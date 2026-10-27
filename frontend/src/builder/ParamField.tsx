@@ -99,9 +99,37 @@ const AXES: Record<number, string[]> = { 1: [''], 2: ['H', 'W'], 3: ['D', 'H', '
 /** Fixed number of integers, e.g. a 2-D kernel size: one small input per axis. */
 function FixedIntsField({ param, value, inferred, onChange }: ParamFieldProps) {
   const length = param.length ?? 1;
-  const current = Array.isArray(value) ? value : null;
+  const toDraft = (v: ParamValue): (number | '')[] =>
+    Array.isArray(v) ? [...v] : Array<number | ''>(length).fill('');
+  // Each axis is edited separately; the value is only reported once every axis is filled
+  // in (or all are empty, which means "use the default / infer it").
+  const [draft, setDraft] = useState(() => toDraft(value));
   const fallback = (Array.isArray(inferred) ? inferred : param.default) as number[] | null;
   const axes = AXES[length] ?? Array.from({ length }, (_, i) => String(i + 1));
+
+  useEffect(() => {
+    // Sync when the value changes from outside (other node selected, example loaded...).
+    const complete = draft.every((v) => v !== '') ? draft : null;
+    if (JSON.stringify(complete) !== JSON.stringify(Array.isArray(value) ? value : null)) {
+      setDraft(toDraft(value));
+    }
+    // `draft` is intentionally not a dependency: only external changes should reset it.
+  }, [value]);
+
+  const update = (index: number, raw: number | string) => {
+    const next = toNumber(raw);
+    if (next === undefined) {
+      return;
+    }
+    const updated = [...draft];
+    updated[index] = next === null ? '' : next;
+    setDraft(updated);
+    if (updated.every((v) => v === '')) {
+      onChange(null);
+    } else if (updated.every((v) => v !== '')) {
+      onChange(updated as number[]);
+    }
+  };
 
   return (
     <Input.Wrapper label={param.label} description={param.help || undefined}>
@@ -111,30 +139,18 @@ function FixedIntsField({ param, value, inferred, onChange }: ParamFieldProps) {
             key={axis || index}
             aria-label={`${param.label} ${axis}`.trim()}
             leftSection={axis ? <span style={{ fontSize: 11 }}>{axis}</span> : undefined}
-            value={current ? current[index] : ''}
+            value={draft[index] ?? ''}
             placeholder={
-              param.auto && !current
-                ? `auto${fallback ? ` (${fallback[index]})` : ''}`
-                : fallback
-                  ? String(fallback[index])
-                  : ''
+              fallback
+                ? param.auto
+                  ? `auto (${fallback[index]})`
+                  : String(fallback[index])
+                : 'auto'
             }
+            error={draft.some((v) => v !== '') && draft[index] === '' ? true : undefined}
             min={param.min ?? undefined}
             allowDecimal={false}
-            onChange={(raw) => {
-              const next = toNumber(raw);
-              if (next === undefined) {
-                return;
-              }
-              if (next === null) {
-                onChange(null);
-                return;
-              }
-              const base = current ?? fallback ?? Array(length).fill(1);
-              const updated = [...base];
-              updated[index] = next;
-              onChange(updated);
-            }}
+            onChange={(raw) => update(index, raw)}
           />
         ))}
       </Group>

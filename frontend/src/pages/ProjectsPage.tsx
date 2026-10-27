@@ -20,7 +20,7 @@ import {
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, type Project } from '@/api';
-import { saveDraft } from '@/builder/draft';
+import { loadDraft, saveDraft, type Draft } from '@/builder/draft';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -40,19 +40,39 @@ export function ProjectsPage() {
 
   useEffect(load, [load]);
 
-  const open = (project: Project) => {
-    saveDraft({ doc: project.graph, name: project.name, projectId: project.id });
-    navigate('/');
+  /** Ask before replacing a different network that is open in the builder. */
+  const replaceDraft = (draft: Draft) => {
+    const current = loadDraft();
+    const replace = () => {
+      saveDraft(draft);
+      navigate('/');
+    };
+    const sameProject = draft.projectId !== null && current?.projectId === draft.projectId;
+    if (!current || current.doc.nodes.length === 0 || sameProject) {
+      replace();
+      return;
+    }
+    modals.openConfirmModal({
+      title: 'Replace the network in the builder?',
+      children: (
+        <Text size="sm">
+          “{current.name}” is currently open in the builder. Unsaved changes to it will be lost.
+        </Text>
+      ),
+      labels: { confirm: 'Replace', cancel: 'Cancel' },
+      onConfirm: replace,
+    });
   };
 
-  const createNew = () => {
-    saveDraft({
+  const open = (project: Project) =>
+    replaceDraft({ doc: project.graph, name: project.name, projectId: project.id });
+
+  const createNew = () =>
+    replaceDraft({
       doc: { version: 1, nodes: [], edges: [] },
       name: 'Untitled network',
       projectId: null,
     });
-    navigate('/');
-  };
 
   const rename = (project: Project) => {
     let value = project.name;

@@ -47,7 +47,7 @@ import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { categoryColor } from '@/theme';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { downloadText } from './download';
-import { loadDraft, saveDraft } from './draft';
+import { loadDraft, saveDraft, type Draft } from './draft';
 import {
   autoLayout,
   createNode,
@@ -129,6 +129,9 @@ function Builder() {
   const [fitRequest, setFitRequest] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Guards against double saves and against a save finishing after another network was loaded.
+  const savingRef = useRef(false);
+  const documentGeneration = useRef(0);
   const seeded = useRef(Boolean(initial));
 
   const specs = useMemo(
@@ -142,13 +145,33 @@ function Builder() {
   const currentKey = `${name}\n${semanticKey(doc)}`;
 
   // ---------------------------------------------------------------- persistence
+  const pendingDraft = useRef<Draft | null>(null);
   useEffect(() => {
     if (!seeded.current && nodes.length === 0) {
       return undefined;
     }
-    const timer = window.setTimeout(() => saveDraft({ doc, name, projectId }), 400);
+    pendingDraft.current = { doc, name, projectId };
+    const timer = window.setTimeout(() => {
+      saveDraft({ doc, name, projectId });
+      pendingDraft.current = null;
+    }, 400);
     return () => window.clearTimeout(timer);
   }, [doc, name, projectId]);
+
+  // Write a pending draft immediately when leaving the page or closing the tab.
+  useEffect(() => {
+    const flush = () => {
+      if (pendingDraft.current) {
+        saveDraft(pendingDraft.current);
+        pendingDraft.current = null;
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
 
   useEffect(() => {
     if (fitRequest === 0) {
@@ -163,6 +186,7 @@ function Builder() {
 
   const loadDocument = useCallback(
     (graph: GraphDocument, newName: string, newProjectId: number | null) => {
+      documentGeneration.current += 1;
       const loaded = fromDocument(graph);
       setNodes(loaded.nodes);
       setEdges(withEdgeStyle(loaded.edges));
@@ -364,6 +388,11 @@ function Builder() {
       navigate('/login', { state: { from: '/' } });
       return;
     }
+    if (savingRef.current) {
+      return;
+    }
+    savingRef.current = true;
+    const generation = documentGeneration.current;
     setSaving(true);
     const payload = { name: name.trim() || 'Untitled network', graph: doc };
     try {
@@ -379,8 +408,10 @@ function Builder() {
           throw error;
         }
       }
-      setProjectId(project.id);
-      setSavedKey(`${name}\n${semanticKey(doc)}`);
+      if (generation === documentGeneration.current) {
+        setProjectId(project.id);
+        setSavedKey(`${name}\n${semanticKey(doc)}`);
+      }
       notifications.show({ color: 'green', message: `Saved “${project.name}”.` });
     } catch (error) {
       notifications.show({
@@ -389,6 +420,7 @@ function Builder() {
         message: (error as Error).message,
       });
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

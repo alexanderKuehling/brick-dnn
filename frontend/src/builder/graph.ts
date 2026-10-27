@@ -70,11 +70,15 @@ export function fromDocument(doc: GraphDocument): { nodes: LayerFlowNode[]; edge
       ...(node.name ? { name: node.name } : {}),
     },
   }));
-  const edges: Edge[] = doc.edges.map((edge: GraphEdge) => ({
-    id: edge.id ?? edgeId(String(edge.source), String(edge.target)),
-    source: String(edge.source),
-    target: String(edge.target),
-  }));
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges: Edge[] = doc.edges
+    // Connections to missing layers could never be deleted in the UI, so drop them here.
+    .filter((edge: GraphEdge) => ids.has(String(edge.source)) && ids.has(String(edge.target)))
+    .map((edge: GraphEdge) => ({
+      id: edge.id ?? edgeId(String(edge.source), String(edge.target)),
+      source: String(edge.source),
+      target: String(edge.target),
+    }));
   return { nodes, edges };
 }
 

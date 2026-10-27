@@ -8,6 +8,8 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       BRICKDNN_ALLOW_REGISTRATION: ${BRICKDNN_ALLOW_REGISTRATION:-true}
+      # nginx in the frontend container is the one proxy in front of Django.
+      BRICKDNN_NUM_PROXIES: 1
     volumes:
       - brickdnn-data:/data
     restart: unless-stopped

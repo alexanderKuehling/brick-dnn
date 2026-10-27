@@ -9,6 +9,8 @@ instead. You will get an answer as soon as possible.
 - Never set `DJANGO_DEBUG=true` on a server reachable from the internet.
 - Set `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` to your domain and serve the app
   over HTTPS (e.g. behind a reverse proxy). With HTTPS, also set `DJANGO_SECURE_COOKIES=true`.
+- If you put another reverse proxy in front of the bundled nginx, increase
+  `BRICKDNN_NUM_PROXIES` so that rate limits see the real client address.
 - Keep the data volume private: it contains the database and the generated secret key.
 - Disable public sign-up with `BRICKDNN_ALLOW_REGISTRATION=false` if you do not need it.
 - The server never executes the generated code; it only produces text.

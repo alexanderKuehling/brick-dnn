@@ -48,7 +48,12 @@ def _secret_key() -> str:
 
 SECRET_KEY = _secret_key()
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")
+# localhost is always allowed so that health checks inside the container work.
+ALLOWED_HOSTS = [
+    *env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]"),
+    "localhost",
+    "127.0.0.1",
+]
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
@@ -126,6 +131,14 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# A file cache is shared by all gunicorn workers, so rate limits are counted correctly.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": DATA_DIR / "cache",
+    }
+}
+
 # Graphs are small JSON documents; 1 MB is plenty and limits abuse.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 
@@ -134,6 +147,10 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_PARSER_CLASSES": ["brick_dnn_core.parsers.SafeJSONParser"],
+    # Number of reverse proxies in front of Django (1 with the bundled nginx). Rate limits
+    # then use the address added by the proxy instead of a client-supplied X-Forwarded-For.
+    "NUM_PROXIES": int(os.environ.get("BRICKDNN_NUM_PROXIES", "0")),
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     "DEFAULT_THROTTLE_CLASSES": [

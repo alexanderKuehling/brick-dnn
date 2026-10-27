@@ -54,8 +54,9 @@ def analyze_graph(request: Request) -> Response:
 
 
 def _filename(raw) -> str:
-    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", str(raw or "model")).strip("_")[:60] or "model"
-    return stem.removesuffix(".py") + ".py"
+    stem = str(raw or "model").strip().removesuffix(".py")
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", stem).strip("_")[:60] or "model"
+    return stem + ".py"
 
 
 @api_view(["POST"])

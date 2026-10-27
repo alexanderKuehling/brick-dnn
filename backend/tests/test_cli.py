@@ -30,3 +30,11 @@ def test_cli_check_reports_errors(tmp_path, capsys):
 def test_cli_lists_layers(capsys):
     assert main(["--list-layers"]) == 0
     assert "TransformerEncoder" in capsys.readouterr().out
+
+
+def test_cli_rejects_invalid_class_name(capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        main(["--example", "mlp_mnist", "--class-name", "my net"])
+    assert "not a valid Python class name" in capsys.readouterr().err

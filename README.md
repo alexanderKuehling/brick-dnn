@@ -230,6 +230,7 @@ All settings are environment variables (see [`.env.example`](.env.example)):
 | `CORS_ALLOWED_ORIGINS`         | `http://localhost:5173,…`  | Only if UI and API run on different origins          |
 | `BRICKDNN_DATA_DIR`            | `backend/data` (`/data` in Docker) | SQLite database and generated secret key     |
 | `BRICKDNN_ALLOW_REGISTRATION`  | `true`                     | Set to `false` for a private instance                |
+| `BRICKDNN_NUM_PROXIES`         | `0` (`1` in Docker)        | Reverse proxies in front of Django (for rate limits) |
 | `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
@@ -238,7 +239,7 @@ The REST API is documented in [docs/api.md](docs/api.md).
 ## Tests
 
 ```bash
-cd backend && pytest          # 160 tests; install torch to also execute the generated models:
+cd backend && pytest          # 180+ tests; install torch to also execute the generated models:
                               # pip install torch --index-url https://download.pytorch.org/whl/cpu
 cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
 ```

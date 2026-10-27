@@ -67,11 +67,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         return _print_analysis(graph)
 
-    options = GeneratorOptions(
-        class_name=args.class_name,
-        include_main=not args.no_main,
-        include_training=not args.no_training,
-    )
+    try:
+        options = GeneratorOptions.from_dict(
+            {
+                "class_name": args.class_name,
+                "include_main": not args.no_main,
+                "include_training": not args.no_training,
+            }
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     try:
         code = generate_code(graph, options)
     except GraphValidationError:

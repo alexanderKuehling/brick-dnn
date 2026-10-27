@@ -55,6 +55,22 @@ describe('ParamField', () => {
     expect(onChange).toHaveBeenLastCalledWith([3, 5]);
   });
 
+  it('keeps the other axis while one axis is being retyped', async () => {
+    const onChange = vi.fn();
+    render(
+      <ParamField
+        param={{ ...base, label: 'Kernel size', kind: 'ints', length: 2, default: [3, 3] }}
+        value={[5, 7]}
+        onChange={onChange}
+      />
+    );
+    const height = screen.getByLabelText('Kernel size H');
+    await userEvent.clear(height);
+    expect(onChange).not.toHaveBeenCalled();
+    await userEvent.type(height, '4');
+    expect(onChange).toHaveBeenLastCalledWith([4, 7]);
+  });
+
   it('parses free-form shapes', async () => {
     const onChange = vi.fn();
     render(

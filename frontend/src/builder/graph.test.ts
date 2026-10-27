@@ -203,3 +203,14 @@ describe('autoLayout', () => {
     ).not.toThrow();
   });
 });
+
+describe('fromDocument cleanup', () => {
+  it('drops connections to layers that do not exist', () => {
+    const { edges } = fromDocument({
+      version: 1,
+      nodes: [{ id: 'a', type: 'Input', params: {} }],
+      edges: [{ source: 'a', target: 'missing' }],
+    });
+    expect(edges).toEqual([]);
+  });
+});

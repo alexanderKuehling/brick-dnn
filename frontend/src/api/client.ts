@@ -53,6 +53,16 @@ export function onTokensChange(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+// Keep tabs in sync: when another tab refreshes the tokens or logs out, follow along.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === TOKEN_KEY || event.key === null) {
+      tokens = readTokens();
+      listeners.forEach((listener) => listener());
+    }
+  });
+}
+
 let refreshing: Promise<boolean> | null = null;
 
 /** Exchange the refresh token for a new access token. Concurrent calls share one request. */
@@ -70,10 +80,18 @@ async function refreshAccessToken(): Promise<boolean> {
           body: JSON.stringify({ refresh: current.refresh }),
         });
         if (!response.ok) {
-          setTokens(null);
-          return false;
+          // Only a rejected refresh token ends the session, and only if no other tab has
+          // replaced it in the meantime. Rate limits or server errors keep the user logged in.
+          if (response.status === 401 && tokens?.refresh === current.refresh) {
+            setTokens(null);
+          }
+          return tokens !== null && tokens.refresh !== current.refresh;
         }
         const data = (await response.json()) as Partial<Tokens>;
+        if (tokens?.refresh !== current.refresh) {
+          // Logged out (or refreshed elsewhere) while this request was running.
+          return tokens !== null;
+        }
         setTokens({ access: data.access!, refresh: data.refresh ?? current.refresh });
         return true;
       } catch {

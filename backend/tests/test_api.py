@@ -216,3 +216,35 @@ def test_users_only_see_their_own_projects(auth_client):
     assert auth_client.get("/api/projects/").data == []
     assert auth_client.get(f"/api/projects/{other_project.id}/").status_code == 404
     assert auth_client.delete(f"/api/projects/{other_project.id}/").status_code == 404
+
+
+def test_filename_keeps_py_suffix(client):
+    response = client.post(
+        "/api/generate/", {"graph": MLP, "options": {"filename": "mnist.py"}}, format="json"
+    )
+    assert response.data["filename"] == "mnist.py"
+
+
+def test_deeply_nested_json_is_a_client_error(client):
+    response = client.post("/api/analyze/", data="[" * 100_000, content_type="application/json")
+    assert response.status_code == 400
+
+
+def test_huge_numbers_do_not_crash_the_api(client):
+    graph = chain(("Input", {"shape": [10**4000, 10**4000]}), ("Flatten", {}))
+    response = client.post("/api/analyze/", {"graph": graph}, format="json")
+    assert response.status_code == 200
+    assert response.data["valid"] is False
+
+
+def test_login_rate_limit_ignores_spoofed_forwarded_for(client, user):
+    statuses = [
+        client.post(
+            "/api/auth/token/",
+            {"username": "ada", "password": "wrong"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=f"10.0.0.{i}",
+        ).status_code
+        for i in range(25)
+    ]
+    assert 429 in statuses

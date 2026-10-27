@@ -193,3 +193,78 @@ def test_script_trains_regression_on_csv(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "val loss" in result.stdout
     assert (tmp_path / "w.pt").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Regression tests from the pre-release review
+# --------------------------------------------------------------------------- #
+
+
+@needs_torch
+@pytest.mark.parametrize("layer_type", ["RNN", "LSTM", "GRU"])
+def test_bidirectional_rnn_uses_final_states_of_both_directions(layer_type):
+    graph = chain(
+        ("Input", {"shape": [6, 3]}),
+        (layer_type, {"hidden_size": 4, "bidirectional": True, "num_layers": 2}),
+    )
+    model = build_model(generate_code(graph))
+    model.eval()
+    x = torch.randn(2, 6, 3)
+    rnn = getattr(model, f"{layer_type.lower()}_1")
+    with torch.no_grad():
+        out = model(x)
+        sequence, state = rnn(x)
+    hidden = state[0] if layer_type == "LSTM" else state
+    # forward direction after the last step, backward direction after the first step
+    assert torch.allclose(out[:, :4], sequence[:, -1, :4])
+    assert torch.allclose(out[:, 4:], sequence[:, 0, 4:])
+    assert torch.allclose(out, torch.cat([hidden[-2], hidden[-1]], dim=-1))
+
+
+@needs_torch
+@pytest.mark.parametrize("name", ["compile", "named_modules", "hidden", "tuple", "main"])
+def test_reserved_layer_names_are_renamed(name):
+    payload = chain(("Input", {"shape": [4]}), ("Linear", {"out_features": 2}))
+    payload["nodes"][1]["name"] = name
+    check_against_torch(payload)
+
+
+@needs_torch
+def test_reserved_input_names_in_multi_input_scripts(tmp_path):
+    payload = {
+        "nodes": [
+            {"id": "a", "type": "Input", "params": {"shape": [3]}, "name": "count_parameters"},
+            {"id": "b", "type": "Input", "params": {"shape": [3]}, "name": "enumerate"},
+            {"id": "add", "type": "Add"},
+            {"id": "o1", "type": "Linear", "params": {"out_features": 2}},
+            {"id": "o2", "type": "Linear", "params": {"out_features": 1}},
+        ],
+        "edges": [
+            {"source": "a", "target": "add"},
+            {"source": "b", "target": "add"},
+            {"source": "add", "target": "o1"},
+            {"source": "add", "target": "o2"},
+        ],
+    }
+    result = run_script(generate_code(payload), tmp_path)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("class_name", ["main", "nn", "torch", "train", "x", "count_parameters"])
+def test_reserved_class_names_are_rejected(class_name):
+    with pytest.raises(ValueError, match="already used"):
+        GeneratorOptions.from_dict({"class_name": class_name})
+
+
+def test_huge_integers_are_rejected():
+    result = analyze(chain(("Input", {"shape": [10**4000, 2]}), ("Flatten", {})))
+    assert "too large" in result.errors[0].message
+
+
+@needs_torch
+def test_script_rejects_tiny_csv(tmp_path):
+    (tmp_path / "data.csv").write_text("1,2,3,4,5,6,7,8,1\n2,3,4,5,6,7,8,9,0\n")
+    code = generate_code(EXAMPLES["tabular_regression"]["graph"])
+    result = run_script(code, tmp_path, "--csv", "data.csv")
+    assert result.returncode != 0
+    assert "at least 4 rows" in result.stderr

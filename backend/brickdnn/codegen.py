@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import keyword
 import re
 from collections import Counter
@@ -13,41 +14,91 @@ from .layers import fmt_shape
 
 PROJECT_URL = "https://github.com/alexanderKuehling/brick-dnn"
 
-# Names that must not be used as attributes or local variables in the generated module.
-RESERVED = set(keyword.kwlist) | {
+# Names that must not be used for layers, inputs or the class in the generated module:
+# Python keywords and builtins, public attributes of nn.Module (a layer called "compile"
+# would be shadowed by the method) and every module-level or local name the script uses.
+NN_MODULE_ATTRIBUTES = {
+    "T_destination",
+    "add_module",
+    "apply",
+    "bfloat16",
+    "buffers",
+    "call_super_init",
+    "children",
+    "compile",
+    "cpu",
+    "cuda",
+    "double",
+    "dump_patches",
+    "eval",
+    "extra_repr",
+    "float",
+    "forward",
+    "get_buffer",
+    "get_extra_state",
+    "get_parameter",
+    "get_submodule",
+    "half",
+    "ipu",
+    "load_state_dict",
+    "modules",
+    "mtia",
+    "named_buffers",
+    "named_children",
+    "named_modules",
+    "named_parameters",
+    "parameters",
+    "register_backward_hook",
+    "register_buffer",
+    "register_forward_hook",
+    "register_forward_pre_hook",
+    "register_full_backward_hook",
+    "register_full_backward_pre_hook",
+    "register_load_state_dict_post_hook",
+    "register_load_state_dict_pre_hook",
+    "register_module",
+    "register_parameter",
+    "register_state_dict_post_hook",
+    "register_state_dict_pre_hook",
+    "requires_grad_",
+    "set_extra_state",
+    "set_submodule",
+    "share_memory",
+    "smart_apply",
+    "state_dict",
+    "to",
+    "to_empty",
+    "train",
+    "training",
+    "type",
+    "xpu",
+    "zero_grad",
+}
+SCRIPT_NAMES = {
     "self",
     "torch",
     "nn",
-    "super",
-    "print",
-    "len",
-    "range",
+    "argparse",
+    "csv",
+    "DataLoader",
+    "TensorDataset",
+    "random_split",
+    "count_parameters",
+    "load_csv",
+    "train",
+    "main",
+    "NUM_FEATURES",
+    "NUM_CLASSES",
     "x",
     "model",
     "out",
-    "forward",
-    "training",
-    "train",
-    "eval",
-    "parameters",
-    "modules",
-    "children",
-    "to",
-    "cuda",
-    "cpu",
-    "apply",
-    "state_dict",
-    "buffers",
-    "type",
-    "float",
-    "double",
-    "half",
-    "zero_grad",
-    "register_buffer",
-    "add_module",
-    "load_state_dict",
-    "requires_grad_",
+    "hidden",
+    "args",
+    "parser",
+    "tensor",
+    "i",
 }
+RESERVED = set(keyword.kwlist) | set(dir(builtins)) | NN_MODULE_ATTRIBUTES | SCRIPT_NAMES
 
 
 @dataclass
@@ -62,6 +113,8 @@ class GeneratorOptions:
         name = str(data.get("class_name") or cls.class_name).strip()
         if not name.isidentifier() or keyword.iskeyword(name):
             raise ValueError(f"'{name}' is not a valid Python class name.")
+        if name in RESERVED:
+            raise ValueError(f"'{name}' is already used in the generated code; pick another name.")
         return cls(
             class_name=name,
             include_main=bool(data.get("include_main", True)),
@@ -102,7 +155,7 @@ class _Generator:
     # -- naming ----------------------------------------------------------- #
 
     def _assign_names(self) -> None:
-        used: set[str] = set(RESERVED)
+        used: set[str] = set(RESERVED) | {self.opt.class_name}
         counters: Counter[str] = Counter()
 
         def unique(base: str) -> str:
@@ -401,6 +454,8 @@ def train(
     print(f"Training on {device}")
     model.to(device)
 
+    if len(dataset) < 4:
+        raise SystemExit("The CSV file needs at least 4 rows (training + validation).")
     n_val = max(1, len(dataset) // 5)
     train_set, val_set = random_split(dataset, [len(dataset) - n_val, n_val])
     train_loader = DataLoader(

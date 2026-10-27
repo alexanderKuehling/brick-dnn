@@ -16,6 +16,7 @@ decorate it with :func:`register`. See ``docs/adding-a-layer.md``.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -124,19 +125,25 @@ def _fmt_num(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else str(value)
 
 
+MAX_INT = 10**9
+
+
 def _to_int(value: Any, label: str) -> int:
     if isinstance(value, bool):
         raise LayerError(f"{label} must be an integer.")
+    result: int | None = None
     if isinstance(value, int):
-        return value
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value.strip())
-        except ValueError:
-            pass
-    raise LayerError(f"{label} must be an integer.")
+        result = value
+    elif isinstance(value, float) and value.is_integer():
+        result = int(value)
+    elif isinstance(value, str) and len(value) < 20:
+        with contextlib.suppress(ValueError):
+            result = int(value.strip())
+    if result is None:
+        raise LayerError(f"{label} must be an integer.")
+    if abs(result) > MAX_INT:
+        raise LayerError(f"{label} is too large.")
+    return result
 
 
 def _to_float(value: Any, label: str) -> float:
@@ -908,9 +915,17 @@ class _Recurrent(Layer):
         return f"nn.{self.type}({', '.join(args)})"
 
     def forward_lines(self, attr: str, inputs: list[str], out: str) -> list[str]:
-        lines = [f"{out}, _ = self.{attr}({inputs[0]})"]
-        if not self.p["return_sequences"]:
-            lines.append(f"{out} = {out}[:, -1, :]  # output of the last time step")
+        if self.p["return_sequences"]:
+            return [f"{out}, _ = self.{attr}({inputs[0]})"]
+        # Use the final hidden state of the last layer. For bidirectional layers this
+        # combines the forward direction (after the last step) with the backward direction
+        # (after the first step), which `output[:, -1]` would not.
+        state = "(hidden, _)" if self.type == "LSTM" else "hidden"
+        lines = [f"_, {state} = self.{attr}({inputs[0]})"]
+        if self.p["bidirectional"]:
+            lines.append(f"{out} = torch.cat([hidden[-2], hidden[-1]], dim=-1)")
+        else:
+            lines.append(f"{out} = hidden[-1]")
         return lines
 
 
