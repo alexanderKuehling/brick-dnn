@@ -1,0 +1,237 @@
+{
+  "id": "resnet_block",
+  "name": "Residual CNN (CIFAR-10)",
+  "description": "A ResNet-style block with a skip connection merged by Add, then global average pooling.",
+  "order": 2,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "input",
+        "type": "Input",
+        "params": {
+          "shape": [
+            3,
+            32,
+            32
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "stem",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64,
+          "bias": false
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "stem_bn",
+        "type": "BatchNorm2d",
+        "params": {},
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "stem_relu",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "conv_a",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64,
+          "bias": false
+        },
+        "position": {
+          "x": 0,
+          "y": 230
+        }
+      },
+      {
+        "id": "bn_a",
+        "type": "BatchNorm2d",
+        "params": {},
+        "position": {
+          "x": 280,
+          "y": 230
+        }
+      },
+      {
+        "id": "relu_a",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 560,
+          "y": 230
+        }
+      },
+      {
+        "id": "conv_b",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64,
+          "bias": false
+        },
+        "position": {
+          "x": 840,
+          "y": 230
+        }
+      },
+      {
+        "id": "bn_b",
+        "type": "BatchNorm2d",
+        "params": {},
+        "position": {
+          "x": 0,
+          "y": 460
+        }
+      },
+      {
+        "id": "add",
+        "type": "Add",
+        "params": {},
+        "position": {
+          "x": 280,
+          "y": 460
+        }
+      },
+      {
+        "id": "relu_out",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 560,
+          "y": 460
+        }
+      },
+      {
+        "id": "gap",
+        "type": "AdaptiveAvgPool2d",
+        "params": {
+          "output_size": [
+            1,
+            1
+          ]
+        },
+        "position": {
+          "x": 840,
+          "y": 460
+        }
+      },
+      {
+        "id": "flatten",
+        "type": "Flatten",
+        "params": {},
+        "position": {
+          "x": 0,
+          "y": 690
+        }
+      },
+      {
+        "id": "fc",
+        "type": "Linear",
+        "params": {
+          "out_features": 10
+        },
+        "position": {
+          "x": 280,
+          "y": 690
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-input-stem",
+        "source": "input",
+        "target": "stem"
+      },
+      {
+        "id": "e-stem-stem_bn",
+        "source": "stem",
+        "target": "stem_bn"
+      },
+      {
+        "id": "e-stem_bn-stem_relu",
+        "source": "stem_bn",
+        "target": "stem_relu"
+      },
+      {
+        "id": "e-stem_relu-conv_a",
+        "source": "stem_relu",
+        "target": "conv_a"
+      },
+      {
+        "id": "e-conv_a-bn_a",
+        "source": "conv_a",
+        "target": "bn_a"
+      },
+      {
+        "id": "e-bn_a-relu_a",
+        "source": "bn_a",
+        "target": "relu_a"
+      },
+      {
+        "id": "e-relu_a-conv_b",
+        "source": "relu_a",
+        "target": "conv_b"
+      },
+      {
+        "id": "e-conv_b-bn_b",
+        "source": "conv_b",
+        "target": "bn_b"
+      },
+      {
+        "id": "e-bn_b-add",
+        "source": "bn_b",
+        "target": "add"
+      },
+      {
+        "id": "e-stem_relu-add",
+        "source": "stem_relu",
+        "target": "add"
+      },
+      {
+        "id": "e-add-relu_out",
+        "source": "add",
+        "target": "relu_out"
+      },
+      {
+        "id": "e-relu_out-gap",
+        "source": "relu_out",
+        "target": "gap"
+      },
+      {
+        "id": "e-gap-flatten",
+        "source": "gap",
+        "target": "flatten"
+      },
+      {
+        "id": "e-flatten-fc",
+        "source": "flatten",
+        "target": "fc"
+      }
+    ]
+  }
+}

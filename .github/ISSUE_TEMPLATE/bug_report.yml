@@ -1,0 +1,24 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: graph
+    attributes:
+      label: Network (optional)
+      description: If the problem is about a specific network, attach the JSON file (File → Save as JSON file).
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, OS and how you run Brick DNN (Docker, local dev, ...)

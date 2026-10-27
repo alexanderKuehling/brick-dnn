@@ -1,0 +1,156 @@
+{
+  "id": "multi_input",
+  "name": "Multi-input model",
+  "description": "Combines an image and a vector of metadata with Concat, e.g. for price prediction from a photo and attributes.",
+  "order": 6,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "image",
+        "type": "Input",
+        "params": {
+          "shape": [
+            1,
+            28,
+            28
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "flatten",
+        "type": "Flatten",
+        "params": {},
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "img_fc",
+        "type": "Linear",
+        "params": {
+          "out_features": 64
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "img_relu",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "meta",
+        "type": "Input",
+        "params": {
+          "shape": [
+            10
+          ]
+        },
+        "position": {
+          "x": 280,
+          "y": 190
+        }
+      },
+      {
+        "id": "meta_fc",
+        "type": "Linear",
+        "params": {
+          "out_features": 16
+        },
+        "position": {
+          "x": 560,
+          "y": 190
+        }
+      },
+      {
+        "id": "meta_relu",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 840,
+          "y": 190
+        }
+      },
+      {
+        "id": "concat",
+        "type": "Concat",
+        "params": {
+          "dim": -1
+        },
+        "position": {
+          "x": 0,
+          "y": 420
+        }
+      },
+      {
+        "id": "head",
+        "type": "Linear",
+        "params": {
+          "out_features": 1
+        },
+        "position": {
+          "x": 280,
+          "y": 420
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-image-flatten",
+        "source": "image",
+        "target": "flatten"
+      },
+      {
+        "id": "e-flatten-img_fc",
+        "source": "flatten",
+        "target": "img_fc"
+      },
+      {
+        "id": "e-img_fc-img_relu",
+        "source": "img_fc",
+        "target": "img_relu"
+      },
+      {
+        "id": "e-meta-meta_fc",
+        "source": "meta",
+        "target": "meta_fc"
+      },
+      {
+        "id": "e-meta_fc-meta_relu",
+        "source": "meta_fc",
+        "target": "meta_relu"
+      },
+      {
+        "id": "e-img_relu-concat",
+        "source": "img_relu",
+        "target": "concat"
+      },
+      {
+        "id": "e-meta_relu-concat",
+        "source": "meta_relu",
+        "target": "concat"
+      },
+      {
+        "id": "e-concat-head",
+        "source": "concat",
+        "target": "head"
+      }
+    ]
+  }
+}

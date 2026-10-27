@@ -1,0 +1,122 @@
+{
+  "id": "mlp_mnist",
+  "name": "MLP classifier (MNIST)",
+  "description": "A classic multi-layer perceptron for 28\u00d728 digits flattened to 784 features.",
+  "order": 0,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "input",
+        "type": "Input",
+        "params": {
+          "shape": [
+            784
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "fc1",
+        "type": "Linear",
+        "params": {
+          "out_features": 256
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "drop1",
+        "type": "Dropout",
+        "params": {
+          "p": 0.2
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "fc2",
+        "type": "Linear",
+        "params": {
+          "out_features": 128
+        },
+        "position": {
+          "x": 0,
+          "y": 230
+        }
+      },
+      {
+        "id": "relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 280,
+          "y": 230
+        }
+      },
+      {
+        "id": "fc3",
+        "type": "Linear",
+        "params": {
+          "out_features": 10
+        },
+        "position": {
+          "x": 560,
+          "y": 230
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-input-fc1",
+        "source": "input",
+        "target": "fc1"
+      },
+      {
+        "id": "e-fc1-relu1",
+        "source": "fc1",
+        "target": "relu1"
+      },
+      {
+        "id": "e-relu1-drop1",
+        "source": "relu1",
+        "target": "drop1"
+      },
+      {
+        "id": "e-drop1-fc2",
+        "source": "drop1",
+        "target": "fc2"
+      },
+      {
+        "id": "e-fc2-relu2",
+        "source": "fc2",
+        "target": "relu2"
+      },
+      {
+        "id": "e-relu2-fc3",
+        "source": "relu2",
+        "target": "fc3"
+      }
+    ]
+  }
+}

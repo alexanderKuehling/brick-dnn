@@ -1,0 +1,93 @@
+{
+  "id": "lstm_sentiment",
+  "name": "LSTM text classifier",
+  "description": "Token ids \u2192 embeddings \u2192 bidirectional LSTM \u2192 positive/negative sentiment.",
+  "order": 3,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "tokens",
+        "type": "Input",
+        "params": {
+          "shape": [
+            128
+          ],
+          "dtype": "long"
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "embed",
+        "type": "Embedding",
+        "params": {
+          "num_embeddings": 20000,
+          "embedding_dim": 128
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "lstm",
+        "type": "LSTM",
+        "params": {
+          "hidden_size": 128,
+          "bidirectional": true
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "drop",
+        "type": "Dropout",
+        "params": {
+          "p": 0.3
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "fc",
+        "type": "Linear",
+        "params": {
+          "out_features": 2
+        },
+        "position": {
+          "x": 0,
+          "y": 230
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-tokens-embed",
+        "source": "tokens",
+        "target": "embed"
+      },
+      {
+        "id": "e-embed-lstm",
+        "source": "embed",
+        "target": "lstm"
+      },
+      {
+        "id": "e-lstm-drop",
+        "source": "lstm",
+        "target": "drop"
+      },
+      {
+        "id": "e-drop-fc",
+        "source": "drop",
+        "target": "fc"
+      }
+    ]
+  }
+}

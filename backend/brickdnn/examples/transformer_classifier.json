@@ -1,0 +1,124 @@
+{
+  "id": "transformer_classifier",
+  "name": "Transformer text classifier",
+  "description": "A small Transformer encoder with learned positional embeddings and mean pooling.",
+  "order": 4,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "tokens",
+        "type": "Input",
+        "params": {
+          "shape": [
+            64
+          ],
+          "dtype": "long"
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "embed",
+        "type": "Embedding",
+        "params": {
+          "num_embeddings": 10000,
+          "embedding_dim": 128
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "pos",
+        "type": "PositionalEmbedding",
+        "params": {
+          "max_len": 512
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "encoder",
+        "type": "TransformerEncoder",
+        "params": {
+          "nhead": 4,
+          "dim_feedforward": 256,
+          "num_layers": 2
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "pool",
+        "type": "SequencePool",
+        "params": {
+          "mode": "mean"
+        },
+        "position": {
+          "x": 0,
+          "y": 230
+        }
+      },
+      {
+        "id": "norm",
+        "type": "LayerNorm",
+        "params": {},
+        "position": {
+          "x": 280,
+          "y": 230
+        }
+      },
+      {
+        "id": "fc",
+        "type": "Linear",
+        "params": {
+          "out_features": 4
+        },
+        "position": {
+          "x": 560,
+          "y": 230
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-tokens-embed",
+        "source": "tokens",
+        "target": "embed"
+      },
+      {
+        "id": "e-embed-pos",
+        "source": "embed",
+        "target": "pos"
+      },
+      {
+        "id": "e-pos-encoder",
+        "source": "pos",
+        "target": "encoder"
+      },
+      {
+        "id": "e-encoder-pool",
+        "source": "encoder",
+        "target": "pool"
+      },
+      {
+        "id": "e-pool-norm",
+        "source": "pool",
+        "target": "norm"
+      },
+      {
+        "id": "e-norm-fc",
+        "source": "norm",
+        "target": "fc"
+      }
+    ]
+  }
+}

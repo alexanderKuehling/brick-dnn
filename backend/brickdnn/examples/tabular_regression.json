@@ -1,0 +1,120 @@
+{
+  "id": "tabular_regression",
+  "name": "Tabular regression (CSV)",
+  "description": "Predicts one number from 8 numeric features. The generated script can train on a CSV file.",
+  "order": 5,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            8
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "fc1",
+        "type": "Linear",
+        "params": {
+          "out_features": 64
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "bn",
+        "type": "BatchNorm1d",
+        "params": {},
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "fc2",
+        "type": "Linear",
+        "params": {
+          "out_features": 32
+        },
+        "position": {
+          "x": 0,
+          "y": 230
+        }
+      },
+      {
+        "id": "relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 280,
+          "y": 230
+        }
+      },
+      {
+        "id": "out",
+        "type": "Linear",
+        "params": {
+          "out_features": 1
+        },
+        "position": {
+          "x": 560,
+          "y": 230
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-fc1",
+        "source": "features",
+        "target": "fc1"
+      },
+      {
+        "id": "e-fc1-relu1",
+        "source": "fc1",
+        "target": "relu1"
+      },
+      {
+        "id": "e-relu1-bn",
+        "source": "relu1",
+        "target": "bn"
+      },
+      {
+        "id": "e-bn-fc2",
+        "source": "bn",
+        "target": "fc2"
+      },
+      {
+        "id": "e-fc2-relu2",
+        "source": "fc2",
+        "target": "relu2"
+      },
+      {
+        "id": "e-relu2-out",
+        "source": "relu2",
+        "target": "out"
+      }
+    ]
+  }
+}

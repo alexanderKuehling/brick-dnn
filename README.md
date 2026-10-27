@@ -1,0 +1,274 @@
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="96" alt="Brick DNN logo" />
+</p>
+
+<h1 align="center">Brick DNN</h1>
+
+<p align="center">
+  <b>Build neural networks from bricks. Export clean, runnable PyTorch code.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml"><img src="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" />
+  <img src="https://img.shields.io/badge/PyTorch-code%20generator-ee4c2c" alt="PyTorch" />
+</p>
+
+![Brick DNN editor with a CNN for MNIST](docs/images/builder.png)
+
+Sketching a network architecture is easy; getting every tensor shape right is not.
+Brick DNN lets you snap layers together on a canvas, **shows the shape of every tensor while you
+build**, points at mistakes before you run anything, and exports a self-contained PyTorch script
+that you can read, run, train and modify.
+
+It is meant for students learning how architectures fit together, teachers who want to
+demonstrate them, and practitioners who want a correct starting point in seconds.
+
+## Features
+
+- **Drag-and-drop editor** for 24 layer types: MLPs, CNNs, RNN/LSTM/GRU and Transformers.
+- **Live shape inference**: every layer shows its output shape and parameter count. Fields
+  such as `in_features` or `in_channels` are filled in automatically, so you never compute a
+  flatten size by hand again.
+- **Instant validation** with clear messages (*"Kernel size 7 is larger than the padded input
+  size 4"*, *"Model dimension 30 must be divisible by the number of attention heads (4)"*).
+- **Real graphs, not just stacks**: skip connections (`Add`), multiple inputs and outputs and
+  branch merging (`Concat`).
+- **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
+  batch and, for tabular models, a ready-to-use **CSV training loop**.
+- **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
+  tabular regression, multi-input model.
+- **Accounts and saved networks** (optional): building and exporting work without logging in.
+  Networks can also be saved and opened as JSON files.
+- **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
+  CLI, so you can generate models from JSON in scripts or CI.
+- Dark mode, keyboard shortcuts, works on tablets and phones.
+
+<table>
+  <tr>
+    <td><img src="docs/images/code.png" alt="Generated PyTorch code" /></td>
+    <td><img src="docs/images/builder-dark.png" alt="Residual network in dark mode" /></td>
+  </tr>
+</table>
+
+## Quick start
+
+### With Docker (recommended)
+
+```bash
+git clone https://github.com/alexanderKuehling/brick-dnn.git
+cd brick-dnn
+docker compose up -d
+```
+
+Open <http://localhost:8080>. Data (accounts, saved networks) lives in the `brickdnn-data`
+volume. To create an admin account for the Django admin at `/admin/`:
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+### For development
+
+You need Python 3.10+ and Node.js 20+.
+
+```bash
+# 1. API on http://127.0.0.1:8000
+cd backend
+python -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+python manage.py migrate
+DJANGO_DEBUG=true python manage.py runserver
+
+# 2. In a second terminal: UI on http://localhost:5173
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite dev server proxies `/api` to the backend, so no CORS setup is needed. If the API runs
+elsewhere, start the UI with `BACKEND_URL=http://host:port npm run dev`.
+
+A `Makefile` wraps these steps (`make install`, `make backend`, `make frontend`, `make test`).
+
+## How to use it
+
+1. Drag an **Input** layer onto the canvas and set its shape **without the batch dimension**,
+   e.g. `784` for flattened MNIST, `3, 32, 32` for CIFAR images, or `64` with data type
+   `long` for 64 token ids.
+2. **Click** a layer in the palette to append it after the selected layer (it is connected
+   automatically), or **drag** it onto the canvas and connect it yourself by dragging from the
+   right dot of one layer to the left dot of another.
+3. Select a layer to edit its settings in the panel on the right. Fields marked *auto* are
+   inferred from the incoming tensor.
+4. Fix anything marked red, then press **Export .py** (or <kbd>Ctrl</kbd>+<kbd>E</kbd>).
+
+The exported file runs as is:
+
+```bash
+python small_cnn_mnist.py                       # prints the model, runs a random batch
+python tabular_model.py --csv data.csv --epochs 20   # tabular models: train on a CSV file
+```
+
+<details>
+<summary>Example output (model part)</summary>
+
+```python
+class NeuralNetwork(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv2d_1 = nn.Conv2d(1, 32, kernel_size=3, padding='same')
+        self.relu_1 = nn.ReLU()
+        self.maxpool2d_1 = nn.MaxPool2d(kernel_size=2)
+        self.conv2d_2 = nn.Conv2d(32, 64, kernel_size=3, padding='same')
+        self.relu_2 = nn.ReLU()
+        self.maxpool2d_2 = nn.MaxPool2d(kernel_size=2)
+        self.flatten_1 = nn.Flatten()
+        self.linear_1 = nn.Linear(3136, 128)
+        self.relu_3 = nn.ReLU()
+        self.dropout_1 = nn.Dropout(p=0.25)
+        self.linear_2 = nn.Linear(128, 10)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv2d_1(x)
+        x = self.relu_1(x)
+        x = self.maxpool2d_1(x)
+        x = self.conv2d_2(x)
+        x = self.relu_2(x)
+        x = self.maxpool2d_2(x)
+        x = self.flatten_1(x)
+        x = self.linear_1(x)
+        x = self.relu_3(x)
+        x = self.dropout_1(x)
+        x = self.linear_2(x)
+        return x
+```
+
+For graphs with branches, every layer gets its own variable (`added_1 = batchnorm2d_3 + relu_1`).
+</details>
+
+## Available layers
+
+| Category      | Layers                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------- |
+| Input         | `Input` (any shape, `float` or `long` token ids)                                          |
+| Basic         | `Linear`, `Flatten`, `Reshape`, `Dropout`, `Activation` (ReLU, LeakyReLU, GELU, ELU, SELU, SiLU, Mish, Sigmoid, Tanh, Softplus, Softmax, LogSoftmax) |
+| Convolution   | `Conv1d`, `Conv2d`, `MaxPool1d`, `MaxPool2d`, `AvgPool2d`, `AdaptiveAvgPool2d`             |
+| Normalization | `BatchNorm1d`, `BatchNorm2d`, `LayerNorm`                                                |
+| Sequence      | `Embedding`, `PositionalEmbedding`, `RNN`, `LSTM`, `GRU`, `TransformerEncoder`, `SequencePool` |
+| Merge         | `Add` (residual connections), `Concat`                                                   |
+
+Missing a layer? Adding one takes about 30 lines of Python, see
+[docs/adding-a-layer.md](docs/adding-a-layer.md). The UI picks it up automatically.
+
+## Use the generator without the UI
+
+The code generator is a separate, dependency-free Python package:
+
+```bash
+pip install "git+https://github.com/alexanderKuehling/brick-dnn#subdirectory=backend"
+
+brickdnn --example resnet_block -o model.py   # bundled examples
+brickdnn my_network.json --check              # validate, print shapes and parameter counts
+brickdnn my_network.json -o model.py --class-name MyNet
+```
+
+```python
+from brickdnn import analyze, generate_code
+
+result = analyze(graph)          # shapes, parameter counts, errors, warnings
+code = generate_code(graph)      # raises GraphValidationError for invalid graphs
+```
+
+The graph format is plain JSON (the editor's *File → Save as JSON file* produces it), see
+[docs/graph-format.md](docs/graph-format.md).
+
+## Architecture
+
+```
+frontend/  React + Mantine + React Flow (TypeScript)
+   │  palette & forms are generated from GET /api/layers/
+   │  every edit → POST /api/analyze/ (debounced) → shapes and errors on the canvas
+   │  export     → POST /api/generate/
+   ▼
+backend/   Django REST API: accounts (JWT), saved networks, thin wrappers around ↓
+   └── brickdnn/   pure Python: layer catalogue, graph validation, shape inference, code generation
+```
+
+The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
+no hard-coded knowledge of layers or their parameters.
+
+```
+brick-dnn/
+├── backend/
+│   ├── brickdnn/            code generator (standalone package + CLI)
+│   ├── brick_dnn_core/      Django app: API views, Project model
+│   ├── brick_dnn_site/      Django settings and URLs
+│   └── tests/               pytest suite (runs generated models in PyTorch if installed)
+├── frontend/
+│   └── src/
+│       ├── builder/         canvas, palette, inspector, code preview
+│       ├── api/             typed API client
+│       ├── auth/            login state
+│       └── pages/           login, sign-up, saved networks
+├── docs/                    graph format, REST API, contributor guide
+└── docker-compose.yml
+```
+
+## Configuration
+
+All settings are environment variables (see [`.env.example`](.env.example)):
+
+| Variable                       | Default                    | Meaning                                              |
+| ------------------------------ | -------------------------- | ---------------------------------------------------- |
+| `DJANGO_SECRET_KEY`            | generated and stored in the data dir | Secret for signing tokens                  |
+| `DJANGO_DEBUG`                 | `false`                    | Never enable in production                           |
+| `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1,[::1]` | Host names the server answers to                    |
+| `DJANGO_CSRF_TRUSTED_ORIGINS`  | –                          | Needed for the Django admin behind a proxy           |
+| `CORS_ALLOWED_ORIGINS`         | `http://localhost:5173,…`  | Only if UI and API run on different origins          |
+| `BRICKDNN_DATA_DIR`            | `backend/data` (`/data` in Docker) | SQLite database and generated secret key     |
+| `BRICKDNN_ALLOW_REGISTRATION`  | `true`                     | Set to `false` for a private instance                |
+| `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
+| `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
+
+The REST API is documented in [docs/api.md](docs/api.md).
+
+## Tests
+
+```bash
+cd backend && pytest          # 160 tests; install torch to also execute the generated models:
+                              # pip install torch --index-url https://download.pytorch.org/whl/cpu
+cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
+```
+
+The backend suite builds every example and every layer type, runs the generated code in
+PyTorch and checks that output shapes and parameter counts match the analysis exactly. It also
+trains the generated CSV scripts end to end. CI runs everything on Python 3.10–3.13 and builds
+the Docker images.
+
+## Roadmap
+
+Ideas for future versions, contributions welcome:
+
+- More layers: `GroupNorm`, `ConvTranspose2d`, `MultiheadAttention`, `Upsample`
+- Grouping layers into reusable blocks
+- Undo/redo
+- Import of existing PyTorch models
+- Running the generator in the browser (Pyodide) for a serverless demo
+
+## Contributing
+
+Bug reports, layer requests and pull requests are very welcome.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+## History
+
+Brick DNN started as two separate repositories, a Django API (`brick_dnn_api`) and a React
+app (`brick_dnn_app`). Version 1.0 merges both into this repository and completes the project:
+graph-based code generation, shape inference, more layer types, tests, Docker and documentation.
+
+## License
+
+[MIT](LICENSE) © Alexander Kühling

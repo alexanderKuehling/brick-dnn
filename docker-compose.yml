@@ -1,0 +1,24 @@
+# One-command setup:   docker compose up -d   ->   http://localhost:8080
+services:
+  backend:
+    build: ./backend
+    environment:
+      # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      BRICKDNN_ALLOW_REGISTRATION: ${BRICKDNN_ALLOW_REGISTRATION:-true}
+    volumes:
+      - brickdnn-data:/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${BRICKDNN_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  brickdnn-data:

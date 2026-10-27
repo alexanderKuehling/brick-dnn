@@ -1,0 +1,15 @@
+name: Feature or layer request
+description: Suggest a new layer type or feature
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to see?
+      description: For a new layer, please link the PyTorch documentation of the module.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it useful?

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies (incl. CPU-only PyTorch to execute generated models)
+        run: |
+          pip install -r requirements-dev.txt
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Migrations are up to date
+        run: python manage.py makemigrations --check --dry-run
+      - name: Tests
+        run: pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck, format, lint, unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  docker:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start
+        run: docker compose up -d --build
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/api/health/ && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Smoke test
+        run: |
+          curl -sf http://localhost:8080/ | grep -q "Brick DNN"
+          curl -sf http://localhost:8080/api/layers/ | grep -q TransformerEncoder
+          curl -sf -X POST http://localhost:8080/api/generate/ \
+            -H "Content-Type: application/json" \
+            -d '{"graph":{"nodes":[{"id":"i","type":"Input","params":{"shape":[4]}},{"id":"l","type":"Linear","params":{"out_features":2}}],"edges":[{"source":"i","target":"l"}]}}' \
+            | grep -q "nn.Linear(4, 2)"
+      - name: Shut down
+        if: always()
+        run: docker compose down -v

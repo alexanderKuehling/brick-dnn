@@ -1,0 +1,16 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--mantine-color-body);
+}
+
+/* Match the canvas to the Mantine colour scheme. */
+.react-flow {
+  --xy-background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+  --xy-minimap-background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+}
