@@ -26,7 +26,7 @@ graph = {
     "edges": [{"source": "in", "target": "flat"}, {"source": "flat", "target": "fc"}],
 }
 
-print(analyze(graph).nodes["fc"].shape)   # (10,)
+print(analyze(graph).nodes["fc"].shape)  # (10,)
 print(generate_code(graph))
 ```
 
