@@ -18,12 +18,12 @@ make backend        # terminal 1: API on :8000
 make frontend       # terminal 2: UI on :5173
 ```
 
-Or follow the manual steps in the [README](README.md#for-development). Installing CPU-only
-PyTorch in the backend venv is strongly recommended, because the tests then execute every
-generated model:
+Or follow the manual steps in the [README](README.md#for-development). Installing PyTorch and
+torchvision in the backend venv is strongly recommended, because the tests then execute and
+train every generated model (and the training panel in the UI works):
 
 ```bash
-backend/.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+make install-training   # or, CPU-only: backend/.venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ## Before you open a pull request
@@ -45,7 +45,8 @@ make lint           # ruff check + ruff format --check
   parameters; it renders whatever `GET /api/layers/` returns.
 - **Generated code is for humans.** It should look like code a careful person would write:
   readable names, no unused imports, PEP 8.
-- **`brickdnn` stays dependency-free** so it can be used anywhere.
+- **`brickdnn` stays dependency-free** so it can be used anywhere. PyTorch is only imported by
+  the training engine, runner and CLI (`brickdnn/training/`), never by the web server process.
 
 By contributing you agree that your contributions are licensed under the [MIT license](LICENSE)
 and to follow the [code of conduct](CODE_OF_CONDUCT.md).

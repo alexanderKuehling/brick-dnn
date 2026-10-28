@@ -27,10 +27,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements*.txt
-      - name: Install dependencies (incl. CPU-only PyTorch to execute generated models)
+      - name: Install dependencies (incl. CPU-only PyTorch to execute and train generated models)
         run: |
           pip install -r requirements-dev.txt
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Lint
         run: |
           ruff check .
@@ -83,6 +83,8 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"graph":{"nodes":[{"id":"i","type":"Input","params":{"shape":[4]}},{"id":"l","type":"Linear","params":{"out_features":2}}],"edges":[{"source":"i","target":"l"}]}}' \
             | grep -q "nn.Linear(4, 2)"
+          # The default image has no PyTorch: training is reported as unavailable.
+          curl -sf http://localhost:8080/api/training/ | grep -q '"available":false'
       - name: Shut down
         if: always()
         run: docker compose down -v

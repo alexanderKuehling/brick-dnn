@@ -13,4 +13,10 @@ instead. You will get an answer as soon as possible.
   `BRICKDNN_NUM_PROXIES` so that rate limits see the real client address.
 - Keep the data volume private: it contains the database and the generated secret key.
 - Disable public sign-up with `BRICKDNN_ALLOW_REGISTRATION=false` if you do not need it.
-- The server never executes the generated code; it only produces text.
+- Code generation only produces text. **Training** (enabled when PyTorch is installed) executes
+  the generated model code in a separate process. That code is built from validated layer
+  parameters only (numbers, choices and identifiers), never from Python supplied by users.
+- With training enabled, every logged-in user can use the server's CPU/GPU and upload datasets
+  (`BRICKDNN_MAX_UPLOAD_MB`). On a public server, disable registration or set
+  `BRICKDNN_TRAINING=false`. Uploaded ZIP files are extracted with checks against path
+  traversal, symbolic links and oversized contents.

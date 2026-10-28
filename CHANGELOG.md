@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+### Added
+- **Local training.** A *Train* button in the editor trains the current network on the machine
+  that runs the backend (CUDA, Apple GPU or CPU) and shows loss and accuracy live. Runs can be
+  stopped, are kept in a history together with the trained network, and the weights can be
+  downloaded with the matching script.
+- Data sources: demo data with a learnable hidden rule (works for every network), MNIST,
+  Fashion-MNIST and CIFAR-10 (downloaded on first use), CSV uploads (classification or
+  regression, `,`/`;` separators, text labels) and ZIP uploads with one folder of images per class.
+- Compatibility check before training that explains what to change, e.g. the number of outputs
+  or the Input shape. Images are converted and resized to the Input layer automatically.
+- `brickdnn train` command and the optional `brickdnn[train]` extra.
+- REST endpoints under `/api/training/` (see `docs/api.md`) and a training guide
+  (`docs/training.md`).
+- Docker: optional PyTorch in the backend image (`BRICKDNN_INSTALL_TORCH=true`).
+
 ## 1.0.0 (2026-10-27)
 
 First public release. The former `brick_dnn_api` (Django) and `brick_dnn_app` (React)

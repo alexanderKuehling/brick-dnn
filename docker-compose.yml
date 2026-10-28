@@ -1,13 +1,22 @@
 # One-command setup:   docker compose up -d   ->   http://localhost:8080
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # Set to "true" to install PyTorch (CPU) and enable training in the UI.
+        INSTALL_TORCH: ${BRICKDNN_INSTALL_TORCH:-false}
+    # A minimal init process reaps training processes whose gunicorn worker was restarted.
+    init: true
     environment:
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       BRICKDNN_ALLOW_REGISTRATION: ${BRICKDNN_ALLOW_REGISTRATION:-true}
+      BRICKDNN_TRAINING: ${BRICKDNN_TRAINING:-true}
+      BRICKDNN_TRAINING_MAX_RUNS: ${BRICKDNN_TRAINING_MAX_RUNS:-1}
+      BRICKDNN_MAX_UPLOAD_MB: ${BRICKDNN_MAX_UPLOAD_MB:-500}
       # nginx in the frontend container is the one proxy in front of Django.
       BRICKDNN_NUM_PROXIES: 1
     volumes:

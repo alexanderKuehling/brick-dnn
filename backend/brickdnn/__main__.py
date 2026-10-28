@@ -5,6 +5,7 @@ python -m brickdnn graph.json -o model.py     # write it to a file
 python -m brickdnn graph.json --check         # only validate and show shapes
 python -m brickdnn --example cnn_mnist        # start from a bundled example
 python -m brickdnn --list-layers
+python -m brickdnn train graph.json --data mnist   # train it (needs PyTorch, see train --help)
 """
 
 from __future__ import annotations
@@ -38,8 +39,16 @@ def _print_analysis(graph: dict) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args_list = sys.argv[1:] if argv is None else list(argv)
+    if args_list[:1] == ["train"]:
+        from .training.cli import main as train_main
+
+        return train_main(args_list[1:])
+
     parser = argparse.ArgumentParser(
-        prog="brickdnn", description="Generate PyTorch code from a Brick DNN graph (JSON)."
+        prog="brickdnn",
+        description="Generate PyTorch code from a Brick DNN graph (JSON).",
+        epilog="To train a network with PyTorch, run: brickdnn train --help",
     )
     parser.add_argument("graph", nargs="?", help="graph JSON file ('-' for stdin)")
     parser.add_argument("-o", "--output", help="write the code to this file instead of stdout")
@@ -49,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="validate only, print shapes")
     parser.add_argument("--example", choices=sorted(EXAMPLES), help="use a bundled example graph")
     parser.add_argument("--list-layers", action="store_true", help="list all layer types")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
 
     if args.list_layers:
         for cls in REGISTRY.values():

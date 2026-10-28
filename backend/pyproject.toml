@@ -3,7 +3,8 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 # Only the framework-independent code generator is packaged:
-#   pip install ./backend   ->   `brickdnn` library + command line tool
+#   pip install ./backend            ->   `brickdnn` library + command line tool
+#   pip install "./backend[train]"   ->   plus PyTorch for `brickdnn train`
 [project]
 name = "brickdnn"
 version = "1.0.0"
@@ -19,6 +20,10 @@ classifiers = [
     "Topic :: Software Development :: Code Generators",
 ]
 
+[project.optional-dependencies]
+# `pip install "brickdnn[train]"` enables `brickdnn train` (local training with PyTorch).
+train = ["torch>=2.1", "torchvision>=0.16"]
+
 [project.urls]
 Homepage = "https://github.com/alexanderKuehling/brick-dnn"
 Issues = "https://github.com/alexanderKuehling/brick-dnn/issues"
@@ -27,7 +32,7 @@ Issues = "https://github.com/alexanderKuehling/brick-dnn/issues"
 brickdnn = "brickdnn.__main__:main"
 
 [tool.setuptools]
-packages = ["brickdnn", "brickdnn.examples"]
+packages = ["brickdnn", "brickdnn.examples", "brickdnn.training"]
 
 [tool.setuptools.package-data]
 "brickdnn.examples" = ["*.json"]

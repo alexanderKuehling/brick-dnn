@@ -2,5 +2,6 @@
 pytest>=8
 pytest-django>=4.9
 ruff==0.17.3
-# Optional, but recommended: lets the test suite execute the generated models.
-#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Optional, but recommended: lets the test suite execute and train the generated models,
+# and enables training in the UI.
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu

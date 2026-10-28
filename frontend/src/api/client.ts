@@ -132,23 +132,62 @@ export function errorMessage(data: unknown, status: number): string {
   if (status === 429) {
     return 'Too many requests. Please wait a moment.';
   }
+  if (status === 413) {
+    return 'The file is too large for the server.';
+  }
   return `Request failed (HTTP ${status}).`;
 }
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** Sent as JSON, except FormData, which is sent as multipart/form-data. */
   body?: unknown;
   /** Send the JWT access token (and refresh it once on 401). */
   auth?: boolean;
   signal?: AbortSignal;
 }
 
-export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = false, signal } = options;
+function isAbort(error: unknown): boolean {
+  return (error as { name?: unknown } | null)?.name === 'AbortError';
+}
 
-  const send = () => {
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (body !== undefined) {
+/** Seconds until a JWT expires (from its `exp` claim), or null if it cannot be read. */
+export function tokenLifetime(token: string, now = Date.now()): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) {
+      return null;
+    }
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const { exp } = JSON.parse(atob(padded)) as { exp?: unknown };
+    return typeof exp === 'number' ? exp - now / 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Uploads refresh the access token first if it expires within this many seconds. */
+const UPLOAD_TOKEN_MARGIN = 60;
+
+/** Send a request (refreshing the access token once on 401) and return the raw response. */
+async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
+  const { method = 'GET', body, auth = false, signal } = options;
+  const multipart = typeof FormData !== 'undefined' && body instanceof FormData;
+
+  // The server rejects an expired token before reading a large upload, which browsers often
+  // report as a dropped connection instead of a 401. So refresh it before sending the file.
+  if (auth && multipart && tokens?.access) {
+    const lifetime = tokenLifetime(tokens.access);
+    if (lifetime !== null && lifetime < UPLOAD_TOKEN_MARGIN) {
+      await refreshAccessToken();
+    }
+  }
+
+  const attempt = () => {
+    const headers: Record<string, string> = { Accept: accept };
+    // The browser sets the multipart Content-Type itself, including the boundary.
+    if (body !== undefined && !multipart) {
       headers['Content-Type'] = 'application/json';
     }
     if (auth && tokens?.access) {
@@ -157,30 +196,111 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     return fetch(`${BASE_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? (body as FormData) : JSON.stringify(body),
       signal,
     });
   };
 
-  let response: Response;
   try {
-    response = await send();
+    const response = await attempt();
     if (response.status === 401 && auth && (await refreshAccessToken())) {
-      response = await send();
+      return await attempt();
     }
+    return response;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isAbort(error)) {
       throw error;
     }
     throw new ApiError(0, null, 'Cannot reach the Brick DNN server. Is the backend running?');
   }
+}
 
+const INTERRUPTED = 'The connection to the server was interrupted. Please try again.';
+
+/** Read the body; an abort is passed on, a broken connection becomes an ApiError. */
+async function readBody<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isAbort(error)) {
+      throw error;
+    }
+    throw new ApiError(0, null, INTERRUPTED);
+  }
+}
+
+async function failure(response: Response): Promise<ApiError> {
+  let text = '';
+  try {
+    text = await response.text();
+  } catch (error) {
+    if (isAbort(error)) {
+      throw error;
+    }
+  }
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Not JSON (e.g. an HTML error page of a proxy): fall back to the status.
+  }
+  return new ApiError(response.status, data, errorMessage(data, response.status));
+}
+
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options, 'application/json');
   if (response.status === 204) {
     return undefined as T;
   }
-  const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(response.status, data, errorMessage(data, response.status));
+    throw await failure(response);
   }
-  return data as T;
+  const text = await readBody(() => response.text());
+  if (text.trim() === '') {
+    return null as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(response.status, null, 'The server sent an unexpected response.');
+  }
+}
+
+/** The file name from a Content-Disposition header, if there is one. */
+export function dispositionFilename(header: string | null): string | null {
+  if (!header) {
+    return null;
+  }
+  const encoded = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      // Fall through to the plain file name.
+    }
+  }
+  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/.exec(header);
+  const name = plain ? (plain[2] ?? plain[1]).trim() : '';
+  return name || null;
+}
+
+export interface FileDownload {
+  blob: Blob;
+  /** From Content-Disposition, or null if the server did not send one. */
+  filename: string | null;
+}
+
+/** Fetch a file (e.g. trained weights) with the same authentication as API calls. */
+export async function requestFile(
+  path: string,
+  options: Omit<RequestOptions, 'body'> = {}
+): Promise<FileDownload> {
+  const response = await send(path, options, '*/*');
+  if (!response.ok) {
+    throw await failure(response);
+  }
+  return {
+    blob: await readBody(() => response.blob()),
+    filename: dispositionFilename(response.headers.get('Content-Disposition')),
+  };
 }
