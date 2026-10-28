@@ -1,5 +1,4 @@
 import json
-import re
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
@@ -16,8 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 import brickdnn
-from brickdnn import EXAMPLES, GeneratorOptions, GraphValidationError, analyze, generate_code
-from brickdnn.layers import CATEGORIES, layer_specs
+from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import training_service as training
@@ -31,16 +29,9 @@ from .serializers import (
     UserSerializer,
 )
 
-
-def _graph_from_request(request: Request):
-    data = request.data
-    if isinstance(data, dict) and "graph" in data:
-        return data["graph"]
-    return data
-
-
 # --------------------------------------------------------------------------- #
 # Code generation (public, no login needed)
+# The logic lives in brickdnn.service, which the browser demo uses as well.
 # --------------------------------------------------------------------------- #
 
 
@@ -52,55 +43,32 @@ def health(request: Request) -> Response:
 @api_view(["GET"])
 def layers(request: Request) -> Response:
     """All layer types with their parameters: the UI builds its palette and forms from this."""
-    return Response({"categories": list(CATEGORIES), "layers": layer_specs()})
+    return Response(service.layers())
 
 
 @api_view(["GET"])
 def examples(request: Request) -> Response:
-    return Response(list(EXAMPLES.values()))
+    return Response(service.examples())
 
 
 @api_view(["POST"])
 def analyze_graph(request: Request) -> Response:
     """Validate a graph and return the inferred shape and parameter count of every layer."""
-    return Response(analyze(_graph_from_request(request)).to_dict())
-
-
-def _filename(raw) -> str:
-    stem = str(raw or "model").strip().removesuffix(".py")
-    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", stem).strip("_")[:60] or "model"
-    return stem + ".py"
+    return Response(service.analyze_graph(request.data))
 
 
 @api_view(["POST"])
 def generate(request: Request) -> Response | HttpResponse:
-    """Generate a PyTorch script.
+    """Generate a PyTorch script (see ``brickdnn.service.generate`` for the body).
 
-    Body: ``{"graph": {...}, "options": {"class_name": "...", "include_main": true,
-    "include_training": true, "filename": "model"}}``. Add ``?download=1`` to get the
-    file as an attachment instead of JSON.
+    Add ``?download=1`` to get the file as an attachment instead of JSON.
     """
-    graph = _graph_from_request(request)
-    raw_options = request.data.get("options") if isinstance(request.data, dict) else None
-    if raw_options is not None and not isinstance(raw_options, dict):
-        return Response({"detail": "'options' must be an object."}, status=400)
-    try:
-        options = GeneratorOptions.from_dict(raw_options)
-        code = generate_code(graph, options)
-    except GraphValidationError as exc:
-        return Response(
-            {"detail": str(exc), "analysis": exc.analysis.to_dict()},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    except ValueError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-    filename = _filename((raw_options or {}).get("filename"))
-    if request.query_params.get("download"):
-        response = HttpResponse(code, content_type="text/x-python; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    status_code, payload = service.generate(request.data)
+    if status_code == status.HTTP_200_OK and request.query_params.get("download"):
+        response = HttpResponse(payload["code"], content_type="text/x-python; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{payload["filename"]}"'
         return response
-    return Response({"code": code, "filename": filename})
+    return Response(payload, status=status_code)
 
 
 # --------------------------------------------------------------------------- #
