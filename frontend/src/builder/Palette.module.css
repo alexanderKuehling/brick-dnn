@@ -13,7 +13,7 @@
 
   &:hover {
     border-color: var(--item-color);
-    background: var(--item-color-light);
+    background: color-mix(in srgb, var(--item-color) 12%, transparent);
   }
 
   &:active {

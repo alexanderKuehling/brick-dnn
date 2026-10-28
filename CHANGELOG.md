@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Frontend upgraded to React 19, Mantine 9, Vite 8 and Vitest 5. Node.js 22.13+ is now
+  required for development.
+- Updated backend dependencies (Django 5.2.18, Django REST framework 3.18) and CI actions.
+- Dependabot groups updates per ecosystem.
+
 ## 1.0.0 (2026-10-27)
 
 First public release. The former `brick_dnn_api` (Django) and `brick_dnn_app` (React)

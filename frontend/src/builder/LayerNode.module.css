@@ -29,7 +29,7 @@
   border-top-left-radius: var(--mantine-radius-md);
   border-top-right-radius: var(--mantine-radius-md);
   border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-  background: var(--node-color-light);
+  background: color-mix(in srgb, var(--node-color) 12%, transparent);
 }
 
 .dot {
