@@ -25,6 +25,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
+import { DEMO } from '@/demo';
 import { progressLabel } from '@/training/format';
 import { formatCount } from './format';
 
@@ -162,13 +163,15 @@ export function Toolbar(props: ToolbarProps) {
             <Menu.Item leftSection={<IconLayoutGrid size={16} />} onClick={props.onTidy}>
               Tidy up layout
             </Menu.Item>
-            <Menu.Item
-              hiddenFrom="sm"
-              leftSection={<IconDeviceFloppy size={16} />}
-              onClick={props.onSave}
-            >
-              Save to account
-            </Menu.Item>
+            {!DEMO && (
+              <Menu.Item
+                hiddenFrom="sm"
+                leftSection={<IconDeviceFloppy size={16} />}
+                onClick={props.onSave}
+              >
+                Save to account
+              </Menu.Item>
+            )}
             <Menu.Item
               hiddenFrom="sm"
               leftSection={<IconCode size={16} />}
@@ -193,18 +196,20 @@ export function Toolbar(props: ToolbarProps) {
           </Menu.Dropdown>
         </Menu>
 
-        <Tooltip label={isSaved ? 'Saved to your account' : 'Save to your account (Ctrl+S)'}>
-          <ActionIcon
-            variant="default"
-            size="lg"
-            loading={saving}
-            onClick={props.onSave}
-            visibleFrom="sm"
-            aria-label="Save to account"
-          >
-            <IconDeviceFloppy size={18} />
-          </ActionIcon>
-        </Tooltip>
+        {!DEMO && (
+          <Tooltip label={isSaved ? 'Saved to your account' : 'Save to your account (Ctrl+S)'}>
+            <ActionIcon
+              variant="default"
+              size="lg"
+              loading={saving}
+              onClick={props.onSave}
+              visibleFrom="sm"
+              aria-label="Save to account"
+            >
+              <IconDeviceFloppy size={18} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <Button
           variant="default"
           leftSection={<IconCode size={16} />}

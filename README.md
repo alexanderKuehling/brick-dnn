@@ -120,6 +120,15 @@ elsewhere, start the UI with `BACKEND_URL=http://host:port npm run dev`.
 A `Makefile` wraps these steps (`make install`, `make install-training`, `make backend`,
 `make frontend`, `make test`).
 
+### Online demo
+
+The [online demo](https://huggingface.co/spaces/alexKlg/brick-dnn) needs no server: the
+`brickdnn` code generator runs in the browser with [Pyodide](https://pyodide.org). Accounts
+and training are switched off. `npm run build:demo` (in `frontend/`) builds it into
+`frontend/dist-demo/`, which can be hosted as static files anywhere;
+`npm run dev:demo` runs it locally. `deploy/huggingface/deploy.sh` builds it and uploads it
+to the Hugging Face Space.
+
 ## How to use it
 
 1. Drag an **Input** layer onto the canvas and set its shape **without the batch dimension**,
@@ -301,7 +310,6 @@ Ideas for future versions, contributions welcome:
 - Grouping layers into reusable blocks
 - Undo/redo
 - Import of existing PyTorch models
-- Running the generator in the browser (Pyodide) for a serverless demo
 
 ## Why I built this
 

@@ -1,4 +1,6 @@
+import { DEMO } from '@/demo';
 import { request, requestFile } from './client';
+import { createDemoApi } from './demoApi';
 import type {
   Analysis,
   Compatibility,
@@ -23,7 +25,7 @@ export { ApiError, getTokens, onTokensChange, setTokens, type FileDownload } fro
 
 type ProjectInput = Pick<Project, 'name' | 'graph'> & Partial<Pick<Project, 'description'>>;
 
-export const api = {
+const serverApi = {
   layers: () => request<LayerCatalog>('/api/layers/'),
   examples: () => request<Example[]>('/api/examples/'),
   analyze: (graph: GraphDocument, signal?: AbortSignal) =>
@@ -96,3 +98,8 @@ export const api = {
     },
   },
 };
+
+export type Api = typeof serverApi;
+
+/** In the online demo, the code generator runs in the browser instead of on a server. */
+export const api: Api = DEMO ? createDemoApi(serverApi) : serverApi;
