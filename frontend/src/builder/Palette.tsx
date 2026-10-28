@@ -67,7 +67,6 @@ function PaletteItem({ spec, onAdd }: { spec: LayerSpec; onAdd: (spec: LayerSpec
   const color = categoryColor(spec.category);
   const style = {
     '--item-color': `var(--mantine-color-${color}-6)`,
-    '--item-color-light': `var(--mantine-color-${color}-light)`,
   } as React.CSSProperties;
 
   return (

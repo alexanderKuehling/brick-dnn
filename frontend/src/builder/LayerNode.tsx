@@ -19,7 +19,6 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
 
   const style = {
     '--node-color': `var(--mantine-color-${color}-6)`,
-    '--node-color-light': `var(--mantine-color-${color}-light)`,
   } as React.CSSProperties;
 
   return (
