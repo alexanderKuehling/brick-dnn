@@ -44,6 +44,7 @@ import {
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
+import { DEMO } from '@/demo';
 import { categoryColor } from '@/theme';
 import { useTraining } from '@/training/useTraining';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
@@ -513,7 +514,8 @@ function Builder() {
   };
 
   useHotkeys([
-    ['mod+S', () => void save()],
+    // The online demo has no accounts, so Ctrl+S saves a JSON file instead.
+    ['mod+S', () => (DEMO ? exportJson() : void save())],
     ['mod+E', () => void exportPython()],
     ['mod+Enter', training.open],
   ]);
@@ -539,12 +541,28 @@ function Builder() {
         {catalogError ? (
           <Stack align="center" maw={420} ta="center">
             <IconPlugConnectedX size={40} color="var(--mantine-color-red-6)" />
-            <Title order={3}>Cannot reach the backend</Title>
+            <Title order={3}>
+              {DEMO ? 'Cannot start the code generator' : 'Cannot reach the backend'}
+            </Title>
             <Text c="dimmed" size="sm">
-              {catalogError} If you run Brick DNN locally, start the API with{' '}
-              <code>python manage.py runserver</code> in the <code>backend</code> folder.
+              {catalogError}
+              {!DEMO && (
+                <>
+                  {' '}
+                  If you run Brick DNN locally, start the API with{' '}
+                  <code>python manage.py runserver</code> in the <code>backend</code> folder.
+                </>
+              )}
             </Text>
             <Button onClick={reload}>Try again</Button>
+          </Stack>
+        ) : DEMO ? (
+          // Pyodide takes a few seconds to load on the first visit.
+          <Stack align="center" gap="sm">
+            <Loader />
+            <Text c="dimmed" size="sm">
+              Loading the code generator…
+            </Text>
           </Stack>
         ) : (
           <Loader />

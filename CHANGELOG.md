@@ -3,6 +3,11 @@
 ## 1.1.0 (unreleased)
 
 ### Added
+- **Online demo without a server.** `npm run build:demo` builds the editor as static files: the
+  code generator runs in the browser with Pyodide, accounts and training are switched off.
+  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space.
+- `brickdnn.service`: the public endpoints (layers, examples, analyze, generate) as plain
+  functions, shared by the Django API and the online demo.
 - **Local training.** A *Train* button in the editor trains the current network on the machine
   that runs the backend (CUDA, Apple GPU or CPU) and shows loss and accuracy live. Runs can be
   stopped, are kept in a history together with the trained network, and the weights can be

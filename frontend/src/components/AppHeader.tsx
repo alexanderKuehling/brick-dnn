@@ -1,7 +1,17 @@
 import { IconBrandGithub, IconChevronDown, IconFolder, IconLogout } from '@tabler/icons-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ActionIcon, Avatar, Button, Group, Menu, Tooltip, UnstyledButton } from '@mantine/core';
+import {
+  ActionIcon,
+  Avatar,
+  Badge,
+  Button,
+  Group,
+  Menu,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { useAuth } from '@/auth/AuthContext';
+import { DEMO } from '@/demo';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
 
@@ -24,6 +34,13 @@ export function AppHeader() {
           <Button component={Link} to="/" variant={navVariant('/')} size="compact-md" color="gray">
             Builder
           </Button>
+          {DEMO && (
+            <Tooltip label="Runs in your browser. Install Brick DNN locally to train networks.">
+              <Badge variant="light" color="gray">
+                Online demo
+              </Badge>
+            </Tooltip>
+          )}
           {user && (
             <Button
               component={Link}
@@ -53,7 +70,7 @@ export function AppHeader() {
           </ActionIcon>
         </Tooltip>
         <ColorSchemeToggle />
-        {ready && !user && (
+        {!DEMO && ready && !user && (
           <>
             <Button component={Link} to="/login" variant="default">
               Log in

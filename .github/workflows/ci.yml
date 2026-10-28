@@ -58,6 +58,8 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Online demo build (code generator in the browser)
+        run: npm run build:demo
 
   docker:
     name: Docker Compose smoke test
