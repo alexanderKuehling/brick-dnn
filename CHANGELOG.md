@@ -27,6 +27,7 @@
 - Docker: optional PyTorch in the backend image (`BRICKDNN_INSTALL_TORCH=true`).
 
 ### Changed
+- **License changed from MIT to Apache-2.0.** Version 1.0.0 remains available under MIT.
 - Frontend upgraded to React 19, Mantine 9, Vite 8 and Vitest 5. Node.js 22.22.2+ (or 24.15+)
   is now required for development.
 - Updated backend dependencies (Django 5.2.18, Django REST framework 3.18) and CI actions.

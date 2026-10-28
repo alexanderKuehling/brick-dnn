@@ -48,5 +48,5 @@ make lint           # ruff check + ruff format --check
 - **`brickdnn` stays dependency-free** so it can be used anywhere. PyTorch is only imported by
   the training engine, runner and CLI (`brickdnn/training/`), never by the web server process.
 
-By contributing you agree that your contributions are licensed under the [MIT license](LICENSE)
+By contributing you agree that your contributions are licensed under the [Apache License 2.0](LICENSE)
 and to follow the [code of conduct](CODE_OF_CONDUCT.md).

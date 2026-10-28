@@ -17,7 +17,7 @@ Have fun!
 
 <p align="center">
   <a href="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml"><img src="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 license" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/PyTorch-code%20generator-ee4c2c" alt="PyTorch" />
 </p>
@@ -317,4 +317,4 @@ graph-based code generation, shape inference, more layer types, tests, Docker an
 
 ## License
 
-[MIT](LICENSE) © Alexander Kühling
+[Apache License 2.0](LICENSE) © Alexander Kühling
