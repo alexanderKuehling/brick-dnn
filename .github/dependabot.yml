@@ -4,16 +4,42 @@ updates:
     directory: /backend
     schedule:
       interval: monthly
+    # requirements.txt holds version ranges; only touch them when a release falls outside.
+    versioning-strategy: increase-if-necessary
+    groups:
+      python:
+        patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: monthly
     groups:
+      # These must always be updated together.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
       mantine:
-        patterns: ["@mantine/*"]
-      dev-dependencies:
-        dependency-type: development
+        patterns: ["@mantine/*", "postcss-preset-mantine"]
+      # Everything else in one PR; major updates come as separate PRs.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # eslint-config-mantine supports ESLint 9 only.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint does not support TypeScript 6+ yet.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # Follows the Node.js version in .nvmrc.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
