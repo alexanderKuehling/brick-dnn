@@ -97,7 +97,7 @@ docker compose exec backend python manage.py createsuperuser
 
 ### For development
 
-You need Python 3.10+ and Node.js 22.13+.
+You need Python 3.10+ and Node.js 22.22.2+ (or 24.15+).
 
 ```bash
 # 1. API on http://127.0.0.1:8000
