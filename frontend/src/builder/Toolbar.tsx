@@ -10,6 +10,7 @@ import {
   IconFilePlus,
   IconLayoutGrid,
   IconLayoutSidebar,
+  IconPlayerPlay,
   IconSchool,
 } from '@tabler/icons-react';
 import {
@@ -23,7 +24,8 @@ import {
   TextInput,
   Tooltip,
 } from '@mantine/core';
-import type { Analysis, Example } from '@/api/types';
+import type { Analysis, Example, RunSummary } from '@/api/types';
+import { progressLabel } from '@/training/format';
 import { formatCount } from './format';
 
 interface ToolbarProps {
@@ -44,6 +46,9 @@ interface ToolbarProps {
   onSave: () => void;
   onShowCode: () => void;
   onExportPython: () => void;
+  onTrain: () => void;
+  /** The user's training that is currently running, if any. */
+  trainingRun: RunSummary | null;
   onShowSummary: () => void;
   onOpenPalette: () => void;
   onOpenInspector: () => void;
@@ -208,6 +213,7 @@ export function Toolbar(props: ToolbarProps) {
         >
           Code
         </Button>
+        <TrainButton run={props.trainingRun} onClick={props.onTrain} />
         <Tooltip label="Download the PyTorch script (Ctrl+E)">
           <Button leftSection={<IconDownload size={16} />} onClick={props.onExportPython}>
             Export .py
@@ -226,5 +232,36 @@ export function Toolbar(props: ToolbarProps) {
         </Tooltip>
       </Group>
     </Group>
+  );
+}
+
+function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => void }) {
+  const label = run
+    ? `Training “${run.name}”: ${progressLabel(run)}`
+    : 'Train this network on the server (Ctrl+Enter)';
+  return (
+    <>
+      <Tooltip label={label}>
+        <Button
+          variant="default"
+          leftSection={run ? <Loader size={14} /> : <IconPlayerPlay size={16} />}
+          onClick={onClick}
+          visibleFrom="sm"
+        >
+          {run ? progressLabel(run) : 'Train'}
+        </Button>
+      </Tooltip>
+      <Tooltip label={label}>
+        <ActionIcon
+          variant="default"
+          size="lg"
+          onClick={onClick}
+          hiddenFrom="sm"
+          aria-label={run ? `Training: ${progressLabel(run)}` : 'Train'}
+        >
+          {run ? <Loader size={16} /> : <IconPlayerPlay size={18} />}
+        </ActionIcon>
+      </Tooltip>
+    </>
   );
 }

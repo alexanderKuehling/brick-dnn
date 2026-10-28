@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
-from .models import Project
+from .models import Dataset, Project, TrainingRun
 
 User = get_user_model()
 
@@ -60,3 +60,68 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+# --------------------------------------------------------------------------- #
+# Local training
+# --------------------------------------------------------------------------- #
+
+
+class DatasetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dataset
+        fields = ["id", "name", "kind", "size_bytes", "created_at", "info"]
+        read_only_fields = fields
+
+
+class RunSummarySerializer(serializers.ModelSerializer):
+    task = serializers.SerializerMethodField()
+    epochs = serializers.SerializerMethodField()
+    stop_requested = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TrainingRun
+        fields = [
+            "id",
+            "name",
+            "status",
+            "message",
+            "dataset",
+            "config",
+            "tuning",
+            "task",
+            "epochs",
+            "epochs_done",
+            "metrics",
+            "best",
+            "trials_done",
+            "best_trial",
+            "has_weights",
+            "stop_requested",
+            "total_params",
+            "created_at",
+            "finished_at",
+        ]
+        read_only_fields = fields
+
+    def get_task(self, obj: TrainingRun) -> str | None:
+        return obj.plan.get("task") if isinstance(obj.plan, dict) else None
+
+    def get_epochs(self, obj: TrainingRun) -> int | None:
+        return obj.config.get("epochs") if isinstance(obj.config, dict) else None
+
+    def get_stop_requested(self, obj: TrainingRun) -> bool:
+        return obj.stop_requested_at is not None
+
+
+class RunDetailSerializer(RunSummarySerializer):
+    state = serializers.SerializerMethodField()
+
+    class Meta(RunSummarySerializer.Meta):
+        fields = [*RunSummarySerializer.Meta.fields, "graph", "plan", "state"]
+        read_only_fields = fields
+
+    def get_state(self, obj: TrainingRun) -> dict | None:
+        from .training_service import state_of
+
+        return state_of(obj)

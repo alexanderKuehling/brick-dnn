@@ -1,0 +1,39 @@
+.card {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  transition:
+    border-color 100ms ease,
+    background-color 100ms ease;
+
+  &[data-checked] {
+    border-color: var(--mantine-primary-color-filled);
+    background-color: var(--mantine-primary-color-light);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.row {
+  display: block;
+  width: 100%;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-sm);
+
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+}
+
+.log {
+  margin: 0;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+  border-radius: var(--mantine-radius-sm);
+}

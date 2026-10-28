@@ -45,6 +45,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { categoryColor } from '@/theme';
+import { useTraining } from '@/training/useTraining';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { downloadText } from './download';
 import { loadDraft, saveDraft, type Draft } from './draft';
@@ -75,6 +76,8 @@ const nodeTypes = { layer: LayerNode };
 
 // The syntax highlighter is large, so the code preview is loaded on first use.
 const CodeModal = lazy(() => import('./CodeModal'));
+// Same for the training panel (charts, forms); it stays mounted once it was opened.
+const TrainingDrawer = lazy(() => import('@/training/TrainingDrawer'));
 
 const EDGE_DEFAULTS = {
   type: 'smoothstep',
@@ -140,6 +143,13 @@ function Builder() {
   );
   const doc = useMemo(() => toDocument(nodes, edges), [nodes, edges]);
   const { analysis, loading: analyzing, error: analysisError } = useAnalysis(doc);
+  const training = useTraining(Boolean(user));
+  const [trainingLoaded, setTrainingLoaded] = useState(false);
+  useEffect(() => {
+    if (training.opened) {
+      setTrainingLoaded(true);
+    }
+  }, [training.opened]);
   const selected = nodes.find((node) => node.selected) ?? null;
   const filename = slugify(name);
   const currentKey = `${name}\n${semanticKey(doc)}`;
@@ -486,9 +496,26 @@ function Builder() {
       loadDocument({ version: 1, nodes: [], edges: [] }, 'Untitled network', null)
     );
 
+  const loadTrainedNetwork = (graph: GraphDocument, runName: string) =>
+    confirmReplace(() => {
+      loadDocument(graph, runName, null);
+      training.close();
+    });
+
+  const showProblemsFromTraining = () => {
+    training.close();
+    showSummary();
+  };
+
+  const loginToTrain = () => {
+    training.close();
+    navigate('/login', { state: { from: '/' } });
+  };
+
   useHotkeys([
     ['mod+S', () => void save()],
     ['mod+E', () => void exportPython()],
+    ['mod+Enter', training.open],
   ]);
 
   // ---------------------------------------------------------------- render
@@ -559,6 +586,8 @@ function Builder() {
             onSave={() => void save()}
             onShowCode={code.open}
             onExportPython={() => void exportPython()}
+            onTrain={training.open}
+            trainingRun={training.activeRun}
             onShowSummary={showSummary}
             onOpenPalette={palette.open}
             onOpenInspector={inspector.open}
@@ -656,6 +685,20 @@ function Builder() {
             filename={filename}
             options={codeOptions}
             onOptionsChange={setCodeOptions}
+          />
+        </Suspense>
+      )}
+      {(trainingLoaded || training.opened) && (
+        <Suspense fallback={null}>
+          <TrainingDrawer
+            training={training}
+            loggedIn={Boolean(user)}
+            doc={doc}
+            networkName={name}
+            analysis={analysis}
+            onLogin={loginToTrain}
+            onShowProblems={showProblemsFromTraining}
+            onLoadNetwork={loadTrainedNetwork}
           />
         </Suspense>
       )}

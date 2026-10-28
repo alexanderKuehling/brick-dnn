@@ -139,8 +139,21 @@ CACHES = {
     }
 }
 
-# Graphs are small JSON documents; 1 MB is plenty and limits abuse.
+# Graphs are small JSON documents; 1 MB is plenty and limits abuse. (File uploads do not
+# count: they are streamed to temporary files and limited by TRAINING_MAX_UPLOAD_MB.)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
+
+# Local training: networks are trained in a separate process per run (needs PyTorch).
+# Set BRICKDNN_TRAINING=false to switch the feature off.
+TRAINING_ENABLED = env_bool("BRICKDNN_TRAINING", True)
+TRAINING_DIR = DATA_DIR / "training"
+# Number of trainings that may run at the same time (counted across all users).
+TRAINING_MAX_RUNS = int(os.environ.get("BRICKDNN_TRAINING_MAX_RUNS", "1"))
+# Largest dataset upload (CSV or ZIP) in megabytes.
+TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
+# Command that trains one run; the run directory is appended as the last argument.
+# None means [sys.executable, "-m", "brickdnn.training.runner"] (tests use a fake runner).
+TRAINING_RUNNER_COMMAND: list[str] | None = None
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -161,6 +174,8 @@ REST_FRAMEWORK = {
         "anon": os.environ.get("BRICKDNN_ANON_RATE", "300/minute"),
         "user": os.environ.get("BRICKDNN_USER_RATE", "600/minute"),
         "auth": os.environ.get("BRICKDNN_AUTH_RATE", "20/minute"),
+        "training": os.environ.get("BRICKDNN_TRAINING_RATE", "120/hour"),
+        "uploads": os.environ.get("BRICKDNN_UPLOAD_RATE", "60/hour"),
     },
 }
 

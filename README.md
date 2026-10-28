@@ -12,7 +12,7 @@ Have fun!
 <h1 align="center">Brick DNN</h1>
 
 <p align="center">
-  <b>Build neural networks from bricks. Export clean, runnable PyTorch code.</b>
+  <b>Build neural networks from bricks. Train them locally. Export clean, runnable PyTorch code.</b>
 </p>
 
 <p align="center">
@@ -26,8 +26,9 @@ Have fun!
 
 Sketching a network architecture is easy; getting every tensor shape right is not.
 Brick DNN lets you snap layers together on a canvas, **shows the shape of every tensor while you
-build**, points at mistakes before you run anything, and exports a self-contained PyTorch script
-that you can read, run, train and modify.
+build**, points at mistakes before you run anything, **trains the network on your own machine**
+with live loss and accuracy curves, and exports a self-contained PyTorch script that you can
+read, run, train and modify.
 
 It is meant for students learning how architectures fit together, teachers who want to
 demonstrate them, and practitioners who want a correct starting point in seconds.
@@ -42,6 +43,13 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   size 4"*, *"Model dimension 30 must be divisible by the number of attention heads (4)"*).
 - **Real graphs, not just stacks**: skip connections (`Add`), multiple inputs and outputs and
   branch merging (`Concat`).
+- **Local training from the editor**: press *Train*, pick demo data, MNIST, Fashion-MNIST,
+  CIFAR-10, a CSV file or a folder of images, and watch loss and accuracy live. Training runs
+  in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
+  checks beforehand whether network and data fit and says what to change. Hold out a test set,
+  let a **hyperparameter search** find a good learning rate, batch size or optimizer, and
+  download the trained weights together with the matching script. See
+  [docs/training.md](docs/training.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
@@ -59,6 +67,16 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   </tr>
 </table>
 
+**Train the network right in the editor**: a small CNN reaches 98.7 % on MNIST after ten epochs
+on a laptop CPU, with loss and accuracy shown live.
+
+<table>
+  <tr>
+    <td><img src="docs/images/training.png" alt="Finished training of a small CNN on MNIST with loss and accuracy curves" /></td>
+    <td><img src="docs/images/training-setup-dark.png" alt="Choosing MNIST as training data in dark mode, with the compatibility check" /></td>
+  </tr>
+</table>
+
 ## Quick start
 
 ### With Docker (recommended)
@@ -69,8 +87,9 @@ cd brick-dnn
 docker compose up -d
 ```
 
-Open <http://localhost:8080>. Data (accounts, saved networks) lives in the `brickdnn-data`
-volume. To create an admin account for the Django admin at `/admin/`:
+Open <http://localhost:8080>. Data (accounts, saved networks, training runs) lives in the
+`brickdnn-data` volume. To enable training, build the image with PyTorch (CPU, about 1 GB more):
+`BRICKDNN_INSTALL_TORCH=true docker compose up -d --build`. To create an admin account for the Django admin at `/admin/`:
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
@@ -86,6 +105,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
+pip install torch torchvision          # optional: enables training (GPU is used if available)
 python manage.py migrate
 DJANGO_DEBUG=true python manage.py runserver
 
@@ -98,7 +118,8 @@ npm run dev
 The Vite dev server proxies `/api` to the backend, so no CORS setup is needed. If the API runs
 elsewhere, start the UI with `BACKEND_URL=http://host:port npm run dev`.
 
-A `Makefile` wraps these steps (`make install`, `make backend`, `make frontend`, `make test`).
+A `Makefile` wraps these steps (`make install`, `make install-training`, `make backend`,
+`make frontend`, `make test`).
 
 ## How to use it
 
@@ -111,6 +132,8 @@ A `Makefile` wraps these steps (`make install`, `make backend`, `make frontend`,
 3. Select a layer to edit its settings in the panel on the right. Fields marked *auto* are
    inferred from the incoming tensor.
 4. Fix anything marked red, then press **Export .py** (or <kbd>Ctrl</kbd>+<kbd>E</kbd>).
+5. Or press **Train**: choose the data and settings and train the network right away. When it is
+   done, download the weights (`.pt`) and the script that loads them.
 
 The exported file runs as is:
 
@@ -180,6 +203,10 @@ pip install "git+https://github.com/alexanderKuehling/brick-dnn#subdirectory=bac
 brickdnn --example resnet_block -o model.py   # bundled examples
 brickdnn my_network.json --check              # validate, print shapes and parameter counts
 brickdnn my_network.json -o model.py --class-name MyNet
+
+pip install "brickdnn[train] @ git+https://github.com/alexanderKuehling/brick-dnn#subdirectory=backend"
+brickdnn train my_network.json --data mnist --epochs 5 --save weights.pt
+brickdnn train my_network.json --data houses.csv --test-split 0.2 --tune --trials 20
 ```
 
 ```python
@@ -199,9 +226,13 @@ frontend/  React + Mantine + React Flow (TypeScript)
    │  palette & forms are generated from GET /api/layers/
    │  every edit → POST /api/analyze/ (debounced) → shapes and errors on the canvas
    │  export     → POST /api/generate/
+   │  training   → POST /api/training/runs/, then polls the run once per second
    ▼
-backend/   Django REST API: accounts (JWT), saved networks, thin wrappers around ↓
-   └── brickdnn/   pure Python: layer catalogue, graph validation, shape inference, code generation
+backend/   Django REST API: accounts (JWT), saved networks, datasets, training runs
+   │          starts one process per training run, reads its progress from state.json
+   ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
+   │                        code generation (no dependencies)
+   └── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
 ```
 
 The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
@@ -211,16 +242,18 @@ no hard-coded knowledge of layers or their parameters.
 brick-dnn/
 ├── backend/
 │   ├── brickdnn/            code generator (standalone package + CLI)
+│   │   └── training/        training engine, runner process, `brickdnn train`
 │   ├── brick_dnn_core/      Django app: API views, Project model
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
 ├── frontend/
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
+│       ├── training/        training panel: data, settings, live progress, history
 │       ├── api/             typed API client
 │       ├── auth/            login state
 │       └── pages/           login, sign-up, saved networks
-├── docs/                    graph format, REST API, contributor guide
+├── docs/                    graph format, REST API, training, contributor guide
 └── docker-compose.yml
 ```
 
@@ -239,6 +272,10 @@ All settings are environment variables (see [`.env.example`](.env.example)):
 | `BRICKDNN_ALLOW_REGISTRATION`  | `true`                     | Set to `false` for a private instance                |
 | `BRICKDNN_NUM_PROXIES`         | `0` (`1` in Docker)        | Reverse proxies in front of Django (for rate limits) |
 | `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
+| `BRICKDNN_TRAINING`            | `true`                     | Set to `false` to disable training                   |
+| `BRICKDNN_TRAINING_MAX_RUNS`   | `1`                        | Trainings running at the same time (all users)       |
+| `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
+| `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md).
@@ -253,7 +290,8 @@ cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
 
 The backend suite builds every example and every layer type, runs the generated code in
 PyTorch and checks that output shapes and parameter counts match the analysis exactly. It also
-trains the generated CSV scripts end to end. CI runs everything on Python 3.10–3.13 and builds
+trains the generated CSV scripts end to end and runs the training engine on every example
+(demo data, CSV files, image folders, built-in datasets with faked downloads). CI runs everything on Python 3.10–3.13 and builds
 the Docker images.
 
 ## Roadmap

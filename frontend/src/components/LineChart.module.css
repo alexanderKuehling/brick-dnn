@@ -1,0 +1,83 @@
+.root {
+  /* Two categorical slots, stepped separately for the light and the dark surface
+     (validated for colour-vision deficiencies and >= 3:1 contrast in both modes). */
+  --chart-series-1: light-dark(#2a78d6, #3987e5);
+  --chart-series-2: light-dark(#eb6834, #d95926);
+  --chart-grid: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  --chart-axis: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+  --chart-surface: var(--mantine-color-body);
+}
+
+.plot {
+  position: relative;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.tick {
+  font-size: 11px;
+  fill: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axis,
+.crosshair {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dot {
+  stroke: var(--chart-surface);
+  stroke-width: 2;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: pan-y;
+  border-radius: var(--mantine-radius-sm);
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 1;
+  min-width: 130px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
