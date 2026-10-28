@@ -115,7 +115,63 @@ class StateReporter(Reporter):
             self.state["history"] = [*self.state["history"], entry]
             self.state["best"] = best
             self.state["progress"] = None
+            trials = self.state["trials"]
+            if self.state["trial"] is not None and trials:
+                # Live values of the running trial.
+                current = dict(trials[-1])
+                current["epochs_done"] = entry["epoch"]
+                for key in ("train_loss", "val_loss", "val_accuracy", "val_rmse"):
+                    current[key] = entry.get(key)
+                self.state["trials"] = [*trials[:-1], current]
             self._write()
+
+    def trial_start(self, trial: dict[str, Any]) -> None:
+        print(f"Trial {trial['trial']} of {trial['trials']}: {trial['params']}", flush=True)
+        entry = {
+            "trial": trial["trial"],
+            "params": trial["params"],
+            "status": "running",
+            "message": "",
+            "epochs_done": 0,
+            "train_loss": None,
+            "val_loss": None,
+            "val_accuracy": None,
+            "val_rmse": None,
+            "seconds": None,
+        }
+        with self._lock:
+            self.state.update(
+                trial=trial["trial"],
+                steps_per_epoch=trial.get("steps_per_epoch"),
+                history=[],
+                best=None,
+                progress=None,
+                trials=[*self.state["trials"], entry],
+            )
+            self._write()
+
+    def trial_end(self, trial: dict[str, Any], best_trial: int | None) -> None:
+        print(f"Trial {trial['trial']} {trial['status']}: {trial}", flush=True)
+        with self._lock:
+            trials = [t for t in self.state["trials"] if t.get("trial") != trial["trial"]]
+            self.state.update(trials=[*trials, trial], best_trial=best_trial, progress=None)
+            self._write()
+
+    def search_end(self, result: dict[str, Any]) -> None:
+        print(f"Best trial: {result['best_trial']} {result['params']}", flush=True)
+        with self._lock:
+            self.state.update(
+                trial=None,
+                best_trial=result["best_trial"],
+                history=result["history"],
+                best=result["best"],
+                progress=None,
+            )
+            self._write()
+
+    def test_end(self, result: dict[str, Any]) -> None:
+        print(f"Test: {result}", flush=True)
+        self._update(test=result, progress=None)
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         print(f"{status}: {message}", flush=True)
@@ -126,6 +182,7 @@ class StateReporter(Reporter):
                 message=message,
                 weights=weights,
                 progress=None,
+                trial=None,
                 finished_at=time.time(),
             )
             self._write()

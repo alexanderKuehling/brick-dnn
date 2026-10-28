@@ -8,10 +8,12 @@ The model is built from exactly the code that the export produces, so the saved
 
 Use :func:`train` with a :class:`TrainingJob` and a :class:`Reporter`; the web runner
 (:mod:`.runner`) and the command line (:mod:`.cli`) only differ in their reporter.
+A job with ``tuning`` settings runs a hyperparameter search (see :mod:`.tuning`).
 """
 
 from __future__ import annotations
 
+import gc
 import math
 import os
 import random
@@ -27,10 +29,11 @@ import torch.nn as nn
 from ..codegen import generate_code
 from .compat import TrainingPlan, check_compatibility
 from .config import ConfigError, TrainingConfig
-from .data import PreparedData, iterate_batches, prepare_data
+from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT, DatasetInfo, builtin_info, random_info
 from .devices import available_devices, default_device, device_label, select_device
-from .reporting import Reporter, StopTraining, TrainingError, short_error
+from .reporting import DivergedError, Reporter, StopTraining, TrainingError, short_error
+from .tuning import TuningConfig, describe_params, trial_config
 
 # Progress callbacks per second (at most).
 PROGRESS_INTERVAL = 0.5
@@ -75,6 +78,7 @@ class TrainingJob:
     path: str | None = None  # CSV file or image folder
     data_root: str | None = None  # where torchvision datasets are downloaded
     name: str = ""
+    tuning: TuningConfig | None = None  # set for a hyperparameter search
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TrainingJob:
@@ -101,6 +105,8 @@ class TrainingJob:
             raise TrainingError("The training job describes no valid dataset.") from exc
         try:
             config = TrainingConfig.from_dict(data.get("config"))
+            tuning = data.get("tuning")
+            tuning = TuningConfig.from_dict(tuning) if tuning is not None else None
         except ConfigError as exc:
             raise TrainingError(str(exc)) from exc
         path = dataset.get("path")
@@ -112,6 +118,7 @@ class TrainingJob:
             path=str(path) if path else None,
             data_root=str(data_root) if data_root else None,
             name=str(data.get("name") or ""),
+            tuning=tuning,
         )
 
 
@@ -122,6 +129,11 @@ class TrainingResult:
     weights: bool = False
     history: list[dict[str, Any]] = field(default_factory=list)
     best: dict[str, Any] | None = None
+    # {"loss", "accuracy", "rmse"} of the final model on the test set
+    test: dict[str, Any] | None = None
+    # Hyperparameter search: every trial (see state.py) and the number of the best one
+    trials: list[dict[str, Any]] = field(default_factory=list)
+    best_trial: int | None = None
 
 
 def train(
@@ -130,9 +142,11 @@ def train(
     """Run one training job to the end. Never raises (except ``KeyboardInterrupt``).
 
     Weights are saved to ``weights_path`` when the run completes or is stopped after at
-    least one optimizer step. The outcome is reported with ``reporter.finish`` and
-    returned.
+    least one optimizer step (a search saves the best trial). The outcome is reported with
+    ``reporter.finish`` and returned.
     """
+    if job.tuning is not None:
+        return _Search(job, reporter, weights_path).run()
     return _Run(job, reporter, weights_path).run()
 
 
@@ -143,6 +157,30 @@ def _is_out_of_memory(exc: BaseException) -> bool:
     if oom is not None and isinstance(exc, oom):
         return True
     return isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower()
+
+
+def _is_batch_norm_error(exc: BaseException) -> bool:
+    return isinstance(exc, ValueError) and "Expected more than 1 value per channel" in str(exc)
+
+
+def _free_memory(device: torch.device) -> None:
+    gc.collect()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "mps":
+        empty = getattr(getattr(torch, "mps", None), "empty_cache", None)
+        if empty is not None:
+            empty()
+
+
+def _metrics_text(name: str, loss: float, accuracy: float | None, rmse: float | None) -> str:
+    """``"validation accuracy 97.1%"`` or ``"test loss 0.123, RMSE 4.5"``."""
+    if accuracy is not None:
+        return f"{name} accuracy {accuracy * 100:.1f}%"
+    text = f"{name} loss {loss:.4g}"
+    if rmse is not None:
+        text += f", RMSE {rmse:.4g}"
+    return text
 
 
 class _Run:
@@ -157,6 +195,10 @@ class _Run:
         self.steps = 0  # optimizer steps so far
         self.history: list[dict[str, Any]] = []
         self.best: dict[str, Any] | None = None
+        self.test_result: dict[str, Any] | None = None
+        self.trials: list[dict[str, Any]] = []
+        self.best_trial: dict[str, Any] | None = None
+        self.seed = 0
         self._last_stop_check = 0.0
 
     # -- outcome ---------------------------------------------------------- #
@@ -164,15 +206,11 @@ class _Run:
     def run(self) -> TrainingResult:
         try:
             try:
-                self._prepare()
-                self._fit()
+                self._execute()
             except StopTraining:
+                self._on_stopped()
                 weights = self._save_weights()
-                if self.steps == 0:
-                    message = "Stopped before the training started."
-                else:
-                    message = f"Stopped after {len(self.history)} of {self.config.epochs} epochs."
-                return self._end("stopped", message, weights)
+                return self._end("stopped", self._stopped_message(), weights)
             return self._end("completed", self._summary(), self._save_weights())
         except TrainingError as exc:
             return self._end("failed", str(exc), False)
@@ -180,13 +218,26 @@ class _Run:
             traceback.print_exc()
             return self._end("failed", self._explain(exc), False)
 
+    def _execute(self) -> None:
+        self._prepare()
+        self._fit()
+        self._test()
+
+    def _on_stopped(self) -> None:
+        """Called when the user stopped the run, before the weights are saved."""
+
+    def _stopped_message(self) -> str:
+        if self.steps == 0:
+            return "Stopped before the training started."
+        return f"Stopped after {len(self.history)} of {self.config.epochs} epochs."
+
     def _explain(self, exc: Exception) -> str:
         if _is_out_of_memory(exc):
             return (
                 f"Out of memory on {self.device_label}. "
                 "Try a smaller batch size or a smaller network."
             )
-        if isinstance(exc, ValueError) and "Expected more than 1 value per channel" in str(exc):
+        if _is_batch_norm_error(exc):
             return (
                 "Batch normalization needs at least 2 samples per batch. Increase the batch size."
             )
@@ -194,16 +245,31 @@ class _Run:
 
     def _end(self, status: str, message: str, weights: bool) -> TrainingResult:
         self.reporter.finish(status, message, weights)
-        return TrainingResult(status, message, weights, self.history, self.best)
+        best_trial = self.best_trial["trial"] if self.best_trial else None
+        return TrainingResult(
+            status,
+            message,
+            weights,
+            self.history,
+            self.best,
+            self.test_result,
+            self.trials,
+            best_trial,
+        )
+
+    def _result_text(self) -> str:
+        """Validation (and test) result of the final model."""
+        last = self.history[-1]
+        text = _metrics_text(
+            "validation", last["val_loss"], last["val_accuracy"], last.get("val_rmse")
+        )
+        if self.test_result is not None:
+            test = self.test_result
+            text += "; " + _metrics_text("test", test["loss"], test["accuracy"], test["rmse"])
+        return text
 
     def _summary(self) -> str:
-        last = self.history[-1]
-        if last["val_accuracy"] is not None:
-            return f"Finished: validation accuracy {last['val_accuracy'] * 100:.1f}%"
-        message = f"Finished: validation loss {last['val_loss']:.4g}"
-        if last.get("val_rmse") is not None:
-            message += f", RMSE {last['val_rmse']:.4g}"
-        return message
+        return f"Finished: {self._result_text()}"
 
     def _save_weights(self) -> bool:
         if self.weights_path is None or self.model is None or self.steps == 0:
@@ -224,6 +290,14 @@ class _Run:
     # -- preparation ------------------------------------------------------- #
 
     def _prepare(self) -> None:
+        self._prepare_data()
+        self._build(self.config)
+        self.reporter.setup(self._setup_info())
+        self._to_device(check=True)
+        self.optimizer = self._optimizer()
+
+    def _prepare_data(self) -> None:
+        """Check the network, choose seed and device, load the data and pick the losses."""
         job, config, reporter = self.job, self.config, self.reporter
         reporter.status("preparing", "Preparing the data …")
         compat = check_compatibility(job.graph, job.dataset)
@@ -237,11 +311,11 @@ class _Run:
         if seed is None:
             seed = random.SystemRandom().randrange(2**31)
             reporter.log(f"Random seed: {seed}")
+        self.seed = seed
         self.device = select_device(config.device)
         self.device_label = device_label(self.device)
 
         generator = torch.Generator().manual_seed(seed)
-        self.shuffle = torch.Generator().manual_seed(seed + 1)
         data_root = job.data_root or (
             str(DEFAULT_DATA_ROOT) if job.dataset.kind == "builtin" else None
         )
@@ -250,38 +324,55 @@ class _Run:
         )
         self._check_stop()
 
-        torch.manual_seed(seed)
-        self.model = build_model(job.graph)
-        n_train, n_val = len(self.data.train), len(self.data.val)
-        # A last batch of a single sample breaks BatchNorm ("Expected more than 1 value per
-        # channel"), so it is skipped; every other sample is used in every epoch.
-        self.drop_last = n_train > config.batch_size and n_train % config.batch_size == 1
-        self.steps_per_epoch = math.ceil(n_train / config.batch_size) - int(self.drop_last)
         targets = self.plan.targets
         self.losses = [
             nn.CrossEntropyLoss() if t["kind"] == "class" else nn.MSELoss() for t in targets
         ]
         self.accuracy = len(targets) == 1 and targets[0]["kind"] == "class"
         self.regression = self.plan.task == "regression"
-        reporter.setup(
-            {
-                "device": self.device.type,
-                "device_label": self.device_label,
-                "task": self.plan.task,
-                "num_classes": self.plan.num_classes,
-                "class_names": self.plan.class_names,
-                "train_size": n_train,
-                "val_size": n_val,
-                "epochs": config.epochs,
-                "steps_per_epoch": self.steps_per_epoch,
-                "total_params": sum(p.numel() for p in self.model.parameters() if p.requires_grad),
-                "preprocessing": self.data.preprocessing,
-            }
-        )
+
+    def _build(self, config: TrainingConfig) -> None:
+        """A fresh model and shuffling order for ``config``.
+
+        The seed fixes the initial weights and the order of the batches, so every trial of
+        a search starts from the same point and only its settings make the difference.
+        """
+        self.config = config
+        self.history = []
+        self.best = None
+        self.steps = 0
+        self.shuffle = torch.Generator().manual_seed(self.seed + 1)
+        torch.manual_seed(self.seed)
+        self.model = build_model(self.job.graph)
+        n_train = len(self.data.train)
+        # A last batch of a single sample breaks BatchNorm ("Expected more than 1 value per
+        # channel"), so it is skipped; every other sample is used in every epoch.
+        self.drop_last = n_train > config.batch_size and n_train % config.batch_size == 1
+        self.steps_per_epoch = math.ceil(n_train / config.batch_size) - int(self.drop_last)
+
+    def _setup_info(self) -> dict[str, Any]:
+        assert self.model is not None
+        return {
+            "device": self.device.type,
+            "device_label": self.device_label,
+            "task": self.plan.task,
+            "num_classes": self.plan.num_classes,
+            "class_names": self.plan.class_names,
+            "train_size": len(self.data.train),
+            "val_size": len(self.data.val),
+            "test_size": len(self.data.test) if self.data.test is not None else None,
+            "epochs": self.config.epochs,
+            "steps_per_epoch": self.steps_per_epoch,
+            "total_params": sum(p.numel() for p in self.model.parameters() if p.requires_grad),
+            "preprocessing": self.data.preprocessing,
+        }
+
+    def _to_device(self, check: bool) -> None:
+        """Move the model to the device; ``check`` tests the Apple GPU first (see _try_mps)."""
+        assert self.model is not None
         self.model.to(self.device)
-        if self.device.type == "mps":
+        if check and self.device.type == "mps":
             self._try_mps()
-        self.optimizer = self._optimizer()
 
     def _try_mps(self) -> None:
         """Check one batch on the Apple GPU against the CPU; fall back to the CPU if needed.
@@ -375,12 +466,15 @@ class _Run:
 
     def _not_finite(self, value: float, epoch: int) -> TrainingError:
         what = "NaN" if math.isnan(value) else "infinite"
-        return TrainingError(f"The loss became {what} in epoch {epoch}. Try a lower learning rate.")
+        return DivergedError(f"The loss became {what} in epoch {epoch}. Try a lower learning rate.")
+
+    def _epoch_message(self, epoch: int) -> str:
+        return f"Epoch {epoch} of {self.config.epochs}"
 
     def _fit(self) -> None:
         epochs = self.config.epochs
         for epoch in range(1, epochs + 1):
-            self.reporter.status("running", f"Epoch {epoch} of {epochs}")
+            self.reporter.status("running", self._epoch_message(epoch))
             started = time.perf_counter()
             train_loss, train_acc = self._train_epoch(epoch)
             val_loss, val_acc, val_rmse = self._validate(epoch)
@@ -444,11 +538,18 @@ class _Run:
         return loss_sum / seen, (correct / seen if self.accuracy else None)
 
     def _validate(self, epoch: int) -> tuple[float, float | None, float | None]:
+        val_loss, accuracy, rmse = self._evaluate(self.data.val)
+        if not math.isfinite(val_loss):
+            raise self._not_finite(val_loss, epoch)
+        return val_loss, accuracy, rmse
+
+    def _evaluate(self, source: Source) -> tuple[float, float | None, float | None]:
+        """Loss, accuracy (single classification output) and RMSE (CSV regression)."""
         assert self.model is not None
         self.model.eval()
         loss_sum, seen, correct = 0.0, 0, 0
         with torch.no_grad():
-            for inputs, targets in iterate_batches(self.data.val, self.config.batch_size):
+            for inputs, targets in iterate_batches(source, self.config.batch_size):
                 self._check_stop()
                 outputs = self._forward(inputs)
                 n = len(targets[0])
@@ -457,10 +558,225 @@ class _Run:
                 if self.accuracy:
                     correct += self._correct(outputs, targets)
         seen = max(seen, 1)
-        val_loss = loss_sum / seen
-        if not math.isfinite(val_loss):
-            raise self._not_finite(val_loss, epoch)
+        loss = loss_sum / seen
         rmse = None
-        if self.regression and self.data.target_std is not None:
-            rmse = math.sqrt(val_loss) * self.data.target_std
-        return val_loss, (correct / seen if self.accuracy else None), rmse
+        if self.regression and self.data.target_std is not None and math.isfinite(loss):
+            rmse = math.sqrt(loss) * self.data.target_std
+        return loss, (correct / seen if self.accuracy else None), rmse
+
+    def _test(self) -> None:
+        """Measure the final model once on the test set (if there is one)."""
+        if self.data.test is None:
+            return
+        self.reporter.status("running", "Testing the final model …")
+        loss, accuracy, rmse = self._evaluate(self.data.test)
+        self.test_result = {"loss": loss, "accuracy": accuracy, "rmse": rmse}
+        self.reporter.test_end(dict(self.test_result))
+
+
+class _Search(_Run):
+    """Hyperparameter search: train one model per trial on the same data, keep the best.
+
+    The data is prepared once. Every trial starts from the same initial weights and batch
+    order; a trial whose loss explodes or that does not fit into memory fails on its own
+    and the search goes on. The best trial (lowest validation loss after its last epoch)
+    is kept in memory, tested and saved at the end.
+    """
+
+    def __init__(self, job: TrainingJob, reporter: Reporter, weights_path: str | Path | None):
+        super().__init__(job, reporter, weights_path)
+        assert job.tuning is not None
+        self.tuning: TuningConfig = job.tuning
+        self.base_config = job.config
+        self.total = 0
+        self.trial = 0
+        self.best_state: dict[str, torch.Tensor] | None = None
+        self.best_history: list[dict[str, Any]] = []
+        self.best_epoch: dict[str, Any] | None = None
+        self.device_checked = False  # the Apple GPU check (_try_mps) is done once
+
+    def _execute(self) -> None:
+        self._prepare_data()
+        trials = self.tuning.sample(self.seed)
+        self.total = len(trials)
+        for index, params in enumerate(trials, start=1):
+            self._check_stop()
+            self._run_trial(index, params)
+        if self.best_trial is None:
+            first = next(t for t in self.trials if t["status"] == "failed")
+            raise TrainingError(
+                f"All {self.total} trials failed. Trial {first['trial']}: {first['message']}"
+            )
+        self._use_best()
+        self._test()
+
+    def _epoch_message(self, epoch: int) -> str:
+        return f"Trial {self.trial} of {self.total}: epoch {epoch} of {self.config.epochs}"
+
+    def _run_trial(self, index: int, params: dict[str, Any]) -> None:
+        self.trial = index
+        self._build(trial_config(self.base_config, params))
+        if index == 1:
+            info = self._setup_info()
+            info.update(tuning=self.tuning.to_dict(), trials_total=self.total)
+            self.reporter.setup(info)
+        self.reporter.trial_start(
+            {
+                "trial": index,
+                "trials": self.total,
+                "params": dict(params),
+                "steps_per_epoch": self.steps_per_epoch,
+            }
+        )
+        entry: dict[str, Any] = {
+            "trial": index,
+            "params": dict(params),
+            "status": "running",
+            "message": "",
+            "epochs_done": 0,
+            "train_loss": None,
+            "val_loss": None,
+            "val_accuracy": None,
+            "val_rmse": None,
+            "seconds": None,
+        }
+        self.trials.append(entry)
+        started = time.perf_counter()
+        failure: str | None = None
+        try:
+            self._to_device(check=not self.device_checked)
+            self.device_checked = True
+            self.optimizer = self._optimizer()
+            self._fit()
+        except StopTraining:
+            self._trial_done(entry, "stopped", "Stopped.", started)
+            raise
+        except Exception as exc:
+            if not (
+                isinstance(exc, DivergedError)
+                or _is_out_of_memory(exc)
+                or _is_batch_norm_error(exc)
+            ):
+                raise
+            failure = str(exc) if isinstance(exc, TrainingError) else self._explain(exc)
+        if failure is not None:
+            self.reporter.log(f"Trial {index} failed: {failure}")
+            self.model = None
+            self.optimizer = None  # type: ignore[assignment]
+            _free_memory(self.device)
+            self._trial_done(entry, "failed", failure, started)
+            return
+
+        best = self.best_trial
+        if best is None or entry_score(self.history) < best["val_loss"]:
+            assert self.model is not None
+            self.best_state = {
+                k: v.detach().to("cpu", copy=True) for k, v in self.model.state_dict().items()
+            }
+            self.best_history = list(self.history)
+            self.best_epoch = dict(self.best) if self.best else None
+            self._trial_done(entry, "completed", "", started, new_best=True)
+        else:
+            self._trial_done(entry, "completed", "", started)
+
+    def _trial_done(
+        self,
+        entry: dict[str, Any],
+        status: str,
+        message: str,
+        started: float,
+        new_best: bool = False,
+    ) -> None:
+        last = self.history[-1] if self.history else {}
+        entry.update(
+            status=status,
+            message=message,
+            epochs_done=len(self.history),
+            train_loss=last.get("train_loss"),
+            val_loss=last.get("val_loss"),
+            val_accuracy=last.get("val_accuracy"),
+            val_rmse=last.get("val_rmse"),
+            seconds=round(time.perf_counter() - started, 3),
+        )
+        if new_best:
+            self.best_trial = entry
+        best = self.best_trial["trial"] if self.best_trial else None
+        self.reporter.trial_end(dict(entry), best)
+
+    def _use_best(self) -> None:
+        """Make the best trial the result: its model, history and settings."""
+        best = self.best_trial
+        assert best is not None and self.best_state is not None
+        self._build(trial_config(self.base_config, best["params"]))
+        assert self.model is not None
+        self.model.load_state_dict(self.best_state)
+        self.model.to(self.device)
+        self.history = list(self.best_history)
+        self.best = self.best_epoch
+        self.trial = 0
+        self.reporter.search_end(
+            {
+                "best_trial": best["trial"],
+                "params": dict(best["params"]),
+                "history": list(self.best_history),
+                "best": dict(self.best_epoch) if self.best_epoch else None,
+            }
+        )
+
+    def _on_stopped(self) -> None:
+        if self.best_trial is not None and self.best_state is not None:
+            best = self.best_trial
+            self.history = list(self.best_history)
+            self.best = self.best_epoch
+            self.reporter.search_end(
+                {
+                    "best_trial": best["trial"],
+                    "params": dict(best["params"]),
+                    "history": list(self.best_history),
+                    "best": dict(self.best_epoch) if self.best_epoch else None,
+                }
+            )
+
+    def _finished_trials(self) -> int:
+        return sum(1 for t in self.trials if t["status"] in ("completed", "failed"))
+
+    def _stopped_message(self) -> str:
+        done = self._finished_trials()
+        if done == 0:
+            if self.steps == 0:
+                return "Stopped before the training started."
+            return f"Stopped during trial {self.trial} of {self.total}."
+        message = f"Stopped after {done} of {self.total} trials."
+        if self.best_trial is not None:
+            best = self.best_trial
+            message += f" Best so far: trial {best['trial']} ({describe_params(best['params'])})."
+        return message
+
+    def _summary(self) -> str:
+        best = self.best_trial
+        assert best is not None
+        failed = sum(1 for t in self.trials if t["status"] == "failed")
+        head = f"Finished {self.total} trial{'s' if self.total != 1 else ''}"
+        if failed:
+            head += f" ({failed} failed)"
+        return (
+            f"{head}. Best: trial {best['trial']} ({describe_params(best['params'])}), "
+            f"{self._result_text()}"
+        )
+
+    def _save_weights(self) -> bool:
+        """The weights of the best trial, or of the first trial if it was stopped early."""
+        state = self.best_state
+        if state is None and self.model is not None and self.steps > 0:
+            state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
+        if self.weights_path is None or state is None:
+            return False
+        tmp = self.weights_path.with_name(f".{self.weights_path.name}.tmp")
+        torch.save(state, tmp)
+        os.replace(tmp, self.weights_path)
+        return True
+
+
+def entry_score(history: list[dict[str, Any]]) -> float:
+    """What a trial is ranked by: the validation loss after its last epoch."""
+    return float(history[-1]["val_loss"]) if history else math.inf

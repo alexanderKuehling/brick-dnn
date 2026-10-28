@@ -15,10 +15,10 @@ import type { RunSummary } from '@/api';
 import {
   formatDate,
   formatDuration,
-  formatMetric,
-  formatPercent,
+  headlineMetric,
   isActive,
   progressLabel,
+  searchLabel,
 } from './format';
 import { confirmDeleteRun, StatusBadge } from './runActions';
 import classes from './Training.module.css';
@@ -32,22 +32,13 @@ interface HistoryViewProps {
   onNewTraining: () => void;
 }
 
-/** The headline number of a run and what it is. */
+/** The headline number of a run and what it is (the test result if there is one). */
 function headline(run: RunSummary): [string, string] | null {
   if (isActive(run.status)) {
     return [progressLabel(run), 'in progress'];
   }
-  const metrics = run.metrics;
-  if (typeof metrics?.val_accuracy === 'number') {
-    return [formatPercent(metrics.val_accuracy), 'val. accuracy'];
-  }
-  if (typeof metrics?.val_rmse === 'number') {
-    return [formatMetric(metrics.val_rmse), 'val. RMSE'];
-  }
-  if (typeof metrics?.val_loss === 'number') {
-    return [formatMetric(metrics.val_loss), 'val. loss'];
-  }
-  return null;
+  const result = headlineMetric(run.metrics);
+  return result ? [result[0], result[1].replace('validation', 'val.')] : null;
 }
 
 export function HistoryView({
@@ -111,7 +102,12 @@ export function HistoryView({
                     <StatusBadge status={run.status} />
                   </Group>
                   <Text size="xs" c="dimmed" truncate>
-                    {[run.dataset.name, formatDate(run.created_at), duration]
+                    {[
+                      run.dataset.name,
+                      run.tuning && searchLabel(run.tuning),
+                      formatDate(run.created_at),
+                      duration,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>

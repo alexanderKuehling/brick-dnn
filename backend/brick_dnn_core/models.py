@@ -77,6 +77,8 @@ class TrainingRun(models.Model):
         Dataset, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
     )
     config = models.JSONField(default=dict)
+    # Hyperparameter search settings (TuningConfig.to_dict()); null for a normal training.
+    tuning = models.JSONField(null=True, blank=True)
     plan = models.JSONField(default=dict)
     status = models.CharField(max_length=10, choices=STATUSES, default="starting")
     message = models.TextField(blank=True)
@@ -84,6 +86,10 @@ class TrainingRun(models.Model):
     epochs_done = models.PositiveIntegerField(default=0)
     metrics = models.JSONField(null=True, blank=True)
     best = models.JSONField(null=True, blank=True)
+    # Hyperparameter search: finished trials and {"trial", "params", "val_loss", ...} of
+    # the best one so far.
+    trials_done = models.PositiveIntegerField(default=0)
+    best_trial = models.JSONField(null=True, blank=True)
     has_weights = models.BooleanField(default=False)
     stop_requested_at = models.DateTimeField(null=True, blank=True)
     pid = models.IntegerField(null=True, blank=True)

@@ -24,6 +24,7 @@ import {
   loadSettings,
   saveSettings,
   toConfig,
+  toTuning,
   validateSettings,
   type SettingsValues,
   type SourceChoice,
@@ -107,9 +108,15 @@ export function SetupView({
   const compatibility = useCompatibility(doc, ref, networkValid);
   const check = compatibility.result;
 
+  const builtinSource = choice.tab === 'builtin';
   const errors = validateSettings(settings);
-  if (choice.tab === 'builtin') {
-    delete errors.val_split;
+  if (builtinSource) {
+    // Built-in datasets have official test images: the test share is not used, and without
+    // a test set they validate on those images instead of a share of the training data.
+    delete errors.test_split;
+    if (!settings.test_enabled) {
+      delete errors.val_split;
+    }
   }
   const blockedByActive = activeRun !== null && status.max_concurrent_runs <= 1;
   const canStart =
@@ -150,15 +157,20 @@ export function SetupView({
     setStarting(true);
     setStartError(null);
     try {
+      const tuning = toTuning(settings);
       const run = await api.training.runs.create({
         name: runName.trim() || networkName.trim() || 'Untitled network',
         graph: doc,
         dataset: ref,
         // A remembered device may not exist on this server (any more).
-        config: toConfig({
-          ...settings,
-          device: status.devices.some((d) => d.id === settings.device) ? settings.device : 'auto',
-        }),
+        config: toConfig(
+          {
+            ...settings,
+            device: status.devices.some((d) => d.id === settings.device) ? settings.device : 'auto',
+          },
+          { builtin: builtinSource }
+        ),
+        ...(tuning ? { tuning } : {}),
       });
       onStarted(run);
     } catch (error) {
@@ -234,7 +246,7 @@ export function SetupView({
         onNameChange={setRunName}
         devices={status.devices}
         defaultDevice={status.default_device}
-        showValSplit={choice.tab !== 'builtin'}
+        builtin={builtinSource}
       />
 
       {startError && (
@@ -272,7 +284,7 @@ export function SetupView({
           loading={starting}
           disabled={!canStart}
         >
-          Start training
+          {settings.search ? 'Start search' : 'Start training'}
         </Button>
       </Group>
     </Stack>

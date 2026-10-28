@@ -39,6 +39,7 @@ from brickdnn.training import (  # noqa: E402
 )
 from brickdnn.training import state as st  # noqa: E402
 from brickdnn.training.engine import Reporter, TrainingJob, build_model, train  # noqa: E402
+from brickdnn.training.tuning import TuningConfig  # noqa: E402
 
 from .helpers import build_model as build_from_code  # noqa: E402
 from .helpers import chain  # noqa: E402
@@ -66,6 +67,11 @@ class Recorder(Reporter):
         self.checks = 0
         self.stop_after_checks = stop_after_checks
         self.steps: list[int] = []
+        self.events: list[tuple] = []
+        self.test = None
+        self.trials_started: list[dict] = []
+        self.trials_ended: list[tuple[dict, int | None]] = []
+        self.search = None
 
     def status(self, status, message):
         self.statuses.append((status, message))
@@ -82,10 +88,28 @@ class Recorder(Reporter):
     def epoch_end(self, entry, best):
         self.history.append(entry)
         self.best = best
+        self.events.append(("epoch_end", entry["epoch"]))
+
+    def trial_start(self, trial):
+        self.trials_started.append(trial)
+        self.events.append(("trial_start", trial["trial"]))
+
+    def trial_end(self, trial, best_trial):
+        self.trials_ended.append((trial, best_trial))
+        self.events.append(("trial_end", trial["trial"]))
+
+    def search_end(self, result):
+        self.search = result
+        self.events.append(("search_end", result["best_trial"]))
+
+    def test_end(self, result):
+        self.test = result
+        self.events.append(("test_end",))
 
     def finish(self, status, message, weights):
         assert self.finished is None, "finish must be called exactly once"
         self.finished = (status, message, weights)
+        self.events.append(("finish", status))
 
     def should_stop(self):
         self.checks += 1
@@ -215,6 +239,11 @@ def test_demo_split_follows_settings():
     plan = check_compatibility(EXAMPLES["mlp_mnist"]["graph"], random_info()).plan
     prepared = data.demo_data(plan, config(val_split=0.5, max_samples=100), torch.Generator())
     assert len(prepared.train) == 100 and len(prepared.val) == 100  # same proportion
+    assert prepared.test is None
+    prepared = data.demo_data(
+        plan, config(val_split=0.2, test_split=0.2, max_samples=60), torch.Generator()
+    )
+    assert (len(prepared.train), len(prepared.val), len(prepared.test)) == (60, 20, 20)
 
 
 def test_demo_data_shrinks_for_large_inputs(monkeypatch):
@@ -241,12 +270,12 @@ def test_every_training_sample_is_used(max_samples, steps, tmp_path, monkeypatch
 
 def test_max_samples_shrinks_validation_in_proportion():
     gen = torch.Generator().manual_seed(0)
-    train, val = data.split_indices(50_000, 0.2, 100, gen)
-    assert (len(train), len(val)) == (100, 25)
+    train, val, test = data.split_indices(50_000, 0.2, 100, gen)
+    assert (len(train), len(val), test) == (100, 25, None)
     assert set(train.tolist()).isdisjoint(val.tolist())
-    train, val = data.split_indices(50_000, 0.2, None, gen)
+    train, val, _ = data.split_indices(50_000, 0.2, None, gen)
     assert (len(train), len(val)) == (40_000, 10_000)
-    train, val = data.split_indices(10, 0.5, 100, gen)
+    train, val, _ = data.split_indices(10, 0.5, 100, gen)
     assert (len(train), len(val)) == (5, 5)
 
 
@@ -405,11 +434,15 @@ def test_job_from_dict():
     assert TrainingJob.from_dict({"graph": graph, "dataset": {"kind": "random"}}).dataset.kind == (
         "random"
     )
+    assert job.tuning is None
+    search = TrainingJob.from_dict({"graph": graph, "tuning": {"trials": 3}, "config": None})
+    assert search.tuning == TuningConfig.from_dict({"trials": 3})
     for bad, message in [
         ({"dataset": {}}, "no network"),
         ({"graph": graph, "dataset": {"kind": "csv"}}, "no valid dataset"),
         ({"graph": graph, "dataset": {"info": {"x": 1}}}, "no valid dataset"),
         ({"graph": graph, "config": {"epochs": 0}}, "Epochs must be between"),
+        ({"graph": graph, "tuning": {"trials": 0}}, "the number of trials must be at least 1"),
     ]:
         with pytest.raises(engine.TrainingError, match=message):
             TrainingJob.from_dict(bad)
@@ -839,6 +872,356 @@ def test_image_transform_helpers():
 
 
 # --------------------------------------------------------------------------- #
+# Test split
+# --------------------------------------------------------------------------- #
+
+
+def test_split_indices_with_a_test_set():
+    gen = torch.Generator().manual_seed(0)
+    train, val, test = data.split_indices(1000, 0.2, None, gen, test_split=0.1)
+    assert (len(train), len(val), len(test)) == (700, 200, 100)
+    assert len(set(train.tolist()) | set(val.tolist()) | set(test.tolist())) == 1000
+    train, val, test = data.split_indices(1000, 0.2, 70, gen, test_split=0.1)
+    assert (len(train), len(val), len(test)) == (70, 20, 10)  # same proportions
+    train, val, test = data.split_indices(3, 0.2, None, gen, test_split=0.1)
+    assert (len(train), len(val), len(test)) == (1, 1, 1)
+    with pytest.raises(engine.TrainingError, match="at least 3 samples"):
+        data.split_indices(2, 0.2, None, gen, test_split=0.1)
+
+
+def test_without_a_test_set_the_split_is_unchanged():
+    """Seeds of earlier runs still select the same training and validation samples."""
+    train, val, test = data.split_indices(500, 0.2, None, torch.Generator().manual_seed(5))
+    order = torch.randperm(500, generator=torch.Generator().manual_seed(5))
+    assert torch.equal(val, order[:100]) and torch.equal(train, order[100:]) and test is None
+
+
+def evaluate_saved_weights(graph, tmp_path, source):
+    """Cross-entropy of the saved weights on a whole source (recomputed outside the engine)."""
+    model = build_model(graph)
+    model.load_state_dict(torch.load(tmp_path / "weights.pt"))
+    model.eval()
+    (x,), (y,) = source.batch(torch.arange(len(source)))
+    with torch.no_grad():
+        return float(torch.nn.functional.cross_entropy(model(x), y))
+
+
+def test_demo_training_with_a_test_set(tmp_path):
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, rec = run_job(graph, random_info(), tmp_path, epochs=2, test_split=0.25)
+    assert result.status == "completed", result.message
+    sizes = (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"])
+    assert sizes == (1408, 512, 640)  # 55 % / 20 % / 25 % of 2,560
+    assert set(rec.test) == {"loss", "accuracy", "rmse"}
+    assert 0 <= rec.test["accuracy"] <= 1 and rec.test["rmse"] is None
+    assert result.test == rec.test
+    assert rec.events[-2:] == [("test_end",), ("finish", "completed")]
+    assert ("running", "Testing the final model …") in rec.statuses
+    assert result.message.startswith("Finished: validation accuracy ")
+    assert "; test accuracy " in result.message
+    # The test set is measured with the saved (final) weights.
+    plan = check_compatibility(graph, random_info()).plan
+    prepared = data.demo_data(plan, config(test_split=0.25), torch.Generator().manual_seed(0))
+    loss = evaluate_saved_weights(graph, tmp_path, prepared.test)
+    assert loss == pytest.approx(rec.test["loss"], rel=1e-4)
+
+
+def test_no_test_set_by_default(tmp_path):
+    result, rec = run_job(EXAMPLES["mlp_mnist"]["graph"], random_info(), tmp_path)
+    assert result.status == "completed"
+    assert rec.info["test_size"] is None and result.test is None and rec.test is None
+    assert "test" not in result.message
+
+
+def test_stopped_runs_are_not_tested(tmp_path):
+    rec = Recorder(stop_after_checks=3)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, _ = run_job(graph, random_info(), tmp_path, reporter=rec, test_split=0.2)
+    assert result.status == "stopped" and result.test is None and rec.test is None
+
+
+def test_csv_test_set_uses_the_training_statistics(tmp_path):
+    gen = torch.Generator().manual_seed(1)
+    x = torch.randn(80, 3, generator=gen)
+    y = 1000 + 250 * (x @ torch.tensor([1.0, -2.0, 0.5]))
+    lines = ["a,b,c,price"] + [
+        ",".join(f"{v:.4f}" for v in row.tolist()) + f",{t:.2f}" for row, t in zip(x, y.tolist())
+    ]
+    path = tmp_path / "prices.csv"
+    path.write_text("\n".join(lines))
+    result, rec = run_job(
+        mlp(3, 1), inspect_csv(path), tmp_path, path=path, epochs=3, batch_size=8, test_split=0.25
+    )
+    assert result.status == "completed", result.message
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (44, 16, 20)
+    train, _, _ = data.split_indices(80, 0.2, None, torch.Generator().manual_seed(0), 0.25)
+    pre = rec.info["preprocessing"]
+    assert pre["mean"] == pytest.approx(x[train].mean(dim=0).tolist(), abs=1e-3)
+    assert pre["target_mean"] == pytest.approx(float(y[train].mean()), rel=1e-4)
+    assert rec.test["rmse"] == pytest.approx(math.sqrt(rec.test["loss"]) * pre["target_std"])
+    assert "; test loss " in result.message and result.message.count("RMSE") == 2
+
+
+@needs_pil
+@pytest.mark.parametrize("lazy", [False, True])
+def test_image_folder_with_a_test_set(tmp_path, monkeypatch, lazy):
+    if lazy:
+        monkeypatch.setattr(data, "PRELOAD_BYTES", 0)
+    make_png_folder(tmp_path / "pets", per_class=10)
+    info = inspect_image_folder(tmp_path / "pets")
+    result, rec = run_job(
+        small_cnn([1, 8, 8]), info, tmp_path, path=tmp_path / "pets", batch_size=4, test_split=0.2
+    )
+    assert result.status == "completed", result.message
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (12, 4, 4)
+    assert rec.test is not None and rec.test["accuracy"] is not None
+    if not lazy:
+        assert ("preparing", "Loading images 20 / 20") in rec.statuses
+
+
+def test_builtin_with_a_test_set_validates_on_training_images(tmp_path, fake_torchvision):
+    graph = EXAMPLES["cnn_mnist"]["graph"]
+    result, rec = run_job(
+        graph, builtin_info("mnist"), tmp_path, data_root=tmp_path, val_split=0.25, test_split=0.1
+    )
+    assert result.status == "completed", result.message
+    # 40 training images: 30 for training, 10 for validation; 20 official test images
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (30, 10, 20)
+    assert rec.test is not None
+    result, rec = run_job(
+        graph,
+        builtin_info("mnist"),
+        tmp_path,
+        data_root=tmp_path,
+        val_split=0.25,
+        test_split=0.1,
+        max_samples=12,
+    )
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (12, 4, 3)
+
+
+def test_builtin_conversion_statistics_use_only_training_images(tmp_path, fake_torchvision):
+    graph = EXAMPLES["resnet_block"]["graph"]  # 3×32×32: MNIST images are converted
+    result, rec = run_job(
+        graph, builtin_info("mnist"), tmp_path, data_root=tmp_path, test_split=0.2
+    )
+    assert result.status == "completed", result.message
+    assert len(rec.info["preprocessing"]["mean"]) == 3
+    assert rec.info["test_size"] == 20
+
+
+# --------------------------------------------------------------------------- #
+# Hyperparameter search
+# --------------------------------------------------------------------------- #
+
+
+def search_job(graph, tmp_path, tuning, reporter=None, **settings):
+    reporter = reporter or Recorder()
+    job = TrainingJob(
+        graph=graph,
+        dataset=random_info(),
+        config=config(**settings),
+        tuning=TuningConfig.from_dict(tuning),
+    )
+    return train(job, reporter, tmp_path / "weights.pt"), reporter
+
+
+def test_search_keeps_the_best_trial(tmp_path):
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    tuning = {"method": "grid", "space": {"learning_rate": [1e-7, 3e-3], "batch_size": [64, 128]}}
+    result, rec = search_job(graph, tmp_path, tuning, epochs=2, test_split=0.2)
+    assert result.status == "completed", result.message
+    assert [t["trial"] for t in result.trials] == [1, 2, 3, 4]
+    assert all(t["status"] == "completed" and t["epochs_done"] == 2 for t in result.trials)
+    best = min(result.trials, key=lambda t: t["val_loss"])
+    assert result.best_trial == best["trial"]
+    assert best["params"]["learning_rate"] == 3e-3  # a tiny learning rate learns nothing
+    assert rec.search == {
+        "best_trial": best["trial"],
+        "params": best["params"],
+        "history": result.history,
+        "best": result.best,
+    }
+    assert result.history[-1]["val_loss"] == best["val_loss"]
+    assert rec.info["tuning"] == TuningConfig.from_dict(tuning).to_dict()
+    assert rec.info["trials_total"] == 4
+    train_size = rec.info["train_size"]
+    assert [t["steps_per_epoch"] for t in rec.trials_started] == [
+        math.ceil(train_size / t["params"]["batch_size"]) for t in rec.trials_started
+    ]
+    events = [e for e in rec.events if e[0] != "epoch_end"]
+    assert events == [
+        *[(kind, n) for n in range(1, 5) for kind in ("trial_start", "trial_end")],
+        ("search_end", best["trial"]),
+        ("test_end",),
+        ("finish", "completed"),
+    ]
+    ranked_so_far = [b for _, b in rec.trials_ended]
+    assert ranked_so_far[0] == 1 and ranked_so_far[-1] == best["trial"]
+    assert ("running", "Trial 1 of 4: epoch 1 of 2") in rec.statuses
+    assert result.message.startswith(
+        f"Finished 4 trials. Best: trial {best['trial']} (learning rate 0.003, batch size "
+    )
+    assert "; test accuracy " in result.message
+    # The saved weights are those of the best trial.
+    plan = check_compatibility(graph, random_info()).plan
+    prepared = data.demo_data(plan, config(test_split=0.2), torch.Generator().manual_seed(0))
+    loss = evaluate_saved_weights(graph, tmp_path, prepared.val)
+    assert loss == pytest.approx(best["val_loss"], rel=1e-4)
+    assert evaluate_saved_weights(graph, tmp_path, prepared.test) == pytest.approx(
+        result.test["loss"], rel=1e-4
+    )
+
+
+def test_trials_start_from_the_same_weights(tmp_path, monkeypatch):
+    monkeypatch.setattr(TuningConfig, "sample", lambda self, seed: [{"learning_rate": 0.01}] * 3)
+    graph = EXAMPLES["multi_input"]["graph"]
+    tuning = {"space": {"learning_rate": [0.01]}}
+    result, _ = search_job(graph, tmp_path, tuning, max_samples=64)
+    assert result.status == "completed", result.message
+    assert len(result.trials) == 3
+    assert len({t["val_loss"] for t in result.trials}) == 1  # same start, same batches
+
+
+@pytest.mark.parametrize(
+    "error,message",
+    [
+        (
+            engine.DivergedError("The loss became NaN in epoch 1. Try a lower learning rate."),
+            "The loss became NaN in epoch 1. Try a lower learning rate.",
+        ),
+        (RuntimeError("CUDA out of memory. Tried to allocate 2 GiB"), "Out of memory on CPU."),
+    ],
+)
+def test_failed_trials_do_not_end_the_search(tmp_path, monkeypatch, error, message):
+    original = engine._Run._fit
+
+    def fit(self):
+        if self.config.learning_rate == 0.5:
+            raise error
+        original(self)
+
+    monkeypatch.setattr(engine._Run, "_fit", fit)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    tuning = {"method": "grid", "space": {"learning_rate": [0.5, 0.01]}}
+    result, rec = search_job(graph, tmp_path, tuning, max_samples=64)
+    assert result.status == "completed", result.message
+    failed, ok = result.trials
+    assert failed["status"] == "failed" and failed["message"].startswith(message)
+    assert failed["val_loss"] is None and failed["epochs_done"] == 0
+    assert ok["status"] == "completed" and result.best_trial == 2
+    assert result.message.startswith("Finished 2 trials (1 failed). Best: trial 2")
+    assert any(line.startswith(f"Trial 1 failed: {message}") for line in rec.logs)
+    assert result.weights
+
+
+def test_search_fails_when_every_trial_fails(tmp_path, monkeypatch):
+    def fit(self):
+        raise engine.DivergedError("The loss became NaN in epoch 1. Try a lower learning rate.")
+
+    monkeypatch.setattr(engine._Run, "_fit", fit)
+    tuning = {"method": "grid", "space": {"learning_rate": [0.5, 0.1]}}
+    result, _ = search_job(EXAMPLES["mlp_mnist"]["graph"], tmp_path, tuning, max_samples=64)
+    assert result.status == "failed"
+    assert result.message == (
+        "All 2 trials failed. Trial 1: The loss became NaN in epoch 1. Try a lower learning rate."
+    )
+    assert not result.weights and not (tmp_path / "weights.pt").exists()
+
+
+def test_unexpected_errors_end_the_search(tmp_path, monkeypatch, capsys):
+    def fit(self):
+        raise RuntimeError("something else broke")
+
+    monkeypatch.setattr(engine._Run, "_fit", fit)
+    tuning = {"method": "grid", "space": {"learning_rate": [0.5, 0.1]}}
+    result, _ = search_job(EXAMPLES["mlp_mnist"]["graph"], tmp_path, tuning, max_samples=64)
+    assert result.status == "failed"
+    assert result.message == "Training failed: RuntimeError: something else broke"
+    assert len(result.trials) == 1
+
+
+class StopAtTrial(Recorder):
+    """Asks to stop as soon as the given trial has started."""
+
+    def __init__(self, trial):
+        super().__init__()
+        self.stop_at = trial
+        self.stopping = False
+
+    def trial_start(self, trial):
+        super().trial_start(trial)
+        self.stopping = self.stopping or trial["trial"] == self.stop_at
+
+    def should_stop(self):
+        return self.stopping
+
+
+def test_stopping_a_search_keeps_the_best_finished_trial(tmp_path):
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001, 0.0001]}}
+    result, rec = search_job(
+        graph, tmp_path, tuning, reporter=StopAtTrial(2), max_samples=64, test_split=0.2
+    )
+    assert result.status == "stopped"
+    assert [t["status"] for t in result.trials] == ["completed", "stopped"]
+    assert result.best_trial == 1 and rec.search["best_trial"] == 1
+    assert (
+        result.message == "Stopped after 1 of 3 trials. Best so far: trial 1 (learning rate 0.01)."
+    )
+    assert result.weights and rec.test is None  # no test after a stop
+    assert result.history == rec.search["history"] and len(result.history) == 1
+
+
+def test_stopping_during_the_first_trial(tmp_path):
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}}
+    result, rec = search_job(
+        EXAMPLES["mlp_mnist"]["graph"],
+        tmp_path,
+        tuning,
+        reporter=Recorder(stop_after_checks=3),
+        epochs=3,
+    )
+    assert result.status == "stopped"
+    assert result.message == "Stopped during trial 1 of 2."
+    assert result.weights and result.best_trial is None and rec.search is None
+
+
+def test_state_reporter_tracks_trials(tmp_path):
+    reporter = runner.StateReporter(tmp_path, epochs=2, heartbeat=0.05)
+    reporter.setup({"tuning": {"method": "grid"}, "trials_total": 2})
+    reporter.trial_start(
+        {"trial": 1, "trials": 2, "params": {"learning_rate": 0.1}, "steps_per_epoch": 7}
+    )
+    state = st.read_state(tmp_path)
+    assert state["trial"] == 1 and state["steps_per_epoch"] == 7
+    assert state["trials"][0]["status"] == "running" and state["history"] == []
+    entry = {"epoch": 1, "train_loss": 0.5, "val_loss": 0.4, "val_accuracy": 0.8, "seconds": 1}
+    reporter.epoch_end(entry, {"epoch": 1, "val_loss": 0.4, "val_accuracy": 0.8})
+    live = st.read_state(tmp_path)["trials"][0]
+    assert live["epochs_done"] == 1 and live["val_loss"] == 0.4 and live["status"] == "running"
+    done = {**live, "status": "completed", "seconds": 2.0}
+    reporter.trial_end(done, 1)
+    reporter.trial_start(
+        {"trial": 2, "trials": 2, "params": {"learning_rate": 9}, "steps_per_epoch": 7}
+    )
+    state = st.read_state(tmp_path)
+    assert state["history"] == [] and state["best"] is None and state["best_trial"] == 1
+    assert [t["trial"] for t in state["trials"]] == [1, 2]
+    reporter.trial_end({**state["trials"][1], "status": "failed", "message": "NaN"}, 1)
+    reporter.search_end(
+        {"best_trial": 1, "params": {"learning_rate": 0.1}, "history": [entry], "best": None}
+    )
+    reporter.test_end({"loss": 0.45, "accuracy": 0.79, "rmse": None})
+    reporter.finish("completed", "Finished 2 trials (1 failed).", True)
+    state = st.read_state(tmp_path)
+    assert state["trial"] is None and state["history"] == [entry]
+    assert [t["status"] for t in state["trials"]] == ["completed", "failed"]
+    assert state["test"] == {"loss": 0.45, "accuracy": 0.79, "rmse": None}
+    assert set(state) == set(st.initial_state())
+
+
+# --------------------------------------------------------------------------- #
 # Runner, probe and command line
 # --------------------------------------------------------------------------- #
 
@@ -882,6 +1265,40 @@ def test_runner_end_to_end(tmp_path):
     assert state["total_params"] == 50_497
     assert state["message"].startswith("Finished: validation loss")
     assert "completed: Finished" in output
+
+
+def test_runner_runs_a_search(tmp_path):
+    run_dir = tmp_path / "run"
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}}
+    job = {
+        "name": "Search",
+        "graph": EXAMPLES["mlp_mnist"]["graph"],
+        "dataset": {"kind": "random", "path": None, "info": random_info().to_dict()},
+        "config": {"epochs": 1, "device": "cpu", "max_samples": 64, "seed": 1, "test_split": 0.2},
+        "tuning": tuning,
+        "data_root": str(tmp_path / "builtin"),
+    }
+    st.write_job(run_dir, job)
+    process = subprocess.run(
+        [sys.executable, "-m", "brickdnn.training.runner", str(run_dir)],
+        cwd=run_dir,
+        env=subprocess_env(),
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    state = st.read_state(run_dir)
+    assert state["status"] == "completed", process.stdout
+    assert set(state) == set(st.initial_state())
+    assert state["tuning"] == TuningConfig.from_dict(tuning).to_dict()
+    assert state["trials_total"] == 2 and state["trial"] is None
+    assert [t["status"] for t in state["trials"]] == ["completed", "completed"]
+    best = state["trials"][state["best_trial"] - 1]
+    assert state["history"][-1]["val_loss"] == best["val_loss"]
+    assert state["test_size"] == 21 and state["test"]["accuracy"] is not None
+    assert state["weights"] is True and state["message"].startswith("Finished 2 trials.")
 
 
 def test_runner_reports_invalid_jobs(tmp_path):
@@ -993,6 +1410,60 @@ def test_cli_prints_warnings_and_notes(tmp_path, capsys, fake_torchvision):
     assert code == 0, out
     assert "warning: MNIST images (28×28) are resized to 32×32." in out
     assert "note: The grayscale images are copied into 3 channels." in out
+
+
+def test_cli_search_with_a_test_set(tmp_path, capsys):
+    save = tmp_path / "best.pt"
+    code = cli.main(
+        ["--example", "mlp_mnist", "--epochs", "1", "--device", "cpu", "--max-samples", "64"]
+        + ["--seed", "0", "--test-split", "0.2", "--search", "grid", "--tune-lr", "0.01,0.001"]
+        + ["--tune-optimizer", "adam,sgd", "--save", str(save)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "64 training, 21 validation and 21 test samples" in out
+    assert "Hyperparameter search: grid search, 4 trials of 1 epoch each." in out
+    assert "Trial 1/4: learning rate 0.01, Adam" in out
+    assert "Trial 4/4: learning rate 0.001, SGD" in out
+    assert "(best so far)" in out
+    assert "Trials, best first:" in out
+    assert "trial  learning rate  optimizer  val loss  val acc" in out
+    assert "Best: trial " in out and "Test: loss " in out
+    assert "Finished 4 trials. Best: trial " in out
+    assert f"Saved weights to {save}" in out and save.exists()
+
+
+def test_cli_tuning_options():
+    parser = cli.build_parser()
+    assert cli.tuning_from_args(parser.parse_args(["--example", "mlp_mnist"])) is None
+    tuning = cli.tuning_from_args(parser.parse_args(["--trials", "5"]))
+    assert tuning.trials == 5 and tuning.space == TuningConfig().space
+    assert cli.tuning_from_args(parser.parse_args(["--tune"])) == TuningConfig()
+    args = parser.parse_args(
+        ["--tune-lr", "1e-4:1e-2", "--tune-batch-size", "16, 32", "--tune-optimizer", "adam,SGD"]
+        + ["--tune-weight-decay", "0,1e-4"]
+    )
+    assert cli.tuning_from_args(args).to_dict()["space"] == {
+        "learning_rate": {"min": 1e-4, "max": 1e-2},
+        "batch_size": [16, 32],
+        "optimizer": ["adam", "sgd"],
+        "weight_decay": [0.0, 1e-4],
+    }
+
+
+@pytest.mark.parametrize(
+    "args,message",
+    [
+        (["--tune-batch-size", "0,32"], "batch sizes must be at least 1"),
+        (["--search", "grid", "--tune-lr", "1e-4:1e-2"], "Grid search needs a list of values"),
+        (["--tune-lr", "fast"], "'fast' is not a number"),
+        (["--trials", "0"], "the number of trials must be at least 1"),
+        (["--test-split", "0.6"], "Test split must be at least 0 and at most 0.5."),
+    ],
+)
+def test_cli_search_errors(args, message, capsys):
+    assert cli.main(["--example", "mlp_mnist", *args]) == 1
+    assert message in capsys.readouterr().err
 
 
 def test_cli_without_torch(monkeypatch, capsys):

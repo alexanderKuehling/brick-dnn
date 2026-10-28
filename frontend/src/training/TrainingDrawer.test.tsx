@@ -2,8 +2,8 @@ import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { api, ApiError } from '@/api';
-import { ANALYSIS, detail, DOC, STATUS, summary } from './fixtures';
-import { DEFAULT_SOURCE } from './settings';
+import { ANALYSIS, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
+import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
 import TrainingDrawer, { type TrainingDrawerProps } from './TrainingDrawer';
 import type { DataController } from './useDatasets';
 import type { TrainingController } from './useTraining';
@@ -298,5 +298,136 @@ describe('TrainingDrawer', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Load into editor' }));
     expect(props.onLoadNetwork).toHaveBeenCalledWith(run.graph, 'Small CNN');
+  });
+
+  it('starts a hyperparameter search with a test set', async () => {
+    vi.mocked(api.training.check).mockResolvedValue({
+      ok: true,
+      errors: [],
+      warnings: [],
+      plan: null,
+    });
+    saveSettings({ ...DEFAULT_SETTINGS, search: true, test_enabled: true, test_split: 10 });
+    vi.mocked(api.training.runs.create).mockResolvedValue(searchDetail());
+    renderDrawer();
+    const start = screen.getByRole('button', { name: 'Start search' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.click(start);
+    expect(api.training.runs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ test_split: 0.1, epochs: 10 }),
+        tuning: {
+          method: 'random',
+          trials: 10,
+          space: { learning_rate: { min: 0.0001, max: 0.01 }, batch_size: [32, 64, 128] },
+        },
+      })
+    );
+    const config = vi.mocked(api.training.runs.create).mock.calls[0][0].config;
+    expect(config).not.toHaveProperty('learning_rate', expect.anything());
+  });
+
+  it('shows the trials of a running search', async () => {
+    const run = searchDetail();
+    renderDrawer({
+      training: controller({ view: 'run', selectedRunId: run.id, detail: run, activeRun: run }),
+    });
+    expect(screen.getByText('Trial 4 of 4 · Epoch 3 of 5')).toBeInTheDocument();
+    // 3 finished trials and half of the fourth one's third epoch: (3 + 2.5 / 5) / 4.
+    expect(screen.getByText('87%')).toBeInTheDocument();
+    expect(screen.getByText(/search · 4 trials/)).toBeInTheDocument();
+    expect(screen.getByText('Best trial so far').nextSibling).toHaveTextContent('3');
+    expect(
+      screen.getByText(/Best so far: trial 3 \(learning rate 0.0011, batch size 32\)/)
+    ).toBeInTheDocument();
+    expect(screen.getByText('Curves of trial 4 (running)')).toBeInTheDocument();
+
+    const table = screen.getByRole('table', { name: 'Trials' });
+    const rows = within(table).getAllByRole('row');
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toHaveTextContent('TrialLearning rateBatch sizeVal. lossVal. acc.Status');
+    expect(rows[1]).toHaveTextContent('10.00312640.293.0%Done');
+    expect(rows[3]).toHaveTextContent('Best');
+    expect(rows[4]).toHaveTextContent('Epoch 3/5');
+    await userEvent.hover(within(rows[2]).getByText('Failed'));
+    expect(await screen.findByText(/The loss became NaN in epoch 2/)).toBeInTheDocument();
+  });
+
+  it('shows the test result and the best trial of a finished search', () => {
+    const base = searchDetail();
+    const run = searchDetail({
+      status: 'completed',
+      message: 'Finished 4 trials (1 failed). Best: trial 3 …',
+      has_weights: true,
+      trials_done: 4,
+      metrics: {
+        train_loss: 0.1,
+        val_loss: 0.12,
+        val_accuracy: 0.96,
+        val_rmse: null,
+        test_loss: 0.14,
+        test_accuracy: 0.955,
+        test_rmse: null,
+      },
+      state: {
+        ...base.state!,
+        status: 'completed',
+        trial: null,
+        progress: null,
+        test_size: 10000,
+        test: { loss: 0.14, accuracy: 0.955, rmse: null },
+        trials: base.state!.trials!.map((t) =>
+          t.trial === 4 ? { ...t, status: 'completed' as const } : t
+        ),
+      },
+    });
+    renderDrawer({ training: controller({ view: 'run', selectedRunId: run.id, detail: run }) });
+    expect(screen.getByText('Test accuracy').nextSibling).toHaveTextContent('95.5%');
+    expect(
+      screen.getByText('loss 0.14 · 10,000 test samples, measured once after training')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Best trial').nextSibling).toHaveTextContent('3');
+    expect(screen.getByText(/Its weights are kept/)).toBeInTheDocument();
+    expect(screen.getByText('Curves of the best trial (3)')).toBeInTheDocument();
+  });
+
+  it('says that the test set waits until the end', () => {
+    const base = detail();
+    const run = detail({
+      config: { ...base.config, test_split: 0.1 },
+      state: { ...base.state!, test_size: 6000 },
+    });
+    renderDrawer({ training: controller({ view: 'run', selectedRunId: run.id, detail: run }) });
+    expect(screen.getByText('Test accuracy').nextSibling).toHaveTextContent('–');
+    expect(
+      screen.getByText('6,000 test samples are held out until training has finished.')
+    ).toBeInTheDocument();
+  });
+
+  it('lists searches and test results', () => {
+    const training = controller({
+      view: 'history',
+      runs: [
+        summary({
+          id: 'r3',
+          name: 'Search',
+          status: 'completed',
+          tuning: TUNING,
+          metrics: {
+            train_loss: 0.1,
+            val_loss: 0.1,
+            val_accuracy: 0.97,
+            val_rmse: null,
+            test_loss: 0.12,
+            test_accuracy: 0.961,
+            test_rmse: null,
+          },
+        }),
+      ],
+    });
+    renderDrawer({ training });
+    expect(screen.getByText(/MNIST · search · 4 trials/)).toBeInTheDocument();
+    expect(screen.getByText('96.1%')).toBeInTheDocument();
+    expect(screen.getByText('test accuracy')).toBeInTheDocument();
   });
 });

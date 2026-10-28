@@ -310,7 +310,7 @@ class TrainingRunViewSet(
         return super().list(request, *args, **kwargs)
 
     def create(self, request: Request) -> Response:
-        """Start a training: ``{"name", "graph", "dataset", "config"}``."""
+        """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?}``."""
         data = request.data if isinstance(request.data, dict) else {}
         try:
             run = training.start_run(
@@ -319,6 +319,7 @@ class TrainingRunViewSet(
                 data.get("graph"),
                 data.get("dataset"),
                 data.get("config"),
+                data.get("tuning"),
             )
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

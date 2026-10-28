@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react';
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Collapse,
@@ -28,10 +29,19 @@ import {
   Table,
   Text,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { api, type GraphDocument, type HistoryEntry, type RunDetail } from '@/api';
+import {
+  api,
+  type GraphDocument,
+  type HistoryEntry,
+  type RunDetail,
+  type TestResult,
+  type TrialEntry,
+  type TuningConfig,
+} from '@/api';
 import { CodeView } from '@/builder/CodeView';
 import { downloadBlob, downloadText } from '@/builder/download';
 import { formatCount } from '@/builder/format';
@@ -39,13 +49,18 @@ import { semanticKey, slugify } from '@/builder/graph';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import {
+  describeParams,
   formatCompact,
   formatDate,
   formatDuration,
   formatMetric,
   formatPercent,
+  formatSetting,
   isActive,
   isClassification,
+  searchedSettings,
+  searchLabel,
+  SETTING_LABELS,
   weightsSnippet,
 } from './format';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
@@ -139,10 +154,31 @@ export function RunView({
   const elapsed = ((finishedAt ?? now) - startedAt) / 1000;
   const progress = state?.progress ?? null;
   const epochs = state?.epochs || run.epochs;
-  const done = run.epochs_done;
+  const tuning = run.tuning ?? state?.tuning ?? null;
+  const trials = state?.trials ?? [];
+  const trialsTotal = state?.trials_total ?? tuning?.trials ?? 0;
+  const runningTrial = state?.trial ?? null;
+  // In a search the history belongs to the running trial (the database only learns about a
+  // new trial after its first epoch).
+  const done = tuning && state ? history.length : run.epochs_done;
   const stepShare = progress && progress.steps > 0 ? progress.step / progress.steps : 0;
-  const overall = epochs > 0 ? Math.min(100, ((done + stepShare) / epochs) * 100) : 0;
   const currentEpoch = progress?.epoch ?? Math.min(done + 1, epochs);
+  let overall = epochs > 0 ? Math.min(100, ((done + stepShare) / epochs) * 100) : 0;
+  let headline = `Epoch ${currentEpoch} of ${epochs}`;
+  if (tuning && trialsTotal > 0) {
+    const share =
+      runningTrial !== null && epochs > 0 ? Math.min(1, (done + stepShare) / epochs) : 0;
+    overall = Math.min(100, ((run.trials_done + share) / trialsTotal) * 100);
+    headline =
+      runningTrial !== null
+        ? `Trial ${runningTrial} of ${trialsTotal} · Epoch ${currentEpoch} of ${epochs}`
+        : `Trial ${Math.min(run.trials_done + 1, trialsTotal)} of ${trialsTotal}`;
+  }
+  if (run.message.startsWith('Testing')) {
+    headline = run.message;
+  }
+  const bestTrial = run.best_trial;
+  const bestTrialNumber = state?.best_trial ?? bestTrial?.trial ?? null;
   const metrics = run.metrics;
   const best = run.best ?? state?.best ?? null;
   const epochSeconds = history.map((h) => h.seconds).filter((s): s is number => !!s);
@@ -224,6 +260,7 @@ export function RunView({
         <Text size="xs" c="dimmed" mt={4}>
           {[
             run.dataset.name,
+            tuning && searchLabel(tuning),
             state?.device_label,
             `started ${formatDate(new Date(startedAt).toISOString())}`,
             formatDuration(elapsed),
@@ -233,13 +270,7 @@ export function RunView({
         </Text>
       </div>
 
-      <RunProgress
-        run={run}
-        currentEpoch={currentEpoch}
-        epochs={epochs}
-        overall={overall}
-        stepShare={stepShare}
-      />
+      <RunProgress run={run} headline={headline} overall={overall} stepShare={stepShare} />
 
       <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
         <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
@@ -249,17 +280,31 @@ export function RunView({
         ) : (
           <Tile label="Validation RMSE" value={formatMetric(metrics?.val_rmse)} />
         )}
-        <Tile
-          label="Best epoch"
-          value={best ? String(best.epoch) : '–'}
-          hint={
-            best
-              ? typeof best.val_accuracy === 'number'
-                ? `accuracy ${formatPercent(best.val_accuracy)}`
-                : `loss ${formatMetric(best.val_loss)}`
-              : undefined
-          }
-        />
+        {tuning ? (
+          <Tile
+            label={active ? 'Best trial so far' : 'Best trial'}
+            value={bestTrial ? String(bestTrial.trial) : '–'}
+            hint={
+              bestTrial
+                ? typeof bestTrial.val_accuracy === 'number'
+                  ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
+                  : `loss ${formatMetric(bestTrial.val_loss)}`
+                : undefined
+            }
+          />
+        ) : (
+          <Tile
+            label="Best epoch"
+            value={best ? String(best.epoch) : '–'}
+            hint={
+              best
+                ? typeof best.val_accuracy === 'number'
+                  ? `accuracy ${formatPercent(best.val_accuracy)}`
+                  : `loss ${formatMetric(best.val_loss)}`
+                : undefined
+            }
+          />
+        )}
         {active && progress?.samples_per_second ? (
           <Tile
             label="Speed"
@@ -272,8 +317,31 @@ export function RunView({
         <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
       </SimpleGrid>
 
+      <TestResultCard run={run} classification={classification} active={active} />
+
+      {tuning && (
+        <TrialsTable
+          tuning={tuning}
+          trials={trials}
+          total={trialsTotal}
+          epochs={epochs}
+          best={bestTrialNumber}
+          active={active}
+          classification={classification}
+        />
+      )}
+
       {history.length > 0 ? (
         <Stack gap="lg">
+          {tuning && (
+            <Text size="xs" c="dimmed" mb={-8}>
+              {runningTrial !== null
+                ? `Curves of trial ${runningTrial} (running)`
+                : bestTrialNumber !== null
+                  ? `Curves of the best trial (${bestTrialNumber})`
+                  : null}
+            </Text>
+          )}
           <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />
           {classification ? (
             <LineChart
@@ -417,14 +485,13 @@ function ToggleButton({
 
 function RunProgress({
   run,
-  currentEpoch,
-  epochs,
+  headline,
   overall,
   stepShare,
 }: {
   run: RunDetail;
-  currentEpoch: number;
-  epochs: number;
+  /** E.g. "Epoch 3 of 10" or "Trial 2 of 10 · Epoch 3 of 5". */
+  headline: string;
   overall: number;
   stepShare: number;
 }) {
@@ -447,7 +514,7 @@ function RunProgress({
       <Box>
         <Group justify="space-between" mb={4}>
           <Text size="sm" fw={600}>
-            Epoch {currentEpoch} of {epochs}
+            {headline}
           </Text>
           <Text size="xs" c="dimmed">
             {Math.floor(overall)}%
@@ -601,5 +668,209 @@ function HistoryTable({
         </Table.Tbody>
       </Table>
     </ScrollArea.Autosize>
+  );
+}
+
+// --------------------------------------------------------------------------
+// Test set and hyperparameter search
+// --------------------------------------------------------------------------
+
+/** The final model on the test set; before the end, how many samples are held out. */
+function TestResultCard({
+  run,
+  classification,
+  active,
+}: {
+  run: RunDetail;
+  classification: boolean;
+  active: boolean;
+}) {
+  const state = run.state;
+  const metrics = run.metrics;
+  const fromMetrics: TestResult | null =
+    metrics &&
+    [metrics.test_loss, metrics.test_accuracy, metrics.test_rmse].some((v) => typeof v === 'number')
+      ? {
+          loss: metrics.test_loss ?? null,
+          accuracy: metrics.test_accuracy ?? null,
+          rmse: metrics.test_rmse ?? null,
+        }
+      : null;
+  const result = state?.test ?? fromMetrics;
+  const size = state?.test_size ?? null;
+  if (!result && size === null && !((run.config.test_split ?? 0) > 0)) {
+    return null;
+  }
+
+  const rmse = typeof result?.rmse === 'number';
+  const label = classification ? 'Test accuracy' : rmse ? 'Test RMSE' : 'Test loss';
+  const value = classification
+    ? formatPercent(result?.accuracy)
+    : formatMetric(rmse ? result?.rmse : result?.loss);
+  const samples = size !== null ? `${size.toLocaleString('en-US')} test samples` : 'The test set';
+  let note: string;
+  if (result) {
+    const loss = classification || rmse ? `loss ${formatMetric(result.loss)} · ` : '';
+    note = `${loss}${samples}, measured once after training`;
+  } else if (active) {
+    note = `${samples} ${size !== null ? 'are' : 'is'} held out until training has finished.`;
+  } else {
+    note = 'Not measured: the training did not finish.';
+  }
+  return (
+    <Paper withBorder p="xs" radius="sm">
+      <Group justify="space-between" wrap="nowrap" gap="sm">
+        <div style={{ flexShrink: 0 }}>
+          <Text size="xs" c="dimmed">
+            {label}
+          </Text>
+          <Text fw={600} size="lg" lh={1.3}>
+            {value}
+          </Text>
+        </div>
+        <Text size="xs" c="dimmed" ta="right">
+          {note}
+        </Text>
+      </Group>
+    </Paper>
+  );
+}
+
+const STATUS_TEXT = { completed: 'Done', running: 'Running', stopped: 'Stopped', failed: 'Failed' };
+
+function TrialsTable({
+  tuning,
+  trials,
+  total,
+  epochs,
+  best,
+  active,
+  classification,
+}: {
+  tuning: TuningConfig;
+  trials: TrialEntry[];
+  total: number;
+  epochs: number;
+  best: number | null;
+  active: boolean;
+  classification: boolean;
+}) {
+  const settings = searchedSettings(tuning);
+  const showRmse = !classification && trials.some((t) => typeof t.val_rmse === 'number');
+  const winner = trials.find((t) => t.trial === best) ?? null;
+  const finished = trials.filter((t) => t.status === 'completed' || t.status === 'failed').length;
+
+  return (
+    <div>
+      <Group justify="space-between" gap="xs" mb={4}>
+        <Text size="sm" fw={600}>
+          Trials
+        </Text>
+        <Text size="xs" c="dimmed">
+          {tuning.method === 'grid' ? 'Grid search' : 'Random search'} · {finished} of {total}{' '}
+          finished
+        </Text>
+      </Group>
+      {winner && (
+        <Text size="sm" mb="xs">
+          {active ? 'Best so far' : 'Best'}: trial {winner.trial} ({describeParams(winner.params)})
+          {active ? '' : '. Its weights are kept.'}
+        </Text>
+      )}
+      {trials.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          The first trial starts when the data is ready.
+        </Text>
+      ) : (
+        <ScrollArea.Autosize mah={260} type="auto">
+          <Table stickyHeader fz="xs" style={{ whiteSpace: 'nowrap' }} aria-label="Trials">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Trial</Table.Th>
+                {settings.map((name) => (
+                  <Table.Th key={name}>{SETTING_LABELS[name]}</Table.Th>
+                ))}
+                <Table.Th>Val. loss</Table.Th>
+                {classification && <Table.Th>Val. acc.</Table.Th>}
+                {showRmse && <Table.Th>Val. RMSE</Table.Th>}
+                <Table.Th>Status</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {trials.map((entry) => {
+                const isBest = entry.trial === best;
+                return (
+                  <Table.Tr
+                    key={entry.trial}
+                    fw={isBest ? 700 : undefined}
+                    bg={isBest ? 'var(--mantine-primary-color-light)' : undefined}
+                  >
+                    <Table.Td>{entry.trial}</Table.Td>
+                    {settings.map((name) => (
+                      <Table.Td key={name}>{formatSetting(name, entry.params[name])}</Table.Td>
+                    ))}
+                    <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>
+                    {classification && <Table.Td>{formatPercent(entry.val_accuracy)}</Table.Td>}
+                    {showRmse && <Table.Td>{formatMetric(entry.val_rmse)}</Table.Td>}
+                    <Table.Td>
+                      <TrialStatus entry={entry} best={isBest} epochs={epochs} active={active} />
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea.Autosize>
+      )}
+    </div>
+  );
+}
+
+function TrialStatus({
+  entry,
+  best,
+  epochs,
+  active,
+}: {
+  entry: TrialEntry;
+  best: boolean;
+  epochs: number;
+  /** False when the run has ended: a trial still marked as running was interrupted. */
+  active: boolean;
+}) {
+  if (entry.status === 'failed') {
+    return (
+      <Tooltip label={entry.message || 'Failed'} multiline w={260} withArrow>
+        <Text span size="xs" c="red" td="underline" style={{ textDecorationStyle: 'dotted' }}>
+          Failed
+        </Text>
+      </Tooltip>
+    );
+  }
+  if (entry.status === 'running' && !active) {
+    return (
+      <Text span size="xs" c="dimmed">
+        Interrupted
+      </Text>
+    );
+  }
+  if (entry.status === 'running') {
+    return (
+      <Text span size="xs" c="blue">
+        Epoch {Math.min(entry.epochs_done + 1, epochs)}/{epochs}
+      </Text>
+    );
+  }
+  if (best) {
+    return (
+      <Badge size="xs" variant="filled">
+        Best
+      </Badge>
+    );
+  }
+  return (
+    <Text span size="xs" c="dimmed">
+      {STATUS_TEXT[entry.status]}
+    </Text>
   );
 }

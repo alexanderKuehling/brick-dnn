@@ -1,10 +1,15 @@
 import type {
   Dataset,
   HistoryEntry,
+  Optimizer,
   RunDetail,
+  RunMetrics,
   RunStatus,
   RunSummary,
   TrainingPlan,
+  TrialParams,
+  TunableSetting,
+  TuningConfig,
 } from '@/api/types';
 
 export const ACTIVE_STATUSES: readonly RunStatus[] = ['starting', 'preparing', 'running'];
@@ -116,8 +121,68 @@ export function datasetDetails(dataset: Dataset): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-/** Short progress text for the toolbar, e.g. "Epoch 3/10" or "Preparing". */
+// --------------------------------------------------------------------------
+// Hyperparameter search
+// --------------------------------------------------------------------------
+
+/** Settings a search can vary, in display order. */
+export const TUNABLE_SETTINGS: TunableSetting[] = [
+  'learning_rate',
+  'batch_size',
+  'optimizer',
+  'weight_decay',
+];
+
+export const SETTING_LABELS: Record<TunableSetting, string> = {
+  learning_rate: 'Learning rate',
+  batch_size: 'Batch size',
+  optimizer: 'Optimizer',
+  weight_decay: 'Weight decay',
+};
+
+const OPTIMIZER_LABELS: Record<Optimizer, string> = { adam: 'Adam', adamw: 'AdamW', sgd: 'SGD' };
+
+/** A setting value as people write it: 0.00312, 64, "Adam". */
+export function formatSetting(name: TunableSetting, value: number | string | undefined): string {
+  if (value === undefined) {
+    return '–';
+  }
+  if (name === 'optimizer') {
+    return OPTIMIZER_LABELS[value as Optimizer] ?? String(value);
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return String(value);
+  }
+  return name === 'batch_size' ? String(value) : String(Number(value.toPrecision(3)));
+}
+
+/** "learning rate 0.00312, batch size 64, Adam" (like the engine's messages). */
+export function describeParams(params: TrialParams): string {
+  return TUNABLE_SETTINGS.filter((name) => params[name] !== undefined)
+    .map((name) => {
+      const value = formatSetting(name, params[name]);
+      return name === 'optimizer' ? value : `${SETTING_LABELS[name].toLowerCase()} ${value}`;
+    })
+    .join(', ');
+}
+
+/** The settings a search varies, in display order. */
+export function searchedSettings(tuning: TuningConfig | null | undefined): TunableSetting[] {
+  return tuning ? TUNABLE_SETTINGS.filter((name) => tuning.space[name] !== undefined) : [];
+}
+
+/** "search · 10 trials" or "grid search · 6 trials". */
+export function searchLabel(tuning: TuningConfig): string {
+  const method = tuning.method === 'grid' ? 'grid search' : 'search';
+  return `${method} · ${tuning.trials} ${tuning.trials === 1 ? 'trial' : 'trials'}`;
+}
+
+/** Short progress text for the toolbar, e.g. "Epoch 3/10", "Trial 2/10" or "Preparing". */
 export function progressLabel(run: RunSummary): string {
+  if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
+    const total = run.tuning.trials;
+    return `Trial ${Math.min(run.trials_done + 1, total)}/${total}`;
+  }
   if (run.status === 'running' && run.epochs > 0) {
     return `Epoch ${Math.min(run.epochs_done + 1, run.epochs)}/${run.epochs}`;
   }
@@ -138,22 +203,55 @@ export function isClassification(run: RunSummary, history: HistoryEntry[] = []):
   );
 }
 
-/** The headline result of a run, e.g. "validation accuracy 98.1%". */
-export function resultText(run: RunSummary): string | null {
-  const metrics = run.metrics;
+/** Whether a test set result exists (only after the end of a run with a test set). */
+export function hasTestResult(metrics: RunMetrics | null | undefined): boolean {
+  return (
+    typeof metrics?.test_accuracy === 'number' ||
+    typeof metrics?.test_rmse === 'number' ||
+    typeof metrics?.test_loss === 'number'
+  );
+}
+
+/**
+ * The most telling number of a run and what it is, e.g. ["98.1%", "test accuracy"]: the test
+ * result if there is one, otherwise the validation result.
+ */
+export function headlineMetric(metrics: RunMetrics | null | undefined): [string, string] | null {
   if (!metrics) {
     return null;
   }
+  if (typeof metrics.test_accuracy === 'number') {
+    return [formatPercent(metrics.test_accuracy), 'test accuracy'];
+  }
+  if (typeof metrics.test_rmse === 'number') {
+    return [formatMetric(metrics.test_rmse), 'test RMSE'];
+  }
+  if (typeof metrics.test_loss === 'number') {
+    return [formatMetric(metrics.test_loss), 'test loss'];
+  }
   if (typeof metrics.val_accuracy === 'number') {
-    return `validation accuracy ${formatPercent(metrics.val_accuracy)}`;
+    return [formatPercent(metrics.val_accuracy), 'validation accuracy'];
   }
   if (typeof metrics.val_rmse === 'number') {
-    return `validation RMSE ${formatMetric(metrics.val_rmse)}`;
+    return [formatMetric(metrics.val_rmse), 'validation RMSE'];
   }
   if (typeof metrics.val_loss === 'number') {
-    return `validation loss ${formatMetric(metrics.val_loss)}`;
+    return [formatMetric(metrics.val_loss), 'validation loss'];
   }
   return null;
+}
+
+/**
+ * The headline result of a run, e.g. "validation accuracy 98.1%", "test accuracy 97.5%" or
+ * "best trial 3, test accuracy 97.5%".
+ */
+export function resultText(run: RunSummary): string | null {
+  const headline = headlineMetric(run.metrics);
+  if (!headline) {
+    return null;
+  }
+  const text = `${headline[1]} ${headline[0]}`;
+  return run.tuning && run.best_trial ? `best trial ${run.best_trial.trial}, ${text}` : text;
 }
 
 // --------------------------------------------------------------------------

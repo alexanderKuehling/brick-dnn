@@ -157,6 +157,8 @@ export interface TrainingStatus {
   max_upload_mb: number;
   max_concurrent_runs: number;
   login_required: boolean;
+  /** Limits of the hyperparameter search (missing on servers without it). */
+  tuning?: TuningLimits;
 }
 
 export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images';
@@ -229,18 +231,124 @@ export interface TrainingConfig {
   learning_rate: number;
   optimizer: Optimizer;
   weight_decay: number;
-  /** Share of the data held out for validation (ignored for built-in datasets). */
+  /**
+   * Share of the data held out for validation. Built-in datasets without a test set validate
+   * on their official test images and ignore it.
+   */
   val_split: number;
+  /**
+   * Share of the data held out as a test set, measured once after training (0: none).
+   * Built-in datasets use their official test images when it is above 0. Missing in runs
+   * from before test sets existed.
+   */
+  test_split?: number;
   device: string;
   max_samples: number | null;
   seed: number | null;
 }
 
+// --------------------------------------------------------------------------
+// Hyperparameter search
+// --------------------------------------------------------------------------
+
+export type TuningMethod = 'random' | 'grid';
+
+/** Settings a search can vary, in display order. */
+export type TunableSetting = 'learning_rate' | 'batch_size' | 'optimizer' | 'weight_decay';
+
+/** Numbers between `min` and `max` (both > 0), drawn log-uniformly. */
+export interface TuningRange {
+  min: number;
+  max: number;
+}
+
+/** What a search tries. Settings that are missing keep their value from the config. */
+export interface TuningSpace {
+  learning_rate?: TuningRange | number[];
+  batch_size?: number[];
+  optimizer?: Optimizer[];
+  weight_decay?: TuningRange | number[];
+}
+
+/**
+ * A hyperparameter search: random search draws `trials` combinations, grid search tries
+ * every combination of the listed values. As stored on a run, `trials` is the planned
+ * number of trials.
+ */
+export interface TuningConfig {
+  method: TuningMethod;
+  trials: number;
+  space: TuningSpace;
+}
+
+/** Search settings sent to the API (`trials` is ignored by grid search). */
+export interface TuningInput {
+  method: TuningMethod;
+  trials?: number;
+  space: TuningSpace;
+}
+
+/** GET /api/training/ `tuning`. */
+export interface TuningLimits {
+  methods: TuningMethod[];
+  tunable: TunableSetting[];
+  max_trials: number;
+  max_values: number;
+  default: TuningConfig;
+}
+
+/** Values of the tuned settings of one trial. */
+export interface TrialParams {
+  learning_rate?: number;
+  batch_size?: number;
+  optimizer?: Optimizer;
+  weight_decay?: number;
+}
+
+export type TrialStatus = 'running' | 'completed' | 'failed' | 'stopped';
+
+/** One trial of a search. The metrics are those of its last (or latest) epoch. */
+export interface TrialEntry {
+  /** Counts from 1. */
+  trial: number;
+  params: TrialParams;
+  status: TrialStatus;
+  /** Why the trial failed, e.g. "The loss became NaN in epoch 2. …". */
+  message: string;
+  epochs_done: number;
+  train_loss: number | null;
+  val_loss: number | null;
+  val_accuracy: number | null;
+  val_rmse: number | null;
+  seconds: number | null;
+}
+
+/** The trial with the lowest final validation loss; its weights are kept. */
+export interface BestTrial {
+  trial: number;
+  params: TrialParams;
+  val_loss: number | null;
+  val_accuracy: number | null;
+  val_rmse: number | null;
+}
+
+/** The final model measured on the test set. */
+export interface TestResult {
+  loss: number | null;
+  accuracy: number | null;
+  rmse: number | null;
+}
+
+/** Metrics of the last finished epoch (of the best trial once a search has ended). */
 export interface RunMetrics {
   train_loss: number | null;
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
+  /** Test set results, null without a test set or before the end (missing in old runs). */
+  test_loss?: number | null;
+  test_accuracy?: number | null;
+  test_rmse?: number | null;
 }
 
 export interface BestEpoch {
@@ -257,12 +365,18 @@ export interface RunSummary {
   dataset: { kind: 'random' | 'builtin' | 'upload'; id: string | number | null; name: string };
   config: TrainingConfig;
   task: TrainingTask | null;
-  /** Planned number of epochs. */
+  /** Planned number of epochs (per trial in a search). */
   epochs: number;
+  /** Finished epochs (of the running trial in a search). */
   epochs_done: number;
   /** Metrics of the last finished epoch. */
   metrics: RunMetrics | null;
   best: BestEpoch | null;
+  /** Set for a hyperparameter search. */
+  tuning: TuningConfig | null;
+  /** Finished trials of a search (completed or failed). */
+  trials_done: number;
+  best_trial: BestTrial | null;
   has_weights: boolean;
   stop_requested: boolean;
   total_params: number | null;
@@ -303,16 +417,28 @@ export interface RunState {
   class_names: string[] | null;
   train_size: number | null;
   val_size: number | null;
+  /** Null without a test set. The new keys below are missing in runs of older versions. */
+  test_size?: number | null;
   epochs: number;
   steps_per_epoch: number | null;
   total_params: number | null;
+  /** Epochs of the running trial in a search; of the best trial once it has ended. */
   history: HistoryEntry[];
   progress: RunProgress | null;
   best: BestEpoch | null;
+  /** The final model on the test set. */
+  test?: TestResult | null;
   weights: boolean;
   /** How inputs were prepared; needed to reuse the weights. Shape defined by the engine. */
   preprocessing: Record<string, unknown> | null;
   log: string[];
+  tuning?: TuningConfig | null;
+  trials_total?: number | null;
+  /** The trial that is running (from 1), null outside of trials. */
+  trial?: number | null;
+  /** Every started trial, in order. */
+  trials?: TrialEntry[];
+  best_trial?: number | null;
 }
 
 export interface RunDetail extends RunSummary {
@@ -326,4 +452,6 @@ export interface RunInput {
   graph: GraphDocument;
   dataset: DatasetRef;
   config: Partial<TrainingConfig>;
+  /** A hyperparameter search instead of a single training. */
+  tuning?: TuningInput;
 }

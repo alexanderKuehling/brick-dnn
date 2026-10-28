@@ -29,6 +29,7 @@ from brickdnn.training import (
 )
 from brickdnn.training import state as st
 from brickdnn.training.datasets import find_image_root, list_image_files, parse_number, read_csv
+from brickdnn.training.tuning import TuningConfig, describe_params, trial_config
 
 from .helpers import chain
 
@@ -47,11 +48,14 @@ def test_config_defaults():
         "optimizer": "adam",
         "weight_decay": 0.0,
         "val_split": 0.2,
+        "test_split": 0.0,
         "device": "auto",
         "max_samples": None,
         "seed": None,
     }
     assert TrainingConfig.from_dict(config.to_dict()) == config
+    assert not config.has_test
+    assert TrainingConfig.from_dict({"test_split": "0.15"}).has_test
 
 
 def test_config_parses_strings_and_normalises_choices():
@@ -90,6 +94,12 @@ def test_config_parses_strings_and_normalises_choices():
         ({"learning_rate": "nan"}, "Learning rate must be greater than 0"),
         ({"weight_decay": -0.1}, "Weight decay must be at least 0 and at most 1."),
         ({"val_split": 0.9}, "Validation split must be at least 0.05 and at most 0.5."),
+        ({"test_split": 0.6}, "Test split must be at least 0 and at most 0.5."),
+        ({"test_split": -0.1}, "Test split must be at least 0 and at most 0.5."),
+        (
+            {"val_split": 0.5, "test_split": 0.4},
+            "Validation and test split together can be at most 80%.",
+        ),
         ({"optimizer": "rmsprop"}, "Optimizer must be one of: adam, adamw, sgd."),
         ({"device": "tpu"}, "Device must be one of: auto, cpu, cuda, mps."),
         ({"max_samples": 5}, "Max. samples must be between 10 and"),
@@ -105,6 +115,138 @@ def test_config_errors(data, message):
 def test_config_must_be_an_object():
     with pytest.raises(ConfigError, match="must be an object"):
         TrainingConfig.from_dict([1, 2])  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
+# Hyperparameter search settings
+# --------------------------------------------------------------------------- #
+
+
+def test_tuning_defaults():
+    tuning = TuningConfig.from_dict(None)
+    assert tuning == TuningConfig()
+    assert tuning.to_dict() == {
+        "method": "random",
+        "trials": 10,
+        "space": {"learning_rate": {"min": 1e-4, "max": 1e-2}, "batch_size": [32, 64, 128]},
+    }
+    assert TuningConfig.from_dict(tuning.to_dict()) == tuning
+    assert tuning.describe() == "random search, 10 trials"
+
+
+def test_random_search_is_reproducible_and_within_the_space():
+    tuning = TuningConfig.from_dict(
+        {
+            "trials": 25,
+            "space": {
+                "learning_rate": {"min": "1e-5", "max": 0.1},
+                "optimizer": ["Adam", "sgd", "adam"],
+                "weight_decay": [0, 1e-4],
+            },
+        }
+    )
+    assert tuning.space["optimizer"] == ("adam", "sgd")  # normalised, without duplicates
+    trials = tuning.sample(seed=7)
+    assert trials == tuning.sample(seed=7)
+    assert trials != tuning.sample(seed=8)
+    assert len(trials) == 25
+    assert len({tuple(t.values()) for t in trials}) == 25  # no trial twice
+    for params in trials:
+        assert list(params) == ["learning_rate", "optimizer", "weight_decay"]
+        assert 1e-5 <= params["learning_rate"] <= 0.1
+        assert params["learning_rate"] == float(f"{params['learning_rate']:.3g}")  # rounded
+        assert params["optimizer"] in ("adam", "sgd")
+        assert params["weight_decay"] in (0, 1e-4)
+    rates = sorted(t["learning_rate"] for t in trials)
+    assert rates[0] < 1e-3 < rates[-1]  # log-uniform: small rates are drawn as well
+
+
+def test_random_search_over_lists_tries_each_combination_at_most_once():
+    tuning = TuningConfig.from_dict(
+        {"trials": 50, "space": {"batch_size": [16, 32], "optimizer": ["adam", "sgd"]}}
+    )
+    assert tuning.trials == 4
+    trials = tuning.sample(seed=0)
+    assert sorted((t["batch_size"], t["optimizer"]) for t in trials) == [
+        (16, "adam"),
+        (16, "sgd"),
+        (32, "adam"),
+        (32, "sgd"),
+    ]
+
+
+def test_grid_search_tries_every_combination_in_order():
+    tuning = TuningConfig.from_dict(
+        {
+            "method": "grid",
+            "trials": 2,  # ignored: a grid always tries every combination
+            "space": {"learning_rate": [0.01, 0.001], "batch_size": [32, 64, 128]},
+        }
+    )
+    assert tuning.trials == 6
+    assert tuning.describe() == "grid search, 6 trials"
+    assert tuning.sample(seed=1) == [
+        {"learning_rate": 0.01, "batch_size": 32},
+        {"learning_rate": 0.01, "batch_size": 64},
+        {"learning_rate": 0.01, "batch_size": 128},
+        {"learning_rate": 0.001, "batch_size": 32},
+        {"learning_rate": 0.001, "batch_size": 64},
+        {"learning_rate": 0.001, "batch_size": 128},
+    ]
+
+
+def test_trial_config_and_description():
+    base = TrainingConfig.from_dict({"epochs": 3, "learning_rate": 0.1})
+    params = {"learning_rate": 0.00312, "batch_size": 16, "optimizer": "adamw"}
+    config = trial_config(base, params)
+    assert (config.epochs, config.learning_rate, config.batch_size) == (3, 0.00312, 16)
+    assert config.optimizer == "adamw" and base.learning_rate == 0.1
+    assert describe_params(params) == "learning rate 0.00312, batch size 16, AdamW"
+    assert describe_params({"weight_decay": 0.0001}) == "weight decay 0.0001"
+
+
+@pytest.mark.parametrize(
+    "data,message",
+    [
+        ("fast", "The hyperparameter search settings must be an object."),
+        ({"method": "bayes"}, "the method must be one of: random, grid."),
+        ({"trials": 0}, "the number of trials must be at least 1 and at most 100."),
+        ({"trials": 2.5}, "the number of trials must be whole numbers."),
+        ({"space": []}, "the search space must be an object."),
+        ({"space": {}}, "choose at least one setting to tune."),
+        ({"space": {"learning_rate": None}}, "choose at least one setting to tune."),
+        ({"space": {"momentum": [0.9]}}, "'momentum' cannot be tuned."),
+        ({"space": {"learning_rate": [0.1, 0]}}, "learning rates must be greater than 0"),
+        ({"space": {"learning_rate": {"min": 0.1}}}, 'needs "min" and "max".'),
+        ({"space": {"learning_rate": {"min": 0.1, "max": 0.01}}}, "must not be larger"),
+        ({"space": {"weight_decay": {"min": 0, "max": 0.1}}}, "must be greater than 0"),
+        ({"space": {"batch_size": {"min": 8, "max": 64}}}, "give a list of values"),
+        ({"space": {"batch_size": [32, 0]}}, "batch sizes must be at least 1"),
+        ({"space": {"batch_size": [32.5]}}, "batch sizes must be whole numbers."),
+        ({"space": {"batch_size": []}}, "give at least one batch size."),
+        ({"space": {"batch_size": list(range(1, 30))}}, "at most 20 values per setting."),
+        ({"space": {"optimizer": ["rmsprop"]}}, "the optimizer must be one of"),
+        (
+            {"method": "grid", "space": {"learning_rate": {"min": 1e-4, "max": 1e-2}}},
+            "Grid search needs a list of values for the learning rate, not a range.",
+        ),
+        (
+            {
+                "method": "grid",
+                "space": {
+                    "learning_rate": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
+                    "batch_size": [8, 16, 32, 64, 128],
+                    "weight_decay": [0, 1e-5, 1e-4, 1e-3, 1e-2],
+                },
+            },
+            "The grid has 125 combinations, at most 100 are possible.",
+        ),
+    ],
+)
+def test_tuning_errors(data, message):
+    with pytest.raises(ConfigError) as excinfo:
+        TuningConfig.from_dict(data)
+    assert message in str(excinfo.value)
 
 
 def test_optional_dependency_checks_return_booleans():

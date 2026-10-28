@@ -55,6 +55,7 @@ from brickdnn.training import (
     torch_installed,
     torchvision_installed,
 )
+from brickdnn.training.config import ConfigError
 from brickdnn.training.state import (
     LOG_FILE,
     WEIGHTS_FILE,
@@ -62,6 +63,13 @@ from brickdnn.training.state import (
     read_state,
     request_stop,
     write_job,
+)
+from brickdnn.training.tuning import (
+    MAX_TRIALS,
+    MAX_VALUES,
+    METHODS,
+    TUNABLE,
+    TuningConfig,
 )
 
 from .models import Dataset, TrainingRun
@@ -97,6 +105,8 @@ STOP_TIMEOUT_SECONDS = 30
 # run is given up. Wall-clock based heartbeats look stale right after a laptop wakes up.
 STALE_GRACE_SECONDS = 15
 METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse")
+TEST_KEYS = {"test_loss": "loss", "test_accuracy": "accuracy", "test_rmse": "rmse"}
+TRIAL_KEYS = ("trial", "params", "val_loss", "val_accuracy", "val_rmse")
 
 # Training processes started by this server process, by run id. A daemon thread waits
 # for each of them so that finished processes do not linger as zombies.
@@ -252,6 +262,13 @@ def capabilities() -> dict[str, Any]:
         "max_upload_mb": settings.TRAINING_MAX_UPLOAD_MB,
         "max_concurrent_runs": settings.TRAINING_MAX_RUNS,
         "login_required": True,
+        "tuning": {
+            "methods": list(METHODS),
+            "tunable": list(TUNABLE),
+            "max_trials": MAX_TRIALS,
+            "max_values": MAX_VALUES,
+            "default": TuningConfig().to_dict(),
+        },
     }
 
 
@@ -427,11 +444,14 @@ def active_run_count() -> int:
     return TrainingRun.objects.filter(status__in=ACTIVE_STATUSES).count()
 
 
-def start_run(user, name: Any, graph: Any, dataset_ref: Any, config: Any) -> TrainingRun:
+def start_run(
+    user, name: Any, graph: Any, dataset_ref: Any, config: Any, tuning: Any = None
+) -> TrainingRun:
     """Validate everything and start a training process.
 
-    Raises :class:`TrainingUnavailable`, :class:`TrainingInputError` (also for
-    ``ConfigError``), :class:`IncompatibleNetwork` or :class:`TrainingBusy`.
+    ``tuning`` (search settings, see brickdnn.training.tuning) turns the run into a
+    hyperparameter search. Raises :class:`TrainingUnavailable`, :class:`TrainingInputError`
+    (also for ``ConfigError``), :class:`IncompatibleNetwork` or :class:`TrainingBusy`.
     """
     reason = unavailable_reason()
     if reason:
@@ -447,7 +467,8 @@ def start_run(user, name: Any, graph: Any, dataset_ref: Any, config: Any) -> Tra
     validate_graph(graph)
     try:
         training_config = TrainingConfig.from_dict(config)
-    except ValueError as exc:  # ConfigError
+        search = TuningConfig.from_dict(tuning) if tuning is not None else None
+    except ConfigError as exc:
         raise TrainingInputError(str(exc)) from None
     dataset = resolve_dataset(user, dataset_ref)
     analysis = analyze(graph)
@@ -466,6 +487,7 @@ def start_run(user, name: Any, graph: Any, dataset_ref: Any, config: Any) -> Tra
             dataset=dataset.summary,
             upload=dataset.upload,
             config=training_config.to_dict(),
+            tuning=search.to_dict() if search is not None else None,
             plan=compatibility.plan.to_dict(),
             total_params=analysis.total_params,
             message="Starting …",
@@ -479,6 +501,7 @@ def start_run(user, name: Any, graph: Any, dataset_ref: Any, config: Any) -> Tra
                 "info": dataset.info.to_dict(),
             },
             "config": training_config.to_dict(),
+            "tuning": search.to_dict() if search is not None else None,
             "data_root": str(builtin_data_dir()),
         }
         _launch(run, job)
@@ -543,6 +566,8 @@ SYNC_FIELDS = [
     "epochs_done",
     "metrics",
     "best",
+    "trials_done",
+    "best_trial",
     "has_weights",
     "total_params",
     "finished_at",
@@ -569,9 +594,22 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
         last = history[-1] if isinstance(history[-1], dict) else {}
         epoch = last.get("epoch")
         run.epochs_done = epoch if isinstance(epoch, int) and epoch >= 0 else len(history)
-        run.metrics = {key: last.get(key) for key in METRIC_KEYS}
+        test = state.get("test") if isinstance(state.get("test"), dict) else {}
+        run.metrics = {
+            **{key: last.get(key) for key in METRIC_KEYS},
+            **{key: test.get(name) for key, name in TEST_KEYS.items()},
+        }
+    elif isinstance(history, list):
+        run.epochs_done = 0  # a new trial of a search has started
     if isinstance(state.get("best"), dict) or state.get("best") is None:
         run.best = state.get("best")
+    trials = state.get("trials")
+    if isinstance(trials, list):
+        trials = [t for t in trials if isinstance(t, dict)]
+        run.trials_done = sum(1 for t in trials if t.get("status") in ("completed", "failed"))
+        number = state.get("best_trial")
+        best = next((t for t in trials if number is not None and t.get("trial") == number), None)
+        run.best_trial = {key: best.get(key) for key in TRIAL_KEYS} if best else None
     run.has_weights = bool(state.get("weights")) and (run_dir(run.pk) / WEIGHTS_FILE).is_file()
     total = state.get("total_params")
     if isinstance(total, int) and not isinstance(total, bool):

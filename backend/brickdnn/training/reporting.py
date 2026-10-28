@@ -21,6 +21,10 @@ def short_error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__
 
 
+class DivergedError(TrainingError):
+    """The loss became NaN or infinite (the settings, e.g. the learning rate, are to blame)."""
+
+
 class StopTraining(Exception):
     """Raised inside the engine when the user asked to stop."""
 
@@ -30,7 +34,9 @@ class Reporter:
 
     Call order: ``status``/``log`` while preparing, ``setup`` once data and model are
     ready, then per epoch ``status`` + ``progress`` (about twice per second) +
-    ``epoch_end``, and exactly one ``finish`` at the end.
+    ``epoch_end``, ``test_end`` if there is a test set, and exactly one ``finish`` at the
+    end. A hyperparameter search wraps the epochs of every trial in ``trial_start`` and
+    ``trial_end`` and calls ``search_end`` before testing the best trial.
     """
 
     def status(self, status: str, message: str) -> None:
@@ -41,14 +47,30 @@ class Reporter:
 
     def setup(self, info: dict[str, Any]) -> None:
         """Facts about the run (state.json keys): device, device_label, task, num_classes,
-        class_names, train_size, val_size, steps_per_epoch, total_params, preprocessing.
+        class_names, train_size, val_size, test_size, steps_per_epoch, total_params,
+        preprocessing; for a hyperparameter search also tuning and trials_total.
         May be called again with a subset (e.g. after falling back to the CPU)."""
 
     def progress(self, progress: dict[str, Any]) -> None:
         """``{"epoch", "step", "steps", "loss", "samples_per_second"}`` during an epoch."""
 
     def epoch_end(self, entry: dict[str, Any], best: dict[str, Any]) -> None:
-        """One history entry (see state.py) and the best epoch so far."""
+        """One history entry (see state.py) and the best epoch so far (of this trial)."""
+
+    def trial_start(self, trial: dict[str, Any]) -> None:
+        """Hyperparameter search: ``{"trial", "trials", "params", "steps_per_epoch"}``
+        before the epochs of a trial (``trial`` counts from 1)."""
+
+    def trial_end(self, trial: dict[str, Any], best_trial: int | None) -> None:
+        """Hyperparameter search: the result of a trial (see state.py, ``trials``) and the
+        number of the best trial so far."""
+
+    def search_end(self, result: dict[str, Any]) -> None:
+        """Hyperparameter search: the winner ``{"best_trial", "params", "history", "best"}``.
+        Its weights are the ones that are tested and saved."""
+
+    def test_end(self, result: dict[str, Any]) -> None:
+        """``{"loss", "accuracy", "rmse"}`` of the final model on the test set."""
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         """Terminal status (completed | stopped | failed) and the result for the user."""

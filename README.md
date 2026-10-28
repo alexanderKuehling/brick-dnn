@@ -46,8 +46,10 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Local training from the editor**: press *Train*, pick demo data, MNIST, Fashion-MNIST,
   CIFAR-10, a CSV file or a folder of images, and watch loss and accuracy live. Training runs
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
-  checks beforehand whether network and data fit and says what to change. Download the trained
-  weights together with the matching script. See [docs/training.md](docs/training.md).
+  checks beforehand whether network and data fit and says what to change. Hold out a test set,
+  let a **hyperparameter search** find a good learning rate, batch size or optimizer, and
+  download the trained weights together with the matching script. See
+  [docs/training.md](docs/training.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
@@ -204,6 +206,7 @@ brickdnn my_network.json -o model.py --class-name MyNet
 
 pip install "brickdnn[train] @ git+https://github.com/alexanderKuehling/brick-dnn#subdirectory=backend"
 brickdnn train my_network.json --data mnist --epochs 5 --save weights.pt
+brickdnn train my_network.json --data houses.csv --test-split 0.2 --tune --trials 20
 ```
 
 ```python

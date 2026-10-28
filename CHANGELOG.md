@@ -12,6 +12,15 @@
   regression, `,`/`;` separators, text labels) and ZIP uploads with one folder of images per class.
 - Compatibility check before training that explains what to change, e.g. the number of outputs
   or the Input shape. Images are converted and resized to the Input layer automatically.
+- **Test set.** Optionally hold out a share of the data as a test set (`test_split`). It is
+  never used for training or for choosing settings; the final model is measured on it once
+  after training. MNIST, Fashion-MNIST and CIFAR-10 use their official test images for it and
+  validate on part of their training images.
+- **Hyperparameter search.** Random or grid search over learning rate, batch size, optimizer
+  and weight decay. All trials train on the same data split from the same initial weights; the
+  trial with the lowest validation loss wins and its weights are kept. Trials whose loss
+  explodes or that run out of memory are skipped. Available in the editor, on the command line
+  (`--tune`, `--trials`, `--tune-lr 1e-4:1e-2`, …) and via the API (`tuning`).
 - `brickdnn train` command and the optional `brickdnn[train]` extra.
 - REST endpoints under `/api/training/` (see `docs/api.md`) and a training guide
   (`docs/training.md`).

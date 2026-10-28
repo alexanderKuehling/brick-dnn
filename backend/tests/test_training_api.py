@@ -95,6 +95,29 @@ elif mode == "until_stop":
         save()
         time.sleep(0.05)
     finish("stopped", "Stopped after 0 epochs.")
+elif mode == "search":  # a finished hyperparameter search with a test set
+    trial = {"status": "completed", "message": "", "epochs_done": 1, "train_loss": 0.5,
+             "val_rmse": None, "seconds": 0.1}
+    state["tuning"] = job["tuning"]
+    state["trials_total"] = 2
+    state["trials"] = [
+        {**trial, "trial": 1, "params": {"learning_rate": 0.01}, "val_loss": 0.6,
+         "val_accuracy": 0.7},
+        {**trial, "trial": 2, "params": {"learning_rate": 0.001}, "val_loss": 0.3,
+         "val_accuracy": 0.95},
+        {**trial, "trial": 3, "params": {"learning_rate": 9.0}, "status": "failed",
+         "message": "The loss became NaN in epoch 1. Try a lower learning rate.",
+         "val_loss": None, "val_accuracy": None, "epochs_done": 0},
+    ]
+    state["best_trial"] = 2
+    state["history"].append(
+        {"epoch": 1, "train_loss": 0.5, "val_loss": 0.3, "train_accuracy": 0.8,
+         "val_accuracy": 0.95, "seconds": 0.1}
+    )
+    state["best"] = {"epoch": 1, "val_loss": 0.3, "val_accuracy": 0.95}
+    state["test_size"] = 13
+    state["test"] = {"loss": 0.35, "accuracy": 0.92, "rmse": None}
+    finish("completed", "Finished 3 trials (1 failed).")
 elif mode == "crash":  # exits without a final status
     print("RuntimeError: something broke", file=sys.stderr)
     sys.exit(1)
@@ -243,6 +266,17 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
     assert data["login_required"] is True
     assert data["max_upload_mb"] == 5
     assert data["max_concurrent_runs"] == 1
+    assert data["tuning"] == {
+        "methods": ["random", "grid"],
+        "tunable": ["learning_rate", "batch_size", "optimizer", "weight_decay"],
+        "max_trials": 100,
+        "max_values": 20,
+        "default": {
+            "method": "random",
+            "trials": 10,
+            "space": {"learning_rate": {"min": 1e-4, "max": 1e-2}, "batch_size": [32, 64, 128]},
+        },
+    }
     builtin = data["builtin_datasets"]
     assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10"]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]
@@ -628,6 +662,9 @@ def test_run_lifecycle(auth_client, training_dir):
     assert data["status"] in ("starting", "preparing", "running", "completed")
     assert data["dataset"] == {"kind": "random", "id": None, "name": "Demo data"}
     assert data["config"]["epochs"] == 1 and data["config"]["device"] == "cpu"
+    assert data["config"]["test_split"] == 0.0
+    assert data["tuning"] is None
+    assert data["trials_done"] == 0 and data["best_trial"] is None
     assert data["epochs"] == 1
     assert data["task"] == "demo"
     assert data["graph"] == DEMO_GRAPH
@@ -643,6 +680,7 @@ def test_run_lifecycle(auth_client, training_dir):
     assert job["dataset"]["path"] is None
     assert job["dataset"]["info"]["name"] == "Demo data"
     assert job["config"]["max_samples"] == 64
+    assert job["tuning"] is None
     assert job["data_root"] == str(training_dir / "builtin")
 
     data = wait_for(auth_client, run_id)
@@ -654,6 +692,9 @@ def test_run_lifecycle(auth_client, training_dir):
         "val_loss": 0.4,
         "val_accuracy": 0.9,
         "val_rmse": None,
+        "test_loss": None,
+        "test_accuracy": None,
+        "test_rmse": None,
     }
     assert data["best"] == {"epoch": 1, "val_loss": 0.4, "val_accuracy": 0.9}
     assert data["has_weights"] is True
@@ -678,6 +719,57 @@ def test_run_lifecycle(auth_client, training_dir):
     )
     assert response.status_code == 200
     response.close()
+
+
+def test_hyperparameter_search_run(auth_client, training_dir, settings):
+    use_runner(settings, "search")
+    tuning = {
+        "trials": 3,
+        "space": {"learning_rate": {"min": "1e-4", "max": 10}, "optimizer": ["SGD", "adam"]},
+    }
+    config = {**QUICK, "test_split": 0.2}
+    response = auth_client.post(
+        "/api/training/runs/",
+        {
+            "name": "Search",
+            "graph": DEMO_GRAPH,
+            "dataset": RANDOM,
+            "config": config,
+            "tuning": tuning,
+        },
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    run_id = response.data["id"]
+    normalised = {
+        "method": "random",
+        "trials": 3,
+        "space": {"learning_rate": {"min": 1e-4, "max": 10.0}, "optimizer": ["sgd", "adam"]},
+    }
+    assert response.data["tuning"] == normalised
+    assert response.data["config"]["test_split"] == 0.2
+    job = read_job(training_dir / "runs" / run_id)
+    assert job["tuning"] == normalised
+    assert job["config"]["test_split"] == 0.2
+
+    data = wait_for(auth_client, run_id)
+    assert data["status"] == "completed", data["message"]
+    assert data["trials_done"] == 3
+    assert data["best_trial"] == {
+        "trial": 2,
+        "params": {"learning_rate": 0.001},
+        "val_loss": 0.3,
+        "val_accuracy": 0.95,
+        "val_rmse": None,
+    }
+    assert data["metrics"]["val_accuracy"] == 0.95
+    assert data["metrics"]["test_loss"] == 0.35
+    assert data["metrics"]["test_accuracy"] == 0.92
+    assert data["metrics"]["test_rmse"] is None
+    assert data["state"]["test_size"] == 13
+    assert [t["trial"] for t in data["state"]["trials"]] == [1, 2, 3]
+    listing = auth_client.get("/api/training/runs/").data
+    assert listing[0]["tuning"] == normalised and listing[0]["best_trial"]["trial"] == 2
 
 
 def test_runs_are_listed_newest_first(auth_client, training_dir, settings):
@@ -838,6 +930,18 @@ def test_run_rejects_incompatible_networks(auth_client, training_dir):
         ({"config": {"epochs": 0}}, "Epochs must be between 1 and 1,000."),
         ({"config": {"optimizer": "rmsprop"}}, "Optimizer must be one of"),
         ({"config": "fast"}, "The training settings must be an object."),
+        ({"config": {"test_split": 0.7}}, "Test split must be at least 0 and at most 0.5."),
+        (
+            {"config": {"val_split": 0.5, "test_split": 0.5}},
+            "Validation and test split together can be at most 80%.",
+        ),
+        ({"tuning": "yes"}, "The hyperparameter search settings must be an object."),
+        ({"tuning": {"space": {}}}, "choose at least one setting to tune."),
+        ({"tuning": {"trials": 500}}, "the number of trials must be at least 1 and at most 100"),
+        (
+            {"tuning": {"method": "grid", "space": {"learning_rate": {"min": 0.1, "max": 1}}}},
+            "Grid search needs a list of values",
+        ),
         ({"graph": {"nodes": "x"}}, "'nodes' and 'edges' must be lists."),
         ({"dataset": None}, "Choose a dataset."),
         ({"name": "x" * 121}, "at most 120 characters"),
@@ -897,6 +1001,35 @@ def test_real_training_end_to_end(auth_client, training_dir, settings):
     assert response["Content-Disposition"] == 'attachment; filename="demo-mlp.pt"'
     assert len(b"".join(response.streaming_content)) > 100
     response.close()
+
+
+@pytest.mark.skipif(not torch_installed(), reason="PyTorch is not installed")
+def test_real_search_with_a_test_set_end_to_end(auth_client, training_dir, settings):
+    if importlib.util.find_spec("brickdnn.training.runner") is None:
+        pytest.skip("brickdnn.training.runner is not available")
+    settings.TRAINING_RUNNER_COMMAND = None
+    response = auth_client.post(
+        "/api/training/runs/",
+        {
+            "name": "Search",
+            "graph": DEMO_GRAPH,
+            "dataset": RANDOM,
+            "config": {**QUICK, "test_split": 0.2},
+            "tuning": {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}},
+        },
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    run_id = response.data["id"]
+    data = wait_for(auth_client, run_id, timeout=90, interval=0.5)
+    log = (training_dir / "runs" / run_id / "output.log").read_text(errors="replace")
+    assert data["status"] == "completed", f"{data['message']}\n{log[-3000:]}"
+    assert data["trials_done"] == 2
+    assert data["best_trial"]["trial"] in (1, 2)
+    assert data["metrics"]["val_loss"] == data["best_trial"]["val_loss"]
+    assert data["metrics"]["test_loss"] is not None
+    assert data["state"]["test_size"] > 0 and data["has_weights"] is True
+    assert data["message"].startswith("Finished 2 trials. Best: trial ")
 
 
 @pytest.mark.skipif(not torch_installed(), reason="PyTorch is not installed")

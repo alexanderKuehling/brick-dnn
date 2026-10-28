@@ -1,6 +1,7 @@
 """Turn a dataset into tensors the way the :class:`TrainingPlan` says.
 
-Every dataset becomes two *sources* (training and validation). A source knows its length
+Every dataset becomes two or three *sources*: training, validation and, if the settings
+ask for one, a test set that is only used once after training. A source knows its length
 and returns ready-to-use batches for a tensor of sample indices; images are kept as
 ``uint8`` and only converted to normalised floats batch by batch, which keeps memory low
 (CIFAR-10 as float32 would need about 600 MB).
@@ -34,7 +35,7 @@ from .reporting import Reporter, StopTraining, TrainingError, short_error
 
 Batch = tuple[list[torch.Tensor], list[torch.Tensor]]
 
-# Demo data: this many samples in total, split into training and validation, but fewer
+# Demo data: this many samples in total, split into training and validation (and test), but fewer
 # for large inputs so that all demo tensors together stay below DEMO_BYTES.
 DEMO_SAMPLES = 2560
 DEMO_BYTES = 500 * 1024**2
@@ -47,8 +48,10 @@ PRELOAD_BYTES = 2 * 1024**3
 # converted in chunks of about this size (float32).
 STATS_SAMPLES = 10_000
 STATS_CHUNK_BYTES = 64 * 1024**2
-# Built-in datasets ignore val_split (they have an official test split). With max_samples,
-# the test split is shrunk as if val_split had its default value (20 % of all samples).
+# Built-in datasets come with an official test split. Without a test set it is used for
+# validation (and val_split is ignored); with a test set it is the test set and validation
+# data is taken from the training split. With max_samples, the official split is shrunk as
+# if it were 20 % of all samples.
 BUILTIN_VAL_SPLIT = 0.2
 # CSV files are parsed in blocks of this many rows.
 CSV_BLOCK_ROWS = 4096
@@ -71,6 +74,8 @@ class PreparedData:
     # Regression on CSV data: standard deviation of the target, to report the
     # validation RMSE in the units of the CSV file.
     target_std: float | None = None
+    # Held out until training is over (None: the settings ask for no test set).
+    test: Source | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -159,28 +164,53 @@ def iterate_batches(
         yield source.batch(indices)
 
 
+def held_out_size(max_samples: int, share: float, train_share: float) -> int:
+    """Validation or test samples that go with ``max_samples`` training samples, so that
+    they keep the proportion ``share : train_share``."""
+    return max(1, round(max_samples * share / train_share))
+
+
 def val_size_for(max_samples: int, val_split: float) -> int:
     """Validation samples that go with ``max_samples`` training samples (same proportion)."""
-    return max(1, round(max_samples * val_split / (1 - val_split)))
+    return held_out_size(max_samples, val_split, 1 - val_split)
+
+
+def split_sizes(n: int, val_split: float, test_split: float) -> tuple[int, int, int]:
+    """Numbers of training, validation and test samples (each part gets at least one)."""
+    need = 3 if test_split > 0 else 2
+    if n < need:
+        parts = "training + validation + test" if test_split > 0 else "training + validation"
+        raise TrainingError(f"The dataset needs at least {need} samples ({parts}).")
+    n_test = min(max(1, round(n * test_split)), n - 2) if test_split > 0 else 0
+    n_val = min(max(1, round(n * val_split)), n - n_test - 1)
+    return n - n_val - n_test, n_val, n_test
 
 
 def split_indices(
-    n: int, val_split: float, max_samples: int | None, generator: torch.Generator
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Random (seeded) training/validation split.
+    n: int,
+    val_split: float,
+    max_samples: int | None,
+    generator: torch.Generator,
+    test_split: float = 0.0,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    """Random (seeded) training/validation/test split; the test part is None without
+    ``test_split``.
 
-    ``max_samples`` caps the training part and shrinks the validation part in proportion,
-    so a quick experiment on a large dataset does not validate on all of it.
+    ``max_samples`` caps the training part and shrinks the validation and test parts in
+    proportion, so a quick experiment on a large dataset does not validate on all of it.
     """
-    if n < 2:
-        raise TrainingError("The dataset needs at least 2 samples (training + validation).")
+    _, n_val, n_test = split_sizes(n, val_split, test_split)
     order = torch.randperm(n, generator=generator)
-    n_val = min(max(1, round(n * val_split)), n - 1)
-    train, val = order[n_val:], order[:n_val]
+    test = order[:n_test] if n_test else None
+    val = order[n_test : n_test + n_val]
+    train = order[n_test + n_val :]
     if max_samples is not None:
+        train_share = 1 - val_split - test_split
         train = train[:max_samples]
-        val = val[: val_size_for(max_samples, val_split)]
-    return train, val
+        val = val[: held_out_size(max_samples, val_split, train_share)]
+        if test is not None:
+            test = test[: held_out_size(max_samples, test_split, train_share)]
+    return train, val, test
 
 
 # --------------------------------------------------------------------------- #
@@ -411,21 +441,29 @@ def demo_data(
     generator: torch.Generator,
     reporter: Reporter | None = None,
 ) -> PreparedData:
-    total = min(DEMO_SAMPLES, max(2, DEMO_BYTES // _demo_sample_bytes(plan)))
-    n_val = min(max(1, round(total * config.val_split)), total - 1)
-    n_train = total - n_val
+    val_split, test_split = config.val_split, config.test_split
+    least = 3 if config.has_test else 2
+    total = min(DEMO_SAMPLES, max(least, DEMO_BYTES // _demo_sample_bytes(plan)))
+    n_train, n_val, n_test = split_sizes(total, val_split, test_split)
     if config.max_samples is not None and config.max_samples < n_train:
         n_train = config.max_samples
-        n_val = min(n_val, val_size_for(config.max_samples, config.val_split))
+        train_share = 1 - val_split - test_split
+        n_val = min(n_val, held_out_size(config.max_samples, val_split, train_share))
+        if n_test:
+            n_test = min(n_test, held_out_size(config.max_samples, test_split, train_share))
     if total < DEMO_SAMPLES and reporter is not None:
         reporter.log(
-            f"The inputs are large, so the demo data has only {n_train + n_val:,} samples."
+            f"The inputs are large, so the demo data has only {n_train + n_val + n_test:,} samples."
         )
     rule = torch.Generator().manual_seed(int(torch.randint(0, 2**31, (1,), generator=generator)))
-    inputs, targets = demo_samples(plan, n_train + n_val, generator, rule)
-    train = TensorSource([x[:n_train] for x in inputs], [y[:n_train] for y in targets])
-    val = TensorSource([x[n_train:] for x in inputs], [y[n_train:] for y in targets])
-    return PreparedData(train, val, {"kind": "demo"})
+    inputs, targets = demo_samples(plan, n_train + n_val + n_test, generator, rule)
+
+    def part(start: int, stop: int) -> TensorSource:
+        return TensorSource([x[start:stop] for x in inputs], [y[start:stop] for y in targets])
+
+    end_val = n_train + n_val
+    test = part(end_val, end_val + n_test) if n_test else None
+    return PreparedData(part(0, n_train), part(n_train, end_val), {"kind": "demo"}, test=test)
 
 
 # --------------------------------------------------------------------------- #
@@ -468,10 +506,18 @@ def _as_nchw(data: Any) -> torch.Tensor:
 
 
 def _channel_stats(
-    images: torch.Tensor, transform: ImageTransform, generator: torch.Generator
+    images: torch.Tensor,
+    transform: ImageTransform,
+    generator: torch.Generator,
+    indices: torch.Tensor | None = None,
 ) -> tuple[list[float], list[float]]:
-    """Per-channel mean and std of converted images (estimated on a random subset)."""
-    if len(images) > STATS_SAMPLES:
+    """Per-channel mean and std of converted images (estimated on a random subset),
+    optionally only of the images at ``indices``."""
+    if indices is not None:
+        if len(indices) > STATS_SAMPLES:
+            indices = indices[torch.randperm(len(indices), generator=generator)[:STATS_SAMPLES]]
+        images = images[indices]
+    elif len(images) > STATS_SAMPLES:
         images = images[torch.randperm(len(images), generator=generator)[:STATS_SAMPLES]]
     image = transform.image
     channels = image["channels"]
@@ -542,19 +588,27 @@ def builtin_data(
     spec = BUILTIN_DATASETS.get(info.builtin or "")
     if spec is None or plan.image is None:
         raise TrainingError(f"Unknown built-in dataset '{info.builtin}'.")
-    train_set, val_set = _open_builtin(spec, data_root / spec.id, reporter)
+    train_set, official_set = _open_builtin(spec, data_root / spec.id, reporter)
     train_images = _as_nchw(train_set.data)
     train_labels = torch.as_tensor(train_set.targets, dtype=torch.long)
-    val_images = _as_nchw(val_set.data)
-    val_labels = torch.as_tensor(val_set.targets, dtype=torch.long)
+    official_images = _as_nchw(official_set.data)
+    official_labels = torch.as_tensor(official_set.targets, dtype=torch.long)
+
+    # With a test set, validation samples come from the training split (as views, without
+    # copying the images); without one, the official test split is used for validation.
+    train_rows = val_rows = None
+    if config.has_test:
+        train_rows, val_rows, _ = split_indices(
+            len(train_images), config.val_split, config.max_samples, generator
+        )
+    elif config.max_samples is not None and config.max_samples < len(train_images):
+        keep = torch.randperm(len(train_images), generator=generator)[: config.max_samples]
+        train_images, train_labels = train_images[keep], train_labels[keep]
     if config.max_samples is not None:
-        if config.max_samples < len(train_images):
-            keep = torch.randperm(len(train_images), generator=generator)[: config.max_samples]
-            train_images, train_labels = train_images[keep], train_labels[keep]
-        n_val = val_size_for(config.max_samples, BUILTIN_VAL_SPLIT)
-        if n_val < len(val_images):
-            keep = torch.randperm(len(val_images), generator=generator)[:n_val]
-            val_images, val_labels = val_images[keep], val_labels[keep]
+        n_official = val_size_for(config.max_samples, BUILTIN_VAL_SPLIT)
+        if n_official < len(official_images):
+            keep = torch.randperm(len(official_images), generator=generator)[:n_official]
+            official_images, official_labels = official_images[keep], official_labels[keep]
 
     image = plan.image
     native = (spec.shape[1], spec.shape[2]) == (image["height"], image["width"])
@@ -562,15 +616,19 @@ def builtin_data(
         mean, std = list(spec.mean), list(spec.std)
     else:
         reporter.status("preparing", f"Converting {spec.name} images …")
-        mean, std = _channel_stats(train_images, ImageTransform(image, [0.0], [1.0]), generator)
+        mean, std = _channel_stats(
+            train_images, ImageTransform(image, [0.0], [1.0]), generator, train_rows
+        )
     transform = ImageTransform(image, mean, std)
     class_names = list(plan.class_names or spec.class_names)
     preprocessing = _image_preprocessing(image, mean, std, class_names)
     preprocessing["dataset"] = spec.id
+    training = TensorSource([train_images], [train_labels], [transform])
+    official = TensorSource([official_images], [official_labels], [transform])
+    if train_rows is None or val_rows is None:
+        return PreparedData(training, official, preprocessing)
     return PreparedData(
-        TensorSource([train_images], [train_labels], [transform]),
-        TensorSource([val_images], [val_labels], [transform]),
-        preprocessing,
+        Subset(training, train_rows), Subset(training, val_rows), preprocessing, test=official
     )
 
 
@@ -691,7 +749,9 @@ def csv_data(
     if not path.is_file():
         raise TrainingError("The CSV file was not found. Upload it again.")
     x, targets, columns, delimiter = _read_csv_tensors(path, info, plan)
-    train, val = split_indices(len(x), config.val_split, config.max_samples, generator)
+    train, val, test = split_indices(
+        len(x), config.val_split, config.max_samples, generator, config.test_split
+    )
     mean, std = _standardise(x, train)
     x.sub_(mean.float()).div_(std.float())  # in place: the CSV may be large
     if not torch.isfinite(x).all():
@@ -721,7 +781,13 @@ def csv_data(
         preprocessing["target_mean"] = float(y_mean[0])
         preprocessing["target_std"] = target_std
     data = TensorSource([x], [y])
-    return PreparedData(Subset(data, train), Subset(data, val), preprocessing, target_std)
+    return PreparedData(
+        Subset(data, train),
+        Subset(data, val),
+        preprocessing,
+        target_std,
+        test=Subset(data, test) if test is not None else None,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -753,18 +819,26 @@ def image_folder_data(
     labels = torch.tensor(
         [label for label, names in enumerate(classes.values()) for _ in names], dtype=torch.long
     )
-    train, val = split_indices(len(files), config.val_split, config.max_samples, generator)
+    train, val, test = split_indices(
+        len(files), config.val_split, config.max_samples, generator, config.test_split
+    )
     channels = image["channels"]
     mean, std = [0.5] * channels, [0.5] * channels
     transform = ImageTransform(image, mean, std)
     preprocessing = _image_preprocessing(image, mean, std, list(plan.class_names or []))
 
-    used = torch.cat([train, val])
+    parts = [train, val] if test is None else [train, val, test]
+    used = torch.cat(parts)
     sample_bytes = channels * image["height"] * image["width"]
     if len(used) * sample_bytes > PRELOAD_BYTES:
         reporter.log("The images do not fit into memory and are read from disk during training.")
         source = ImageFileSource(files, labels, root, image, transform)
-        return PreparedData(Subset(source, train), Subset(source, val), preprocessing)
+        return PreparedData(
+            Subset(source, train),
+            Subset(source, val),
+            preprocessing,
+            test=Subset(source, test) if test is not None else None,
+        )
 
     images = torch.empty((len(used), channels, image["height"], image["width"]), dtype=torch.uint8)
     total = len(used)
@@ -778,9 +852,12 @@ def image_folder_data(
             reporter.status("preparing", f"Loading images {i:,} / {total:,}")
         images[i] = load_image(files[index], image, root)
     reporter.status("preparing", f"Loading images {total:,} / {total:,}")
-    n_train = len(train)
+    sources = []
+    start = 0
+    for rows in parts:
+        stop = start + len(rows)
+        sources.append(TensorSource([images[start:stop]], [labels[rows]], [transform]))
+        start = stop
     return PreparedData(
-        TensorSource([images[:n_train]], [labels[train]], [transform]),
-        TensorSource([images[n_train:]], [labels[val]], [transform]),
-        preprocessing,
+        sources[0], sources[1], preprocessing, test=sources[2] if test is not None else None
     )

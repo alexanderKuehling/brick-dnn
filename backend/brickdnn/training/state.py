@@ -20,7 +20,8 @@ Every run lives in its own directory::
       "task": "classification",      # classification | regression | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
       "train_size": 60000, "val_size": 10000,
-      "epochs": 10,                  # planned number of epochs
+      "test_size": null,             # null without a test set
+      "epochs": 10,                  # planned number of epochs (per trial in a search)
       "steps_per_epoch": 938,
       "total_params": 101770,
       "history": [                   # one entry per finished epoch
@@ -31,10 +32,29 @@ Every run lives in its own directory::
       "progress": {"epoch": 2, "step": 120, "steps": 938, "loss": 0.21,
                    "samples_per_second": 5400.0},          # null outside of an epoch
       "best": {"epoch": 1, "val_loss": 0.15, "val_accuracy": 0.95},  # lowest val_loss
+      "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null},  # final model on the test
+                                     # set; null without a test set or before the end
       "weights": false,              # true once weights.pt exists
       "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights
-      "log": ["Downloading MNIST …", "..."]                # last 200 lines
+      "log": ["Downloading MNIST …", "..."],               # last 200 lines
+
+      # Hyperparameter search only (null / empty for normal runs):
+      "tuning": {"method": "random", "trials": 10,        # see tuning.py
+                 "space": {"learning_rate": {"min": 0.0001, "max": 0.01}}},
+      "trials_total": 10,
+      "trial": 2,                    # the trial that is running, null outside of trials
+      "trials": [                    # one entry per started trial
+        {"trial": 1, "params": {"learning_rate": 0.00312}, "status": "completed",
+         "message": "", "epochs_done": 10, "train_loss": 0.2, "val_loss": 0.15,
+         "val_accuracy": 0.95, "val_rmse": null, "seconds": 120.5}
+      ],                             # status: running | completed | failed | stopped;
+                                     # the metrics are those of the trial's last epoch
+      "best_trial": 1                # lowest final val_loss so far
     }
+
+In a search, ``history``, ``best`` and ``progress`` belong to the running trial. When the
+search ends (or is stopped), they are replaced by those of the best trial, whose weights
+are saved.
 """
 
 from __future__ import annotations
@@ -104,15 +124,22 @@ def initial_state(epochs: int = 0) -> dict[str, Any]:
         "class_names": None,
         "train_size": None,
         "val_size": None,
+        "test_size": None,
         "epochs": epochs,
         "steps_per_epoch": None,
         "total_params": None,
         "history": [],
         "progress": None,
         "best": None,
+        "test": None,
         "weights": False,
         "preprocessing": None,
         "log": [],
+        "tuning": None,
+        "trials_total": None,
+        "trial": None,
+        "trials": [],
+        "best_trial": None,
     }
 
 
