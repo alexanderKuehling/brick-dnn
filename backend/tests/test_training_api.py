@@ -1055,6 +1055,10 @@ def test_non_finite_numbers_in_the_state_become_null(auth_client, training_dir, 
     use_runner(settings, "hang")
     run_id = start(auth_client).data["id"]
     wait_for_state(training_dir, run_id)
+    # The runner rewrites its state every 0.1 s: stop it so it cannot overwrite the edit below.
+    process = training_service._PROCESSES[run_id]
+    process.kill()
+    process.wait(timeout=5)
     directory = training_dir / "runs" / run_id
     state = read_state(directory)
     state["history"] = [
