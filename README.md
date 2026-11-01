@@ -127,7 +127,8 @@ The [online demo](https://huggingface.co/spaces/alexKlg/brick-dnn) needs no serv
 and training are switched off. `npm run build:demo` (in `frontend/`) builds it into
 `frontend/dist-demo/`, which can be hosted as static files anywhere;
 `npm run dev:demo` runs it locally. `deploy/huggingface/deploy.sh` builds it and uploads it
-to the Hugging Face Space.
+to the Hugging Face Space. On GitHub, the *Deploy demo* workflow does this after every
+successful CI run on `main` (it needs the repository secret `HF_TOKEN`).
 
 ## How to use it
 

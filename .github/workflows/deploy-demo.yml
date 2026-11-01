@@ -1,0 +1,40 @@
+name: Deploy demo
+
+# Uploads the online demo to the Hugging Face Space after CI passed on main.
+# Needs the repository secret HF_TOKEN (a Hugging Face token with write access).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Hugging Face Space
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          npm ci --prefix frontend
+          pip install huggingface_hub
+      - name: Build and upload
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: deploy/huggingface/deploy.sh
