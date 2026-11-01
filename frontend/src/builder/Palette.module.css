@@ -10,6 +10,11 @@
   background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
   font-size: var(--mantine-font-size-sm);
   cursor: grab;
+  user-select: none;
+  -webkit-touch-callout: none;
+
+  /* Vertical swipes scroll the list, sideways swipes drag the layer out. */
+  touch-action: pan-y;
 
   &:hover {
     border-color: var(--item-color);
@@ -27,4 +32,20 @@
   flex-shrink: 0;
   border-radius: 3px;
   background: var(--item-color);
+}
+
+.ghost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--item-color);
+  border-radius: var(--mantine-radius-sm);
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  box-shadow: var(--mantine-shadow-md);
+  color: var(--mantine-color-text);
+  font-family: var(--mantine-font-family);
+  font-size: var(--mantine-font-size-sm);
+  white-space: nowrap;
+  opacity: 0.9;
 }
