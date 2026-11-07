@@ -27,6 +27,65 @@ class Project(models.Model):
         return f"{self.name} ({self.owner})"
 
 
+def default_prep_settings() -> dict:
+    """Target and split settings of a new preparation (see brickdnn.data.pipeline)."""
+    return {
+        "target": None,
+        "task": "auto",
+        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True},
+    }
+
+
+class DataSource(models.Model):
+    """An imported CSV file (Data tab). The files live in DATA_PREP_DIR/sources/<id>/:
+    the uploaded file (``original.csv``) and the typed table (``table/``)."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="data_sources"
+    )
+    name = models.CharField(max_length=120)
+    filename = models.CharField(max_length=255, blank=True)
+    size_bytes = models.BigIntegerField(default=0)
+    n_rows = models.BigIntegerField(default=0)
+    n_columns = models.PositiveIntegerField(default=0)
+    # [{"name", "kind", "missing"}, ...] in table order
+    columns = models.JSONField(default=list)
+    # brickdnn.data.io.ImportOptions as requested ("auto" = detect) and ImportReport (detected)
+    import_options = models.JSONField(default=dict)
+    report = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.owner})"
+
+
+class DataPrep(models.Model):
+    """A data preparation: a main source, a list of steps and the target/split settings."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="data_preps"
+    )
+    name = models.CharField(max_length=120)
+    # RESTRICT (not PROTECT): a source cannot be deleted while a preparation uses it, but
+    # deleting the user deletes both.
+    source = models.ForeignKey(DataSource, on_delete=models.RESTRICT, related_name="preps")
+    # [{"id", "type", "enabled", "params"}, ...]
+    steps = models.JSONField(default=list)
+    # {"target", "task", "split": {"val", "test", "seed", "stratify"}}
+    settings = models.JSONField(default=default_prep_settings)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.owner})"
+
+
 class Dataset(models.Model):
     """An uploaded training dataset. The files live in TRAINING_DIR/datasets/<id>/."""
 
@@ -40,6 +99,10 @@ class Dataset(models.Model):
     size_bytes = models.BigIntegerField(default=0)
     # DatasetInfo.to_dict(): columns, classes, number of samples, ...
     info = models.JSONField(default=dict)
+    # Created from a data preparation (Data tab) instead of an upload.
+    prepared_from = models.ForeignKey(
+        DataPrep, on_delete=models.SET_NULL, null=True, blank=True, related_name="datasets"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

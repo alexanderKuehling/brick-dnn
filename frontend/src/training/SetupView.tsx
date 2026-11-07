@@ -118,6 +118,12 @@ export function SetupView({
       delete errors.val_split;
     }
   }
+  // Datasets made in the Data tab bring their own split; the share fields are not used.
+  const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
+  if (predefinedSplit) {
+    delete errors.val_split;
+    delete errors.test_split;
+  }
   const blockedByActive = activeRun !== null && status.max_concurrent_runs <= 1;
   const canStart =
     networkValid &&
@@ -247,6 +253,7 @@ export function SetupView({
         devices={status.devices}
         defaultDevice={status.default_device}
         builtin={builtinSource}
+        predefinedSplit={predefinedSplit}
       />
 
       {startError && (

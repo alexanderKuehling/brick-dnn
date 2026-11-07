@@ -1,0 +1,195 @@
+/* Shared look of the analysis charts (tokens in global.css). */
+
+.frame {
+  margin: 0;
+  min-width: 0;
+}
+
+.plot {
+  position: relative;
+  touch-action: pan-y;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+/* A chart wider than its box (e.g. very many columns) scrolls inside it. */
+.scrollX {
+  min-width: 0;
+
+  &[data-scroll] {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* SVG marks drawn above a canvas (trend line, focused point). */
+.layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tick {
+  font-size: 11px;
+  fill: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-size: 12px;
+  fill: var(--mantine-color-text);
+}
+
+.value {
+  font-size: 11px;
+  fill: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.axisTitle {
+  font-size: 11px;
+  fill: var(--mantine-color-dimmed);
+}
+
+.grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axis {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.band {
+  fill: var(--chart-grid);
+  opacity: 0.7;
+}
+
+.whisker {
+  stroke: var(--mantine-color-dimmed);
+  stroke-width: 1.5;
+}
+
+.trend {
+  fill: none;
+  stroke: var(--mantine-color-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ring {
+  stroke: var(--chart-surface);
+  stroke-width: 2;
+}
+
+.focusCell {
+  fill: none;
+  stroke: var(--mantine-color-text);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--mantine-radius-sm);
+
+  &[data-clickable] {
+    cursor: pointer;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  /* Its own width (not the room left of its position), at most the plot's width. */
+  width: max-content;
+  min-width: min(120px, 100%);
+  max-width: min(280px, 100%);
+  padding: 6px 10px;
+  pointer-events: none;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.tooltipValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  border-radius: var(--mantine-radius-sm);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gradient {
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.table {
+  font-variant-numeric: tabular-nums;
+}
+
+.tile {
+  min-width: 0;
+}
+
+.tileValue {
+  overflow-wrap: anywhere;
+}
+
+.segments {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.segment {
+  min-width: 2px;
+  height: 100%;
+}

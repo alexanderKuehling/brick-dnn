@@ -1,0 +1,144 @@
+.root {
+  min-width: 0;
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--mantine-radius-xs);
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 760px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
+  border-collapse: collapse;
+
+  & th,
+  & td {
+    padding: 4px 6px;
+    text-align: left;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  }
+
+  & th {
+    font-weight: 600;
+  }
+
+  & td.right,
+  & th.right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & tbody tr:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+}
+
+.right {
+  text-align: right;
+}
+
+.dimmed {
+  color: var(--mantine-color-dimmed);
+}
+
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.linkButton {
+  max-width: 220px;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  font-weight: 500;
+  color: var(--mantine-color-anchor);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--mantine-radius-xs);
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.association {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kindIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+}
+
+.kv td:first-child {
+  padding-left: 0;
+}
+
+.pairList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: var(--mantine-radius-sm);
+
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 1px;
+  }
+}

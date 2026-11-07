@@ -125,6 +125,8 @@ elif mode == "stale":  # alive, but no heartbeat
     state["updated_at"] = time.time() - 600
     st.write_state(run_dir, state)
     time.sleep(30)
+elif mode == "wait":  # writes its state once, then waits (tests change the state)
+    time.sleep(30)
 elif mode == "hang":  # sends heartbeats but ignores stop requests
     deadline = time.time() + 30
     while time.time() < deadline:
@@ -712,13 +714,14 @@ def test_run_lifecycle(auth_client, training_dir):
     assert response.status_code == 200
     assert response["Content-Type"] == "application/octet-stream"
     assert response["Content-Disposition"] == 'attachment; filename="small-net.pt"'
+    # Reading a streamed response to the end closes it. (Calling close() again would end the
+    # request a second time, which closes the database connection of the test on PostgreSQL.)
     assert b"".join(response.streaming_content) == b"fake weights"
-    response.close()
     response = auth_client.get(
         f"/api/training/runs/{run_id}/weights/", HTTP_ACCEPT="application/octet-stream"
     )
     assert response.status_code == 200
-    response.close()
+    assert b"".join(response.streaming_content) == b"fake weights"
 
 
 def test_hyperparameter_search_run(auth_client, training_dir, settings):
@@ -1000,7 +1003,6 @@ def test_real_training_end_to_end(auth_client, training_dir, settings):
     assert response.status_code == 200
     assert response["Content-Disposition"] == 'attachment; filename="demo-mlp.pt"'
     assert len(b"".join(response.streaming_content)) > 100
-    response.close()
 
 
 @pytest.mark.skipif(not torch_installed(), reason="PyTorch is not installed")
@@ -1052,7 +1054,7 @@ def test_real_training_on_csv_can_be_stopped(auth_client, training_dir, settings
 
 
 def test_non_finite_numbers_in_the_state_become_null(auth_client, training_dir, settings):
-    use_runner(settings, "hang")
+    use_runner(settings, "wait")  # does not overwrite the state written below
     run_id = start(auth_client).data["id"]
     wait_for_state(training_dir, run_id)
     directory = training_dir / "runs" / run_id

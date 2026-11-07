@@ -13,6 +13,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from .database import database_settings
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -103,11 +105,14 @@ TEMPLATES = [
     },
 ]
 
+# A SQLite file in DATA_DIR, or PostgreSQL (e.g. Supabase) if DATABASE_URL is set:
+# postgresql://USER:PASSWORD@HOST:PORT/NAME, see docs/database.md.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("BRICKDNN_DB_PATH", DATA_DIR / "db.sqlite3"),
-    }
+    "default": database_settings(
+        os.environ.get("DATABASE_URL", ""),
+        sqlite_path=os.environ.get("BRICKDNN_DB_PATH", DATA_DIR / "db.sqlite3"),
+        conn_max_age=int(os.environ.get("BRICKDNN_DB_CONN_MAX_AGE", "60")),
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -155,6 +160,22 @@ TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # None means [sys.executable, "-m", "brickdnn.training.runner"] (tests use a fake runner).
 TRAINING_RUNNER_COMMAND: list[str] | None = None
 
+# Data preparation (the Data tab, needs pandas): imported CSV files and their tables live in
+# DATA_PREP_DIR. Uploads are limited by DATA_MAX_UPLOAD_MB.
+# Set BRICKDNN_DATA_PREP=false to switch the feature off.
+DATA_PREP_ENABLED = env_bool("BRICKDNN_DATA_PREP", True)
+DATA_PREP_DIR = DATA_DIR / "prepare"
+# Largest table that can be imported.
+DATA_MAX_ROWS = int(os.environ.get("BRICKDNN_DATA_MAX_ROWS", "2000000"))
+# Most columns per imported file; 0 or unset: no limit.
+DATA_MAX_COLUMNS = int(os.environ.get("BRICKDNN_DATA_MAX_COLUMNS", "0")) or None
+# Largest CSV import in megabytes. Imports are parsed in memory (roughly 10-15 times the file
+# size while reading), so this is lower than the training upload limit.
+DATA_MAX_UPLOAD_MB = float(os.environ.get("BRICKDNN_DATA_MAX_UPLOAD_MB", "200"))
+# Rows in a preview sample (the data table and the charts): default and maximum.
+DATA_SAMPLE_ROWS = 5000
+DATA_MAX_SAMPLE_ROWS = 20000
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -176,6 +197,8 @@ REST_FRAMEWORK = {
         "auth": os.environ.get("BRICKDNN_AUTH_RATE", "20/minute"),
         "training": os.environ.get("BRICKDNN_TRAINING_RATE", "120/hour"),
         "uploads": os.environ.get("BRICKDNN_UPLOAD_RATE", "60/hour"),
+        # Previews of data preparations (one per change in the Data tab).
+        "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
     },
 }
 

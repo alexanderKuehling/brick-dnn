@@ -1,0 +1,49 @@
+name: Deploy server
+
+# Deploys backend and frontend to the server after CI passed on main, see
+# deploy/server/README.md. Needs the repository secret DEPLOY_SSH_KEY and the variables
+# DEPLOY_HOST, DEPLOY_URL and DEPLOY_KNOWN_HOSTS; without DEPLOY_HOST it does nothing.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Server (backend + frontend)
+    if: vars.DEPLOY_HOST != '' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy the commit
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key may only run deploy.sh on the server, which deploys commits of main only.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "deploy@$HOST" "$SHA"
+      - name: Check that the site answers
+        env:
+          URL: ${{ vars.DEPLOY_URL }}
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf "$URL/api/health/" && curl -sf "$URL/" | grep -q "Brick DNN" && exit 0
+            sleep 5
+          done
+          echo "$URL does not answer after the deploy." >&2
+          exit 1

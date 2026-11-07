@@ -40,6 +40,9 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: 'jsdom',
       setupFiles: './vitest.setup.mjs',
+      // Tests that click through whole forms take about a second alone, but several times
+      // longer when all files run in parallel on a small machine (or CI runner).
+      testTimeout: 15000,
     },
   };
 });

@@ -7,12 +7,13 @@ const PYODIDE_VERSION = '314.0.7';
 const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 const PACKAGE_DIR = '/brickdnn-src';
 
-// The package's source files, bundled at build time. The training engine needs PyTorch and
-// the command line tool is not needed, so both are left out.
+// The package's source files, bundled at build time. The training engine needs PyTorch, data
+// preparation needs pandas and the command line tool is not needed, so they are left out.
 const sources = import.meta.glob<string>(
   [
     '../../../backend/brickdnn/**/*.{py,json}',
     '!../../../backend/brickdnn/training/**',
+    '!../../../backend/brickdnn/data/**',
     '!../../../backend/brickdnn/__main__.py',
   ],
   { query: '?raw', import: 'default', eager: true }

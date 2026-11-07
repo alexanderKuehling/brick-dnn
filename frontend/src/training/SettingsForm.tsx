@@ -19,7 +19,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import type { Optimizer, TrainingDevice, TuningMethod } from '@/api';
-import { formatSetting } from './format';
+import { formatSetting, formatSplit, splitPercents } from './format';
 import {
   BATCH_SIZE_PRESETS,
   LIMITS,
@@ -47,6 +47,11 @@ interface SettingsFormProps {
    * them, with one they are the test set and validation data comes from the training images.
    */
   builtin: boolean;
+  /**
+   * Rows for training, validation and test of a dataset made in the Data tab. Training uses
+   * this split, so the share fields are shown but cannot be changed.
+   */
+  predefinedSplit?: number[] | null;
 }
 
 /** Shown in the fixed fields while the search varies them. */
@@ -62,6 +67,7 @@ export function SettingsForm({
   devices,
   defaultDevice,
   builtin,
+  predefinedSplit = null,
 }: SettingsFormProps) {
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
@@ -81,7 +87,10 @@ export function SettingsForm({
   const device = deviceOptions.some((option) => option.value === values.device)
     ? values.device
     : 'auto';
-  const showValSplit = !builtin || values.test_enabled;
+  const fixed = predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit : null;
+  const fixedPercents = fixed ? splitPercents(fixed) : null;
+  const showValSplit = fixed !== null || !builtin || values.test_enabled;
+  const testEnabled = fixed ? fixed[2] > 0 : values.test_enabled;
 
   return (
     <Stack gap="sm">
@@ -149,7 +158,8 @@ export function SettingsForm({
         {showValSplit && (
           <NumberInput
             label="Validation split"
-            value={values.val_split}
+            value={fixedPercents ? fixedPercents[1] : values.val_split}
+            disabled={fixed !== null}
             onChange={setNumber('val_split')}
             min={LIMITS.val_split.min}
             max={LIMITS.val_split.max}
@@ -157,27 +167,31 @@ export function SettingsForm({
             suffix="%"
             allowNegative={false}
             decimalScale={1}
-            error={errors.val_split}
+            error={fixed ? undefined : errors.val_split}
           />
         )}
       </SimpleGrid>
 
       <div>
         <Switch
-          label={builtin ? 'Test on the official test images' : 'Hold out a test set'}
+          label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
           description={
-            builtin
-              ? 'The final model is measured once on the official test images. Validation data then comes from the training images.'
-              : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
+            fixed
+              ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
+              : builtin
+                ? 'The final model is measured once on the official test images. Validation data then comes from the training images.'
+                : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
           }
-          checked={values.test_enabled}
+          checked={testEnabled}
+          disabled={fixed !== null}
           onChange={(event) => set('test_enabled')(event.currentTarget.checked)}
         />
-        {values.test_enabled && !builtin && (
+        {testEnabled && (fixed !== null || !builtin) && (
           <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="xs">
             <NumberInput
               label="Test split"
-              value={values.test_split}
+              value={fixedPercents ? fixedPercents[2] : values.test_split}
+              disabled={fixed !== null}
               onChange={setNumber('test_split')}
               min={LIMITS.test_split.min}
               max={LIMITS.test_split.max}
@@ -185,7 +199,7 @@ export function SettingsForm({
               suffix="%"
               allowNegative={false}
               decimalScale={1}
-              error={errors.test_split}
+              error={fixed ? undefined : errors.test_split}
             />
           </SimpleGrid>
         )}

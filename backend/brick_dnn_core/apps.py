@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.db.models.signals import post_migrate
 
 
 class BrickDnnCoreConfig(AppConfig):
@@ -7,5 +8,9 @@ class BrickDnnCoreConfig(AppConfig):
     verbose_name = "Brick DNN"
 
     def ready(self) -> None:
-        # Connects the signal handlers that delete training files with their objects.
-        from . import training_service  # noqa: F401
+        # Connects the signal handlers that delete training and data files with their objects.
+        from . import data_service, training_service  # noqa: F401
+        from .supabase import protect_after_migrate
+
+        # On Supabase, hide the tables from its Data API after every migrate (see supabase.py).
+        post_migrate.connect(protect_after_migrate, sender=self, dispatch_uid="brickdnn-supabase")

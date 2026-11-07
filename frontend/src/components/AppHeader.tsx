@@ -1,4 +1,10 @@
-import { IconBrandGithub, IconChevronDown, IconFolder, IconLogout } from '@tabler/icons-react';
+import {
+  IconBrandGithub,
+  IconChevronDown,
+  IconFolder,
+  IconLogout,
+  IconTable,
+} from '@tabler/icons-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
@@ -22,7 +28,8 @@ export function AppHeader() {
   const { user, ready, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const navVariant = (path: string) => (pathname === path ? 'light' : 'subtle');
+  const navVariant = (path: string) =>
+    pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
 
   return (
     <Group h="100%" px="md" justify="space-between" wrap="nowrap">
@@ -33,6 +40,15 @@ export function AppHeader() {
         <Group gap={4} visibleFrom="sm">
           <Button component={Link} to="/" variant={navVariant('/')} size="compact-md" color="gray">
             Builder
+          </Button>
+          <Button
+            component={Link}
+            to="/data"
+            variant={navVariant('/data')}
+            size="compact-md"
+            color="gray"
+          >
+            Data
           </Button>
           {DEMO && (
             <Tooltip label="Runs in your browser. Install Brick DNN locally to train networks.">
@@ -101,6 +117,9 @@ export function AppHeader() {
                 onClick={() => navigate('/projects')}
               >
                 My networks
+              </Menu.Item>
+              <Menu.Item leftSection={<IconTable size={16} />} onClick={() => navigate('/data')}>
+                Data preparation
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item
