@@ -1,6 +1,11 @@
-# HTTPS for Brick DNN: Caddy gets and renews the certificate from Let's Encrypt itself.
-# BRICKDNN_DOMAIN comes from .env (e.g. 203-0-113-7.sslip.io or your own domain).
+# HTTPS for Brick DNN: Caddy gets and renews the certificates from Let's Encrypt itself.
+# BRICKDNN_DOMAIN comes from .env (e.g. brickdnn.com, or 203-0-113-7.sslip.io without a domain).
 {$BRICKDNN_DOMAIN} {
 	reverse_proxy frontend:80
 	header Strict-Transport-Security "max-age=31536000"
+}
+
+# www.<domain> leads to <domain> (needs a DNS record for www that points to this server too).
+www.{$BRICKDNN_DOMAIN} {
+	redir https://{$BRICKDNN_DOMAIN}{uri} permanent
 }

@@ -14,19 +14,22 @@ Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api─
 
 On your machine, in the repository:
 
-1. Create the server with your own SSH key (the one you log in with as `root`).
+1. Create the server with your own SSH key (the one you log in with as `root`). With an own
+   domain, point it to the server at your DNS provider: an `A` record for `@` and `www` with
+   the server's IPv4 address (and `AAAA` records with its IPv6 address, or none at all).
+   Remove other `A`/`AAAA`/`CNAME` records of these names, or certificates fail.
 2. Create a key for GitHub Actions. It is only used for deploying:
 
    ```bash
    ssh-keygen -t ed25519 -N "" -C github-deploy -f /tmp/brickdnn-deploy
    ```
 
-3. Set up the server (replace `SERVER` with its IP address). Without a domain as the last
-   argument, the site gets `https://<IP with dashes>.sslip.io`:
+3. Set up the server (replace `SERVER` with its IP address and `example.com` with your
+   domain). Without the domain, the site gets `https://<IP with dashes>.sslip.io`:
 
    ```bash
    scp -r deploy/server root@SERVER:/root/brickdnn-setup
-   ssh root@SERVER bash /root/brickdnn-setup/setup.sh "$(cat /tmp/brickdnn-deploy.pub)"
+   ssh root@SERVER bash /root/brickdnn-setup/setup.sh "$(cat /tmp/brickdnn-deploy.pub)" example.com
    ```
 
    At the end it prints the site address and the server's host key.
