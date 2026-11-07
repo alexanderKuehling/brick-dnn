@@ -18,6 +18,13 @@ DOMAIN="${2:?usage: deploy/server/bootstrap.sh SERVER-IP DOMAIN [SSH-KEY]}"
 KEY="${3:-}"
 cd "$(dirname "$0")/../.."
 
+# GitHub Actions has no IPv6, and the domain may not point to the server yet: use the IPv4.
+if [[ ! "$SERVER" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+  echo "SERVER-IP must be the IPv4 address of the server, e.g. 203.0.113.7" >&2
+  echo "(Hetzner Cloud Console → Servers → your server → Public IPv4)." >&2
+  exit 2
+fi
+
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new)
 if [ -n "$KEY" ]; then
   KEY="${KEY/#\~/$HOME}"
