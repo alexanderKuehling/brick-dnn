@@ -12,7 +12,14 @@ Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api─
 
 ## One-time setup
 
-On your machine, in the repository:
+Create the server with your SSH key and point your domain to it (step 1 below). Then one
+command does steps 2–6, with the key you log in to the server with:
+
+```bash
+deploy/server/bootstrap.sh SERVER-IP example.com ~/.ssh/your_server_key
+```
+
+The same by hand, on your machine, in the repository:
 
 1. Create the server with your own SSH key (the one you log in with as `root`). With an own
    domain, point it to the server at your DNS provider: an `A` record for `@` and `www` with
