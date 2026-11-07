@@ -5,7 +5,7 @@ Cloud CX23 with Ubuntu 24.04). [Caddy](https://caddyserver.com) in front of them
 certificate from Let's Encrypt. After the one-time setup, every push to `main` is deployed
 automatically once all CI checks have passed (job `deploy-server` in `.github/workflows/ci.yml`).
 
-```
+```text
 GitHub Actions ──ssh deploy@SERVER <commit>──▶ brickdnn-deploy: git checkout, docker compose up
 Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api──▶ Django (backend) ──▶ Supabase / SQLite
 ```
