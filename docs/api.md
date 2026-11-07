@@ -1,7 +1,7 @@
 # REST API
 
 All endpoints live under `/api/`. Requests and responses are JSON. Code generation does not
-need an account; saved networks and training do.
+need an account; saved networks, training and data preparation do.
 
 ## Code generation (public)
 
@@ -88,7 +88,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
 | GET    | `/api/training/`                       | Availability, devices, built-in datasets, limits    |
-| GET    | `/api/training/datasets/`              | Your uploaded datasets                              |
+| GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
 | POST   | `/api/training/check/`                 | `{graph, dataset}`: does the network fit the data?  |
@@ -153,9 +153,96 @@ trial with its `params`, `status` and final metrics; `history`, `best` and `metr
 the running trial and, at the end, to the best one. The file format is documented in
 `backend/brickdnn/training/state.py`.
 
+## Data preparation (login required)
+
+The Data tab imports CSV files, combines and cleans them step by step and turns the result into
+a training dataset. The work is done on the server with pandas (`pip install "brickdnn[data]"`),
+see `backend/brickdnn/data/`. `GET /api/data/` and `GET /api/data/steps/` are public; all JSON
+shapes are documented in `frontend/src/api/types.ts` (section "Data preparation").
+
+| Method | Path                                   | Description                                         |
+| ------ | -------------------------------------- | --------------------------------------------------- |
+| GET    | `/api/data/`                           | Availability and limits (`DataStatus`)              |
+| GET    | `/api/data/steps/`                     | All step types with their settings (`StepCatalog`)  |
+| GET    | `/api/data/sources/`                   | Your imported CSV files, newest first               |
+| POST   | `/api/data/sources/`                   | Import `file` (`.csv`, `.tsv`, `.txt`) with import options (multipart) |
+| GET / PATCH / DELETE | `/api/data/sources/<id>/` | One source / rename it (`{name}`) / delete it with its files |
+| GET    | `/api/data/preps/`                     | Your preparations, last changed first               |
+| POST   | `/api/data/preps/`                     | `{source, name?, steps?, settings?}`                |
+| GET / PATCH / DELETE | `/api/data/preps/<id>/`   | One preparation / change it / delete it             |
+| POST   | `/api/data/preps/<id>/preview/`        | Run the (unsaved) pipeline: reports, profile, sample, readiness |
+| POST   | `/api/data/preps/<id>/export/`         | Create a training dataset from the saved preparation `{name?}` |
+| GET    | `/api/data/preps/<id>/download/?format=…` | `csv` (prepared data), `recipe` (JSON) or `python` (pandas script) |
+
+**Import.** Besides `file`, the form may contain `name`, `delimiter` (`auto`, `,`, `;`, a tab,
+`|`), `decimal` (`auto`, `.`, `,`), `header` (`auto`, `yes`, `no`), `encoding` (`auto`, `utf-8`,
+`cp1252`, `latin-1`) and `missing_values` (a JSON list of cell values that mean "missing", e.g.
+`["-999", "n/a"]`). Left out means "detect". The answer (`201`) is the source with its typed
+`columns` (`{name, kind, missing}`), the requested `import_options` and the `report` of what was
+detected (`delimiter`, `decimal`, `header`, `encoding`, `rows`, `columns`, `warnings`). Files
+larger than `BRICKDNN_DATA_MAX_UPLOAD_MB` (default 200) are refused (`413`), files with more than `BRICKDNN_DATA_MAX_ROWS`
+rows (or more than `BRICKDNN_DATA_MAX_COLUMNS` columns, if set) are refused (`400`). A source that a preparation
+uses as its main source cannot be deleted (`409 {"detail": "Used by the preparation “Churn”;
+delete it first."}`).
+
+```bash
+curl -X POST http://localhost:8080/api/data/sources/ -H "Authorization: Bearer $TOKEN" \
+  -F file=@customers.csv -F delimiter=";" -F decimal="," -F 'missing_values=["-999"]'
+```
+
+**Preparations.** A preparation is a main `source`, a list of `steps`
+(`{"id": "s1", "type": "impute", "enabled": true, "params": {...}}`, types from
+`/api/data/steps/`; combine steps such as `join` and `append` come first) and `settings`:
+
+```json
+{ "target": "churn", "task": "auto", "split": { "val": 0.15, "test": 0.15, "seed": 42, "stratify": true } }
+```
+
+Missing settings get these defaults. The answer adds `source_name` and `datasets` (the training
+datasets exported from it, `{id, name, created_at}`, newest first). Invalid steps or settings
+give `400 {"detail": "...", "steps": ["..."]}`; the source must be one of your own.
+
+**Preview.** `POST /api/data/preps/<id>/preview/` with an optional body
+
+```json
+{ "steps": [...], "settings": {...}, "upto": "s3", "sample_rows": 5000, "compare": true }
+```
+
+previews unsaved `steps`/`settings` (the saved ones if left out) without saving them. The answer
+(`PreviewResult`) has one report per step (`status` `ok`, `error`, `skipped`, `disabled` or
+`not_run`, a one-sentence `summary`, `warnings`, `details`, the `columns` after the step,
+`added`/`removed` columns, what the step learned in `fitted`), the resolved `task`, the
+`profile` of the result (statistics, histograms, correlations, target analysis and warnings
+with suggested fixes), a seeded random `sample` of rows, the training `readiness` and, with
+`compare`, the profile `before` the cleaning steps. `upto` shows the data after that step.
+`sample_rows` is clamped to 10 … `max_sample_rows` (default `default_sample_rows`). A failing
+step does not fail the request: its report says what is wrong and the later steps are
+`skipped`. Join and append steps can only read your own sources.
+
+The train/validation/test split is assigned right after the combine steps, and every step that
+learns values (means, bounds, categories …) learns them from the training rows only.
+
+**Export.** `POST /api/data/preps/<id>/export/` runs the saved preparation and stores the result
+as a training dataset (`201`, a `Dataset` as in `/api/training/datasets/`). Data that is not
+ready gives `400 {"detail": "...", "issues": [...]}` (the readiness issues, with fixes). The
+dataset is a CSV file with the numeric features and the target last (class indices for
+classification) plus `split.bin`, the split of the preparation. Its `info.predefined_split` is
+`[train, validation, test]` rows and `info.class_names` the original labels; `prepared_from` is
+`{id, name}` of the preparation (`null` for uploads). Training then uses this split instead of
+`val_split`/`test_split`, so the test rows stay unseen.
+
+**Downloads** are attachments named after the preparation: `<name>.csv` (the prepared table
+with a last column `split`), `<name>.recipe.json` (sources, settings, steps with their fitted
+values) and `<name>_prepare.py` (a standalone pandas script that prepares new data the same way).
+
+All data endpoints except `GET /api/data/` answer `503` when data preparation is switched off
+(`BRICKDNN_DATA_PREP=false`) or pandas is not installed; `GET /api/data/` then says why
+(`available: false`, `reason`).
+
 ## Rate limits
 
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
-20/minute, starting training runs: 120/hour, dataset uploads: 60/hour. Adjust with
-`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE` and
-`BRICKDNN_UPLOAD_RATE` (e.g. `100/minute`).
+20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
+preparations: 60/hour, previews and downloads of preparations: 1200/hour. Adjust with
+`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
+`BRICKDNN_UPLOAD_RATE` and `BRICKDNN_DATA_RATE` (e.g. `100/minute`).

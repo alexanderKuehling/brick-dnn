@@ -1,0 +1,33 @@
+# Additions for a public server: Caddy in front of the app, with HTTPS from Let's Encrypt.
+#   docker compose -f docker-compose.yml -f deploy/server/compose.yml up -d --build
+# Settings come from .env next to docker-compose.yml (written by setup.sh), see README.md.
+services:
+  backend:
+    environment:
+      # Caddy and nginx are in front of Django (for the client address in rate limits).
+      BRICKDNN_NUM_PROXIES: 2
+      DJANGO_SECURE_COOKIES: "true"
+
+  frontend:
+    # Only Caddy talks to nginx: nothing is published on port 8080.
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      BRICKDNN_DOMAIN: ${BRICKDNN_DOMAIN:?Set BRICKDNN_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

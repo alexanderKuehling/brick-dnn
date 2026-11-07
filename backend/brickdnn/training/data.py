@@ -24,6 +24,7 @@ from .compat import TrainingPlan
 from .config import TrainingConfig
 from .datasets import (
     BUILTIN_DATASETS,
+    SPLIT_FILE,
     BuiltinDataset,
     DatasetError,
     DatasetInfo,
@@ -211,6 +212,56 @@ def split_indices(
         if test is not None:
             test = test[: held_out_size(max_samples, test_split, train_share)]
     return train, val, test
+
+
+def read_split_file(path: Path, n: int, expected: list[int] | None = None) -> torch.Tensor:
+    """The split stored with a prepared CSV file (``split.bin`` next to it): one uint8 per
+    data row, 0 training, 1 validation, 2 test. ``expected`` are the [train, val, test]
+    counts from the dataset info."""
+    changed = TrainingError(
+        "The split of this dataset (split.bin) does not match its rows. "
+        "Create the dataset again in the Data tab."
+    )
+    try:
+        raw = (path.parent / SPLIT_FILE).read_bytes()
+    except OSError:
+        raise TrainingError(
+            "The split of this dataset (split.bin) is missing. Create the dataset again in the "
+            "Data tab."
+        ) from None
+    if len(raw) != n or n == 0:
+        raise changed
+    split = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
+    if bool((split > 2).any()):
+        raise changed
+    counts = torch.bincount(split.long(), minlength=3).tolist()
+    if expected is not None and [int(c) for c in expected] != counts:
+        raise changed
+    if counts[0] == 0 or counts[1] == 0:
+        raise TrainingError(
+            "The split of this dataset needs training and validation rows. "
+            "Change the split in the Data tab and create the dataset again."
+        )
+    return split
+
+
+def predefined_split_indices(
+    split: torch.Tensor, max_samples: int | None, generator: torch.Generator
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    """Training, validation and test rows of a stored split (the test part is None if it
+    has no rows). ``max_samples`` caps the training part and shrinks the other parts in
+    proportion (random rows, seeded), like :func:`split_indices`."""
+    parts = [(split == label).nonzero().flatten() for label in range(3)]
+    n_train = len(parts[0])
+    if max_samples is not None and max_samples < n_train:
+        sizes = [max_samples]
+        sizes += [min(len(p), held_out_size(max_samples, len(p), n_train)) for p in parts[1:]]
+        parts = [
+            p[torch.randperm(len(p), generator=generator)[:size].sort().values]
+            for p, size in zip(parts, sizes, strict=True)
+        ]
+    train, val, test = parts
+    return train, val, test if len(test) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -749,9 +800,14 @@ def csv_data(
     if not path.is_file():
         raise TrainingError("The CSV file was not found. Upload it again.")
     x, targets, columns, delimiter = _read_csv_tensors(path, info, plan)
-    train, val, test = split_indices(
-        len(x), config.val_split, config.max_samples, generator, config.test_split
-    )
+    if info.predefined_split is not None:
+        # Prepared in the Data tab: its steps learned from the training rows of this split.
+        split = read_split_file(path, len(x), info.predefined_split)
+        train, val, test = predefined_split_indices(split, config.max_samples, generator)
+    else:
+        train, val, test = split_indices(
+            len(x), config.val_split, config.max_samples, generator, config.test_split
+        )
     mean, std = _standardise(x, train)
     x.sub_(mean.float()).div_(std.float())  # in place: the CSV may be large
     if not torch.isfinite(x).all():
@@ -768,6 +824,9 @@ def csv_data(
         "target_std": None,
         "class_names": None,
     }
+    if info.predefined_split is not None:
+        sizes = [len(train), len(val), len(test) if test is not None else 0]
+        preprocessing["split"] = {"source": "dataset", "counts": sizes}
     target_std = None
     if plan.targets[0]["kind"] == "class":
         y = targets.long()

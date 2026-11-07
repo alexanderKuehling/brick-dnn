@@ -1,0 +1,247 @@
+.editor {
+  min-width: 0;
+}
+
+.settingsCard {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+}
+
+.stratify {
+  padding-top: 26px;
+}
+
+/* ---- split bar ---------------------------------------------------------- */
+
+.splitBar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: var(--mantine-radius-xl);
+  overflow: hidden;
+}
+
+.splitPart {
+  flex-basis: 0;
+  min-width: 0;
+  transition: flex-grow 150ms ease;
+}
+
+.splitPart,
+.splitDot {
+  &[data-part='train'] {
+    background: var(--mantine-color-brick-filled);
+  }
+
+  &[data-part='val'] {
+    background: var(--mantine-color-orange-filled);
+  }
+
+  &[data-part='test'] {
+    background: var(--mantine-color-grape-filled);
+  }
+}
+
+.splitDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+/* ---- step list ------------------------------------------------------------ */
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  transition:
+    border-color 100ms ease,
+    opacity 100ms ease;
+
+  &[data-status='error'] {
+    border-color: light-dark(var(--mantine-color-red-4), var(--mantine-color-red-8));
+  }
+
+  &[data-previewed] {
+    border-color: var(--mantine-primary-color-filled);
+    box-shadow: 0 0 0 1px var(--mantine-primary-color-filled);
+  }
+
+  &[data-off] .stepTitle,
+  &[data-off] .report {
+    opacity: 0.55;
+  }
+}
+
+.stepHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stepToggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 2px 4px 2px 0;
+  border-radius: var(--mantine-radius-sm);
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+  transition: transform 150ms ease;
+
+  &[data-expanded] {
+    transform: rotate(90deg);
+  }
+}
+
+.stepTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stepNumber {
+  flex-shrink: 0;
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.chevronSpace {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.badge {
+  flex-shrink: 0;
+}
+
+.summary {
+  margin: 2px 0 0 22px;
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 22px;
+  transition: opacity 150ms ease;
+
+  &:not(:empty) {
+    margin-top: 6px;
+  }
+
+  &[data-stale] {
+    opacity: 0.6;
+  }
+}
+
+.reportLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+
+  & > svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  &[data-tone='warning'] > svg {
+    color: var(--mantine-color-yellow-light-color);
+  }
+}
+
+.changes {
+  overflow-wrap: anywhere;
+}
+
+.details {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+
+  & li {
+    overflow-wrap: anywhere;
+  }
+}
+
+.detailColumn {
+  font-family: var(--mantine-font-family-monospace);
+  color: var(--mantine-color-text);
+}
+
+.hints {
+  margin-left: 22px;
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form {
+  margin: var(--mantine-spacing-sm) 0 var(--mantine-spacing-xs) 22px;
+  padding-top: var(--mantine-spacing-sm);
+  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.uptoBanner {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--mantine-primary-color-light);
+}
+
+.empty {
+  border-style: dashed;
+}
+
+.addBottom {
+  margin-top: var(--mantine-spacing-xs);
+}
+
+.menuItem {
+  align-items: flex-start;
+
+  & [data-position='left'] {
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: $mantine-breakpoint-xs) {
+  .summary,
+  .report,
+  .hints,
+  .form {
+    margin-left: 0;
+  }
+}

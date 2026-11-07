@@ -1,8 +1,17 @@
 import { useRef } from 'react';
-import { IconFileSpreadsheet, IconPhoto, IconTrash, IconUpload } from '@tabler/icons-react';
+import {
+  IconFileSpreadsheet,
+  IconPhoto,
+  IconTableShortcut,
+  IconTrash,
+  IconUpload,
+} from '@tabler/icons-react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import {
   ActionIcon,
   Alert,
+  Anchor,
+  Badge,
   Button,
   FileButton,
   Group,
@@ -15,7 +24,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Dataset, TrainingStatus } from '@/api';
-import { datasetDetails } from './format';
+import { datasetDetails, formatSplit } from './format';
 import type { SourceChoice, SourceTab } from './settings';
 import classes from './Training.module.css';
 
@@ -154,6 +163,8 @@ function Uploads({
         </FileButton>
       </Group>
 
+      <DataTabHint />
+
       {uploading && (
         <Group gap="xs" wrap="nowrap">
           <Loader size="xs" />
@@ -209,12 +220,33 @@ function Uploads({
                       )}
                     </ThemeIcon>
                     <div style={{ minWidth: 0 }}>
-                      <Text size="sm" fw={600} truncate>
-                        {dataset.name}
-                      </Text>
+                      <Group gap={6} wrap="nowrap">
+                        <Text size="sm" fw={600} truncate>
+                          {dataset.name}
+                        </Text>
+                        {isPrepared(dataset) && (
+                          <Tooltip
+                            label={
+                              dataset.prepared_from
+                                ? `Made in the Data tab from “${dataset.prepared_from.name}”`
+                                : 'Made in the Data tab'
+                            }
+                          >
+                            <Badge size="xs" variant="light" color="teal" style={{ flexShrink: 0 }}>
+                              Prepared
+                            </Badge>
+                          </Tooltip>
+                        )}
+                      </Group>
                       <Text size="xs" c="dimmed">
                         {dataset.kind === 'csv' ? 'CSV' : 'Images'} · {datasetDetails(dataset)}
                       </Text>
+                      {dataset.info.predefined_split && (
+                        <Text size="xs" c="dimmed">
+                          Split {formatSplit(dataset.info.predefined_split)} (training / validation
+                          / test)
+                        </Text>
+                      )}
                     </div>
                   </Group>
                 </Radio.Card>
@@ -234,5 +266,40 @@ function Uploads({
         </Radio.Group>
       )}
     </>
+  );
+}
+
+/** Datasets made in the Data tab (they bring their own split). */
+function isPrepared(dataset: Dataset): boolean {
+  return Boolean(dataset.prepared_from || dataset.info.predefined_split);
+}
+
+/** Points to the Data tab, which turns messy CSV files into training data. */
+function DataTabHint() {
+  // The panel is also shown without a router (e.g. in tests); then a plain link is used.
+  const inRouter = useInRouterContext();
+  const text = 'Data tab';
+  return (
+    <Group gap={6} wrap="nowrap" align="flex-start">
+      <IconTableShortcut
+        size={16}
+        color="var(--mantine-color-dimmed)"
+        style={{ flexShrink: 0, marginTop: 1 }}
+        aria-hidden
+      />
+      <Text size="xs" c="dimmed">
+        Messy CSV? Clean, encode and analyse it in the{' '}
+        {inRouter ? (
+          <Anchor component={Link} to="/data" size="xs">
+            {text}
+          </Anchor>
+        ) : (
+          <Anchor href="/data" size="xs">
+            {text}
+          </Anchor>
+        )}
+        .
+      </Text>
+    </Group>
   );
 }

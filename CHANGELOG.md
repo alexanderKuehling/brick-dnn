@@ -3,9 +3,35 @@
 ## 1.1.0 (unreleased)
 
 ### Added
+- **PostgreSQL and Supabase.** Set `DATABASE_URL=postgresql://…` to keep accounts, networks,
+  datasets and runs in PostgreSQL instead of the SQLite file (default). Supabase connection
+  strings work as copied from the dashboard: encrypted connections, transaction pooler
+  support, and after every `migrate` the tables are hidden from Supabase's Data API (row
+  level security, no privileges for `anon`/`authenticated`). Guide, including moving existing
+  data, in `docs/database.md`. CI also runs the backend tests on PostgreSQL.
+- **Server deployment.** `deploy/server/`: one-time setup script for a small Linux server
+  (Docker, firewall, HTTPS with Caddy and Let's Encrypt, a deploy user that can only deploy
+  commits of `main`); CI deploys backend and frontend there after every push to `main`.
+- `manage.py` (`make backend`) and the backend server read settings from `.env` in the
+  repository root, like Docker Compose; variables set in the shell win.
+- **Data tab: data preparation, integration and analysis.** Import CSV files (separator,
+  decimal comma, header, encoding, missing-value placeholders and column types are detected),
+  combine tables (join, append) and build a pipeline of steps: missing values (drop, fill
+  with mean/median/most frequent/constant/KNN/interpolation), outliers (IQR, z-score, MAD,
+  quantiles; clip, remove, set missing, flag), clipping, scaling, log/power/quantile
+  transforms, binning, one-hot/ordinal/frequency/target encoding, rare categories, date
+  parts, filters, duplicates, formulas, class balancing and feature selection. Every step
+  reports what it did; a live preview shows the data, charts (histograms, box plots, missing
+  values, correlation heatmaps, scatter plots, target analysis, before/after) and a training
+  readiness check with one-click fixes. Values are learned from the training rows only.
+  Results become training datasets with a fixed split, cleaned CSV files, JSON recipes or
+  standalone pandas scripts. REST endpoints under `/api/data/`, guide in
+  `docs/data-preparation.md`.
+- Training uses the split of prepared datasets (`DatasetInfo.predefined_split`).
 - **Online demo without a server.** `npm run build:demo` builds the editor as static files: the
   code generator runs in the browser with Pyodide, accounts and training are switched off.
-  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space.
+  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space; CI does this
+  after every push to `main` once all checks have passed.
 - `brickdnn.service`: the public endpoints (layers, examples, analyze, generate) as plain
   functions, shared by the Django API and the online demo.
 - **Local training.** A *Train* button in the editor trains the current network on the machine
@@ -32,6 +58,8 @@
 - Docker: optional PyTorch in the backend image (`BRICKDNN_INSTALL_TORCH=true`).
 
 ### Changed
+- The backend depends on pandas and numpy (data preparation); the `brickdnn` code generator
+  itself still has no dependencies (`brickdnn[data]` adds them).
 - **License changed from MIT to Apache-2.0.** Version 1.0.0 remains available under MIT.
 - Frontend upgraded to React 19, Mantine 9, Vite 8 and Vitest 5. Node.js 22.22.2+ (or 24.15+)
   is now required for development.

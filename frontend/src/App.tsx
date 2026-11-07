@@ -11,6 +11,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
 import { RequireAuth } from './components/RequireAuth';
+import { DataPage } from './data/DataPage';
 import { DEMO } from './demo';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -19,7 +20,8 @@ import { RegisterPage } from './pages/RegisterPage';
 import { theme } from './theme';
 
 // The online demo can be hosted under any path (e.g. GitHub Pages), so it keeps the route in
-// the URL hash. It only has the builder: there are no accounts.
+// the URL hash. It only has the builder: there are no accounts (the Data tab explains that it
+// needs a local installation).
 const Router = DEMO ? HashRouter : BrowserRouter;
 
 export default function App() {
@@ -36,6 +38,8 @@ export default function App() {
               <AppShell.Main>
                 <Routes>
                   <Route path="/" element={<BuilderPage />} />
+                  {/* One route, so switching preparations keeps the page (and its state). */}
+                  <Route path="/data/:prepId?" element={<DataPage />} />
                   {!DEMO && (
                     <>
                       <Route

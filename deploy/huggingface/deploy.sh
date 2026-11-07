@@ -4,7 +4,9 @@
 #
 #   deploy/huggingface/deploy.sh [space]        default space: alexKlg/brick-dnn
 #
-# Needs Node.js (see frontend/.nvmrc) and the hf CLI with a login (`hf auth login`).
+# Needs Node.js (see frontend/.nvmrc) and the hf CLI with a login (`hf auth login`), or
+# HF_PYTHON (a Python with huggingface_hub) and HF_TOKEN, as in CI: every push to main deploys
+# the demo automatically once all checks have passed (.github/workflows/ci.yml).
 set -euo pipefail
 
 SPACE="${1:-alexKlg/brick-dnn}"
@@ -16,7 +18,7 @@ cp "$ROOT/deploy/huggingface/README.md" dist-demo/README.md
 
 # `hf upload` would first try to create the repository as a Gradio Space, which needs a paid
 # plan, even if the Space exists. So use the Python library the hf CLI runs on instead.
-HF_PYTHON="$(sed -n '1s/^#!//p' "$(command -v hf)")"
+HF_PYTHON="${HF_PYTHON:-$(sed -n '1s/^#!//p' "$(command -v hf)")}"
 $HF_PYTHON - "$SPACE" "$ROOT/frontend/dist-demo" <<'PY'
 import sys
 

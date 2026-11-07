@@ -1,7 +1,14 @@
 import { ApiError } from './client';
 import type { EngineOp } from './engine.worker';
 import type { Api } from './index';
-import type { Analysis, Example, GenerateResult, LayerCatalog, TrainingStatus } from './types';
+import type {
+  Analysis,
+  DataStatus,
+  Example,
+  GenerateResult,
+  LayerCatalog,
+  TrainingStatus,
+} from './types';
 
 /** Loaded on first use. The mode check keeps the demo's web worker out of normal builds. */
 function callEngine<T>(op: EngineOp, body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -27,6 +34,21 @@ const TRAINING_STATUS: TrainingStatus = {
   login_required: false,
 };
 
+const DATA_STATUS: DataStatus = {
+  enabled: false,
+  available: false,
+  reason:
+    'Data preparation runs on your own computer, so it is not part of this online demo. To ' +
+    'clean, analyse and train on your own CSV files, install Brick DNN locally: ' +
+    'github.com/alexanderKuehling/brick-dnn',
+  max_upload_mb: 0,
+  max_rows: 0,
+  max_columns: 0,
+  default_sample_rows: 0,
+  max_sample_rows: 0,
+  login_required: false,
+};
+
 /**
  * The API of the online demo: the code generator runs in the browser, accounts and training
  * are not available (the UI hides them).
@@ -40,5 +62,6 @@ export function createDemoApi(server: Api): Api {
     generate: (graph, options = {}) => callEngine<GenerateResult>('generate', { graph, options }),
     me: () => Promise.reject(new ApiError(401, null, 'There are no accounts in the online demo.')),
     training: { ...server.training, status: () => Promise.resolve(TRAINING_STATUS) },
+    data: { ...server.data, status: () => Promise.resolve(DATA_STATUS) },
   };
 }

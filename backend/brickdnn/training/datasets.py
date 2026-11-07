@@ -30,6 +30,9 @@ from typing import Any
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 MAX_CLASSES = 1000
 MIN_SAMPLES = 4
+# Prepared CSV datasets (Data tab) store their split next to data.csv: one byte per data
+# row, 0 training, 1 validation, 2 test (see DatasetInfo.predefined_split).
+SPLIT_FILE = "split.bin"
 # Where built-in datasets are downloaded when no other folder is configured (CLI).
 DEFAULT_DATA_ROOT = Path.home() / ".cache" / "brickdnn" / "datasets"
 
@@ -187,6 +190,9 @@ class DatasetInfo:
     # images
     class_counts: list[int] | None = None
     subdir: str | None = None  # folder (relative to the dataset dir) holding the class folders
+    # csv made in the Data tab: [train, validation, test] rows of the split stored in
+    # split.bin next to the CSV file. Training uses it instead of val_split / test_split.
+    predefined_split: list[int] | None = None
 
     @property
     def num_classes(self) -> int | None:

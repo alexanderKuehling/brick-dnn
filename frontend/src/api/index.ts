@@ -4,17 +4,26 @@ import { createDemoApi } from './demoApi';
 import type {
   Analysis,
   Compatibility,
+  DataPrep,
+  DataPrepInput,
   Dataset,
   DatasetRef,
+  DataSource,
+  DataStatus,
   Example,
   GenerateOptions,
   GenerateResult,
   GraphDocument,
+  ImportOptions,
   LayerCatalog,
+  PrepDownloadFormat,
+  PreviewRequest,
+  PreviewResult,
   Project,
   RunDetail,
   RunInput,
   RunSummary,
+  StepCatalog,
   Tokens,
   TrainingStatus,
   User,
@@ -95,6 +104,79 @@ const serverApi = {
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
         requestFile(`/api/training/runs/${id}/weights/`, { auth: true }),
+    },
+  },
+
+  /** Data preparation (the Data tab). */
+  data: {
+    /** What the server can do (public, no login needed). */
+    status: (signal?: AbortSignal) => request<DataStatus>('/api/data/', { signal }),
+    /** All step types with their settings (public). */
+    steps: (signal?: AbortSignal) => request<StepCatalog>('/api/data/steps/', { signal }),
+    sources: {
+      list: (signal?: AbortSignal) =>
+        request<DataSource[]>('/api/data/sources/', { auth: true, signal }),
+      get: (id: number, signal?: AbortSignal) =>
+        request<DataSource>(`/api/data/sources/${id}/`, { auth: true, signal }),
+      /** Import a CSV file; options left out are detected. */
+      upload: (
+        file: File,
+        options: Partial<ImportOptions> & { name?: string } = {},
+        signal?: AbortSignal
+      ) => {
+        const form = new FormData();
+        form.append('file', file);
+        for (const [key, value] of Object.entries(options)) {
+          if (value === undefined || value === null) {
+            continue;
+          }
+          form.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value));
+        }
+        return request<DataSource>('/api/data/sources/', {
+          method: 'POST',
+          body: form,
+          auth: true,
+          signal,
+        });
+      },
+      rename: (id: number, name: string) =>
+        request<DataSource>(`/api/data/sources/${id}/`, {
+          method: 'PATCH',
+          body: { name },
+          auth: true,
+        }),
+      remove: (id: number) =>
+        request<void>(`/api/data/sources/${id}/`, { method: 'DELETE', auth: true }),
+    },
+    preps: {
+      list: (signal?: AbortSignal) =>
+        request<DataPrep[]>('/api/data/preps/', { auth: true, signal }),
+      get: (id: number, signal?: AbortSignal) =>
+        request<DataPrep>(`/api/data/preps/${id}/`, { auth: true, signal }),
+      create: (data: DataPrepInput) =>
+        request<DataPrep>('/api/data/preps/', { method: 'POST', body: data, auth: true }),
+      update: (id: number, data: Partial<DataPrepInput>) =>
+        request<DataPrep>(`/api/data/preps/${id}/`, { method: 'PATCH', body: data, auth: true }),
+      remove: (id: number) =>
+        request<void>(`/api/data/preps/${id}/`, { method: 'DELETE', auth: true }),
+      /** Run the (possibly unsaved) pipeline and return reports, profile and a sample. */
+      preview: (id: number, body: PreviewRequest = {}, signal?: AbortSignal) =>
+        request<PreviewResult>(`/api/data/preps/${id}/preview/`, {
+          method: 'POST',
+          body,
+          auth: true,
+          signal,
+        }),
+      /** Turn the saved preparation into a training dataset (it appears under "Your data"). */
+      export: (id: number, name?: string) =>
+        request<Dataset>(`/api/data/preps/${id}/export/`, {
+          method: 'POST',
+          body: name ? { name } : {},
+          auth: true,
+        }),
+      /** The prepared data (csv), the recipe (JSON) or a pandas script (python). */
+      download: (id: number, format: PrepDownloadFormat) =>
+        requestFile(`/api/data/preps/${id}/download/?format=${format}`, { auth: true }),
     },
   },
 };
