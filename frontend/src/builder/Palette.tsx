@@ -1,19 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { IconSearch } from '@tabler/icons-react';
 import { ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
 import type { LayerCatalog, LayerSpec } from '@/api/types';
 import { categoryColor } from '@/theme';
+import { startPointerDrag, type Point } from './pointerDrag';
 import classes from './Palette.module.css';
-
-/** MIME type used when dragging a layer from the palette onto the canvas. */
-export const DRAG_MIME = 'application/x-brickdnn-layer';
 
 interface PaletteProps {
   catalog: LayerCatalog;
   onAdd: (spec: LayerSpec) => void;
+  /** A layer was dragged out of the palette and released at `point` (client coordinates). */
+  onDrop?: (spec: LayerSpec, point: Point) => void;
+  /** A drag out of the palette started. */
+  onDragStart?: () => void;
 }
 
-export function Palette({ catalog, onAdd }: PaletteProps) {
+export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
   const [query, setQuery] = useState('');
 
   const groups = useMemo(() => {
@@ -46,7 +48,13 @@ export function Palette({ catalog, onAdd }: PaletteProps) {
               {category}
             </Text>
             {layers.map((spec) => (
-              <PaletteItem key={spec.type} spec={spec} onAdd={onAdd} />
+              <PaletteItem
+                key={spec.type}
+                spec={spec}
+                onAdd={onAdd}
+                onDrop={onDrop}
+                onDragStart={onDragStart}
+              />
             ))}
           </div>
         ))}
@@ -57,29 +65,61 @@ export function Palette({ catalog, onAdd }: PaletteProps) {
         )}
       </ScrollArea>
       <Text size="xs" c="dimmed">
-        Drag a layer onto the canvas, or click it to append it after the selected layer.
+        Drag a layer onto the canvas, or tap it to append it after the selected layer.
       </Text>
     </Stack>
   );
 }
 
-function PaletteItem({ spec, onAdd }: { spec: LayerSpec; onAdd: (spec: LayerSpec) => void }) {
+interface PaletteItemProps {
+  spec: LayerSpec;
+  onAdd: (spec: LayerSpec) => void;
+  onDrop?: (spec: LayerSpec, point: Point) => void;
+  onDragStart?: () => void;
+}
+
+function PaletteItem({ spec, onAdd, onDrop, onDragStart }: PaletteItemProps) {
   const color = categoryColor(spec.category);
-  const style = {
-    '--item-color': `var(--mantine-color-${color}-6)`,
-  } as React.CSSProperties;
+  const itemColor = `var(--mantine-color-${color}-6)`;
+  const style = { '--item-color': itemColor } as React.CSSProperties;
+  // A mouse drag ends with a click on the item; that click must not add the layer again.
+  const dragged = useRef(false);
+
+  const createGhost = () => {
+    const ghost = document.createElement('div');
+    ghost.className = classes.ghost;
+    ghost.style.setProperty('--item-color', itemColor);
+    const swatch = document.createElement('span');
+    swatch.className = classes.swatch;
+    ghost.append(swatch, spec.label);
+    return ghost;
+  };
 
   return (
     <Tooltip label={spec.description} position="right" multiline w={260} openDelay={500} withArrow>
       <UnstyledButton
         className={classes.item}
         style={style}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData(DRAG_MIME, spec.type);
-          event.dataTransfer.effectAllowed = 'move';
+        onPointerDown={(event) => {
+          dragged.current = false;
+          if (onDrop) {
+            startPointerDrag(event, {
+              createGhost,
+              onStart: () => {
+                dragged.current = true;
+                onDragStart?.();
+              },
+              onDrop: (point) => onDrop(spec, point),
+            });
+          }
         }}
-        onClick={() => onAdd(spec)}
+        onContextMenu={(event) => event.preventDefault()}
+        onClick={() => {
+          if (!dragged.current) {
+            onAdd(spec);
+          }
+          dragged.current = false;
+        }}
       >
         <span className={classes.swatch} />
         {spec.label}

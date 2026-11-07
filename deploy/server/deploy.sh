@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys one commit of main on this server. setup.sh installs this script as
-# /usr/local/bin/brickdnn-deploy, the only command the deploy key may run. GitHub Actions calls
-# it after CI has passed:
+# /usr/local/bin/brickdnn-deploy, the only command the deploy key may run. The *Deploy server*
+# workflow calls it after CI has passed on main:
 #
 #   ssh deploy@SERVER <full commit sha>
 #

@@ -11,7 +11,8 @@
   data, in `docs/database.md`. CI also runs the backend tests on PostgreSQL.
 - **Server deployment.** `deploy/server/`: one-time setup script for a small Linux server
   (Docker, firewall, HTTPS with Caddy and Let's Encrypt, a deploy user that can only deploy
-  commits of `main`); CI deploys backend and frontend there after every push to `main`.
+  commits of `main`); the *Deploy server* workflow deploys backend and frontend there after
+  every successful CI run on `main`.
 - `manage.py` (`make backend`) and the backend server read settings from `.env` in the
   repository root, like Docker Compose; variables set in the shell win.
 - **Data tab: data preparation, integration and analysis.** Import CSV files (separator,
@@ -30,8 +31,7 @@
 - Training uses the split of prepared datasets (`DatasetInfo.predefined_split`).
 - **Online demo without a server.** `npm run build:demo` builds the editor as static files: the
   code generator runs in the browser with Pyodide, accounts and training are switched off.
-  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space; CI does this
-  after every push to `main` once all checks have passed.
+  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space.
 - `brickdnn.service`: the public endpoints (layers, examples, analyze, generate) as plain
   functions, shared by the Django API and the online demo.
 - **Local training.** A *Train* button in the editor trains the current network on the machine

@@ -68,7 +68,8 @@ import {
 } from './graph';
 import { Inspector } from './Inspector';
 import { LayerNode } from './LayerNode';
-import { DRAG_MIME, Palette } from './Palette';
+import { Palette } from './Palette';
+import type { Point } from './pointerDrag';
 import { Toolbar } from './Toolbar';
 import { useAnalysis } from './useAnalysis';
 import { useCatalog } from './useCatalog';
@@ -390,22 +391,18 @@ function Builder() {
     [edges]
   );
 
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-      const spec = specs[event.dataTransfer.getData(DRAG_MIME)];
-      if (spec) {
-        const point = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        addLayer(spec, { x: point.x - 110, y: point.y - 40 });
+  const dropLayer = useCallback(
+    (spec: LayerSpec, point: Point) => {
+      // Only drops on the canvas count (not on the sidebars, the toolbar or a drawer).
+      const target = document.elementFromPoint(point.x, point.y);
+      if (!target || !canvasRef.current?.contains(target)) {
+        return;
       }
+      const position = flow.screenToFlowPosition(point);
+      addLayer(spec, { x: position.x - 110, y: position.y - 40 });
     },
-    [specs, flow, addLayer]
+    [flow, addLayer]
   );
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
 
   // ---------------------------------------------------------------- actions
   const showSummary = () => {
@@ -596,7 +593,15 @@ function Builder() {
     );
   }
 
-  const paletteView = <Palette catalog={catalog} onAdd={(spec) => addLayer(spec)} />;
+  const paletteView = (
+    <Palette
+      catalog={catalog}
+      onAdd={(spec) => addLayer(spec)}
+      onDrop={dropLayer}
+      // On small screens the palette is a drawer over the canvas: get it out of the way.
+      onDragStart={palette.close}
+    />
+  );
   const inspectorView = <Inspector node={selected} nodes={nodes} />;
 
   return (
@@ -635,12 +640,7 @@ function Builder() {
             onOpenPalette={palette.open}
             onOpenInspector={inspector.open}
           />
-          <Box
-            ref={canvasRef}
-            style={{ flex: 1, position: 'relative' }}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-          >
+          <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }}>
             <ReactFlow<LayerFlowNode, Edge>
               nodes={nodes}
               edges={edges}

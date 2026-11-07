@@ -3,7 +3,7 @@
 Backend and frontend run with Docker Compose on one small Linux server (for example a Hetzner
 Cloud CX23 with Ubuntu 24.04). [Caddy](https://caddyserver.com) in front of them gets the HTTPS
 certificate from Let's Encrypt. After the one-time setup, every push to `main` is deployed
-automatically once all CI checks have passed (job `deploy-server` in `.github/workflows/ci.yml`).
+automatically once all CI checks have passed (`.github/workflows/deploy-server.yml`).
 
 ```text
 GitHub Actions ──ssh deploy@SERVER <commit>──▶ brickdnn-deploy: git checkout, docker compose up
@@ -51,7 +51,8 @@ On your machine, in the repository:
    rm /tmp/brickdnn-deploy /tmp/brickdnn-deploy.pub
    ```
 
-6. Push to `main`, or start a deploy by hand: GitHub → *Actions* → *CI* → *Run workflow*.
+6. Push to `main`, or start a deploy by hand: GitHub → *Actions* → *Deploy server* →
+   *Run workflow*.
 
 ## Security
 

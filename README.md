@@ -136,9 +136,9 @@ The [online demo](https://huggingface.co/spaces/alexKlg/brick-dnn) needs no serv
 `brickdnn` code generator runs in the browser with [Pyodide](https://pyodide.org). Accounts
 and training are switched off. `npm run build:demo` (in `frontend/`) builds it into
 `frontend/dist-demo/`, which can be hosted as static files anywhere;
-`npm run dev:demo` runs it locally. Every push to `main` deploys it to the Hugging Face Space
-once all CI checks have passed (repository secret `HF_TOKEN`); `deploy/huggingface/deploy.sh`
-does the same by hand.
+`npm run dev:demo` runs it locally. `deploy/huggingface/deploy.sh` builds it and uploads it
+to the Hugging Face Space. On GitHub, the *Deploy demo* workflow does this after every
+successful CI run on `main` (it needs the repository secret `HF_TOKEN`).
 
 ## How to use it
 

@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  # "Run workflow" in the Actions tab: on main, this also deploys the online demo.
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -133,70 +131,3 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  deploy-server:
-    name: Deploy to the server (backend + frontend)
-    # Only from main, never for pull requests, after every check passed, and only once the
-    # server is set up (repository variable DEPLOY_HOST, see deploy/server/README.md).
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_HOST != ''
-    needs: [backend, postgres, frontend, docker]
-    runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-server
-      cancel-in-progress: false
-    steps:
-      - name: Deploy this commit
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
-          HOST: ${{ vars.DEPLOY_HOST }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          # The key may only run deploy.sh on the server, which deploys this commit of main.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
-            "deploy@$HOST" "$GITHUB_SHA"
-      - name: Check that the site answers
-        env:
-          URL: ${{ vars.DEPLOY_URL }}
-        run: |
-          for i in $(seq 1 30); do
-            curl -sf "$URL/api/health/" && curl -sf "$URL/" | grep -q "Brick DNN" && exit 0
-            sleep 5
-          done
-          echo "$URL does not answer after the deploy." >&2
-          exit 1
-
-  deploy-demo:
-    name: Deploy online demo (Hugging Face)
-    # Only from main, never for pull requests, and only after every check passed.
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [backend, postgres, frontend, docker]
-    runs-on: ubuntu-latest
-    # Deploys run one after the other, the newest last.
-    concurrency:
-      group: deploy-demo
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          npm ci --prefix frontend
-          pip install "huggingface_hub>=0.34"
-      - name: Build and upload
-        env:
-          # A Hugging Face token with write access to the Space (repository secret).
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_PYTHON: python
-          # Another Space: set the repository variable HF_SPACE (e.g. user/space).
-          SPACE: ${{ vars.HF_SPACE || 'alexKlg/brick-dnn' }}
-        run: deploy/huggingface/deploy.sh "$SPACE"
