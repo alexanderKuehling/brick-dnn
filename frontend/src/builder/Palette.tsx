@@ -64,7 +64,7 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
           </Text>
         )}
       </ScrollArea>
-      <Text size="xs" c="dimmed">
+      <Text size="xs" c="dimmed" className={classes.hint}>
         Drag a layer onto the canvas, or tap it to append it after the selected layer.
       </Text>
     </Stack>

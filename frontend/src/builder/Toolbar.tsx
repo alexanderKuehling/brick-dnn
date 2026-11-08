@@ -121,7 +121,7 @@ export function Toolbar(props: ToolbarProps) {
       gap="xs"
       style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
     >
-      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
         <Tooltip label="Layers">
           <ActionIcon
             hiddenFrom="md"
@@ -138,6 +138,10 @@ export function Toolbar(props: ToolbarProps) {
           value={name}
           onChange={(event) => onNameChange(event.currentTarget.value)}
           w={{ base: 150, sm: 210 }}
+          // On phones the name takes the free width of its row.
+          flex={{ base: '1 1 150px', sm: 'none' }}
+          miw={110}
+          maw={{ base: 320, sm: 'none' }}
           styles={{ input: { fontWeight: 600 } }}
         />
         <Status {...props} />

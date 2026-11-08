@@ -26,6 +26,13 @@
   }
 }
 
+/* Phones in landscape need the height for the list. */
+.hint {
+  @media (max-height: 500px) {
+    display: none;
+  }
+}
+
 .swatch {
   width: 10px;
   height: 10px;
