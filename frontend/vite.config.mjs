@@ -24,6 +24,9 @@ export default defineConfig(({ mode }) => {
         '/api': backend,
         '/admin': backend,
         '/static': backend,
+        // OAuth metadata for MCP clients (docs/mcp.md).
+        '/.well-known/oauth-protected-resource': backend,
+        '/.well-known/oauth-authorization-server': backend,
       },
       fs: {
         // The demo bundles the Python sources of the code generator from ../backend.

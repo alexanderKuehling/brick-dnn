@@ -8,6 +8,11 @@
   page, and use them for scripts or to connect AI assistants: `/api/mcp/` is a remote MCP
   server whose tools list layers and examples, analyse networks, generate PyTorch code,
   save networks and start, follow and stop trainings as the token's owner. See `docs/mcp.md`.
+- **OAuth sign-in for the MCP server**, so it can be added as a custom connector in the
+  Claude apps: protected resource and authorization server metadata, dynamic client
+  registration, a consent page in the web app (full or read-only access), PKCE, short-lived
+  access tokens only valid for MCP, rotating refresh tokens and revocation. Connected apps
+  are listed on the *API tokens* page and can be disconnected there.
 - **PostgreSQL and Supabase.** Set `DATABASE_URL=postgresql://…` to keep accounts, networks,
   datasets and runs in PostgreSQL instead of the SQLite file (default). Supabase connection
   strings work as copied from the dashboard: encrypted connections, transaction pooler

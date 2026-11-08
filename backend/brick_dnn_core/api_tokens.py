@@ -16,7 +16,7 @@ from django.utils import timezone
 from rest_framework import authentication, exceptions, permissions
 from rest_framework.request import Request
 
-from .models import ApiToken
+from .models import ApiToken, OAuthConnection
 
 PREFIX = "bdnn_"
 # Shown in the list of tokens, so users can tell them apart.
@@ -26,8 +26,9 @@ EXPIRY_DAYS = (7, 30, 90, 365)
 # last_used_at is written at most this often, not on every request.
 LAST_USED_INTERVAL = timedelta(minutes=1)
 # POST endpoints that change nothing: read-only tokens may use them.
+MCP_URL_NAMES = {"mcp", "mcp-no-slash"}
 # The MCP server itself only offers read-only tokens the tools that change nothing.
-READ_ONLY_POSTS = {"analyze", "generate", "training-check", "mcp", "mcp-no-slash"}
+READ_ONLY_POSTS = {"analyze", "generate", "training-check", *MCP_URL_NAMES}
 
 
 def hash_key(key: str) -> str:
@@ -72,14 +73,20 @@ class ApiTokenAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("This API token has expired.")
         if not token.owner.is_active:
             raise exceptions.AuthenticationFailed("This account is disabled.")
-        if token.read_only and request.method not in permissions.SAFE_METHODS:
-            match = request._request.resolver_match
-            if match is None or match.url_name not in READ_ONLY_POSTS:
-                raise exceptions.PermissionDenied("This API token is read-only.")
+        match = request._request.resolver_match
+        url_name = match.url_name if match is not None else None
+        # Apps connected with OAuth were allowed to use the MCP server, nothing else.
+        if token.connection_id is not None and url_name not in MCP_URL_NAMES:
+            raise exceptions.AuthenticationFailed("This token is only valid for the MCP server.")
+        writes = request.method not in permissions.SAFE_METHODS
+        if token.read_only and writes and url_name not in READ_ONLY_POSTS:
+            raise exceptions.PermissionDenied("This API token is read-only.")
 
         if token.last_used_at is None or now - token.last_used_at > LAST_USED_INTERVAL:
             ApiToken.objects.filter(pk=token.pk).update(last_used_at=now)
             token.last_used_at = now
+            if token.connection_id is not None:
+                OAuthConnection.objects.filter(pk=token.connection_id).update(last_used_at=now)
         return token.owner, token
 
     def authenticate_header(self, request: Request) -> str:

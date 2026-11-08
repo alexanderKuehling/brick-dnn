@@ -86,6 +86,21 @@ generate, training check, MCP). The MCP server for AI assistants is described in
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
 endpoints need a website login (JWT): an API token cannot manage tokens.
 
+## OAuth (MCP sign-in)
+
+For MCP clients; details in [mcp.md](mcp.md).
+
+| Method      | Path                                        | Description                                    |
+| ----------- | ------------------------------------------- | ---------------------------------------------- |
+| GET         | `/.well-known/oauth-protected-resource/api/mcp/` | Protected resource metadata (RFC 9728)    |
+| GET         | `/.well-known/oauth-authorization-server`   | Authorization server metadata (RFC 8414)       |
+| POST        | `/api/oauth/register/`                      | Dynamic client registration (RFC 7591)         |
+| GET / POST  | `/api/oauth/authorize/`                     | Check a request / the user's decision (consent page, JWT) |
+| POST        | `/api/oauth/token/`                         | `authorization_code` (PKCE) and `refresh_token` grants |
+| POST        | `/api/oauth/revoke/`                        | Revoke a token (RFC 7009)                      |
+| GET         | `/api/auth/connections/`                    | Apps you connected (JWT)                       |
+| DELETE      | `/api/auth/connections/<id>/`               | Disconnect an app, revoking its tokens (JWT)   |
+
 ## Saved networks (login required)
 
 | Method        | Path                   | Description                              |
@@ -263,6 +278,7 @@ All data endpoints except `GET /api/data/` answer `503` when data preparation is
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
 20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
 preparations: 60/hour, previews and downloads of preparations: 1200/hour, MCP requests:
-600/hour. Adjust with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
-`BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE` and
-`BRICKDNN_MCP_RATE` (e.g. `100/minute`).
+600/hour, OAuth registration, token and revocation requests: 120/minute. Adjust with
+`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
+`BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE` and `BRICKDNN_OAUTH_RATE`
+(e.g. `100/minute`).

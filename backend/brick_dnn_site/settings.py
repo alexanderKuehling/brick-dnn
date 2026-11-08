@@ -203,6 +203,9 @@ REST_FRAMEWORK = {
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
         # Requests to the MCP server (one per tool call of an AI assistant).
         "mcp": os.environ.get("BRICKDNN_MCP_RATE", "600/hour"),
+        # OAuth app registration, tokens and revocation (per IP address: apps like Claude
+        # call it from their servers, for all their users).
+        "oauth": os.environ.get("BRICKDNN_OAUTH_RATE", "120/minute"),
     },
 }
 
@@ -213,6 +216,10 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
+
+# The public address of the site (e.g. https://brickdnn.com), used as OAuth issuer. Empty:
+# taken from each request (Host header and X-Forwarded-Proto behind a proxy).
+PUBLIC_URL = os.environ.get("BRICKDNN_PUBLIC_URL", "").rstrip("/")
 
 # Set to "false" to disable public sign-up (e.g. for a private instance).
 ALLOW_REGISTRATION = env_bool("BRICKDNN_ALLOW_REGISTRATION", True)

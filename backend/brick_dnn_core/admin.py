@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun
+from .models import (
+    ApiToken,
+    DataPrep,
+    Dataset,
+    DataSource,
+    OAuthClient,
+    OAuthConnection,
+    Project,
+    TrainingRun,
+)
 
 
 @admin.register(Project)
@@ -77,10 +86,49 @@ class ApiTokenAdmin(admin.ModelAdmin):
     """Admins can see and revoke (delete) tokens, but not create them: only the hash is stored."""
 
     list_display = ("name", "owner", "prefix", "read_only", "created_at", "last_used_at")
-    list_filter = ("read_only",)
+    list_filter = ("read_only", ("connection", admin.EmptyFieldListFilter))
     search_fields = ("name", "prefix", "owner__username")
     exclude = ("key_hash",)
-    readonly_fields = ("owner", "name", "prefix", "read_only", "created_at", "last_used_at")
+    readonly_fields = (
+        "owner",
+        "name",
+        "prefix",
+        "read_only",
+        "created_at",
+        "last_used_at",
+        "connection",
+    )
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+
+@admin.register(OAuthClient)
+class OAuthClientAdmin(admin.ModelAdmin):
+    """Apps that registered for OAuth sign-in. Deleting one disconnects it everywhere."""
+
+    list_display = ("name", "client_id", "uri", "created_at")
+    search_fields = ("name", "client_id", "uri")
+    exclude = ("secret_hash",)
+    readonly_fields = ("client_id", "name", "uri", "redirect_uris", "created_at")
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+
+@admin.register(OAuthConnection)
+class OAuthConnectionAdmin(admin.ModelAdmin):
+    list_display = ("client", "owner", "read_only", "created_at", "last_used_at")
+    search_fields = ("client__name", "owner__username")
+    exclude = ("refresh_hash",)
+    readonly_fields = (
+        "client",
+        "owner",
+        "read_only",
+        "refresh_expires_at",
+        "created_at",
+        "last_used_at",
+    )
 
     def has_add_permission(self, request) -> bool:
         return False

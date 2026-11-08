@@ -129,7 +129,8 @@ class ApiTokenViewSet(
     permission_classes = [IsLoggedInUser]
 
     def get_queryset(self):
-        return ApiToken.objects.filter(owner=self.request.user)
+        # The access tokens of apps connected with OAuth are managed as connections.
+        return ApiToken.objects.filter(owner=self.request.user, connection__isnull=True)
 
     def create(self, request: Request) -> Response:
         serializer = ApiTokenCreateSerializer(data=request.data)
