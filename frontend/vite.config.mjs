@@ -4,8 +4,10 @@ import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  // During development, API calls go to the Django dev server via this proxy.
-  const backend = env.BACKEND_URL || 'http://127.0.0.1:8000';
+  // During development, API calls go to the Django dev server via this proxy. It keeps the
+  // Host header (like nginx in production), so that Django builds URLs for this address,
+  // e.g. the OAuth endpoints MCP clients sign in with.
+  const backend = { target: env.BACKEND_URL || 'http://127.0.0.1:8000', changeOrigin: false };
 
   return {
     plugins: [react()],
