@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover: the page fills the screen behind the iPhone notch and home
+         indicator, global.css keeps content out of those areas. resizes-content: the
+         on-screen keyboard shrinks the page (Chrome), so focused fields stay visible. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta
       name="description"
       content="Build neural networks with drag and drop and export clean, runnable PyTorch code."

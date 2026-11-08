@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from '@mantine/core';
+import { createTheme, Drawer, Modal, type MantineColorsTuple } from '@mantine/core';
 
 /** Navy/indigo of the Brick DNN logo. */
 const brick: MantineColorsTuple = [
@@ -22,6 +22,29 @@ export const theme = createTheme({
     'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   fontFamilyMonospace:
     'ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace',
+  // index.html uses viewport-fit=cover, so a screen edge can be under the iPhone notch or home
+  // indicator. Drawers and full-screen modals keep their content clear of them.
+  components: {
+    Drawer: Drawer.extend({
+      styles: (_theme, { position = 'left' }) => ({
+        content: {
+          paddingLeft: position === 'right' ? undefined : 'env(safe-area-inset-left)',
+          paddingRight: position === 'left' ? undefined : 'env(safe-area-inset-right)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        },
+      }),
+    }),
+    Modal: Modal.extend({
+      styles: (_theme, { fullScreen }) => ({
+        content: fullScreen
+          ? {
+              padding:
+                'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+            }
+          : {},
+      }),
+    }),
+  },
 });
 
 /** Colour of each layer category on the canvas and in the palette. */

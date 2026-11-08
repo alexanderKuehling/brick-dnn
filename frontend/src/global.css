@@ -62,3 +62,79 @@ body {
   --chart-axis: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
   --chart-track: light-dark(#e9ecef, #3b3b3b);
 }
+
+/* ---- phones and touch screens ------------------------------------------ */
+
+/*
+ * iOS Safari zooms into a focused form field whose text is smaller than 16px, and the page
+ * stays zoomed afterwards. So touch screens get 16px text in all fields (Mantine sets the
+ * size inline on the wrapper, hence !important). Pinch zoom stays available.
+ * `-webkit-touch-callout` only exists on iOS: this also covers iPads with a trackpad.
+ */
+@media (pointer: coarse) {
+  .mantine-Input-wrapper {
+    --input-fz: 16px !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .mantine-Input-wrapper {
+    --input-fz: 16px !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* index.html uses viewport-fit=cover: keep content clear of the notch in landscape. */
+.mantine-AppShell-header,
+.mantine-AppShell-main {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/*
+ * In drawers and modals Mantine puts every scrollbar above the sticky title (z-index 1001),
+ * so the scrollbar of a wide table scrolls over the title. Only the drawer's own scrollbar
+ * needs that.
+ */
+.mantine-Drawer-body [data-mantine-scrollbar],
+.mantine-Modal-body [data-mantine-scrollbar] {
+  z-index: 1;
+}
+
+/* The canvas handles all gestures itself: pinching zooms the network, not the page. */
+.react-flow {
+  touch-action: none;
+}
+
+/* Keep the canvas controls above the iPhone home indicator. */
+.react-flow__panel.bottom {
+  margin-bottom: calc(15px + env(safe-area-inset-bottom));
+}
+
+.react-flow__panel.react-flow__attribution {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+/* Zoom buttons big enough for a finger. */
+@media (pointer: coarse) {
+  .react-flow__controls-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .react-flow__controls-button svg {
+    max-width: 14px;
+    max-height: 14px;
+  }
+}
