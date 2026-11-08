@@ -3,7 +3,8 @@
 Implements the Model Context Protocol (https://modelcontextprotocol.io) over Streamable
 HTTP, without sessions: every JSON-RPC message is a POST to ``/api/mcp/`` and gets a JSON
 answer (no event streams). Clients log in with a personal API token
-(``Authorization: Bearer bdnn_…``); read-only tokens only get the tools that change nothing.
+(``Authorization: Bearer bdnn_…``) or sign in with OAuth (see oauth.py); read-only access
+only gets the tools that change nothing.
 """
 
 from __future__ import annotations
@@ -31,8 +32,9 @@ from brickdnn.training import ACTIVE_STATUSES
 from brickdnn.training.config import TrainingConfig
 
 from . import training_service as training
-from .api_tokens import ApiTokenAuthentication, uses_api_token
+from .api_tokens import uses_api_token
 from .models import ApiToken, Dataset, Project, TrainingRun
+from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
 from .serializers import (
     DatasetSerializer,
@@ -534,8 +536,8 @@ def _json(payload: Any, status: int = 200) -> HttpResponse:
 
 class IsApiTokenUser(permissions.IsAuthenticated):
     message = (
-        "Log in with a personal API token: Authorization: Bearer bdnn_… "
-        "(create one on the API tokens page of Brick DNN)."
+        "Sign in with OAuth, or log in with a personal API token: "
+        "Authorization: Bearer bdnn_… (see the API tokens page of Brick DNN)."
     )
 
     def has_permission(self, request, view) -> bool:
@@ -543,7 +545,7 @@ class IsApiTokenUser(permissions.IsAuthenticated):
 
 
 class McpView(APIView):
-    authentication_classes = [ApiTokenAuthentication]
+    authentication_classes = [McpAuthentication]
     permission_classes = [IsApiTokenUser]
     throttle_classes = [UserRateThrottle, ScopedRateThrottle]
     throttle_scope = "mcp"

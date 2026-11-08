@@ -186,9 +186,71 @@ class ApiToken(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
+    # Set for the short-lived access tokens of an app connected with OAuth (see oauth.py);
+    # empty for the tokens users create themselves.
+    connection = models.ForeignKey(
+        "OAuthConnection",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="access_tokens",
+    )
 
     class Meta:
         ordering = ["-created_at", "-id"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner}, {self.prefix}…)"
+
+
+class OAuthClient(models.Model):
+    """An app that registered itself for OAuth sign-in (dynamic client registration)."""
+
+    client_id = models.CharField(max_length=64, unique=True)
+    # Empty for public clients, which prove themselves with PKCE only.
+    secret_hash = models.CharField(max_length=64, blank=True)
+    name = models.CharField(max_length=200)
+    uri = models.URLField(max_length=500, blank=True)
+    redirect_uris = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.client_id})"
+
+
+class OAuthCode(models.Model):
+    """An authorization code: a user allowed a client access; valid for a few minutes."""
+
+    code_hash = models.CharField(max_length=64, unique=True)
+    client = models.ForeignKey(OAuthClient, on_delete=models.CASCADE, related_name="codes")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    redirect_uri = models.CharField(max_length=2000)
+    code_challenge = models.CharField(max_length=128)
+    read_only = models.BooleanField(default=False)
+    expires_at = models.DateTimeField()
+
+
+class OAuthConnection(models.Model):
+    """A user's permission for an app (an OAuth grant), with its current refresh token.
+
+    Deleting it disconnects the app: its access tokens go with it.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="oauth_connections"
+    )
+    client = models.ForeignKey(OAuthClient, on_delete=models.CASCADE, related_name="connections")
+    read_only = models.BooleanField(default=False)
+    refresh_hash = models.CharField(max_length=64, unique=True)
+    refresh_expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.client.name} ({self.owner})"

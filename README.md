@@ -58,9 +58,10 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
   and the result becomes a training dataset with a fixed train/validation/test split, a
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
-- **MCP server for AI assistants**: connect Claude or another MCP client with a personal API
-  token, and let it build, check, save and train networks in your account (read-only tokens
-  can only look and analyse). The same tokens work for scripts against the REST API. See
+- **MCP server for AI assistants**: add Brick DNN as a connector in Claude (or another MCP
+  client), sign in with OAuth, and let it build, check, save and train networks in your
+  account; you decide whether it may change things or only look. Personal API tokens work
+  for clients without OAuth and for scripts against the REST API. See
   [docs/mcp.md](docs/mcp.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
@@ -307,6 +308,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_TRAINING_MAX_RUNS`   | `1`                        | Trainings running at the same time (all users)       |
 | `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
+| `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
