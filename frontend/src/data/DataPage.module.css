@@ -18,7 +18,7 @@
 .drawerBody {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 64px);
+  height: calc(100dvh - 64px - env(safe-area-inset-bottom));
   padding: 0;
 }
 
@@ -37,6 +37,9 @@
 }
 
 .editor {
+  /* Scroll containers are positioned, so they also clip absolutely positioned content (such
+     as visually hidden labels). Otherwise that content makes the whole page scroll. */
+  position: relative;
   width: 400px;
   flex-shrink: 0;
   overflow-y: auto;
@@ -87,6 +90,17 @@
   }
 }
 
+/* On phones the tabs drop their icons, so all four fit. */
+.tab {
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding-inline: 12px;
+
+    & > [data-position='left'] {
+      display: none;
+    }
+  }
+}
+
 .notices {
   display: flex;
   flex-direction: column;
@@ -99,6 +113,7 @@
 }
 
 .panel {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;

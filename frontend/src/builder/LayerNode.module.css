@@ -73,4 +73,14 @@
   height: 12px;
   border: 2px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
   background: var(--node-color);
+
+  /* A bigger target for fingers; the dot keeps its size. */
+  @media (pointer: coarse) {
+    &::before {
+      content: '';
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+    }
+  }
 }

@@ -210,6 +210,23 @@ function Builder() {
     };
   }, []);
 
+  // Pinching the canvas zooms the network. Safari's own gesture events would zoom the page as
+  // well (touch-action on the canvas is not enough for older iOS versions).
+  const hasCanvas = Boolean(catalog);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return undefined;
+    }
+    const prevent = (event: Event) => event.preventDefault();
+    canvas.addEventListener('gesturestart', prevent);
+    canvas.addEventListener('gesturechange', prevent);
+    return () => {
+      canvas.removeEventListener('gesturestart', prevent);
+      canvas.removeEventListener('gesturechange', prevent);
+    };
+  }, [hasCanvas]);
+
   useEffect(() => {
     if (fitRequest === 0) {
       return undefined;
@@ -672,7 +689,16 @@ function Builder() {
               )}
               {nodes.length === 0 && (
                 <Panel position="top-center">
-                  <Paper withBorder shadow="sm" p="lg" mt={60} maw={420} ta="center">
+                  <Paper
+                    withBorder
+                    shadow="sm"
+                    p="lg"
+                    mt={{ base: 'md', sm: 60 }}
+                    // The panel is centred with left: 50%, which would halve its width on phones.
+                    w={{ base: 'calc(100vw - 48px)', xs: 'auto' }}
+                    maw={420}
+                    ta="center"
+                  >
                     <Title order={4}>Start building</Title>
                     <Text size="sm" c="dimmed" mt={6}>
                       Drag an <b>Input</b> layer from the palette onto the canvas, then add layers
@@ -708,7 +734,7 @@ function Builder() {
       </Box>
 
       <Drawer opened={paletteOpened} onClose={palette.close} title="Layers" size={280}>
-        <Box h="calc(100dvh - 90px)">{paletteView}</Box>
+        <Box h="calc(100dvh - 90px - env(safe-area-inset-bottom))">{paletteView}</Box>
       </Drawer>
       <Drawer
         opened={inspectorOpened && !wideScreen}

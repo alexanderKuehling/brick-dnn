@@ -4,13 +4,16 @@ import {
   IconFolder,
   IconKey,
   IconLogout,
+  IconMenu2,
   IconTable,
+  IconTopologyStar3,
 } from '@tabler/icons-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
   Avatar,
   Badge,
+  Box,
   Button,
   Group,
   Menu,
@@ -33,7 +36,7 @@ export function AppHeader() {
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
 
   return (
-    <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+    <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
       <Group gap="lg" wrap="nowrap">
         <UnstyledButton component={Link} to="/" aria-label="Brick DNN home">
           <Logo />
@@ -73,6 +76,7 @@ export function AppHeader() {
       </Group>
 
       <Group gap="xs" wrap="nowrap">
+        <PhoneMenu loggedIn={Boolean(user)} isActive={(path) => navVariant(path) === 'light'} />
         <Tooltip label="Source code on GitHub">
           <ActionIcon
             component="a"
@@ -82,6 +86,7 @@ export function AppHeader() {
             variant="default"
             size="lg"
             aria-label="GitHub repository"
+            visibleFrom="sm"
           >
             <IconBrandGithub size={18} />
           </ActionIcon>
@@ -108,8 +113,12 @@ export function AppHeader() {
                   </Avatar>
                 }
                 rightSection={<IconChevronDown size={14} />}
+                aria-label={user.username}
               >
-                {user.username}
+                {/* Phones show only the avatar. */}
+                <Box component="span" visibleFrom="xs">
+                  {user.username}
+                </Box>
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
@@ -140,5 +149,54 @@ export function AppHeader() {
         )}
       </Group>
     </Group>
+  );
+}
+
+/** Below `sm` the page links and the GitHub link move into a menu. */
+function PhoneMenu({
+  loggedIn,
+  isActive,
+}: {
+  loggedIn: boolean;
+  isActive: (path: string) => boolean;
+}) {
+  const navigate = useNavigate();
+  const item = (path: string, label: string, icon: React.ReactNode) => (
+    <Menu.Item
+      leftSection={icon}
+      onClick={() => navigate(path)}
+      fw={isActive(path) ? 600 : undefined}
+      aria-current={isActive(path) ? 'page' : undefined}
+    >
+      {label}
+    </Menu.Item>
+  );
+
+  return (
+    <Box hiddenFrom="sm">
+      <Menu position="bottom-end" withinPortal>
+        <Menu.Target>
+          <ActionIcon variant="default" size="lg" aria-label="Pages">
+            <IconMenu2 size={18} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown>
+          {DEMO && <Menu.Label>Online demo: runs in your browser</Menu.Label>}
+          {item('/', 'Builder', <IconTopologyStar3 size={16} />)}
+          {item('/data', 'Data', <IconTable size={16} />)}
+          {loggedIn && item('/projects', 'My networks', <IconFolder size={16} />)}
+          <Menu.Divider />
+          <Menu.Item
+            component="a"
+            href={REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+            leftSection={<IconBrandGithub size={16} />}
+          >
+            Source code on GitHub
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    </Box>
   );
 }

@@ -16,6 +16,7 @@ import {
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Group,
   Loader,
@@ -91,7 +92,11 @@ function Status({
         style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
         onClick={onShowSummary}
       >
-        Valid · {formatCount(analysis.total_params)} params
+        {/* Phones keep the space for the network name: the check says it is valid. */}
+        <Box component="span" visibleFrom="xs">
+          Valid ·{' '}
+        </Box>
+        {formatCount(analysis.total_params)} params
       </Badge>
     );
   }
@@ -121,7 +126,7 @@ export function Toolbar(props: ToolbarProps) {
       gap="xs"
       style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
     >
-      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
         <Tooltip label="Layers">
           <ActionIcon
             hiddenFrom="md"
@@ -138,6 +143,10 @@ export function Toolbar(props: ToolbarProps) {
           value={name}
           onChange={(event) => onNameChange(event.currentTarget.value)}
           w={{ base: 150, sm: 210 }}
+          // On phones the name takes the free width of its row.
+          flex={{ base: '1 1 150px', sm: 'none' }}
+          miw={80}
+          maw={{ base: 320, sm: 'none' }}
           styles={{ input: { fontWeight: 600 } }}
         />
         <Status {...props} />
