@@ -18,6 +18,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, type ApiToken } from '@/api';
 import { formatDate } from '@/training/format';
+import { ConnectedApps } from './ConnectedApps';
 import { CreateTokenModal } from './CreateTokenModal';
 import { McpSetup } from './McpSetup';
 import classes from './Tokens.module.css';
@@ -29,9 +30,9 @@ function isExpired(token: ApiToken, now = Date.now()): boolean {
 function TokenItem({ token, onRevoke }: { token: ApiToken; onRevoke: () => void }) {
   const expired = isExpired(token);
   return (
-    <li className={classes.token} aria-label={token.name}>
+    <li className={classes.item} aria-label={token.name}>
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
-        <div className={classes.tokenTitle}>
+        <div className={classes.itemTitle}>
           <Group gap={8} wrap="wrap">
             <Text fw={600} className={classes.name}>
               {token.name}
@@ -54,7 +55,7 @@ function TokenItem({ token, onRevoke }: { token: ApiToken; onRevoke: () => void 
           color="red"
           size="xs"
           leftSection={<IconTrash size={14} />}
-          className={classes.revoke}
+          className={classes.itemAction}
           onClick={onRevoke}
           aria-label={`Revoke “${token.name}”`}
         >
@@ -131,9 +132,9 @@ export function ApiTokensPage() {
     <Container size="md" py="xl">
       <Title order={2}>API tokens</Title>
       <Text mt="xs" maw={720}>
-        API tokens let AI assistants (through MCP) and your own scripts use Brick DNN as you. Treat
-        them like passwords: anyone who has one can use your account as far as the token allows,
-        until it expires or you revoke it.
+        AI assistants (through MCP) and your own scripts can use Brick DNN as you: apps like Claude
+        by signing in, others with an API token. Treat tokens like passwords: anyone who has one can
+        use your account as far as the token allows, until it expires or you revoke it.
       </Text>
 
       <section className={classes.section} aria-labelledby="mcp-title">
@@ -142,11 +143,13 @@ export function ApiTokensPage() {
         </Title>
         <Text size="sm" c="dimmed" mb="md" maw={720}>
           With Brick DNN&apos;s MCP server, an assistant can look up layers and examples, check
-          networks, generate PyTorch code and read your networks and training runs. With a
-          full-access token, it can also save networks and start or stop trainings.
+          networks, generate PyTorch code and read your networks and training runs. With full
+          access, it can also save networks and start or stop trainings.
         </Text>
         <McpSetup />
       </section>
+
+      <ConnectedApps />
 
       <section className={classes.section} aria-labelledby="tokens-title">
         <Group justify="space-between" mb="md">
