@@ -13,6 +13,7 @@ import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
 import { RequireAuth } from './components/RequireAuth';
 import { DataPage } from './data/DataPage';
 import { DEMO } from './demo';
+import { AuthorizePage } from './oauth/AuthorizePage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -56,6 +57,15 @@ export default function App() {
                         element={
                           <RequireAuth>
                             <ApiTokensPage />
+                          </RequireAuth>
+                        }
+                      />
+                      {/* Apps (e.g. Claude) send the browser here to connect to the MCP server. */}
+                      <Route
+                        path="/oauth/authorize"
+                        element={
+                          <RequireAuth>
+                            <AuthorizePage />
                           </RequireAuth>
                         }
                       />

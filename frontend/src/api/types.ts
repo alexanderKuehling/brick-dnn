@@ -134,6 +134,46 @@ export interface NewApiToken extends ApiToken {
   token: string;
 }
 
+// --------------------------------------------------------------------------
+// OAuth: apps like the Claude apps connect to the MCP server by signing in
+// --------------------------------------------------------------------------
+
+/** A valid authorization request (/oauth/authorize), checked by the server. */
+export interface OAuthRequest {
+  /** As the app registered itself: the name and homepage are not verified. */
+  client: { name: string; uri: string | null };
+  /** Where the browser returns to after the decision. */
+  redirect_host: string;
+  /** The app asks to make changes (scope "write"), not only to read. */
+  write_requested: boolean;
+}
+
+/** A rejected authorization request (HTTP 400), with the OAuth error code. */
+export interface OAuthRequestError {
+  error: string;
+  error_description: string;
+  /**
+   * Set when the app itself can be told about the error. Without it, the app or its redirect
+   * URI is unknown, so the browser must not be sent anywhere.
+   */
+  redirect_to?: string;
+}
+
+/** The answer to allowing or denying a request: where to send the browser back to. */
+export interface OAuthDecision {
+  redirect_to: string;
+}
+
+/** An app the user allowed to use their account; disconnecting it revokes its access. */
+export interface OAuthConnection {
+  id: number;
+  client_name: string;
+  client_uri: string | null;
+  read_only: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export interface Project {
   id: number;
   name: string;
