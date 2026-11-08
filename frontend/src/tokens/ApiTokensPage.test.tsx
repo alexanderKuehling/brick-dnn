@@ -2,15 +2,18 @@ import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, type ApiToken, type NewApiToken } from '@/api';
+import { api, ApiError, type ApiToken, type NewApiToken, type OAuthConnection } from '@/api';
 import { ApiTokensPage } from './ApiTokensPage';
-import { claudeCodeCommand, curlCommand, mcpJsonConfig, mcpUrl } from './setup';
+import { claudeCodeCommand, curlCommand, isLocalUrl, mcpJsonConfig, mcpUrl } from './setup';
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
   return {
     ...actual,
-    api: { apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() } },
+    api: {
+      apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
+      connections: { list: vi.fn(), revoke: vi.fn() },
+    },
   };
 });
 
@@ -32,6 +35,24 @@ const SCRIPT: ApiToken = {
   created_at: '2026-01-01T10:00:00Z',
   last_used_at: null,
   expires_at: '2026-02-01T10:00:00Z',
+};
+
+const CLAUDE: OAuthConnection = {
+  id: 7,
+  client_name: 'Claude',
+  client_uri: 'https://claude.ai/',
+  read_only: false,
+  created_at: '2026-11-05T08:00:00Z',
+  last_used_at: '2026-11-08T07:45:00Z',
+};
+
+const VIEWER: OAuthConnection = {
+  id: 6,
+  client_name: 'Network viewer',
+  client_uri: null,
+  read_only: true,
+  created_at: '2026-10-01T08:00:00Z',
+  last_used_at: null,
 };
 
 const SECRET = `bdnn_${'s'.repeat(43)}`;
@@ -59,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(notifications, 'show').mockImplementation(() => 'id');
   vi.mocked(api.apiTokens.list).mockResolvedValue([LAPTOP, SCRIPT]);
+  vi.mocked(api.connections.list).mockResolvedValue([]);
 });
 
 describe('setup snippets', () => {
@@ -68,6 +90,10 @@ describe('setup snippets', () => {
     expect(claudeCodeCommand(url, 'T')).toBe(
       'claude mcp add --transport http brick-dnn https://brick.example.com/api/mcp/ ' +
         '--header "Authorization: Bearer T"'
+    );
+    // Without a token, Claude Code signs in with OAuth.
+    expect(claudeCodeCommand(url)).toBe(
+      'claude mcp add --transport http brick-dnn https://brick.example.com/api/mcp/'
     );
     expect(JSON.parse(mcpJsonConfig(url, 'T'))).toEqual({
       mcpServers: {
@@ -81,6 +107,13 @@ describe('setup snippets', () => {
     expect(curlCommand('https://brick.example.com', 'T')).toBe(
       'curl -H "Authorization: Bearer T" https://brick.example.com/api/projects/'
     );
+  });
+
+  it('know which servers apps on the internet cannot reach', () => {
+    expect(isLocalUrl('http://localhost:8080/api/mcp/')).toBe(true);
+    expect(isLocalUrl('http://127.0.0.1:8000/api/mcp/')).toBe(true);
+    expect(isLocalUrl('http://[::1]:8000/api/mcp/')).toBe(true);
+    expect(isLocalUrl('https://brick.example.com/api/mcp/')).toBe(false);
   });
 });
 
@@ -104,7 +137,17 @@ describe('ApiTokensPage', () => {
     await screen.findByRole('listitem', { name: 'Claude on my laptop' });
     const url = `${window.location.origin}/api/mcp/`;
     expect(screen.getByText(url)).toBeInTheDocument();
-    expect(screen.getByText(claudeCodeCommand(url, '<YOUR_TOKEN>'))).toBeInTheDocument();
+    // First, how to add it to the Claude apps, which sign in instead of using a token.
+    expect(screen.getByRole('tab', { name: 'Claude app' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByText(/Settings → Connectors → Add custom connector/)).toBeVisible();
+    expect(screen.getByText(/no token needed/)).toBeVisible();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Claude Code' }));
+    expect(screen.getByText(claudeCodeCommand(url))).toBeVisible();
+    expect(screen.getByText(claudeCodeCommand(url, '<YOUR_TOKEN>'))).toBeVisible();
     expect(
       screen.getByText(curlCommand(window.location.origin, '<YOUR_TOKEN>'))
     ).toBeInTheDocument();
@@ -154,6 +197,8 @@ describe('ApiTokensPage', () => {
     // The snippets in the dialog use the new token.
     const url = `${window.location.origin}/api/mcp/`;
     expect(within(done).getByText(claudeCodeCommand(url, SECRET))).toBeInTheDocument();
+    expect(within(done).queryByRole('tab', { name: 'Claude app' })).not.toBeInTheDocument();
+    expect(within(done).queryByText(claudeCodeCommand(url))).not.toBeInTheDocument();
 
     await user.click(within(done).getByRole('button', { name: 'Copy token' }));
     expect(await navigator.clipboard.readText()).toBe(SECRET);
@@ -278,5 +323,74 @@ describe('ApiTokensPage', () => {
       )
     );
     expect(screen.getByRole('listitem', { name: 'Claude on my laptop' })).toBeInTheDocument();
+  });
+});
+
+describe('connected apps', () => {
+  it('lists the apps the user allowed', async () => {
+    vi.mocked(api.connections.list).mockResolvedValue([CLAUDE, VIEWER]);
+    renderPage();
+    const list = await screen.findByRole('list', { name: 'Connected apps' });
+    const claude = within(list).getByRole('listitem', { name: 'Claude' });
+    expect(within(claude).getByText('Full access')).toBeInTheDocument();
+    expect(within(claude).getByText('claude.ai')).toBeInTheDocument();
+    expect(within(claude).getByText('Connected')).toBeInTheDocument();
+
+    const viewer = within(list).getByRole('listitem', { name: 'Network viewer' });
+    expect(within(viewer).getByText('Read only')).toBeInTheDocument();
+    expect(within(viewer).getByText('Never')).toBeInTheDocument();
+  });
+
+  it('says when no app is connected', async () => {
+    renderPage();
+    expect(await screen.findByText(/No apps connected yet/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Connected apps' })).not.toBeInTheDocument();
+  });
+
+  it('shows an error if the apps cannot be loaded', async () => {
+    vi.mocked(api.connections.list).mockRejectedValue(new ApiError(500, null, 'Server down.'));
+    renderPage();
+    expect(await screen.findByText('Server down.')).toBeInTheDocument();
+    // The tokens still load.
+    expect(await screen.findByRole('listitem', { name: 'Claude on my laptop' })).toBeVisible();
+  });
+
+  it('disconnects an app after confirmation', async () => {
+    vi.mocked(api.connections.list).mockResolvedValue([CLAUDE, VIEWER]);
+    vi.mocked(api.connections.revoke).mockResolvedValue(undefined);
+    renderPage();
+    const claude = await screen.findByRole('listitem', { name: 'Claude' });
+
+    await userEvent.click(within(claude).getByRole('button', { name: 'Disconnect “Claude”' }));
+    let confirm = await screen.findByRole('dialog', { name: 'Disconnect “Claude”?' });
+    expect(within(confirm).getByText(/Claude loses access immediately/)).toBeInTheDocument();
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.connections.revoke).not.toHaveBeenCalled();
+
+    await userEvent.click(within(claude).getByRole('button', { name: 'Disconnect “Claude”' }));
+    confirm = await screen.findByRole('dialog', { name: 'Disconnect “Claude”?' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Disconnect' }));
+    expect(api.connections.revoke).toHaveBeenCalledWith(7);
+    await waitFor(() =>
+      expect(screen.queryByRole('listitem', { name: 'Claude' })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('listitem', { name: 'Network viewer' })).toBeInTheDocument();
+  });
+
+  it('keeps the app if disconnecting fails', async () => {
+    vi.mocked(api.connections.list).mockResolvedValue([CLAUDE]);
+    vi.mocked(api.connections.revoke).mockRejectedValue(new ApiError(0, null, 'Cannot reach it.'));
+    renderPage();
+    const claude = await screen.findByRole('listitem', { name: 'Claude' });
+    await userEvent.click(within(claude).getByRole('button', { name: /Disconnect/ }));
+    const confirm = await screen.findByRole('dialog', { name: 'Disconnect “Claude”?' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Disconnect' }));
+    await waitFor(() =>
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({ color: 'red', message: 'Cannot reach it.' })
+      )
+    );
+    expect(screen.getByRole('listitem', { name: 'Claude' })).toBeInTheDocument();
   });
 });

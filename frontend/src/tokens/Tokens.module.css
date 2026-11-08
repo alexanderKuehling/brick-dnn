@@ -60,19 +60,20 @@
   border-radius: var(--mantine-radius-md);
 }
 
-.token {
+/* A token or connected app in a list. */
+.item {
   padding: var(--mantine-spacing-md);
 }
 
-.token + .token {
+.item + .item {
   border-top: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
 }
 
-.tokenTitle {
+.itemTitle {
   min-width: 0;
 }
 
-.revoke {
+.itemAction {
   flex: none;
 }
 

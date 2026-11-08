@@ -9,9 +9,28 @@ export function mcpUrl(apiUrl: string): string {
   return `${apiUrl}/api/mcp/`;
 }
 
-/** Adds the MCP server to Claude Code. */
-export function claudeCodeCommand(url: string, token: string): string {
-  return `claude mcp add --transport http ${SERVER_NAME} ${url} --header "Authorization: Bearer ${token}"`;
+/**
+ * Adds the MCP server to Claude Code. Without a token, Claude Code asks you to sign in in the
+ * browser (OAuth) when you connect it with /mcp.
+ */
+export function claudeCodeCommand(url: string, token?: string): string {
+  const command = `claude mcp add --transport http ${SERVER_NAME} ${url}`;
+  return token ? `${command} --header "Authorization: Bearer ${token}"` : command;
+}
+
+/** Whether `url` is on this computer, where apps that connect from the internet cannot reach it. */
+export function isLocalUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname === '[::1]' ||
+      /^127\.\d+\.\d+\.\d+$/.test(hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** The usual JSON configuration of MCP clients that support remote servers with headers. */
