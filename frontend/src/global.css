@@ -95,6 +95,19 @@ body {
   }
 }
 
+/* Small icon buttons (layer actions, menus, close buttons) are hard to hit with a finger. */
+@media (pointer: coarse) {
+  .mantine-ActionIcon-root {
+    --ai-size-sm: 28px;
+    --ai-size-md: 34px;
+  }
+
+  .mantine-CloseButton-root {
+    --cb-size-sm: 28px;
+    --cb-size-md: 34px;
+  }
+}
+
 /* index.html uses viewport-fit=cover: keep content clear of the notch in landscape. */
 .mantine-AppShell-header,
 .mantine-AppShell-main {

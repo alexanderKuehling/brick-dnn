@@ -16,6 +16,10 @@
   /* Vertical swipes scroll the list, sideways swipes drag the layer out. */
   touch-action: pan-y;
 
+  @media (pointer: coarse) {
+    padding-block: 9px;
+  }
+
   &:hover {
     border-color: var(--item-color);
     background: color-mix(in srgb, var(--item-color) 12%, transparent);
