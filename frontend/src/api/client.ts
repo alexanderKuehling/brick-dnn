@@ -3,6 +3,14 @@ import type { Tokens } from './types';
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 const TOKEN_KEY = 'brickdnn:tokens';
 
+/**
+ * The absolute URL of the API, without a trailing slash: VITE_API_URL if it is set, otherwise
+ * this site (which serves the API under /api/ itself or through a proxy).
+ */
+export function apiBaseUrl(): string {
+  return new URL(BASE_URL || '/', window.location.href).href.replace(/\/+$/, '');
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

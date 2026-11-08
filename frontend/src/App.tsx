@@ -18,6 +18,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { theme } from './theme';
+import { ApiTokensPage } from './tokens/ApiTokensPage';
 
 // The online demo can be hosted under any path (e.g. GitHub Pages), so it keeps the route in
 // the URL hash. It only has the builder: there are no accounts (the Data tab explains that it
@@ -47,6 +48,14 @@ export default function App() {
                         element={
                           <RequireAuth>
                             <ProjectsPage />
+                          </RequireAuth>
+                        }
+                      />
+                      <Route
+                        path="/tokens"
+                        element={
+                          <RequireAuth>
+                            <ApiTokensPage />
                           </RequireAuth>
                         }
                       />
