@@ -16,6 +16,7 @@ import {
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Group,
   Loader,
@@ -91,7 +92,11 @@ function Status({
         style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
         onClick={onShowSummary}
       >
-        Valid · {formatCount(analysis.total_params)} params
+        {/* Phones keep the space for the network name: the check says it is valid. */}
+        <Box component="span" visibleFrom="xs">
+          Valid ·{' '}
+        </Box>
+        {formatCount(analysis.total_params)} params
       </Badge>
     );
   }
