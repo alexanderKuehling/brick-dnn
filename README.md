@@ -318,7 +318,7 @@ cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
 The backend suite builds every example and every layer type, runs the generated code in
 PyTorch and checks that output shapes and parameter counts match the analysis exactly. It also
 trains the generated CSV scripts end to end and runs the training engine on every example
-(demo data, CSV files, image folders, built-in datasets with faked downloads). CI runs everything on Python 3.10–3.13 and builds
+(demo data, CSV files, image folders, built-in datasets with faked downloads). CI runs everything on Python 3.12 and 3.13 and builds
 the Docker images.
 
 ## Roadmap
