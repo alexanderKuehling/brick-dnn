@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import stat
+import subprocess
+import sys
 import time
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +28,7 @@ from brickdnn.training import (
     inspect_csv,
     inspect_image_folder,
     random_info,
+    runner,
     torch_installed,
     torchvision_installed,
 )
@@ -849,3 +854,31 @@ def test_is_stale():
 def test_status_constants():
     assert st.STATUSES == ("starting", "preparing", "running", "completed", "stopped", "failed")
     assert set(st.ACTIVE_STATUSES).isdisjoint(st.TERMINAL_STATUSES)
+
+
+def test_runner_lowers_its_priority_before_training(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(runner, "lower_priority", lambda: calls.append("lower_priority"))
+    monkeypatch.setattr(runner, "run", lambda run_dir: calls.append("run"))
+    assert runner.main([str(tmp_path)]) == 0
+    assert calls == ["lower_priority", "run"]
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="oom_score_adj is Linux only")
+def test_lower_priority():
+    # In its own process: a lowered priority cannot be raised again.
+    code = (
+        "import os; from brickdnn.training import runner; runner.lower_priority(); "
+        "print(os.getpriority(os.PRIO_PROCESS, 0), open('/proc/self/oom_score_adj').read())"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    nice, oom_score_adj = map(int, result.stdout.split())
+    assert nice == min(os.getpriority(os.PRIO_PROCESS, 0) + runner.NICE, 19)
+    assert oom_score_adj == runner.OOM_SCORE_ADJ

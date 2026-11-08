@@ -207,7 +207,8 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 ```
 
 - Every run is a **separate process**. The web server never imports PyTorch and stays
-  responsive; a crash in training cannot take it down.
+  responsive; a crash in training cannot take it down. The process has a lower CPU priority
+  than the web server, and if memory runs out, the system kills the training first (Linux).
 - The model is created by executing the code that **Export .py** produces, so the trained
   weights always match the exported script.
 - Run directories live in `BRICKDNN_DATA_DIR/training/runs/<id>/` (`job.json`, `state.json`,

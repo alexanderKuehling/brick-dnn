@@ -2,11 +2,13 @@
 
 Reads ``RUN_DIR/job.json``, keeps ``RUN_DIR/state.json`` up to date (see state.py) and
 saves ``RUN_DIR/weights.pt``. A ``STOP`` file, SIGTERM or SIGINT stop the run after the
-current batch. The process always ends with a terminal status in ``state.json``.
+current batch. The process always ends with a terminal status in ``state.json``. It runs
+with a lower priority than the web server that started it (see :func:`lower_priority`).
 """
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import os
 import signal
@@ -30,6 +32,10 @@ from .state import (
 
 # state.json is written at most this often for progress updates (seconds).
 WRITE_INTERVAL = 0.5
+# The web server goes first: the training gets a lower CPU priority (nice) and is the first
+# process the kernel kills when memory runs out (oom_score_adj, 1000 is the most).
+NICE = 10
+OOM_SCORE_ADJ = 1000
 
 
 class StateReporter(Reporter):
@@ -241,6 +247,20 @@ def run(run_dir: str | Path) -> dict[str, Any]:
     return reporter.snapshot()
 
 
+def lower_priority() -> None:
+    """Make way for the web server, which keeps the normal priority.
+
+    The API gets the CPU first while a training runs, and if the memory runs out (e.g. the
+    memory limit of the Docker container), the kernel kills the training, not the API. Call
+    it before any thread starts: threads inherit the priority. Every process may lower its
+    own priority; where a setting does not exist (Windows, macOS), it is skipped.
+    """
+    with contextlib.suppress(AttributeError, OSError):  # no os.nice on Windows
+        os.nice(NICE)
+    with contextlib.suppress(OSError):  # Linux only
+        Path("/proc/self/oom_score_adj").write_text(f"{OOM_SCORE_ADJ}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 1:
@@ -250,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     if not run_dir.is_dir():
         print(f"Run directory not found: {run_dir}", file=sys.stderr)
         return 2
+    lower_priority()
     run(run_dir)
     return 0
 
