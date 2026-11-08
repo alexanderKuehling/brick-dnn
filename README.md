@@ -9,6 +9,8 @@
 </p>
 
 <p align="center">
+  <a href="https://brickdnn.com"><b>▶LIVE VERSION</b></a>
+  &nbsp;·&nbsp;
   <a href="https://huggingface.co/spaces/alexKlg/brick-dnn"><b>▶ Try the online demo</b></a>
   &nbsp;·&nbsp;
   <a href="#quick-start">Run it locally</a>
