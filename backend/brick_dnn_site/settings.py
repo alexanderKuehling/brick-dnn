@@ -178,6 +178,8 @@ DATA_MAX_SAMPLE_ROWS = 20000
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        # Personal API tokens (bdnn_…) first; other bearer tokens are JWT logins.
+        "brick_dnn_core.api_tokens.ApiTokenAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
@@ -199,6 +201,8 @@ REST_FRAMEWORK = {
         "uploads": os.environ.get("BRICKDNN_UPLOAD_RATE", "60/hour"),
         # Previews of data preparations (one per change in the Data tab).
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
+        # Requests to the MCP server (one per tool call of an AI assistant).
+        "mcp": os.environ.get("BRICKDNN_MCP_RATE", "600/hour"),
     },
 }
 

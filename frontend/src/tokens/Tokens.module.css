@@ -1,0 +1,102 @@
+.section {
+  margin-top: calc(var(--mantine-spacing-xl) * 1.5);
+}
+
+/* A command, URL or configuration with a copy button. */
+.snippet {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-xs);
+  padding: 4px 4px 4px var(--mantine-spacing-sm);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  /* Centres a single line on the copy button (28px). */
+  padding: 4px 0;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  /* Wrap long commands instead of making the page scroll sideways on phones. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The new token, shown once. */
+.secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  background: light-dark(var(--mantine-color-brick-0), var(--mantine-color-dark-6));
+  border: 2px solid var(--mantine-color-brick-filled);
+  border-radius: var(--mantine-radius-md);
+}
+
+.secretValue {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.secretCopy {
+  flex: none;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+}
+
+.token {
+  padding: var(--mantine-spacing-md);
+}
+
+.token + .token {
+  border-top: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+}
+
+.tokenTitle {
+  min-width: 0;
+}
+
+.revoke {
+  flex: none;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-xl);
+  margin: var(--mantine-spacing-sm) 0 0;
+
+  dt {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--mantine-font-size-sm);
+  }
+
+  dd[data-expired] {
+    color: var(--mantine-color-red-text);
+  }
+}

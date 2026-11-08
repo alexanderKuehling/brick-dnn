@@ -108,6 +108,32 @@ export interface Tokens {
   refresh: string;
 }
 
+/** Days until a new API token expires; null means it never does. */
+export type ApiTokenExpiry = 7 | 30 | 90 | 365;
+
+/** A personal API token for AI assistants (MCP) and scripts. The secret is never listed. */
+export interface ApiToken {
+  id: number;
+  name: string;
+  /** The start of the token (e.g. "bdnn_Ab3dEf9h"), to recognise it. */
+  prefix: string;
+  read_only: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+}
+
+export interface ApiTokenInput {
+  name: string;
+  read_only?: boolean;
+  expires_in_days?: ApiTokenExpiry | null;
+}
+
+/** The answer to creating a token: the only time the server sends the token itself. */
+export interface NewApiToken extends ApiToken {
+  token: string;
+}
+
 export interface Project {
   id: number;
   name: string;

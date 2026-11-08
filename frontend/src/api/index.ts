@@ -3,6 +3,8 @@ import { request, requestFile } from './client';
 import { createDemoApi } from './demoApi';
 import type {
   Analysis,
+  ApiToken,
+  ApiTokenInput,
   Compatibility,
   DataPrep,
   DataPrepInput,
@@ -16,6 +18,7 @@ import type {
   GraphDocument,
   ImportOptions,
   LayerCatalog,
+  NewApiToken,
   PrepDownloadFormat,
   PreviewRequest,
   PreviewResult,
@@ -30,7 +33,14 @@ import type {
 } from './types';
 
 export * from './types';
-export { ApiError, getTokens, onTokensChange, setTokens, type FileDownload } from './client';
+export {
+  ApiError,
+  apiBaseUrl,
+  getTokens,
+  onTokensChange,
+  setTokens,
+  type FileDownload,
+} from './client';
 
 type ProjectInput = Pick<Project, 'name' | 'graph'> & Partial<Pick<Project, 'description'>>;
 
@@ -52,6 +62,17 @@ const serverApi = {
   logout: (refresh: string) =>
     request<void>('/api/auth/logout/', { method: 'POST', body: { refresh } }),
   me: () => request<User>('/api/auth/me/', { auth: true }),
+
+  /** Personal API tokens. Only the normal login can manage them, not the tokens themselves. */
+  apiTokens: {
+    /** Newest first. */
+    list: () => request<ApiToken[]>('/api/auth/api-tokens/', { auth: true }),
+    create: (data: ApiTokenInput) =>
+      request<NewApiToken>('/api/auth/api-tokens/', { method: 'POST', body: data, auth: true }),
+    /** Revoked tokens stop working immediately. */
+    revoke: (id: number) =>
+      request<void>(`/api/auth/api-tokens/${id}/`, { method: 'DELETE', auth: true }),
+  },
 
   projects: {
     list: () => request<Project[]>('/api/projects/', { auth: true }),

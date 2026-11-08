@@ -3,6 +3,11 @@
 ## 1.1.0 (unreleased)
 
 ### Added
+- **API tokens and an MCP server.** Create personal API tokens (full access or read only,
+  optional expiry, revocable, shown once and stored only as a hash) on the new *API tokens*
+  page, and use them for scripts or to connect AI assistants: `/api/mcp/` is a remote MCP
+  server whose tools list layers and examples, analyse networks, generate PyTorch code,
+  save networks and start, follow and stop trainings as the token's owner. See `docs/mcp.md`.
 - **PostgreSQL and Supabase.** Set `DATABASE_URL=postgresql://…` to keep accounts, networks,
   datasets and runs in PostgreSQL instead of the SQLite file (default). Supabase connection
   strings work as copied from the dashboard: encrypted connections, transaction pooler

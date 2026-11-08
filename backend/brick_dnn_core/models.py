@@ -165,3 +165,30 @@ class TrainingRun(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner}, {self.status})"
+
+
+class ApiToken(models.Model):
+    """A personal API token: lets scripts and AI assistants (MCP) act as its owner.
+
+    Only a SHA-256 hash of the token is stored; the token itself is shown once, when it is
+    created (see brick_dnn_core.api_tokens).
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_tokens"
+    )
+    name = models.CharField(max_length=100)
+    # The start of the token ("bdnn_" and 8 characters), so users can recognise it.
+    prefix = models.CharField(max_length=20)
+    key_hash = models.CharField(max_length=64, unique=True)
+    # Read-only tokens can look at everything but change nothing.
+    read_only = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.owner}, {self.prefix}…)"

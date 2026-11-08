@@ -1,6 +1,7 @@
 import { api } from '.';
 import { afterEach, beforeEach, vi } from 'vitest';
 import {
+  apiBaseUrl,
   ApiError,
   dispositionFilename,
   errorMessage,
@@ -29,6 +30,12 @@ describe('errorMessage', () => {
     expect(errorMessage(null, 500)).toBe('Request failed (HTTP 500).');
     expect(errorMessage(null, 429)).toContain('Too many requests');
     expect(errorMessage(null, 413)).toContain('too large');
+  });
+});
+
+describe('apiBaseUrl', () => {
+  it('is this site if VITE_API_URL is not set', () => {
+    expect(apiBaseUrl()).toBe(window.location.origin);
   });
 });
 

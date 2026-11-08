@@ -2,6 +2,7 @@ import {
   IconBrandGithub,
   IconChevronDown,
   IconFolder,
+  IconKey,
   IconLogout,
   IconTable,
 } from '@tabler/icons-react';
@@ -120,6 +121,9 @@ export function AppHeader() {
               </Menu.Item>
               <Menu.Item leftSection={<IconTable size={16} />} onClick={() => navigate('/data')}>
                 Data preparation
+              </Menu.Item>
+              <Menu.Item leftSection={<IconKey size={16} />} onClick={() => navigate('/tokens')}>
+                API tokens
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item
