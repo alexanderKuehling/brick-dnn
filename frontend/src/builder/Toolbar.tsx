@@ -140,7 +140,7 @@ export function Toolbar(props: ToolbarProps) {
           w={{ base: 150, sm: 210 }}
           // On phones the name takes the free width of its row.
           flex={{ base: '1 1 150px', sm: 'none' }}
-          miw={110}
+          miw={80}
           maw={{ base: 320, sm: 'none' }}
           styles={{ input: { fontWeight: 600 } }}
         />

@@ -35,7 +35,7 @@ export function AppHeader() {
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
 
   return (
-    <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+    <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
       <Group gap="lg" wrap="nowrap">
         <UnstyledButton component={Link} to="/" aria-label="Brick DNN home">
           <Logo />
