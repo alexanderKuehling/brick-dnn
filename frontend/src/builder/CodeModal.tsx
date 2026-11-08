@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { IconAlertTriangle, IconDownload } from '@tabler/icons-react';
 import {
   Alert,
+  Box,
   Button,
   Center,
   Group,
@@ -11,8 +12,9 @@ import {
   Switch,
   Text,
   TextInput,
+  useMantineTheme,
 } from '@mantine/core';
-import { useDebouncedValue } from '@mantine/hooks';
+import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
 import { api, type GenerateOptions, type GraphDocument } from '@/api';
 import { CodeView } from './CodeView';
 import { downloadText } from './download';
@@ -39,6 +41,11 @@ export default function CodeModal({
   const key = useMemo(() => semanticKey(doc), [doc]);
   const [code, setCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const theme = useMantineTheme();
+  // Phones (also in landscape) get the whole screen, with the code filling the free height.
+  const fullScreen = Boolean(
+    useMediaQuery(`(max-width: ${theme.breakpoints.sm}), (max-height: 500px)`)
+  );
 
   useEffect(() => {
     if (!opened) {
@@ -61,7 +68,21 @@ export default function CodeModal({
   }, [opened, key, debounced, filename]);
 
   return (
-    <Modal opened={opened} onClose={onClose} title="PyTorch code" size="xl">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="PyTorch code"
+      size="xl"
+      fullScreen={fullScreen}
+      styles={
+        fullScreen
+          ? {
+              content: { display: 'flex', flexDirection: 'column' },
+              body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+            }
+          : undefined
+      }
+    >
       <Group align="flex-end" mb="md" gap="md">
         <TextInput
           label="Class name"
@@ -102,11 +123,16 @@ export default function CodeModal({
           <Loader />
         </Center>
       )}
-      {code && (
-        <ScrollArea.Autosize mah="60vh" type="auto">
-          <CodeView code={code} />
-        </ScrollArea.Autosize>
-      )}
+      {code &&
+        (fullScreen ? (
+          <ScrollArea type="auto" style={{ flex: 1, minHeight: 120 }}>
+            <CodeView code={code} />
+          </ScrollArea>
+        ) : (
+          <ScrollArea.Autosize mah="60vh" type="auto">
+            <CodeView code={code} />
+          </ScrollArea.Autosize>
+        ))}
 
       <Group justify="flex-end" mt="md">
         <Button variant="default" onClick={onClose}>
@@ -117,7 +143,14 @@ export default function CodeModal({
           disabled={!code}
           onClick={() => code && downloadText(`${filename}.py`, code, 'text/x-python')}
         >
-          Download {filename}.py
+          {/* One inline span: the button label is a flex box, which would drop the space. */}
+          <span>
+            Download{' '}
+            <Box component="span" visibleFrom="xs">
+              {filename}
+            </Box>
+            .py
+          </span>
         </Button>
       </Group>
     </Modal>

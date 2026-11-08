@@ -464,7 +464,8 @@ function SearchRow({
   children: React.ReactNode;
 }) {
   return (
-    <Group align="flex-start" gap="sm" wrap="nowrap">
+    // On phones the values move below the checkbox, where they have the full width.
+    <Group align="flex-start" gap="sm" wrap="wrap">
       <Checkbox
         label={label}
         aria-label={`Search ${label.toLowerCase()}`}
@@ -474,7 +475,7 @@ function SearchRow({
         mt={7}
         style={{ flexShrink: 0 }}
       />
-      <Box style={{ flex: 1, minWidth: 0 }}>
+      <Box style={{ flex: 1, minWidth: 220 }}>
         {checked ? (
           children
         ) : (

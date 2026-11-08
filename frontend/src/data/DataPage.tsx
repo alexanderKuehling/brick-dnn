@@ -1049,6 +1049,7 @@ function PrepContent(props: PrepContentProps) {
       onChange={(value) => value && onViewChange(value as View)}
       keepMounted={false}
       className={classes.tabs}
+      classNames={{ tab: classes.tab }}
     >
       <div className={classes.tabBar}>
         <Tabs.List className={classes.tabList}>
