@@ -207,7 +207,8 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 ```
 
 - Every run is a **separate process**. The web server never imports PyTorch and stays
-  responsive; a crash in training cannot take it down.
+  responsive; a crash in training cannot take it down. The process has a lower CPU priority
+  than the web server, and if memory runs out, the system kills the training first (Linux).
 - The model is created by executing the code that **Export .py** produces, so the trained
   weights always match the exported script.
 - Run directories live in `BRICKDNN_DATA_DIR/training/runs/<id>/` (`job.json`, `state.json`,
@@ -239,6 +240,8 @@ training; disable registration or training if that is not wanted.
   Docker image with `BRICKDNN_INSTALL_TORCH=true`) and restart the backend.
 - **"Could not download MNIST"**: the server needs internet access once per dataset.
 - **Loss becomes NaN**: lower the learning rate. In a search, only that trial fails.
-- **Out of memory**: lower the batch size, the image size or the network size.
+- **Out of memory**: lower the batch size, the image size or the network size. On a server
+  with limits ([deploy/server](../deploy/server/README.md#cpu-and-memory-the-site-comes-first))
+  such a run often only says "The training process stopped unexpectedly".
 - **Something else failed**: the last lines of `output.log` in the run directory contain the
   full error.

@@ -39,7 +39,7 @@ ufw allow 80/tcp
 ufw allow 443
 ufw --force enable
 
-echo "== Swap (for building images and training on 4 GB RAM)"
+echo "== Swap (for building images on 4 GB RAM; the backend itself does not swap)"
 if [ -z "$(swapon --show)" ]; then
   fallocate -l 4G /swapfile
   chmod 600 /swapfile
