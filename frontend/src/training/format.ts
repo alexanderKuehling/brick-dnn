@@ -121,6 +121,17 @@ export function datasetDetails(dataset: Dataset): string {
   return parts.filter(Boolean).join(' · ');
 }
 
+/** Rows of a predefined split (datasets from the Data tab): "840 / 180 / 180". */
+export function formatSplit(counts: number[]): string {
+  return counts.map((count) => count.toLocaleString('en-US')).join(' / ');
+}
+
+/** Shares of a predefined split in percent, rounded to one decimal: [70, 15, 15]. */
+export function splitPercents(counts: number[]): number[] {
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  return counts.map((count) => (total > 0 ? Math.round((count / total) * 1000) / 10 : 0));
+}
+
 // --------------------------------------------------------------------------
 // Hyperparameter search
 // --------------------------------------------------------------------------

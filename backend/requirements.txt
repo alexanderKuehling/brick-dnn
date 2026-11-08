@@ -6,3 +6,8 @@ djangorestframework-simplejwt>=5.3,<6
 django-cors-headers>=4.4,<5
 whitenoise>=6.12.0,<7
 gunicorn>=26.2.0
+# PostgreSQL driver, used if DATABASE_URL is set (e.g. Supabase), see docs/database.md.
+psycopg[binary]>=3.2,<4
+# Data preparation (the Data tab): reading, cleaning and analysing CSV files.
+numpy>=1.24
+pandas>=2.2,<3

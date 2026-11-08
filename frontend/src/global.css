@@ -14,3 +14,51 @@ body {
   --xy-background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
   --xy-minimap-background-color: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
 }
+
+/*
+ * Chart colours, one job each (see components/charts/colors.ts, which mirrors these values
+ * for canvas drawing and continuous scales). Light and dark steps are chosen separately and
+ * validated against the chart surface of each mode (#fff / #242424).
+ * Declared on body, not :root: browsers resolve light-dark() in a custom property where it is
+ * declared, and on :root Mantine's `color-scheme: var(--mantine-color-scheme)` is not known
+ * yet there, so :root would always get the light values.
+ */
+body {
+  /* Categorical (identity), assigned in this fixed order and never cycled. Adjacent pairs
+     stay apart under protanopia/deuteranopia (ΔE ≥ 8.4); scatter plots use only the first
+     three (all pairs ΔE ≥ 9.2). Series 1 and 2 are the LineChart colours. Aqua, yellow and
+     magenta are below 3:1 on white, so charts always ship a legend and a table view. */
+  --chart-series-1: light-dark(#2a78d6, #3987e5);
+  --chart-series-2: light-dark(#eb6834, #d95926);
+  --chart-series-3: light-dark(#1baf7a, #199e70);
+  --chart-series-4: light-dark(#eda100, #c98500);
+  --chart-series-5: light-dark(#e87ba4, #d55181);
+  --chart-series-6: light-dark(#008300, #008300);
+  --chart-series-7: light-dark(#6250d6, #9085e9);
+  --chart-series-8: light-dark(#e34948, #e66767);
+  /* De-emphasis: "Other", "Before", context marks. */
+  --chart-other: #898781;
+
+  /* Sequential (magnitude): one blue hue, low → high. Marks start at a step that still
+     clears 2:1 on the surface; fills (heat cells) may fade into the surface. */
+  --chart-sequential-low: light-dark(#86b6ef, #1c5cab);
+  --chart-sequential-high: light-dark(#0d366b, #cde2fb);
+  --chart-sequential-fill-low: light-dark(#cde2fb, #0d366b);
+
+  /* Diverging (polarity, e.g. correlations): red ← neutral gray → blue, equal arms. */
+  --chart-diverging-negative: light-dark(#8e2526, #de6f69);
+  --chart-diverging-midpoint: light-dark(#f0efec, #383835);
+  --chart-diverging-positive: light-dark(#184f95, #5598e7);
+
+  /* Status (reserved meaning, always with an icon and a label). */
+  --chart-status-good: #0ca30c;
+  --chart-status-warning: #fab219;
+  --chart-status-serious: #ec835a;
+  --chart-status-critical: #d03b3b;
+
+  /* Chrome. */
+  --chart-surface: var(--mantine-color-body);
+  --chart-grid: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  --chart-axis: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+  --chart-track: light-dark(#e9ecef, #3b3b3b);
+}

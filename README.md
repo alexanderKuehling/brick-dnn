@@ -9,6 +9,8 @@
 </p>
 
 <p align="center">
+  <a href="https://brickdnn.com"><b>▶LIVE VERSION</b></a>
+  &nbsp;·&nbsp;
   <a href="https://huggingface.co/spaces/alexKlg/brick-dnn"><b>▶ Try the online demo</b></a>
   &nbsp;·&nbsp;
   <a href="#quick-start">Run it locally</a>
@@ -49,6 +51,13 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   let a **hyperparameter search** find a good learning rate, batch size or optimizer, and
   download the trained weights together with the matching script. See
   [docs/training.md](docs/training.md).
+- **Data preparation and analysis** in the *Data* tab: import messy CSV files, join and append
+  tables, fill missing values (median, KNN …), detect and clip outliers (IQR, z-score,
+  quantiles), scale, transform, bin and encode columns, split dates, balance classes, and see
+  every step's effect in charts: distributions, box plots, missing values, correlation
+  heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
+  and the result becomes a training dataset with a fixed train/validation/test split, a
+  cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
@@ -93,6 +102,9 @@ Open <http://localhost:8080>. Data (accounts, saved networks, training runs) liv
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
+
+On a public server (HTTPS with Caddy, automatic deploys from GitHub Actions after every
+push to `main`): [deploy/server/README.md](deploy/server/README.md).
 
 ### For development
 
@@ -241,7 +253,8 @@ backend/   Django REST API: accounts (JWT), saved networks, datasets, training r
    │          starts one process per training run, reads its progress from state.json
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
-   └── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
+   ├── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
+   └── brickdnn/data/       data preparation with pandas: CSV import, steps, profiles, export
 ```
 
 The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
@@ -251,7 +264,8 @@ no hard-coded knowledge of layers or their parameters.
 brick-dnn/
 ├── backend/
 │   ├── brickdnn/            code generator (standalone package + CLI)
-│   │   └── training/        training engine, runner process, `brickdnn train`
+│   │   ├── training/        training engine, runner process, `brickdnn train`
+│   │   └── data/            data preparation: import, steps, analysis, export
 │   ├── brick_dnn_core/      Django app: API views, Project model
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
@@ -259,16 +273,18 @@ brick-dnn/
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
 │       ├── training/        training panel: data, settings, live progress, history
+│       ├── data/            Data tab: pipeline editor, data table, analysis views
 │       ├── api/             typed API client
 │       ├── auth/            login state
 │       └── pages/           login, sign-up, saved networks
-├── docs/                    graph format, REST API, training, contributor guide
+├── docs/                    graph format, REST API, training, data, database, contributors
 └── docker-compose.yml
 ```
 
 ## Configuration
 
-All settings are environment variables (see [`.env.example`](.env.example)):
+All settings are environment variables, or lines in a file `.env` in the repository root
+(see [`.env.example`](.env.example)):
 
 | Variable                       | Default                    | Meaning                                              |
 | ------------------------------ | -------------------------- | ---------------------------------------------------- |
@@ -277,7 +293,8 @@ All settings are environment variables (see [`.env.example`](.env.example)):
 | `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1,[::1]` | Host names the server answers to                    |
 | `DJANGO_CSRF_TRUSTED_ORIGINS`  | –                          | Needed for the Django admin behind a proxy           |
 | `CORS_ALLOWED_ORIGINS`         | `http://localhost:5173,…`  | Only if UI and API run on different origins          |
-| `BRICKDNN_DATA_DIR`            | `backend/data` (`/data` in Docker) | SQLite database and generated secret key     |
+| `BRICKDNN_DATA_DIR`            | `backend/data` (`/data` in Docker) | Files (datasets, runs), SQLite database, secret key |
+| `DATABASE_URL`                 | – (SQLite)                 | PostgreSQL, e.g. Supabase: [docs/database.md](docs/database.md) |
 | `BRICKDNN_ALLOW_REGISTRATION`  | `true`                     | Set to `false` for a private instance                |
 | `BRICKDNN_NUM_PROXIES`         | `0` (`1` in Docker)        | Reverse proxies in front of Django (for rate limits) |
 | `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
@@ -287,7 +304,8 @@ All settings are environment variables (see [`.env.example`](.env.example)):
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
-The REST API is documented in [docs/api.md](docs/api.md).
+The REST API is documented in [docs/api.md](docs/api.md), the database setup (SQLite,
+PostgreSQL, Supabase) in [docs/database.md](docs/database.md).
 
 ## Tests
 

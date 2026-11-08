@@ -15,7 +15,7 @@ import {
   type Edge,
   type XYPosition,
 } from '@xyflow/react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -147,6 +147,31 @@ function Builder() {
   const { analysis, loading: analyzing, error: analysisError } = useAnalysis(doc);
   const training = useTraining(Boolean(user));
   const [trainingLoaded, setTrainingLoaded] = useState(false);
+  const location = useLocation();
+  // "Train with this data" in the Data tab opens the training panel here, with the exported
+  // dataset selected (also when the builder is open already, e.g. from a notification). The
+  // state is cleared, so going back or reloading does not open it again.
+  const { setSource: setTrainingSource, reloadDatasets } = training.data;
+  useEffect(() => {
+    const state = location.state as { openTraining?: boolean; dataset?: unknown } | null;
+    if (!state?.openTraining) {
+      return;
+    }
+    const { dataset } = state;
+    if (typeof dataset === 'number') {
+      setTrainingSource((current) => ({ ...current, tab: 'upload', upload: dataset }));
+      reloadDatasets();
+    }
+    training.open();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [
+    location.state,
+    location.pathname,
+    training.open,
+    setTrainingSource,
+    reloadDatasets,
+    navigate,
+  ]);
   useEffect(() => {
     if (training.opened) {
       setTrainingLoaded(true);

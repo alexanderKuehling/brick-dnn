@@ -2,13 +2,15 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
-from . import views
+from . import data_views, views
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
 router.register("projects", views.ProjectViewSet, basename="project")
 router.register("training/datasets", views.DatasetViewSet, basename="training-dataset")
 router.register("training/runs", views.TrainingRunViewSet, basename="training-run")
+router.register("data/sources", data_views.DataSourceViewSet, basename="data-source")
+router.register("data/preps", data_views.DataPrepViewSet, basename="data-prep")
 
 urlpatterns = [
     path("", views.ApiRoot.as_view(), name="api-root"),
@@ -24,5 +26,7 @@ urlpatterns = [
     path("auth/me/", views.me, name="me"),
     path("training/", views.training_info, name="training"),
     path("training/check/", views.training_check, name="training-check"),
+    path("data/", data_views.data_status, name="data"),
+    path("data/steps/", data_views.data_steps, name="data-steps"),
     path("", include(router.urls)),
 ]

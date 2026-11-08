@@ -197,7 +197,7 @@ class DatasetViewSet(
     throttle_scope = "uploads"
 
     def get_queryset(self):
-        return Dataset.objects.filter(owner=self.request.user)
+        return Dataset.objects.filter(owner=self.request.user).select_related("prepared_from")
 
     def get_throttles(self):
         throttles = super().get_throttles()
@@ -355,6 +355,10 @@ class ApiRoot(APIView):
                     "training_check": f"{base}training/check/",
                     "training_datasets": f"{base}training/datasets/",
                     "training_runs": f"{base}training/runs/",
+                    "data": f"{base}data/",
+                    "data_steps": f"{base}data/steps/",
+                    "data_sources": f"{base}data/sources/",
+                    "data_preps": f"{base}data/preps/",
                 },
             }
         )

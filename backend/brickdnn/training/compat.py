@@ -194,6 +194,22 @@ def _check_classes(
     return k
 
 
+def _shown(names: list[str], limit: int = 6) -> str:
+    return ", ".join(names[:limit]) + (" …" if len(names) > limit else "")
+
+
+def _predefined_split_note(counts: list[int]) -> str:
+    train, val, test = [*counts, 0, 0, 0][:3]
+    if test:
+        parts = f"{train:,} training, {val:,} validation and {test:,} test rows"
+    else:
+        parts = f"{train:,} training and {val:,} validation rows, no test set"
+    return (
+        f"Uses the split of the data preparation ({parts}); the validation and test split "
+        "settings are ignored."
+    )
+
+
 def _check_csv(
     result: Compatibility,
     info: DatasetInfo,
@@ -219,6 +235,10 @@ def _check_csv(
     k = out_shape[0]
     target = info.columns[-1] if info.columns else "target"
     rows = _count(info.num_samples, "row")
+    # Made in the Data tab: class targets are written as indices, `class_names` are the labels.
+    prepared = info.predefined_split is not None
+    if prepared:
+        result.warnings.append(_predefined_split_note(info.predefined_split or []))
     if k == 1:
         if info.target_kind == "text":
             classes = info.num_classes or 0
@@ -227,7 +247,14 @@ def _check_csv(
                 f"is a classification task: the last layer needs {classes} outputs, one per class."
             )
             return
-        if info.target_kind == "integer" and info.class_names and len(info.class_names) <= 10:
+        if prepared and info.target_kind == "integer" and info.class_names:
+            result.warnings.append(
+                f"The target column '{target}' holds {len(info.class_names)} classes "
+                f"({_shown(info.class_names)}). With 1 output the network is trained as a "
+                f"regression. For classification, give the last layer {len(info.class_names)} "
+                "outputs instead."
+            )
+        elif info.target_kind == "integer" and info.class_names and len(info.class_names) <= 10:
             result.warnings.append(
                 f"The target column '{target}' only contains the whole numbers "
                 f"{', '.join(info.class_names)}. With 1 output the network is trained as a "
@@ -260,6 +287,10 @@ def _check_csv(
             return
         class_names = [str(i) for i in range(k)]
         notes = [f"The target column holds the class index 0..{k - 1}."]
+        if prepared and info.class_names and len(info.class_names) <= k:
+            class_names = list(info.class_names)
+            class_names += [f"class {i}" for i in range(len(class_names), k)]  # unused outputs
+            notes = [f"Classes in index order: {_shown(info.class_names)}."]
     else:
         class_names = list(info.class_names or [])
         if _check_classes(result, out_shape, len(class_names), f"the column '{target}'") is None:

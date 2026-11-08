@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
-from .models import Dataset, Project, TrainingRun
+from .models import DataPrep, Dataset, DataSource, Project, TrainingRun
 
 User = get_user_model()
 
@@ -68,10 +68,17 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class DatasetSerializer(serializers.ModelSerializer):
+    prepared_from = serializers.SerializerMethodField()
+
     class Meta:
         model = Dataset
-        fields = ["id", "name", "kind", "size_bytes", "created_at", "info"]
+        fields = ["id", "name", "kind", "size_bytes", "created_at", "info", "prepared_from"]
         read_only_fields = fields
+
+    def get_prepared_from(self, obj: Dataset) -> dict | None:
+        """The data preparation (Data tab) the dataset was made from: ``{id, name}``."""
+        prep = obj.prepared_from
+        return {"id": prep.pk, "name": prep.name} if prep is not None else None
 
 
 class RunSummarySerializer(serializers.ModelSerializer):
@@ -125,3 +132,108 @@ class RunDetailSerializer(RunSummarySerializer):
         from .training_service import state_of
 
         return state_of(obj)
+
+
+# --------------------------------------------------------------------------- #
+# Data preparation
+# --------------------------------------------------------------------------- #
+
+
+class DataSourceSerializer(serializers.ModelSerializer):
+    """An imported CSV file. Only the name can be changed."""
+
+    name = serializers.CharField(max_length=120)
+
+    class Meta:
+        model = DataSource
+        fields = [
+            "id",
+            "name",
+            "filename",
+            "size_bytes",
+            "n_rows",
+            "n_columns",
+            "columns",
+            "import_options",
+            "report",
+            "created_at",
+        ]
+        read_only_fields = [f for f in fields if f != "name"]
+
+
+class PrepDatasetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dataset
+        fields = ["id", "name", "created_at"]
+        read_only_fields = fields
+
+
+class DataPrepSerializer(serializers.ModelSerializer):
+    """A preparation. ``steps`` and ``settings`` are checked with brickdnn.data.pipeline;
+    the source must belong to the requesting user."""
+
+    name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    source = serializers.PrimaryKeyRelatedField(
+        queryset=DataSource.objects.none(),
+        error_messages={
+            "does_not_exist": "This data source does not exist (any more).",
+            "incorrect_type": "Choose one of your data sources.",
+        },
+    )
+    source_name = serializers.CharField(source="source.name", read_only=True)
+    steps = serializers.JSONField(required=False)
+    settings = serializers.JSONField(required=False)
+    # Training datasets made from this preparation, newest first.
+    datasets = PrepDatasetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DataPrep
+        fields = [
+            "id",
+            "name",
+            "source",
+            "source_name",
+            "steps",
+            "settings",
+            "datasets",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "source_name", "datasets", "created_at", "updated_at"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            fields["source"].queryset = DataSource.objects.filter(owner=user)
+        return fields
+
+    def validate_steps(self, value):
+        from . import data_service
+
+        try:
+            return data_service.clean_steps(value)
+        except data_service.DataInputError as exc:
+            raise serializers.ValidationError(str(exc)) from None
+
+    def validate_settings(self, value):
+        from . import data_service
+
+        try:
+            return data_service.clean_settings(value)
+        except data_service.DataInputError as exc:
+            raise serializers.ValidationError(str(exc)) from None
+
+    def validate(self, attrs):
+        if self.instance is None:
+            attrs.setdefault("steps", [])
+            if "settings" not in attrs:
+                attrs["settings"] = self.validate_settings({})
+        if "name" in attrs or self.instance is None:
+            name = (attrs.get("name") or "").strip()
+            if not name:
+                source = attrs.get("source") or getattr(self.instance, "source", None)
+                name = source.name if source is not None else "Data preparation"
+            attrs["name"] = name[:120]
+        return attrs
