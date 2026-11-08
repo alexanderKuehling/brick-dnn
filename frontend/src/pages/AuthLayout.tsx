@@ -5,8 +5,8 @@ export function AuthLayout({
   subtitle,
   children,
 }: {
-  title: string;
-  subtitle: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -14,9 +14,11 @@ export function AuthLayout({
       <Title ta="center" order={2}>
         {title}
       </Title>
-      <Text c="dimmed" size="sm" ta="center" mt={6}>
-        {subtitle}
-      </Text>
+      {subtitle && (
+        <Text c="dimmed" size="sm" ta="center" mt={6}>
+          {subtitle}
+        </Text>
+      )}
       <Paper withBorder shadow="sm" p="xl" mt="xl" radius="md">
         {children}
       </Paper>

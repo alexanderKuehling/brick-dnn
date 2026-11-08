@@ -19,6 +19,9 @@ import type {
   ImportOptions,
   LayerCatalog,
   NewApiToken,
+  OAuthConnection,
+  OAuthDecision,
+  OAuthRequest,
   PrepDownloadFormat,
   PreviewRequest,
   PreviewResult,
@@ -72,6 +75,33 @@ const serverApi = {
     /** Revoked tokens stop working immediately. */
     revoke: (id: number) =>
       request<void>(`/api/auth/api-tokens/${id}/`, { method: 'DELETE', auth: true }),
+  },
+
+  /**
+   * Signing in apps (OAuth authorization code flow) on the page /oauth/authorize. `query` is
+   * the query string of that page without the "?", passed on unchanged. A rejected request
+   * fails with HTTP 400 and an OAuthRequestError as `data`.
+   */
+  oauth: {
+    /** Checks the request and says which app asks for what. */
+    validate: (query: string) =>
+      request<OAuthRequest>(`/api/oauth/authorize/${query ? `?${query}` : ''}`, { auth: true }),
+    /** Allows (with or without changes) or denies the request. */
+    decide: (query: string, approve: boolean, allowWrite: boolean) =>
+      request<OAuthDecision>('/api/oauth/authorize/', {
+        method: 'POST',
+        body: { query, approve, allow_write: allowWrite },
+        auth: true,
+      }),
+  },
+
+  /** Apps the user allowed through OAuth (see `oauth`). */
+  connections: {
+    /** Newest first. */
+    list: () => request<OAuthConnection[]>('/api/auth/connections/', { auth: true }),
+    /** The app loses access immediately (its tokens are revoked). */
+    revoke: (id: number) =>
+      request<void>(`/api/auth/connections/${id}/`, { method: 'DELETE', auth: true }),
   },
 
   projects: {

@@ -1,0 +1,5 @@
+/* App names and hosts come from the app itself and can be long words: wrap them anywhere, so
+   that the card never gets wider than a phone screen. */
+.wrap {
+  overflow-wrap: anywhere;
+}
