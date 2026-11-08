@@ -19,8 +19,11 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import training_service as training
-from .models import Dataset, Project, TrainingRun
+from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
+from .models import ApiToken, Dataset, Project, TrainingRun
 from .serializers import (
+    ApiTokenCreateSerializer,
+    ApiTokenSerializer,
     DatasetSerializer,
     ProjectSerializer,
     RegisterSerializer,
@@ -109,6 +112,37 @@ class RegisterView(APIView):
 @permission_classes([permissions.IsAuthenticated])
 def me(request: Request) -> Response:
     return Response(UserSerializer(request.user).data)
+
+
+class ApiTokenViewSet(
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Personal API tokens of the logged-in user (for scripts and the MCP server).
+
+    Only a website login can manage them, not an API token. The token itself is returned
+    once, by ``create``; deleting a token revokes it at once.
+    """
+
+    serializer_class = ApiTokenSerializer
+    permission_classes = [IsLoggedInUser]
+
+    def get_queryset(self):
+        return ApiToken.objects.filter(owner=self.request.user)
+
+    def create(self, request: Request) -> Response:
+        serializer = ApiTokenCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if self.get_queryset().count() >= MAX_TOKENS_PER_USER:
+            return Response(
+                {"detail": f"You can have at most {MAX_TOKENS_PER_USER} API tokens."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token, key = create_token(request.user, **serializer.validated_data)
+        return Response(
+            {**ApiTokenSerializer(token).data, "token": key}, status=status.HTTP_201_CREATED
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -350,6 +384,8 @@ class ApiRoot(APIView):
                     "generate": f"{base}generate/",
                     "register": f"{base}auth/register/",
                     "login": f"{base}auth/token/",
+                    "api_tokens": f"{base}auth/api-tokens/",
+                    "mcp": f"{base}mcp/",
                     "projects": f"{base}projects/",
                     "training": f"{base}training/",
                     "training_check": f"{base}training/check/",

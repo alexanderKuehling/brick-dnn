@@ -67,6 +67,25 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 Send the access token as `Authorization: Bearer <access>`. Access tokens live 30 minutes,
 refresh tokens 7 days. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`.
 
+## API tokens
+
+For scripts and AI assistants: personal tokens that do not expire after 30 minutes. Send them
+like an access token, `Authorization: Bearer bdnn_…`; requests then act as the token's owner.
+Read-only tokens may only use `GET` and the `POST` endpoints that change nothing (analyze,
+generate, training check, MCP). The MCP server for AI assistants is described in
+[mcp.md](mcp.md).
+
+| Method | Path                         | Body                                         | Response                       |
+| ------ | ---------------------------- | -------------------------------------------- | ------------------------------ |
+| GET    | `/api/auth/api-tokens/`      | –                                            | `[ApiToken]`, newest first     |
+| POST   | `/api/auth/api-tokens/`      | `{name, read_only?, expires_in_days?}`       | `201 {...ApiToken, token}`     |
+| DELETE | `/api/auth/api-tokens/<id>/` | –                                            | `204`, the token stops working |
+
+`ApiToken` is `{id, name, prefix, read_only, created_at, last_used_at, expires_at}`.
+`expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
+is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
+endpoints need a website login (JWT): an API token cannot manage tokens.
+
 ## Saved networks (login required)
 
 | Method        | Path                   | Description                              |
@@ -243,6 +262,7 @@ All data endpoints except `GET /api/data/` answer `503` when data preparation is
 
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
 20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
-preparations: 60/hour, previews and downloads of preparations: 1200/hour. Adjust with
-`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
-`BRICKDNN_UPLOAD_RATE` and `BRICKDNN_DATA_RATE` (e.g. `100/minute`).
+preparations: 60/hour, previews and downloads of preparations: 1200/hour, MCP requests:
+600/hour. Adjust with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
+`BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE` and
+`BRICKDNN_MCP_RATE` (e.g. `100/minute`).

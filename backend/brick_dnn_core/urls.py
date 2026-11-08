@@ -2,11 +2,12 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
-from . import data_views, views
+from . import data_views, mcp, views
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
 router.register("projects", views.ProjectViewSet, basename="project")
+router.register("auth/api-tokens", views.ApiTokenViewSet, basename="api-token")
 router.register("training/datasets", views.DatasetViewSet, basename="training-dataset")
 router.register("training/runs", views.TrainingRunViewSet, basename="training-run")
 router.register("data/sources", data_views.DataSourceViewSet, basename="data-source")
@@ -24,6 +25,10 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", views.me, name="me"),
+    # MCP server for AI assistants (log in with an API token). Both spellings: MCP clients
+    # POST to the URL as given, and Django cannot redirect a POST to add the slash.
+    path("mcp/", mcp.McpView.as_view(), name="mcp"),
+    path("mcp", mcp.McpView.as_view(), name="mcp-no-slash"),
     path("training/", views.training_info, name="training"),
     path("training/check/", views.training_check, name="training-check"),
     path("data/", data_views.data_status, name="data"),

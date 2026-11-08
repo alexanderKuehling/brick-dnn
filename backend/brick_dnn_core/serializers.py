@@ -4,7 +4,8 @@ from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
-from .models import DataPrep, Dataset, DataSource, Project, TrainingRun
+from .api_tokens import EXPIRY_DAYS
+from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun
 
 User = get_user_model()
 
@@ -65,6 +66,21 @@ class RegisterSerializer(serializers.ModelSerializer):
 # --------------------------------------------------------------------------- #
 # Local training
 # --------------------------------------------------------------------------- #
+
+
+class ApiTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ApiToken
+        fields = ["id", "name", "prefix", "read_only", "created_at", "last_used_at", "expires_at"]
+        read_only_fields = fields
+
+
+class ApiTokenCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100)
+    read_only = serializers.BooleanField(default=False)
+    expires_in_days = serializers.ChoiceField(
+        choices=EXPIRY_DAYS, allow_null=True, required=False, default=None
+    )
 
 
 class DatasetSerializer(serializers.ModelSerializer):

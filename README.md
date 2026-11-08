@@ -58,6 +58,10 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
   and the result becomes a training dataset with a fixed train/validation/test split, a
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
+- **MCP server for AI assistants**: connect Claude or another MCP client with a personal API
+  token, and let it build, check, save and train networks in your account (read-only tokens
+  can only look and analyse). The same tokens work for scripts against the REST API. See
+  [docs/mcp.md](docs/mcp.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
@@ -305,7 +309,8 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
-The REST API is documented in [docs/api.md](docs/api.md), the database setup (SQLite,
+The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
+[docs/mcp.md](docs/mcp.md), the database setup (SQLite,
 PostgreSQL, Supabase) in [docs/database.md](docs/database.md).
 
 ## Tests
