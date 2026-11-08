@@ -104,6 +104,14 @@ jobs:
     needs: [backend, postgres, frontend]
     steps:
       - uses: actions/checkout@v7
+      - name: Server configuration is valid
+        # With the values deploy/server/deploy.sh writes to .env on a server with 1 vCPU and 2 GB.
+        env:
+          BRICKDNN_DOMAIN: example.com
+          BRICKDNN_BACKEND_CPUS: "0.75"
+          BRICKDNN_BACKEND_MEMORY: 1459m
+          BRICKDNN_BACKEND_THREADS: "1"
+        run: docker compose -f docker-compose.yml -f deploy/server/compose.yml config --quiet
       - name: Build and start
         run: docker compose up -d --build
       - name: Wait for the API

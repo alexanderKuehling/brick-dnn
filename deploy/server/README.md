@@ -70,6 +70,41 @@ The same by hand, on your machine, in the repository:
 - `/opt/brick-dnn/.env` (database password) is readable by `root` and `deploy` only and never
   leaves the server.
 
+## CPU and memory: the site comes first
+
+Trainings can keep all CPUs busy and use a lot of memory. So that the site still loads and
+answers while they run, the containers get different shares of the server:
+
+| Container | Gets |
+| --- | --- |
+| `backend`: Django with all its trainings | at most 3/4 of the CPUs and of the memory, no swap |
+| `caddy` and `frontend` (nginx) | the other quarter, shared with the system; the CPU first when it is busy, killed last |
+
+- Every deploy computes the limits from the size of the server, so they follow a resize
+  (Hetzner: *Rescale*, then deploy). They are in `/opt/brick-dnn/.env`
+  (`BRICKDNN_BACKEND_CPUS`, `BRICKDNN_BACKEND_MEMORY`, `BRICKDNN_BACKEND_THREADS`); the next
+  deploy overwrites changes. A CX23 (2 vCPUs, 4 GB) gives the backend 1.5 CPUs and 2.8 GB.
+- In the backend, the API comes first: trainings run with a lower CPU priority, and PyTorch
+  uses one thread per whole CPU of the backend (on a CX23 one thread, so half a CPU stays
+  free for the API).
+- A training that needs more memory than the backend has is the first process the kernel
+  kills; the run fails with "The training process stopped unexpectedly" and the API keeps
+  running. Imports in the Data tab need about 10–15 times the file size in memory: lower
+  `BRICKDNN_DATA_MAX_UPLOAD_MB` on a small server. The server's swap is for building images.
+- `docker stats` shows what every container uses.
+
+`setup.sh` copies `deploy.sh` to `/usr/local/bin/brickdnn-deploy`, and deploys do not update
+that copy. After a change to `deploy.sh` (such as these limits), copy it again before the
+change is deployed, or run `bootstrap.sh` again:
+
+```bash
+scp deploy/server/deploy.sh root@SERVER:/usr/local/bin/brickdnn-deploy
+```
+
+With the old copy, deploys of commits with the limits fail ("required variable
+BRICKDNN_BACKEND_CPUS is missing a value") and the site keeps running the previous version:
+copy it, then run the deploy again (GitHub → *Actions* → *Deploy server* → *Run workflow*).
+
 ## On the server
 
 | What | Where |
@@ -85,6 +120,7 @@ cd /opt/brick-dnn
 C="docker compose -f docker-compose.yml -f deploy/server/compose.yml"
 $C ps                          # what runs
 $C logs -f --tail 100 backend  # logs
+docker stats --no-stream       # CPU and memory per container
 nano .env && $C up -d          # change settings
 sudo -u deploy brickdnn-deploy <commit>   # deploy another commit of main, e.g. an older one
 ```

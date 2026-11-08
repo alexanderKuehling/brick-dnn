@@ -12,7 +12,9 @@
 - **Server deployment.** `deploy/server/`: one-time setup script for a small Linux server
   (Docker, firewall, HTTPS with Caddy and Let's Encrypt, a deploy user that can only deploy
   commits of `main`); the *Deploy server* workflow deploys backend and frontend there after
-  every successful CI run on `main`.
+  every successful CI run on `main`. The backend with all its trainings gets at most three
+  quarters of the server's CPUs and memory (computed on every deploy), so that Caddy and nginx
+  always answer.
 - Training processes run with a lower CPU priority than the web server and are the first to
   be killed when memory runs out.
 - `manage.py` (`make backend`) and the backend server read settings from `.env` in the

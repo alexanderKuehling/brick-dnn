@@ -102,7 +102,8 @@ docker compose exec backend python manage.py createsuperuser
 ```
 
 On a public server (HTTPS with Caddy, automatic deploys from GitHub Actions after every
-push to `main`): [deploy/server/README.md](deploy/server/README.md).
+push to `main`, backend and trainings limited to three quarters of the server):
+[deploy/server/README.md](deploy/server/README.md).
 
 ### For development
 

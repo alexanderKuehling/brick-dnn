@@ -1,16 +1,29 @@
 # Additions for a public server: Caddy in front of the app, with HTTPS from Let's Encrypt.
 #   docker compose -f docker-compose.yml -f deploy/server/compose.yml up -d --build
 # Settings come from .env next to docker-compose.yml (written by setup.sh), see README.md.
+# The BRICKDNN_BACKEND_* limits are written there by every deploy (deploy.sh).
 services:
   backend:
     environment:
       # Caddy and nginx are in front of Django (for the client address in rate limits).
       BRICKDNN_NUM_PROXIES: 2
       DJANGO_SECURE_COOKIES: "true"
+      # PyTorch and NumPy: one thread per whole CPU of the backend, not one per CPU of the server.
+      OMP_NUM_THREADS: ${BRICKDNN_BACKEND_THREADS:?see deploy/server/README.md}
+    # Django with all its trainings gets at most three quarters of the CPUs and the memory,
+    # the rest stays free for Caddy and nginx: the site answers while a training runs.
+    # No swap: a training that needs more memory is stopped instead of slowing everything down.
+    cpus: ${BRICKDNN_BACKEND_CPUS:?see deploy/server/README.md}
+    mem_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
+    memswap_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
 
   frontend:
     # Only Caddy talks to nginx: nothing is published on port 8080.
     ports: !reset []
+    # The site comes first: more CPU time than the rest of the server when the CPUs are busy
+    # (e.g. while images are built), and the last to be killed when memory runs out.
+    cpu_shares: 4096
+    oom_score_adj: -500
 
   caddy:
     image: caddy:2.10-alpine
@@ -26,6 +39,9 @@ services:
       - caddy-config:/config
     depends_on:
       - frontend
+    # Like the frontend: the site comes first.
+    cpu_shares: 4096
+    oom_score_adj: -500
     restart: unless-stopped
 
 volumes:
