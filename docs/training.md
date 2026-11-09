@@ -154,6 +154,13 @@ model.eval()
 Prepare new inputs the same way as during training. The run view lists the preprocessing:
 normalisation (mean and standard deviation), image size and class names.
 
+The server can also predict with the weights, without downloading them:
+`POST /api/training/runs/<id>/predict/` (see [api.md](api.md#training-login-required)) or the
+MCP tool `predict`. It prepares the inputs like the training data and runs the network in a
+separate process, like a training. AI assistants get the weights with `get_weights_download`:
+a download link valid for 15 minutes, the model code, the preprocessing and a snippet like the
+one above (see [mcp.md](mcp.md#downloading-the-weights)).
+
 ## Command line
 
 The `brickdnn` package trains without the web UI:
@@ -217,6 +224,10 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 - Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights and
   exits. A run whose process disappears (for example because the server was restarted) is
   marked as failed.
+- Predictions start `python -m brickdnn.training.predict <run dir>` per request: it builds the
+  network from `job.json`, loads `weights.pt`, reads the prepared inputs from stdin and prints
+  the outputs. It runs on the CPU with a lower priority and is stopped after 30 seconds; the
+  web server waits for it.
 
 The REST endpoints are documented in [api.md](api.md#training-login-required).
 
@@ -229,10 +240,13 @@ The REST endpoints are documented in [api.md](api.md#training-login-required).
 | `BRICKDNN_MAX_UPLOAD_MB` | `500` | Maximum size of an uploaded dataset |
 | `BRICKDNN_TRAINING_RATE` | `120/hour` | Rate limit for starting runs |
 | `BRICKDNN_UPLOAD_RATE` | `60/hour` | Rate limit for uploads |
+| `BRICKDNN_MAX_PREDICTIONS` | `1` | Predictions running at the same time (all users) |
+| `BRICKDNN_PREDICT_RATE` | `120/hour` | Rate limit for predictions |
+| `BRICKDNN_MCP_UPLOAD_MB` | `5` | Largest CSV file AI assistants can upload over MCP |
 | `BRICKDNN_INSTALL_TORCH` | `false` | Docker build: install PyTorch (CPU) into the backend image |
 
 On a public server, keep in mind that every registered user can use the server's CPU/GPU for
-training; disable registration or training if that is not wanted.
+training and predictions; disable registration or training if that is not wanted.
 
 ## Troubleshooting
 

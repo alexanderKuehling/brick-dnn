@@ -72,7 +72,7 @@ refresh tokens 7 days. Registration can be disabled with `BRICKDNN_ALLOW_REGISTR
 For scripts and AI assistants: personal tokens that do not expire after 30 minutes. Send them
 like an access token, `Authorization: Bearer bdnn_…`; requests then act as the token's owner.
 Read-only tokens may only use `GET` and the `POST` endpoints that change nothing (analyze,
-generate, training check, MCP). The MCP server for AI assistants is described in
+generate, training check, predictions, MCP). The MCP server for AI assistants is described in
 [mcp.md](mcp.md).
 
 | Method | Path                         | Body                                         | Response                       |
@@ -199,7 +199,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (weights are kept)     |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
-| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`)           |
+| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`); with `?sig=…` from a download link without login |
+| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
 (`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
@@ -254,6 +255,49 @@ Every run also has `metrics` (the last epoch plus `test_loss`, `test_accuracy`, 
 trial with its `params`, `status` and final metrics; `history`, `best` and `metrics` belong to
 the running trial and, at the end, to the best one. The file format is documented in
 `backend/brickdnn/training/state.py`.
+
+**Download links.** `GET /api/training/runs/<id>/weights/?sig=…` works without login: the
+MCP tool `get_weights_download` creates such links. They are valid for 15 minutes, signed for
+one run and one user, and refused (`403`, with the reason in `detail`) when they have expired,
+were changed or belong to another run, or when that user can no longer see the run. Without
+`sig`, the endpoint needs a login as before.
+
+**Predictions.** `POST /api/training/runs/<id>/predict/` runs the trained network of a finished
+or stopped run (everyone who can see the run, also with a read-only token):
+
+```json
+{ "inputs": [{"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}, [6.7, 3.0, 5.2, 2.3]], "top_k": 2 }
+```
+
+```json
+{
+  "run": { "id": "…", "name": "Iris net" },
+  "task": "classification",
+  "predictions": [
+    { "class": "setosa", "index": 0, "probability": 0.97, "top": [{ "class": "setosa", "index": 0, "probability": 0.97 }, { "class": "versicolor", "index": 1, "probability": 0.02 }] },
+    { "class": "virginica", "index": 2, "probability": 0.88, "top": [...] }
+  ]
+}
+```
+
+At most 64 samples and 250,000 numbers. Networks trained on a CSV file take one row per sample,
+as an object `{column: value}` or a list in column order, with the raw values of the CSV file
+(`input_scale` `raw`, the default) or already standardised ones (`normalized`); regression
+answers `{"value": …}` per sample in the units of the target column (named in `target`). Image
+networks take one image per sample as a nested array of channels × height × width (grayscale
+also height × width) or in the shape of the Input layer, and need `input_scale`: `raw`
+(pixels 0–255), `unit` (0–1) or `normalized` (normalised like in training, see
+`state.preprocessing`). Runs on demo data take
+arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
+`top_k` (1–10, default 3) is the number of classes in `top`.
+
+The inputs are checked and prepared like the training data from the run's
+`state.preprocessing`; the network then runs in a separate process (CPU, at most 30 seconds,
+`BRICKDNN_MAX_PREDICTIONS` at a time, default 1). Answers: `400 {"detail", "inputs"}` when the
+inputs do not fit (`inputs` describes what the network takes), `409` when the run has no
+weights or its preprocessing is unknown (e.g. it failed early), `503` when training is
+disabled, PyTorch is missing or other predictions are running (`Retry-After: 5`), `500` when the
+prediction itself fails or takes too long, `429` above the rate limit.
 
 ## Data preparation (login required)
 
@@ -345,9 +389,10 @@ All data endpoints except `GET /api/data/` answer `503` when data preparation is
 
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
 20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
-preparations: 60/hour, previews and downloads of preparations: 1200/hour, MCP requests:
-600/hour, OAuth registration, token and revocation requests: 120/minute. Adjust with
-`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
-`BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
+preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
+1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
+120/minute. Adjust with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
+`BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
+`BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
 `BRICKDNN_SHARING_RATE` (invitations and link changes, 120/hour)
 (e.g. `100/minute`).

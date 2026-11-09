@@ -21,6 +21,22 @@
 - **Shared runs and data.** Trainings started from a shared network are visible to all its
   members; datasets and data preparations can be shared in a network, so members train on
   them and editors improve the preparation.
+- **Predictions with trained networks.** `POST /api/training/runs/<id>/predict/` and the MCP
+  tool `predict` run a finished run's network on up to 64 samples on the server and return
+  the most likely classes with their probabilities, or the predicted values in the units of
+  the target. Inputs are prepared like the training data (CSV rows by column name or in
+  column order; images as arrays with pixels 0–255, 0–1 or already normalised). The network
+  runs in a separate process with a timeout, one prediction at a time by default
+  (`BRICKDNN_MAX_PREDICTIONS`), with its own rate limit (`BRICKDNN_PREDICT_RATE`).
+- **More MCP tools.** `get_weights_download` gives assistants a download link for the trained
+  weights, valid for 15 minutes without login (signed for the run and the user, and refused
+  once the user loses access), together with the model code, the preprocessing and a snippet
+  that loads the weights. `upload_dataset` stores a small CSV file sent as text as a training
+  dataset (up to `BRICKDNN_MCP_UPLOAD_MB`, default 5 MB), optionally shared in a project.
+  `delete_project` (owner), `delete_training_run` (who started it, the project's owner) and
+  `delete_dataset` (own datasets not in use) are marked destructive; read-only access never
+  sees them. The REST API and MCP use the same delete code, so live editors are told when a
+  project is deleted either way.
 
 ## 1.1.0 (2026-11-09)
 

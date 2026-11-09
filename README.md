@@ -60,7 +60,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
 - **MCP server for AI assistants**: add Brick DNN as a connector in Claude (or another MCP
   client), sign in with OAuth, and let it build, check, save and train networks in your
-  account; you decide whether it may change things or only look. Personal API tokens work
+  account, upload small CSV datasets, predict with trained networks and hand you their
+  weights; you decide whether it may change things or only look. Personal API tokens work
   for clients without OAuth and for scripts against the REST API. See
   [docs/mcp.md](docs/mcp.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
