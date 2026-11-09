@@ -8,8 +8,8 @@
     manage.py set_plan ada --limited             the limits of the plan, also for staff
     manage.py set_plan ada --staff-default       unlimited only if staff or superuser
 
-The same as in the Django admin (user profiles); billing will set plans later
-(brick_dnn_core.budgets.set_plan).
+The same as in the Django admin (user profiles). With paid plans (billing.py) a subscription
+sets the plan of its account; a plan set here stays until that subscription changes.
 """
 
 from __future__ import annotations

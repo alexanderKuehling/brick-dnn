@@ -643,6 +643,10 @@ class AccountBudgetSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Your plan has no compute beyond its monthly allowance."
             )
+        if value and not budgets.overage_billable(user):
+            raise serializers.ValidationError(
+                "Compute beyond the allowance needs a subscription that is paid and not cancelled."
+            )
         return value
 
 

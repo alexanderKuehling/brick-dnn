@@ -304,7 +304,7 @@ export interface UsageSource {
 export interface Plan {
   key: string;
   name: string;
-  /** Per month, in `currency` (only shown: there is no payment yet). */
+  /** Per month, in `currency`, incl. VAT (with paid plans, Paddle charges it). */
   price: number | null;
   currency: string | null;
   cpu_hours_per_month: number | null;
@@ -326,6 +326,8 @@ export interface Usage {
   unlimited?: boolean;
   /** The plans with prices, when the server offers several (else empty). */
   plans?: Plan[];
+  /** Where plans can be bought, on a server that sells them (the pricing page); else null. */
+  upgrade_url?: string | null;
   /** Compute beyond the monthly allowance (paid plans), switched on by the user. */
   overage?: {
     available: boolean;

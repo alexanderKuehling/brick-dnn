@@ -20,7 +20,7 @@ it one plan from ``BRICKDNN_BUDGET_…``, unlimited by default). A plan has
 - optionally a price per CPU hour beyond the allowance (*overage*), which users of the plan
   can switch on for their account, with a cap of their own.
 
-:func:`set_plan` changes an account's plan (billing will call it), :func:`limits_for` gives
+:func:`set_plan` changes an account's plan (billing.py calls it), :func:`limits_for` gives
 the limits that apply. Accounts can be marked **unlimited** (:func:`set_unlimited`; staff and
 superusers are by default): they are still measured, but no limit of a plan applies. The
 operator can override single limits per account in the Django admin (user profile).
@@ -186,9 +186,10 @@ PLAN_FIELDS = {
 class Plan:
     """A plan (subscription tier) and its limits; None (or 0 in the settings): unlimited.
 
-    ``price`` per month and ``overage_price_per_cpu_hour`` are in BRICKDNN_PRICE_CURRENCY and
-    only shown for now (billing comes later). ``priority`` is for the job queue (higher goes
-    first); nothing uses it yet."""
+    ``price`` per month and ``overage_price_per_cpu_hour`` are in BRICKDNN_PRICE_CURRENCY.
+    The price is for display (with paid plans the customer pays the price set in Paddle, see
+    billing.py); overage is billed at its price. ``priority`` is for the job queue (higher
+    goes first); nothing uses it yet."""
 
     key: str
     name: str
@@ -364,6 +365,7 @@ def limits_for(user) -> Limits:
         and profile.overage_enabled
         and plan.overage_price_per_cpu_hour is not None
         and monthly is not None
+        and overage_billable(user)
     )
     cap = profile.overage_cap_cpu_hours if overage and profile is not None else None
     return Limits(
@@ -376,6 +378,22 @@ def limits_for(user) -> Limits:
         overage=overage,
         overage_cap_seconds=cap * 3600 if cap is not None else None,
     )
+
+
+def overage_billable(user) -> bool:
+    """Whether compute beyond the allowance could be billed to the account. Always on a
+    server without paid plans (billing.py), where that is up to the operator; with them it
+    needs a subscription that is paid and goes on."""
+    from . import billing  # billing.py builds on this module
+
+    return billing.overage_allowed(user)
+
+
+def pricing_url() -> str | None:
+    """Where a higher plan can be bought, on a server that sells plans (billing.py)."""
+    from . import billing
+
+    return billing.pricing_url()
 
 
 def concurrency_refusal(user, active: int) -> str | None:
@@ -492,8 +510,11 @@ class Budget:
 
     @property
     def how_to_raise(self) -> str:
+        pricing = pricing_url()
         higher = (
-            "Higher plans include more (see your account page)."
+            f"Higher plans include more: {pricing}"
+            if pricing
+            else "Higher plans include more (see your account page)."
             if len(plans()) > 1
             else "Ask the operator of this server for a higher allowance."
         )
@@ -589,10 +610,10 @@ class StorageQuotaExceeded(BudgetError):
 
 
 def _exceeded(budget: Budget) -> BudgetExceeded:
-    return BudgetExceeded(
-        budget.exhausted_message(),
-        {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
-    )
+    data = {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)}
+    if budget.kind == "allowance" and pricing_url():
+        data["upgrade_url"] = pricing_url()  # a higher plan can be bought there
+    return BudgetExceeded(budget.exhausted_message(), data)
 
 
 def check_compute(actor: Actor) -> list[Budget]:
@@ -936,13 +957,18 @@ def check_storage(user, adding: int = 0) -> None:
         )
     else:
         message = f"The storage of this account is full: {_size(used)} of {_size(limit)}."
-    message += (
-        " Delete data sources, datasets or training runs you no longer need, or ask the "
-        "operator of this server for more space."
+    pricing = pricing_url()
+    message += " Delete data sources, datasets or training runs you no longer need, or " + (
+        f"choose a plan with more storage: {pricing}"
+        if pricing
+        else "ask the operator of this server for more space."
     )
-    raise StorageQuotaExceeded(
-        message, {"storage": {"used_bytes": used, "limit_bytes": limit, "adding_bytes": adding}}
-    )
+    data: dict[str, Any] = {
+        "storage": {"used_bytes": used, "limit_bytes": limit, "adding_bytes": adding}
+    }
+    if pricing:
+        data["upgrade_url"] = pricing
+    raise StorageQuotaExceeded(message, data)
 
 
 # --------------------------------------------------------------------------- #
@@ -1030,8 +1056,12 @@ def usage_summary(actor: Actor) -> dict[str, Any]:
         # No limit of the plan applies (still measured); the own budgets do.
         "unlimited": limits.unlimited,
         "plans": offered if len(offered) > 1 else [],
+        # Where plans can be bought, on a server that sells them (else null).
+        "upgrade_url": pricing_url(),
         "overage": {
-            "available": plan.overage_price_per_cpu_hour is not None and not limits.unlimited,
+            "available": plan.overage_price_per_cpu_hour is not None
+            and not limits.unlimited
+            and overage_billable(user),
             "enabled": limits.overage,
             "price_per_cpu_hour": plan.overage_price_per_cpu_hour,
             "currency": settings.PRICE_CURRENCY,

@@ -435,8 +435,9 @@ class UserProfile(models.Model):
     terms_version = models.CharField(max_length=64, blank=True)
     privacy_version = models.CharField(max_length=64, blank=True)
     # The plan the limits come from (a key of BRICKDNN_PLANS; empty: the default plan) and
-    # whether the account has no limits at all (empty: only staff and superusers). Billing
-    # will set the plan; for now the operator does (Django admin, `manage.py set_plan`).
+    # whether the account has no limits at all (empty: only staff and superusers). The
+    # operator sets the plan (Django admin, `manage.py set_plan`), or a paid subscription
+    # does (billing.py).
     plan = models.CharField(
         max_length=40,
         blank=True,

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { IconAlertCircle } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Group,
@@ -143,10 +145,21 @@ function PlanInfo({ usage }: { usage: Usage }) {
           ? 'No limits apply to your account; its usage is still shown here. Budgets you set yourself still apply.'
           : planLimits(plan)}
       </Text>
-      {others.length > 0 && !unlimited && (
+      {usage.upgrade_url && !unlimited ? (
+        // The server sells plans: the pricing page compares them and has the checkout.
         <Text size="xs" c="dimmed" mt={2}>
-          Other plans: {others.map(otherPlan).join(' · ')}.
+          Need more?{' '}
+          <Anchor component={Link} to="/pricing" size="xs">
+            Compare plans and prices
+          </Anchor>
         </Text>
+      ) : (
+        others.length > 0 &&
+        !unlimited && (
+          <Text size="xs" c="dimmed" mt={2}>
+            Other plans: {others.map(otherPlan).join(' · ')}.
+          </Text>
+        )
       )}
     </div>
   );

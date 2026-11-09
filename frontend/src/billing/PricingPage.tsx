@@ -250,10 +250,10 @@ export function PricingPage() {
       <Stack gap="lg" mt="xl">
         <Plans info={info} />
         <Text size="sm" c="dimmed" maw={760}>
-          Prices are per month{info.prices_include_tax && ' and include VAT'}. A CPU hour is one
-          hour of one processor core working on your trainings or predictions; unused hours do not
-          carry over. You can cancel at any time to the end of the month you paid for. Nothing is
-          deleted when a plan ends: the limits of the free plan apply.
+          Prices are per month{info.prices_include_tax && ' and include VAT'}; Paddle charges them.
+          A CPU hour is one hour of one processor core working on your trainings or predictions;
+          unused hours do not carry over. You can cancel at any time to the end of the month you
+          paid for. Nothing is deleted when a plan ends: the limits of the free plan apply.
           {overage &&
             ' Compute beyond what a plan includes is only used and billed if you switch it on yourself on your account page, up to a limit you set.'}
         </Text>

@@ -27,6 +27,7 @@ from brick_dnn_core import billing, budgets, retention
 from brick_dnn_core.api_tokens import create_token
 from brick_dnn_core.billing_admin import user_link
 from brick_dnn_core.models import (
+    AgentAction,
     BillingCustomer,
     BillingEvent,
     OverageCharge,
@@ -1166,6 +1167,90 @@ def test_overage_that_was_not_billed_when_the_subscription_ended_is_written_off(
     notify(paddle, "subscription.canceled", paddle.entity(subscription))
     billing.sync_all()
     assert OverageCharge.objects.count() == 1
+
+
+# --------------------------------------------------------------------------- #
+# Together with budgets: where to get more, and overage only where it can be billed
+# --------------------------------------------------------------------------- #
+
+
+def use_up_the_free_allowance(user) -> None:
+    UsageRecord.objects.create(
+        user=user, kind="training", quantity=0.5 * 3600, period=budgets.period_of()
+    )
+
+
+def test_budget_messages_point_to_the_pricing_page(paddle, plans, ada, web):
+    use_up_the_free_allowance(ada)
+    with pytest.raises(budgets.BudgetExceeded) as caught:
+        budgets.check_compute(budgets.Actor(ada))
+    assert caught.value.message.endswith("Higher plans include more: /pricing")
+    assert caught.value.data["upgrade_url"] == "/pricing"
+    assert web.get("/api/account/usage/").json()["upgrade_url"] == "/pricing"
+    # With the site's address, scripts and AI assistants get a link they can pass on.
+    plans.PUBLIC_URL = "https://brickdnn.com"
+    with pytest.raises(budgets.BudgetExceeded) as caught:
+        budgets.check_compute(budgets.Actor(ada))
+    assert "Higher plans include more: https://brickdnn.com/pricing" in caught.value.message
+    assert caught.value.body()["upgrade_url"] == "https://brickdnn.com/pricing"
+    # A full storage names the pricing page too.
+    with pytest.raises(budgets.StorageQuotaExceeded) as full:
+        budgets.check_storage(ada, adding=2 * 1024**3)
+    assert "choose a plan with more storage: https://brickdnn.com/pricing" in full.value.message
+    assert full.value.data["upgrade_url"] == "https://brickdnn.com/pricing"
+
+
+def test_budget_messages_without_paid_plans_are_as_before(plans, ada, web):
+    use_up_the_free_allowance(ada)
+    with pytest.raises(budgets.BudgetExceeded) as caught:
+        budgets.check_compute(budgets.Actor(ada))
+    assert caught.value.message.endswith("Higher plans include more (see your account page).")
+    assert "upgrade_url" not in caught.value.data
+    assert web.get("/api/account/usage/").json()["upgrade_url"] is None
+    with pytest.raises(budgets.StorageQuotaExceeded) as full:
+        budgets.check_storage(ada, adding=2 * 1024**3)
+    assert full.value.message.endswith("ask the operator of this server for more space.")
+    assert "upgrade_url" not in full.value.data
+
+
+def test_overage_needs_a_subscription_it_can_be_billed_to(paddle, ada, web):
+    def switch_on():
+        return web.patch("/api/account/usage/", {"overage_enabled": True}, format="json")
+
+    # A paid plan the operator gave by hand: nothing to bill overage to.
+    budgets.set_plan(ada, "plus")
+    refused = switch_on()
+    assert refused.status_code == 400
+    assert "needs a subscription" in refused.json()["overage_enabled"][0]
+    assert web.get("/api/account/usage/").json()["overage"]["available"] is False
+
+    budgets.set_plan(ada, "")
+    subscribe(paddle, web, ada, "plus")
+    answer = switch_on()
+    assert answer.status_code == 200, answer.content
+    overage = answer.json()["overage"]
+    assert (overage["available"], overage["enabled"]) == (True, True)
+    assert budgets.limits_for(ada).overage is True
+    # While the subscription is cancelled, no new overage builds up; it comes back with it.
+    assert web.post("/api/billing/cancel/").status_code == 200
+    assert budgets.limits_for(ada).overage is False
+    assert web.post("/api/billing/reactivate/").status_code == 200
+    assert budgets.limits_for(ada).overage is True
+
+
+def test_overage_without_paid_plans_is_as_before(plans, ada, web):
+    budgets.set_plan(ada, "plus")
+    answer = web.patch("/api/account/usage/", {"overage_enabled": True}, format="json")
+    assert answer.status_code == 200
+    assert budgets.limits_for(ada).overage is True
+
+
+def test_notifications_are_not_logged_as_agent_activity(paddle, ada, web):
+    subscription = subscribe(paddle, web, ada, "plus")
+    notify(paddle, "subscription.updated", paddle.entity(subscription))
+    state(web)
+    assert post_event({"event_id": "evt_x"}, secret="wrong").status_code == 403
+    assert AgentAction.objects.count() == 0
 
 
 # --------------------------------------------------------------------------- #
