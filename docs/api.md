@@ -110,8 +110,9 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 
 `Account` is `{id, username, email, date_joined, last_login, last_active_at,
 terms_accepted_at, terms_version, privacy_version, stored}`; `stored` counts the projects,
-memberships, comments, data sources and preparations, datasets, training runs, API tokens and
-connected apps, and the bytes of uploaded files. What the export holds and what deleting an
+memberships, comments, data sources and preparations, datasets, training runs, API tokens,
+connected apps and entries of the agent activity log (`agent_actions`), and the bytes of
+uploaded files. What the export holds and what deleting an
 account deletes: [privacy.md](privacy.md).
 
 ### Legal pages (public)
@@ -142,6 +143,31 @@ generate, training check, predictions, MCP). The MCP server for AI assistants is
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
 endpoints need a website login (JWT): an API token cannot manage tokens.
+
+## Agent activity
+
+What AI agents and scripts did with the user's API tokens and connected apps (see
+[mcp.md](mcp.md#activity-log)). Website login (JWT) only; each user sees their own entries.
+
+| Method | Path                            | Response                                         |
+| ------ | ------------------------------- | ------------------------------------------------ |
+| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days}`, newest first |
+| GET    | `/api/agent-activity/summary/`  | `{agents, tools, total, latest_id, latest_at, retention_days}` |
+
+Query parameters of the list: `limit` (default 50, at most 200), `before=<id>` (older
+entries: the next page), `after=<id>` (only newer entries: poll with the last `latest_id`),
+and the filters `agent=token:<id>` or `app:<connection id>`, `tool=<tool or route>`,
+`outcome=ok|error`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
+time>`. `latest_id` is the user's newest entry whatever the filters. With `after`, `has_more`
+means more new entries than `limit` arrived: load the first page again.
+
+`AgentAction` is `{id, created_at, source ("mcp" | "api"), agent: {kind ("token" | "app"), id,
+key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error"), error,
+status_code, duration_ms, summary, arguments, targets: [{kind, id, name?}], project}`.
+`arguments` are summarised and redacted; `targets` kinds are `project`, `run`, `dataset`,
+`data_source` and `data_prep`. The summary's `agents` are `{kind, id, key, name, prefix,
+active, actions, errors, last_at, last_id}`, the most recently active first; `active` is false
+for revoked tokens and disconnected apps.
 
 ## OAuth (MCP sign-in)
 

@@ -3,6 +3,22 @@
 ## Unreleased
 
 ### Added
+- **Agent activity: a log of everything AI agents do.** Every MCP tool call and every API
+  request made with an API token or a connected app is recorded for its user: the token or
+  app, the client, the tool or route, whether it worked (with the error the agent got), how
+  long it took, the networks, trainings and datasets it touched and a sentence such as
+  *Started training “GP 1” on dataset “houses.csv” (#3)*. Arguments are summarised and
+  redacted (sizes and counts instead of CSV text and prediction inputs; never tokens or
+  passwords). The new page *Agent activity* (account menu, and next to each token and app on
+  the API tokens page) shows it live: new entries slide in while the page is open, repeated
+  checks of a training count up in one row, failed actions are marked, details show the
+  arguments, and names link to the network, training or dataset; filters for the token or app
+  and for errors. Website use is not logged; each user sees only their own agents. Entries are
+  kept for `BRICKDNN_AGENT_LOG_DAYS` (90) days and at most 20,000 per account, deleted by
+  `purge_old_data`, exported with the account and deleted with it; revoking a token keeps its
+  entries until then. API: `GET /api/agent-activity/` (filters, pages, `?after=` for polling)
+  and `/api/agent-activity/summary/`. Logging happens after the response and never breaks a
+  call.
 - **Classical models: Gaussian processes and support vector machines.** New bricks next to
   the neural layers: kernels (`RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`,
   `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum` and
