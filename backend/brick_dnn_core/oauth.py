@@ -36,7 +36,9 @@ from .api_tokens import (
     IsLoggedInUser,
     hash_key,
 )
+from .budgets import token_usage
 from .models import ApiToken, OAuthClient, OAuthCode, OAuthConnection
+from .serializers import BudgetSerializer, UsageMixin
 
 SCOPES = ("read", "write")  # write includes read
 ACCESS_TOKEN_LIFETIME = timedelta(hours=1)
@@ -534,13 +536,23 @@ class RevokeView(APIView):
 # --------------------------------------------------------------------------- #
 
 
-class ConnectionSerializer(serializers.ModelSerializer):
+class ConnectionSerializer(UsageMixin, serializers.ModelSerializer):
+    usage_key = "app"
     client_name = serializers.CharField(source="client.name", read_only=True)
     client_uri = serializers.SerializerMethodField()
 
     class Meta:
         model = OAuthConnection
-        fields = ["id", "client_name", "client_uri", "read_only", "created_at", "last_used_at"]
+        fields = [
+            "id",
+            "client_name",
+            "client_uri",
+            "read_only",
+            "created_at",
+            "last_used_at",
+            "budget_cpu_minutes",
+            "used_cpu_minutes",
+        ]
         read_only_fields = fields
 
     def get_client_uri(self, obj: OAuthConnection) -> str | None:
@@ -548,10 +560,22 @@ class ConnectionSerializer(serializers.ModelSerializer):
 
 
 class ConnectionViewSet(mixins.ListModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
-    """Apps the user connected with OAuth. Deleting one revokes its tokens at once."""
+    """Apps the user connected with OAuth. Deleting one revokes its tokens at once. ``PATCH
+    {"budget_cpu_minutes"}`` sets the app's monthly compute budget (null: none)."""
 
     serializer_class = ConnectionSerializer
     permission_classes = [IsLoggedInUser]
 
     def get_queryset(self):
         return OAuthConnection.objects.filter(owner=self.request.user).select_related("client")
+
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), "usage": token_usage(self.request.user)}
+
+    def partial_update(self, request: Request, pk=None) -> Response:
+        connection = self.get_object()
+        serializer = BudgetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        connection.budget_cpu_minutes = serializer.validated_data["budget_cpu_minutes"]
+        connection.save(update_fields=["budget_cpu_minutes"])
+        return Response(self.get_serializer(connection).data)

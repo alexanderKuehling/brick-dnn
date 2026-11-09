@@ -31,6 +31,8 @@ urlpatterns = [
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
+    # Usage and budgets this month (any login; changing the budget: website login only).
+    path("account/usage/", accounts.UsageView.as_view(), name="account-usage"),
     # Imprint, privacy policy, terms of use: Markdown files on the server (public).
     path("legal/", legal.legal_index, name="legal"),
     re_path(r"^legal/(?P<page>imprint|privacy|terms)/$", legal.legal_page, name="legal-page"),

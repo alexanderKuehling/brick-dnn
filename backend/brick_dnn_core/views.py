@@ -20,11 +20,13 @@ from . import downloads, shared_data
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
+from .budgets import Actor, BudgetError, token_usage
 from .models import ApiToken, Dataset, TrainingRun
 from .retention import touch
 from .serializers import (
     ApiTokenCreateSerializer,
     ApiTokenSerializer,
+    BudgetSerializer,
     DatasetSerializer,
     RegisterSerializer,
     RunDetailSerializer,
@@ -118,15 +120,29 @@ class ApiTokenViewSet(
     """Personal API tokens of the logged-in user (for scripts and the MCP server).
 
     Only a website login can manage them, not an API token. The token itself is returned
-    once, by ``create``; deleting a token revokes it at once.
+    once, by ``create``; deleting a token revokes it at once. ``PATCH
+    {"budget_cpu_minutes"}`` sets the token's monthly compute budget (null: none).
     """
 
     serializer_class = ApiTokenSerializer
     permission_classes = [IsLoggedInUser]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         # The access tokens of apps connected with OAuth are managed as connections.
         return ApiToken.objects.filter(owner=self.request.user, connection__isnull=True)
+
+    def get_serializer_context(self):
+        # This month's usage of every token, in one query.
+        return {**super().get_serializer_context(), "usage": token_usage(self.request.user)}
+
+    def partial_update(self, request: Request, pk=None) -> Response:
+        token = self.get_object()
+        serializer = BudgetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token.budget_cpu_minutes = serializer.validated_data["budget_cpu_minutes"]
+        token.save(update_fields=["budget_cpu_minutes"])
+        return Response(self.get_serializer(token).data)
 
     def create(self, request: Request) -> Response:
         serializer = ApiTokenCreateSerializer(data=request.data)
@@ -193,8 +209,11 @@ def training_info(request: Request) -> Response:
 @permission_classes([permissions.IsAuthenticated])
 def training_check(request: Request) -> Response:
     """Check a network against a dataset before training: ``{"graph", "dataset",
-    "config"?}``. With ``config`` (the training settings), the checks that depend on them
-    are made too (e.g. Max. samples against the row limit of classical models)."""
+    "config"?, "tuning"?}``. With ``config`` (the training settings), the checks that depend
+    on them are made too (e.g. Max. samples against the row limit of classical models).
+
+    The answer also has the estimated CPU time of the run (``estimate``) and whether the
+    budgets allow it (``budget``, see budgets.estimate_data). Checks are never counted."""
     if (response := _disabled_response()) is not None:
         return response
     data = request.data if isinstance(request.data, dict) else {}
@@ -203,9 +222,12 @@ def training_check(request: Request) -> Response:
         training.validate_graph(graph)
         dataset = training.resolve_dataset(request.user, data.get("dataset"))
         config = training.parse_config(data.get("config")) if "config" in data else None
+        search = training.parse_tuning(data.get("tuning"))
     except training.TrainingInputError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(training.check(graph, dataset, config).to_dict())
+    result = training.check(graph, dataset, config)
+    cost = training.budget_check(Actor.of(request), graph, dataset, config, result, search)
+    return Response({**result.to_dict(), **cost})
 
 
 class DatasetViewSet(
@@ -277,6 +299,8 @@ class DatasetViewSet(
             )
         except DatasetError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except BudgetError as exc:
+            return Response(exc.body(), status=exc.status_code)
         return Response(
             DatasetSerializer(dataset, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
@@ -302,7 +326,9 @@ class TrainingRunViewSet(
     throttle_scope = "training"
 
     def get_queryset(self):
-        runs = shared_data.visible_runs(self.request.user).select_related("owner")
+        runs = shared_data.visible_runs(self.request.user).select_related(
+            "owner", "api_token", "connection__client"
+        )
         project = self.request.query_params.get("project")
         if project is not None and project.isdigit():
             runs = runs.filter(project_id=int(project))
@@ -340,7 +366,10 @@ class TrainingRunViewSet(
                 data.get("config"),
                 data.get("tuning"),
                 data.get("project"),
+                actor=Actor.of(request),
             )
+        except BudgetError as exc:
+            return Response(exc.body(), status=exc.status_code)
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except training.TrainingInputError as exc:
@@ -353,7 +382,8 @@ class TrainingRunViewSet(
             )
         except training.TrainingBusy as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response(RunDetailSerializer(run).data, status=status.HTTP_201_CREATED)
+        body = {**RunDetailSerializer(run).data, "budget_warning": run.budget_warning}
+        return Response(body, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance: TrainingRun) -> None:
         if not shared_data.can_delete_run(self.request.user, instance):
@@ -393,7 +423,9 @@ class TrainingRunViewSet(
         if not throttle.allow_request(request, self):
             self.throttled(request, throttle.wait())
         try:
-            return Response(training.run_prediction(prediction))
+            return Response(training.run_prediction(prediction, Actor.of(request)))
+        except BudgetError as exc:
+            return Response(exc.body(), status=exc.status_code)
         except training.TrainingBusy as exc:
             return Response(
                 {"detail": str(exc)},
@@ -458,6 +490,7 @@ class ApiRoot(APIView):
                     "login": f"{base}auth/token/",
                     "api_tokens": f"{base}auth/api-tokens/",
                     "account": f"{base}auth/account/",
+                    "usage": f"{base}account/usage/",
                     "legal": f"{base}legal/",
                     "mcp": f"{base}mcp/",
                     "projects": f"{base}projects/",

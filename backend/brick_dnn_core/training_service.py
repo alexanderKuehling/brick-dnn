@@ -8,6 +8,10 @@ Classical models (Gaussian processes, SVMs) are fitted with scikit-learn by the 
 runner and saved as ``model.joblib``; they need scikit-learn, not PyTorch.
 Predictions with the trained weights also run in a process of their own
 (``python -m brickdnn.training.predict <run_dir>``), one per request.
+
+Both report the CPU time they use, which is counted against the budgets of the account and of
+the API token or app that started them (see budgets.py): every look at an active run counts
+what it used since, and stops it when a budget is used up.
 """
 
 from __future__ import annotations
@@ -65,12 +69,14 @@ from brickdnn.training import (
     torchvision_installed,
 )
 from brickdnn.training.config import ConfigError, classical_max_rows
+from brickdnn.training.estimate import Estimate, estimate_training
 from brickdnn.training.job import graph_family
 from brickdnn.training.state import (
     LOG_FILE,
     is_stale,
     read_state,
     request_stop,
+    stop_request,
     weights_file,
     write_job,
 )
@@ -82,6 +88,8 @@ from brickdnn.training.tuning import (
     TuningConfig,
 )
 
+from . import budgets
+from .budgets import Actor
 from .models import Dataset, TrainingRun
 from .retention import touch
 from .serializers import validate_graph_document
@@ -116,6 +124,8 @@ PREDICT_BUSY_MESSAGE = "The server is busy with other predictions. Try again in 
 # A prediction (starting Python, loading PyTorch and the weights, a forward pass on the CPU)
 # that takes longer than this is stopped. It blocks a web server worker meanwhile.
 PREDICT_TIMEOUT_SECONDS = 30
+# CPU threads of a prediction (brickdnn.training.predict.THREADS), for counting its CPU time.
+PREDICT_THREADS = 2
 
 PROBE_CACHE_KEY = "brickdnn:training:probe"
 PROBE_CACHE_SECONDS = 600
@@ -355,13 +365,15 @@ def capabilities() -> dict[str, Any]:
 
 
 def save_upload(user, upload, name: str | None = None) -> Dataset:
-    """Store and inspect an uploaded CSV or ZIP file. Raises :class:`DatasetError`."""
+    """Store and inspect an uploaded CSV or ZIP file. Raises :class:`DatasetError`, or
+    :class:`budgets.StorageQuotaExceeded` if it does not fit into the account's storage."""
     filename = Path(upload.name or "").name
     suffix = Path(filename).suffix.lower()
     if suffix not in (".csv", ".zip"):
         raise DatasetError(WRONG_FILE_MESSAGE)
     name = (str(name or "").strip() or Path(filename).stem.strip() or "Dataset")[:120]
     kind = "csv" if suffix == ".csv" else "images"
+    budgets.check_storage(user, int(upload.size or 0))
 
     # Work in a temporary folder, so that a half-processed upload is never listed.
     datasets = training_dir() / "datasets"
@@ -391,6 +403,7 @@ def save_upload(user, upload, name: str | None = None) -> Dataset:
                 archive.unlink()
             info = inspect_image_folder(work / "images", name=name)
             size = _folder_size(work / "images")
+            budgets.check_storage(user, size)  # unpacked, the images can take more room
         dataset = Dataset.objects.create(
             owner=user, name=name, kind=kind, size_bytes=size, info=info.to_dict()
         )
@@ -491,6 +504,50 @@ def parse_config(config: Any) -> TrainingConfig | None:
         raise TrainingInputError(str(exc)) from None
 
 
+def parse_tuning(tuning: Any) -> TuningConfig | None:
+    """Search settings from a request (None stays None). Raises :class:`TrainingInputError`."""
+    if tuning is None:
+        return None
+    try:
+        return TuningConfig.from_dict(tuning)
+    except ConfigError as exc:
+        raise TrainingInputError(str(exc)) from None
+
+
+def estimate_run(
+    graph: Any,
+    dataset: ResolvedDataset,
+    config: TrainingConfig | None,
+    plan: dict[str, Any] | None,
+    search: TuningConfig | None = None,
+) -> Estimate | None:
+    """The estimated CPU time of a run (None if it cannot be estimated)."""
+    analysis = graph if isinstance(graph, Analysis) else analyze(graph)
+    trials = search.trials if search is not None else 1
+    try:
+        return estimate_training(analysis, dataset.info, config, plan, trials)
+    except Exception:  # an estimate must never break a check or a start
+        logger.exception("Could not estimate the CPU time of a training")
+        return None
+
+
+def budget_check(
+    actor: Actor,
+    graph: Any,
+    dataset: ResolvedDataset,
+    config: TrainingConfig | None,
+    result: Compatibility,
+    search: TuningConfig | None = None,
+) -> dict[str, Any]:
+    """``{"estimate", "budget"}`` for a training check: the estimated CPU time of the planned
+    run and whether the budgets of ``actor`` allow it (see budgets.estimate_data)."""
+    sync_runs(TrainingRun.objects.filter(owner=actor.user, status__in=ACTIVE_STATUSES))
+    estimate = None
+    if result.ok and result.plan is not None:
+        estimate = estimate_run(graph, dataset, config, result.plan.to_dict(), search)
+    return budgets.estimate_data(actor, estimate)
+
+
 def check(
     graph: Any, dataset: ResolvedDataset, config: TrainingConfig | None = None
 ) -> Compatibility:
@@ -562,13 +619,18 @@ def start_run(
     config: Any,
     tuning: Any = None,
     project_id: Any = None,
+    actor: Actor | None = None,
 ) -> TrainingRun:
     """Validate everything and start a training process.
 
     ``tuning`` (search settings, see brickdnn.training.tuning) turns the run into a
-    hyperparameter search. Raises :class:`TrainingUnavailable`, :class:`TrainingInputError`
-    (also for ``ConfigError``), :class:`IncompatibleNetwork` or :class:`TrainingBusy`.
+    hyperparameter search. ``actor``: who starts it (the API token or app, for their
+    budgets; default: ``user`` in the web app). Raises :class:`TrainingUnavailable`,
+    :class:`TrainingInputError` (also for ``ConfigError``), :class:`IncompatibleNetwork`,
+    :class:`TrainingBusy` or a :class:`budgets.BudgetError`. The run's ``budget_warning``
+    (not stored) says if it will probably be stopped by its limit.
     """
+    actor = actor or Actor(user)
     family = graph_family(graph)
     reason = unavailable_reason(family)
     if reason:
@@ -604,9 +666,19 @@ def start_run(
     if not compatibility.ok:
         raise IncompatibleNetwork(compatibility)
     assert compatibility.plan is not None
+    estimate = estimate_run(
+        analysis, dataset, training_config, compatibility.plan.to_dict(), search
+    )
+    budgets.check_storage(user)
 
+    # Under the start lock: two starts cannot both use what is left of a budget.
     with _start_lock():
-        if active_run_count() >= settings.TRAINING_MAX_RUNS:
+        active = active_run_count()  # also counts what the active runs used so far
+        limit = budgets.run_limit(actor)
+        refusal, warning = budgets.estimate_verdict(estimate, limit)
+        if refusal is not None:
+            raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
+        if active >= settings.TRAINING_MAX_RUNS:
             raise TrainingBusy(BUSY_MESSAGE)
         run = TrainingRun.objects.create(
             owner=user,
@@ -620,6 +692,10 @@ def start_run(
             plan=compatibility.plan.to_dict(),
             total_params=analysis.total_params,
             message="Starting …",
+            api_token=actor.token,
+            connection=actor.connection,
+            cpu_limit_seconds=limit.seconds,
+            estimated_cpu_seconds=estimate.cpu_seconds if estimate is not None else None,
         )
         job = {
             "name": run.name,
@@ -632,8 +708,11 @@ def start_run(
             "config": training_config.to_dict(),
             "tuning": search.to_dict() if search is not None else None,
             "data_root": str(builtin_data_dir()),
+            # The runner stops by itself once it has used this much CPU time.
+            "limits": limit.job(),
         }
         _launch(run, job)
+    run.budget_warning = warning  # type: ignore[attr-defined]
     return run
 
 
@@ -708,7 +787,10 @@ SYNC_FIELDS = [
     "has_weights",
     "total_params",
     "finished_at",
+    "stop_reason",
+    "size_bytes",
 ]
+STOP_REASONS = ("user", "budget", "run_limit")
 
 
 def _timestamp(value: Any) -> datetime | None:
@@ -758,6 +840,8 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
     finished = _timestamp(state.get("finished_at"))
     if finished is not None:
         run.finished_at = finished
+    if state.get("stop_reason") in STOP_REASONS:
+        run.stop_reason = state["stop_reason"]
 
 
 def _finite(value: Any) -> Any:
@@ -797,6 +881,50 @@ def _finish(run: TrainingRun, status: str, message: str, with_log: bool = False)
     if run.finished_at is None:
         run.finished_at = timezone.now()
     run.has_weights = run.has_weights and _weights_file(run).is_file()
+
+
+def _stopped(run: TrainingRun) -> None:
+    """End a run the server stopped (its process is gone or was killed after a stop
+    request), saying why if it was a budget."""
+    request = stop_request(run_dir(run.pk)) or {}
+    why = request.get("message") if request.get("reason") in ("budget", "run_limit") else ""
+    _finish(run, "stopped", f"{why} {STOPPED_MESSAGE}" if why else STOPPED_MESSAGE)
+    if request.get("reason") in STOP_REASONS:
+        run.stop_reason = request["reason"]
+    elif not run.stop_reason:
+        run.stop_reason = "user"
+
+
+def _count_usage(run: TrainingRun, state: dict[str, Any] | None) -> float:
+    """Count the CPU time ``run`` used since the last look into the ledger (see budgets.py);
+    measure its files once it has ended. Returns the CPU seconds added."""
+    final = run.status in TERMINAL_STATUSES
+    measured = budgets.measured_cpu(run, state)
+    added = budgets.record_run(run, measured, final=final) if measured is not None else 0.0
+    if final and run.size_bytes is None:
+        run.size_bytes = budgets.folder_size(run_dir(run.pk))
+    return added
+
+
+def _enforce_budgets(run: TrainingRun) -> None:
+    """Stop the active ``run`` (like a stop request, keeping its weights) if it used the
+    most one run may use or a budget it counts against is used up."""
+    if run.status not in ACTIVE_STATUSES or run.stop_requested_at is not None:
+        return
+    verdict = budgets.over_budget(run)
+    if verdict is None:
+        return
+    reason, message = verdict
+    directory = run_dir(run.pk)
+    if directory.is_dir():
+        request_stop(directory, reason, message)
+    now = timezone.now()
+    TrainingRun.objects.filter(pk=run.pk, stop_requested_at__isnull=True).update(
+        stop_requested_at=now, stop_reason=reason
+    )
+    run.stop_requested_at = now
+    run.stop_reason = reason
+    logger.info("Stopping training run %s: %s", run.pk, reason)
 
 
 def _is_own_child(run: TrainingRun) -> bool:
@@ -899,7 +1027,7 @@ def sync_run(run: TrainingRun) -> TrainingRun:
                 _apply_state(run, state)
             if run.status in ACTIVE_STATUSES:
                 if run.stop_requested_at is not None:
-                    _finish(run, "stopped", STOPPED_MESSAGE)
+                    _stopped(run)
                 else:
                     _finish(run, "failed", UNEXPECTED_MESSAGE, with_log=True)
         elif state is None and now - started > timedelta(seconds=START_TIMEOUT_SECONDS):
@@ -915,8 +1043,9 @@ def sync_run(run: TrainingRun) -> TrainingRun:
         ):
             # The process is alive and sends heartbeats, so the pid is really the runner.
             _kill(run, wait=2.0)
-            _finish(run, "stopped", STOPPED_MESSAGE)
+            _stopped(run)
 
+    added = _count_usage(run, state)
     # Never overwrite a final status that another request has already stored.
     updated = TrainingRun.objects.filter(pk=run.pk, status__in=ACTIVE_STATUSES).update(
         **{field: getattr(run, field) for field in SYNC_FIELDS}
@@ -924,6 +1053,8 @@ def sync_run(run: TrainingRun) -> TrainingRun:
     if not updated:
         with contextlib.suppress(TrainingRun.DoesNotExist):
             run.refresh_from_db()
+    elif added > 0:
+        _enforce_budgets(run)
     if run.status in TERMINAL_STATUSES:
         _PROCESSES.pop(str(run.pk), None)
     return run
@@ -955,11 +1086,12 @@ def stop_run(run: TrainingRun) -> TrainingRun:
     sync_run(run)
     if run.status in ACTIVE_STATUSES:
         directory = run_dir(run.pk)
-        if directory.is_dir():
+        if directory.is_dir() and run.stop_requested_at is None:
             request_stop(directory)
         if run.stop_requested_at is None:
             run.stop_requested_at = timezone.now()
-            run.save(update_fields=["stop_requested_at"])
+            run.stop_reason = "user"
+            run.save(update_fields=["stop_requested_at", "stop_reason"])
     return run
 
 
@@ -1072,15 +1204,17 @@ def describe_inputs(run: TrainingRun) -> str | None:
         return None
 
 
-def run_prediction(prediction: Prediction) -> dict[str, Any]:
-    """Run the network on the prepared inputs in a separate process.
+def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
+    """Run the network on the prepared inputs in a separate process. Its CPU time counts
+    against the budgets of ``actor`` (who asks, not who trained the run).
 
-    Raises :class:`TrainingBusy` (too many predictions at once) or
-    :class:`PredictionFailed`.
+    Raises :class:`budgets.BudgetExceeded` (no compute left), :class:`TrainingBusy` (too
+    many predictions at once) or :class:`PredictionFailed`.
     """
     run, prepared = prediction.run, prediction.inputs
+    budgets.check_compute(actor)
     with _prediction_slot():
-        result = _predict_process(run, {"inputs": prepared.tensors, "kind": prepared.kind})
+        result = _predict_process(run, {"inputs": prepared.tensors, "kind": prepared.kind}, actor)
     try:
         predictions = inference.read_outputs(
             run.plan,
@@ -1138,10 +1272,12 @@ def _prediction_slot():
     raise TrainingBusy(PREDICT_BUSY_MESSAGE)
 
 
-def _predict_process(run: TrainingRun, request: dict[str, Any]) -> dict[str, Any]:
-    """Start ``python -m brickdnn.training.predict <run dir>`` and return its answer."""
+def _predict_process(run: TrainingRun, request: dict[str, Any], actor: Actor) -> dict[str, Any]:
+    """Start ``python -m brickdnn.training.predict <run dir>``, count its CPU time and return
+    its answer."""
     directory = run_dir(run.pk)
     command = [*predict_command(), str(directory)]
+    started = time.monotonic()
     try:
         result = subprocess.run(
             command,
@@ -1155,6 +1291,9 @@ def _predict_process(run: TrainingRun, request: dict[str, Any]) -> dict[str, Any
             env=_subprocess_env(),
         )
     except subprocess.TimeoutExpired:
+        # Killed before it could report: count its wall time on all its threads.
+        threads = max(1, min(PREDICT_THREADS, os.cpu_count() or 1))
+        budgets.record_prediction(actor, run, (time.monotonic() - started) * threads)
         raise PredictionFailed(
             f"The prediction took longer than {PREDICT_TIMEOUT_SECONDS} seconds and was stopped."
         ) from None
@@ -1169,6 +1308,10 @@ def _predict_process(run: TrainingRun, request: dict[str, Any]) -> dict[str, Any
             with contextlib.suppress(ValueError):
                 answer = json.loads(line)
             break
+    spent = answer.get("cpu_seconds") if isinstance(answer, dict) else None
+    if isinstance(spent, bool) or not isinstance(spent, (int, float)) or spent < 0:
+        spent = time.monotonic() - started  # it did not report: at least its wall time
+    budgets.record_prediction(actor, run, float(spent))
     if isinstance(answer, dict) and isinstance(answer.get("error"), str):
         raise PredictionFailed(answer["error"][:500])
     if result.returncode == 0 and isinstance(answer, dict) and "outputs" in answer:

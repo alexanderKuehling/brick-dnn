@@ -10,6 +10,7 @@ from .models import (
     Project,
     ProjectMember,
     TrainingRun,
+    UsageRecord,
     UserProfile,
 )
 
@@ -65,6 +66,13 @@ class TrainingRunAdmin(admin.ModelAdmin):
         "created_at",
         "started_at",
         "finished_at",
+        "api_token",
+        "connection",
+        "cpu_seconds",
+        "cpu_limit_seconds",
+        "estimated_cpu_seconds",
+        "stop_reason",
+        "size_bytes",
     )
 
 
@@ -147,17 +155,47 @@ class OAuthConnectionAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    """When accounts were last used and which terms they accepted (see retention.py)."""
+    """When accounts were last used and which terms they accepted (see retention.py), and
+    the limits of each account (see budgets.py): empty uses the server's settings."""
 
-    list_display = ("user", "last_active_at", "terms_accepted_at", "terms_version")
-    search_fields = ("user__username",)
-    readonly_fields = (
+    list_display = (
         "user",
         "last_active_at",
         "terms_accepted_at",
-        "terms_version",
-        "privacy_version",
+        "cpu_minutes_per_month",
+        "cpu_minutes_per_run",
+        "storage_mb",
+        "budget_cpu_minutes",
+    )
+    search_fields = ("user__username",)
+    raw_id_fields = ("user",)
+    fieldsets = (
+        (None, {"fields": ("user", "last_active_at")}),
+        ("Terms", {"fields": ("terms_accepted_at", "terms_version", "privacy_version")}),
+        (
+            "Limits (empty: the server's settings, 0: unlimited)",
+            {"fields": ("cpu_minutes_per_month", "cpu_minutes_per_run", "storage_mb")},
+        ),
+        ("Set by the user", {"fields": ("budget_cpu_minutes",)}),
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        fixed = ("last_active_at", "terms_accepted_at", "terms_version", "privacy_version")
+        # A new profile (e.g. for an account created in the admin) needs its user.
+        return fixed if obj is None else ("user", *fixed)
+
+
+@admin.register(UsageRecord)
+class UsageRecordAdmin(admin.ModelAdmin):
+    """The ledger of compute usage (see budgets.py). Written by the server only."""
+
+    list_display = ("period", "user", "kind", "quantity", "unit", "source", "via", "run_name")
+    list_filter = ("period", "kind", "source")
+    search_fields = ("user__username", "via", "run_name")
+    date_hierarchy = "created_at"
+
     def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
         return False
