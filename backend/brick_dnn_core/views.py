@@ -278,11 +278,10 @@ class DatasetViewSet(
         )
 
     def perform_destroy(self, instance: Dataset) -> None:
-        if training.dataset_in_use(instance):
-            raise Conflict(
-                "This dataset is used by a training that is still running. Stop it first."
-            )
-        instance.delete()  # the files are removed by a post_delete signal
+        try:
+            training.delete_dataset(instance)
+        except training.DatasetInUse as exc:
+            raise Conflict(str(exc)) from None
 
 
 class TrainingRunViewSet(
@@ -352,8 +351,7 @@ class TrainingRunViewSet(
     def perform_destroy(self, instance: TrainingRun) -> None:
         if not shared_data.can_delete_run(self.request.user, instance):
             raise PermissionDenied("Only who started it and the project's owner can delete it.")
-        training.terminate_run(instance)
-        instance.delete()  # the run directory is removed by a post_delete signal
+        training.delete_run(instance)
 
     @action(detail=True, methods=["post"])
     def stop(self, request: Request, pk=None) -> Response:

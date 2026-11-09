@@ -92,6 +92,7 @@ UNEXPECTED_MESSAGE = "The training process stopped unexpectedly."
 NOT_STARTED_MESSAGE = "The training process did not start."
 STOPPED_MESSAGE = "Training was stopped."
 WRONG_FILE_MESSAGE = "Upload a .csv file or a .zip file with one folder per class."
+IN_USE_MESSAGE = "This dataset is used by a training that is still running. Stop it first."
 
 PROBE_CACHE_KEY = "brickdnn:training:probe"
 PROBE_CACHE_SECONDS = 600
@@ -124,6 +125,10 @@ class TrainingUnavailable(Exception):
 
 class TrainingBusy(Exception):
     """The maximum number of concurrent trainings is reached."""
+
+
+class DatasetInUse(Exception):
+    """A dataset cannot be deleted while a training uses it."""
 
 
 class IncompatibleNetwork(Exception):
@@ -418,6 +423,14 @@ def dataset_in_use(dataset: Dataset) -> bool:
     """True if an active training uses ``dataset`` (after updating the run statuses)."""
     sync_runs(dataset.runs.filter(status__in=ACTIVE_STATUSES))
     return dataset.runs.filter(status__in=ACTIVE_STATUSES).exists()
+
+
+def delete_dataset(dataset: Dataset) -> None:
+    """Delete a dataset with its files. Raises :class:`DatasetInUse` while a training uses
+    it. The caller checks that the user owns it."""
+    if dataset_in_use(dataset):
+        raise DatasetInUse(IN_USE_MESSAGE)
+    dataset.delete()  # the files are removed by a post_delete signal
 
 
 # --------------------------------------------------------------------------- #
@@ -847,6 +860,13 @@ def terminate_run(run: TrainingRun) -> None:
     if run.status in ACTIVE_STATUSES:
         # Still active after the sync: the process is alive and its pid is trustworthy.
         _kill(run, wait=3.0)
+
+
+def delete_run(run: TrainingRun) -> None:
+    """Delete a run with its files, killing its process first if it is still active. The
+    caller checks that the user may delete it (``shared_data.can_delete_run``)."""
+    terminate_run(run)
+    run.delete()  # the run directory is removed by a post_delete signal
 
 
 def state_of(run: TrainingRun) -> dict[str, Any] | None:

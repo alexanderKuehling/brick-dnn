@@ -97,6 +97,14 @@ def update_project(
     return updated
 
 
+def delete_project(project: Project) -> None:
+    """Delete a project and close it for everyone editing it live. The caller checks that
+    the user is its owner. Training runs started in it are kept (for who started them)."""
+    project_id = project.pk
+    project.delete()
+    live.notify_deleted(project_id)
+
+
 def copy_project(project: Project, user) -> Project:
     name = project.name if project.name.endswith("(copy)") else f"{project.name} (copy)"
     copy = Project.objects.create(
@@ -227,9 +235,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return self.update(request, pk, partial=True)
 
     def perform_destroy(self, instance: Project) -> None:
-        project_id = instance.pk
-        instance.delete()
-        live.notify_deleted(project_id)
+        delete_project(instance)
 
     @action(detail=True, methods=["post"])
     def duplicate(self, request: Request, pk=None) -> Response:

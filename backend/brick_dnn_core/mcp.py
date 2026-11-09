@@ -42,15 +42,17 @@ from .projects import (
     can_edit,
     project_data,
     projects_for,
+    role_of,
     update_project,
 )
+from .projects import delete_project as remove_project
 from .serializers import (
     DatasetSerializer,
     ProjectSerializer,
     RunDetailSerializer,
     RunSummarySerializer,
 )
-from .shared_data import can_stop_run, visible_datasets, visible_runs
+from .shared_data import can_delete_run, can_stop_run, visible_datasets, visible_runs
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +255,21 @@ def save_project(request: Request, args: dict[str, Any]) -> Any:
     return _summary(project, request.user)
 
 
+def delete_project(request: Request, args: dict[str, Any]) -> Any:
+    project = _project(request, args)
+    role = role_of(request.user, project)
+    if role != "owner":
+        raise ToolError(
+            f"Only its owner ({project.owner.get_username()}) can delete “{project.name}”; "
+            f"the user is {'an editor' if role == 'editor' else 'a viewer'} of it. To remove it "
+            "from their list, they can leave it in the Brick DNN web app (My networks → ⋯ → "
+            "Leave)."
+        )
+    deleted = {"deleted": True, "id": project.pk, "name": project.name}
+    remove_project(project)  # the same as in the web app: also closes it for live editors
+    return {**deleted, "note": "Training runs started in it are kept for who started them."}
+
+
 def get_training_options(request: Request, args: dict[str, Any]) -> Any:
     capabilities = training.capabilities()
     return {
@@ -329,6 +346,39 @@ def stop_training(request: Request, args: dict[str, Any]) -> Any:
     if not can_stop_run(request.user, run):
         raise ToolError("Only who started it and the project's editors can stop it.")
     return RunSummarySerializer(training.stop_run(run)).data
+
+
+def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args)
+    if not can_delete_run(request.user, run):
+        raise ToolError(
+            f"Only who started this run ({run.owner.get_username()}) and the owner of its "
+            "project can delete it."
+        )
+    deleted = {"deleted": True, "id": str(run.pk), "name": run.name}
+    was_active = run.status in ACTIVE_STATUSES
+    training.delete_run(run)
+    return {**deleted, "killed_running_training": was_active}
+
+
+def delete_dataset(request: Request, args: dict[str, Any]) -> Any:
+    dataset_id = _int_id(args, "a dataset")
+    dataset = visible_datasets(request.user).select_related("owner").filter(pk=dataset_id).first()
+    if dataset is None:
+        raise ToolError("No such dataset. get_training_options lists the user's datasets.")
+    if dataset.owner_id != request.user.pk:
+        raise ToolError(
+            f"Only its owner ({dataset.owner.get_username()}) can delete this dataset; it is "
+            "shared with the user in a project."
+        )
+    deleted = {"deleted": True, "id": dataset.pk, "name": dataset.name}
+    try:
+        training.delete_dataset(dataset)
+    except training.DatasetInUse as exc:
+        raise ToolError(
+            f"{exc} list_training_runs shows the running trainings; stop_training stops one."
+        ) from None
+    return deleted
 
 
 TOOLS: dict[str, Tool] = {
@@ -411,6 +461,18 @@ TOOLS: dict[str, Tool] = {
             destructive=True,
         ),
         Tool(
+            "delete_project",
+            "Delete a saved network",
+            "Delete a saved network for good, with its history and comments (only its owner "
+            "can; members are told how to leave it instead). Anyone editing it live in the web "
+            "app is disconnected; training runs started in it are kept. Ask the user first.",
+            delete_project,
+            {"id": {"type": "integer", "description": "Project id from list_projects"}},
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
             "get_training_options",
             "Show training options",
             "Whether training is available on this server, the built-in datasets and the "
@@ -473,6 +535,30 @@ TOOLS: dict[str, Tool] = {
             {"id": {"type": "string"}},
             ("id",),
             writes=True,
+        ),
+        Tool(
+            "delete_training_run",
+            "Delete a training run",
+            "Delete a training run with its trained weights and log for good; a training that "
+            "is still running is killed first. Only who started it and the owner of its "
+            "project can. Ask the user first.",
+            delete_training_run,
+            {"id": {"type": "string", "description": "Run id from list_training_runs"}},
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
+            "delete_dataset",
+            "Delete a dataset",
+            "Delete one of the user's own training datasets with its files for good. Not "
+            "possible while a training uses it, nor for datasets that others shared with the "
+            "user. Runs trained on it are kept. Ask the user first.",
+            delete_dataset,
+            {"id": {"type": "integer", "description": "Dataset id from get_training_options"}},
+            ("id",),
+            writes=True,
+            destructive=True,
         ),
     ]
 }
