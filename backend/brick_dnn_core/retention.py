@@ -4,7 +4,9 @@ Uploads (data sources, datasets) and training runs remember when they were last 
 accounts when they were last logged in to or used with an API token. ``manage.py
 purge_old_data`` deletes what nobody has used for ``BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS``
 (uploads, finished runs) or ``BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS`` days (accounts with
-everything they own). Both are off by default. See docs/privacy.md.
+everything they own). Both are off by default. Entries of the activity log of AI agents are
+deleted after ``BRICKDNN_AGENT_LOG_DAYS`` days (default 90, see agent_activity.py). See
+docs/privacy.md.
 
 The purge never asks training processes for their state: Docker Compose runs it in a
 container of its own, which cannot see them (they would look dead). It skips everything an
@@ -18,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import QuerySet
 from django.db.models.functions import Coalesce
@@ -118,6 +121,7 @@ class PurgeResult:
     datasets: int = 0
     training_runs: int = 0
     tokens: int = 0
+    agent_actions: int = 0
     lines: list[str] = field(default_factory=list)
 
     @property
@@ -137,9 +141,13 @@ def purge(
     dry_run: bool = False,
     log: Callable[[str], None] | None = None,
     now: datetime | None = None,
+    agent_log_days: int | None = None,
 ) -> PurgeResult:
     """Delete old data (0 days: that kind is kept). Logs a line per deleted object, naming
-    users by id only. With ``dry_run``, nothing is deleted."""
+    users by id only. With ``dry_run``, nothing is deleted. ``agent_log_days``: how long the
+    activity log of agents is kept (default BRICKDNN_AGENT_LOG_DAYS; 0: the log is off, all
+    of it is deleted)."""
+    from . import agent_activity
     from .accounts import delete_account
 
     now = now or timezone.now()
@@ -190,6 +198,13 @@ def purge(
             result.training_runs += 1
             if not dry_run:
                 run.delete()
+
+    if agent_log_days is None:
+        agent_log_days = settings.AGENT_LOG_DAYS
+    result.agent_actions = agent_activity.purge(now, agent_log_days, dry_run)
+    if result.agent_actions:
+        kept = f"older than {agent_log_days} days" if agent_log_days > 0 else "(the log is off)"
+        say(f"{verb} {result.agent_actions} entries of the agent activity log {kept}")
 
     # Housekeeping that needs no setting: logins that have expired anyway.
     result.tokens = _expired_tokens(now, dry_run)

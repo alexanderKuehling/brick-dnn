@@ -1,5 +1,6 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import {
+  IconActivity,
   IconBrandGithub,
   IconChevronDown,
   IconCoffee,
@@ -27,8 +28,9 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import type { LegalPageName } from '@/api';
+import { api, type LegalPageName } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { relativeTime } from '@/collab/time';
 import { DEMO } from '@/demo';
 import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
@@ -50,6 +52,14 @@ export function AppHeader() {
   const legal = legalPages(useLegalInfo());
   const navVariant = (path: string) =>
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
+  // When an agent last did something: asked for when the account menu opens.
+  const [latestActivity, setLatestActivity] = useState<string | null>(null);
+  const checkActivity = () => {
+    api.agentActivity
+      .summary()
+      .then((summary) => setLatestActivity(summary.latest_at))
+      .catch(() => undefined); // Then the menu shows no time.
+  };
 
   return (
     <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
@@ -161,7 +171,7 @@ export function AppHeader() {
           </>
         )}
         {user && (
-          <Menu position="bottom-end" withinPortal>
+          <Menu position="bottom-end" withinPortal onOpen={checkActivity}>
             <Menu.Target>
               <Button
                 variant="default"
@@ -193,6 +203,13 @@ export function AppHeader() {
                 API tokens
               </Menu.Item>
               <Menu.Item
+                leftSection={<IconActivity size={16} />}
+                rightSection={<RecentActivity at={latestActivity} />}
+                onClick={() => navigate('/activity')}
+              >
+                Agent activity
+              </Menu.Item>
+              <Menu.Item
                 leftSection={<IconUserCircle size={16} />}
                 onClick={() => navigate('/account')}
               >
@@ -212,6 +229,28 @@ export function AppHeader() {
           </Menu>
         )}
       </Group>
+    </Group>
+  );
+}
+
+const RECENT = 24 * 60 * 60 * 1000;
+const JUST_NOW = 10 * 60 * 1000;
+
+/** "5 min ago" next to "Agent activity" when an agent acted today; a dot while it is busy. */
+function RecentActivity({ at }: { at: string | null }) {
+  if (!at) {
+    return null;
+  }
+  const age = Date.now() - new Date(at).getTime();
+  if (age > RECENT) {
+    return null;
+  }
+  return (
+    <Group gap={4} wrap="nowrap" c="dimmed" fz="xs">
+      {age < JUST_NOW && (
+        <Box component="span" w={6} h={6} bg="green" style={{ borderRadius: '50%' }} aria-hidden />
+      )}
+      {relativeTime(at)}
     </Group>
   );
 }

@@ -8,8 +8,8 @@ limited (``account`` scope). Deleting an account deletes everything it owns:
 - its data sources, preparations, datasets and training runs with their files (running
   trainings are stopped first);
 - its memberships in other people's projects, its comments on them (replies of others to a
-  thread it started go with it, as when it deletes the thread itself), API tokens and
-  connected apps.
+  thread it started go with it, as when it deletes the thread itself), API tokens,
+  connected apps and the activity log of its agents.
 
 Other people's projects it worked on stay; their history keeps the versions it saved, without
 saying who. All its logins end: its refresh tokens are blacklisted. See docs/privacy.md.
@@ -53,8 +53,10 @@ from brickdnn.training import ACTIVE_STATUSES
 
 from . import data_service, live
 from . import training_service as training
+from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
 from .models import (
+    AgentAction,
     ApiToken,
     Comment,
     DataPrep,
@@ -169,6 +171,8 @@ comments.json            comments you wrote
 api_tokens.json          your API tokens: name, the start of the token, dates (never the
                          token itself; the server only keeps a hash)
 connected_apps.json      apps you connected with OAuth, e.g. AI assistants
+agent_activity.json      what AI assistants and scripts did with your API tokens and
+                         connected apps (summarised, as on the page "Agent activity")
 data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
@@ -451,6 +455,7 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "comments.json", _comments(user))
         _json(archive, "api_tokens.json", _api_tokens(user))
         _json(archive, "connected_apps.json", _connections(user))
+        _json(archive, "agent_activity.json", export_entries(user))
         _json(archive, "data_sources.json", _data_sources(user))
         _json(archive, "data_preparations.json", _data_preps(user))
         _json(archive, "datasets.json", _datasets(user))
@@ -497,6 +502,7 @@ def account_data(user) -> dict[str, Any]:
             "training_runs": TrainingRun.objects.filter(owner=user).count(),
             "api_tokens": ApiToken.objects.filter(owner=user, connection__isnull=True).count(),
             "connected_apps": OAuthConnection.objects.filter(owner=user).count(),
+            "agent_actions": AgentAction.objects.filter(owner=user).count(),
             "upload_bytes": uploads,
         },
     }

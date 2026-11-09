@@ -18,6 +18,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Training datasets:** an uploaded CSV file or the images of a ZIP file | `BRICKDNN_DATA_DIR/training/datasets/<id>/` | as imports |
 | **Training runs:** network, settings and metrics; job, state, log and trained weights | database; `BRICKDNN_DATA_DIR/training/runs/<id>/` | as imports (finished runs only) |
 | **API tokens and connected apps:** name, start of the token, SHA-256 hash, dates, the app's name | database | revoked by the user, or with the account |
+| **Agent activity log:** every MCP tool call and API request made with a token or app: token or app name, start of the token, user agent, tool or route, outcome and error message, duration, ids and names of what it touched, summarised arguments (sizes and counts, never file contents, prediction inputs or secrets) | database | `BRICKDNN_AGENT_LOG_DAYS` (90) days, at most 20,000 entries per account; with the account. Kept when the token is revoked |
 | **Rate-limit counters:** IP address (anonymous requests) or user id | file cache in `BRICKDNN_DATA_DIR/cache` | at most an hour |
 | **Live editing:** who is in a network, what they select or drag | Redis, in memory only | 30 seconds; never written to disk |
 | **Access log** (nginx): shortened IP address, time, path without query string, status, size, duration, user agent | Docker's container logs | at most 3 × 10 MB per container |
@@ -78,15 +79,15 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
   are blacklisted; their access tokens expire within 30 minutes); this one goes on.
 - **Download my data:** a ZIP file with `README.txt` and JSON files for the account, own
   networks with their history, memberships, own comments, API tokens (no secrets), connected
-  apps, data sources, preparations, datasets and training runs (settings, metrics; not the
-  weights), plus the uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
+  apps, the agent activity log, data sources, preparations, datasets and training runs
+  (settings, metrics; not the weights), plus the uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
   in total. Files beyond that are listed in `files.json` with a note. Nothing of other users
   is included (e.g. their comments on the user's networks).
 - **Delete the account**, with the password and the username typed again. Running trainings
   are stopped, then everything the account owns is deleted, files included: its networks
   (members lose access, people editing them live see that the network is gone), data
-  sources, preparations, datasets, training runs, API tokens, connected apps, memberships
-  and its comments. Comments are deleted, not anonymised: a comment's text can itself be
+  sources, preparations, datasets, training runs, API tokens, connected apps, the agent
+  activity log, memberships and its comments. Comments are deleted, not anonymised: a comment's text can itself be
   personal data. Replies of others to a thread the user started go with the thread, as when
   the user deletes the thread. Networks of others the user worked on stay; their history
   keeps the versions without saying who saved them. All refresh tokens are blacklisted.
@@ -121,7 +122,10 @@ python manage.py purge_old_data --unused-uploads-days 90  # override the setting
 ```
 
 Expired logins (refresh tokens, unused OAuth codes) and expired admin sessions are cleaned up
-on every run, whatever the settings.
+on every run, whatever the settings. So are entries of the **agent activity log** older than
+`BRICKDNN_AGENT_LOG_DAYS` (default 90; it is on by default, as users see it on the page *Agent
+activity*; `0` turns the log off and the next run deletes it) and the oldest entries of an
+account beyond 20,000. `--agent-log-days N` overrides the setting once.
 
 ## Logs and security headers
 

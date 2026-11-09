@@ -73,6 +73,7 @@ import {
   isActive,
   isClassification,
   preprocessingJson,
+  reportsR2,
   searchedSettings,
   searchLabel,
   SETTING_LABELS,
@@ -107,15 +108,42 @@ function useNow(running: boolean): number {
   return now;
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** A number with its name above it. */
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Paper withBorder p="xs" radius="sm">
+    <div>
       <Text size="xs" c="dimmed">
         {label}
       </Text>
       <Text fw={600} size="lg" lh={1.3}>
         {value}
       </Text>
+    </div>
+  );
+}
+
+function Tile({
+  label,
+  value,
+  hint,
+  next,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  /** A second number next to the first one, e.g. the R² next to the RMSE. */
+  next?: { label: string; value: string };
+}) {
+  return (
+    <Paper withBorder p="xs" radius="sm">
+      {next ? (
+        <Group gap="xs" align="flex-start" justify="space-between">
+          <Metric label={label} value={value} />
+          <Metric label={next.label} value={next.value} />
+        </Group>
+      ) : (
+        <Metric label={label} value={value} />
+      )}
       {hint && (
         <Text size="xs" c="dimmed">
           {hint}
@@ -145,6 +173,7 @@ export function RunView({
   const active = isActive(run.status);
   const history = useMemo(() => state?.history ?? [], [state?.history]);
   const classification = isClassification(run, history);
+  const r2 = reportsR2(run, history);
   const now = useNow(active);
   const [logOpened, log] = useDisclosure(false);
   const [tableOpened, table] = useDisclosure(false);
@@ -317,7 +346,11 @@ export function RunView({
             {classification ? (
               <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
             ) : (
-              <Tile label="Validation RMSE" value={formatMetric(metrics?.val_rmse)} />
+              <Tile
+                label="Validation RMSE"
+                value={formatMetric(metrics?.val_rmse)}
+                next={r2 ? { label: 'R²', value: formatR2(metrics?.val_r2) } : undefined}
+              />
             )}
             {tuning ? (
               <Tile
@@ -356,7 +389,7 @@ export function RunView({
             <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
           </SimpleGrid>
 
-          <TestResultCard run={run} classification={classification} active={active} />
+          <TestResultCard run={run} classification={classification} r2={r2} active={active} />
 
           {tuning && (
             <TrialsTable
@@ -401,6 +434,15 @@ export function RunView({
                   />
                 )
               )}
+              {charts.r2.length > 0 && (
+                <LineChart
+                  title="Validation R²"
+                  x={charts.x}
+                  series={charts.r2}
+                  yBounds={[-Infinity, 1]}
+                  formatValue={formatR2}
+                />
+              )}
               <div>
                 <ToggleButton opened={tableOpened} onClick={table.toggle}>
                   Values per epoch
@@ -409,6 +451,7 @@ export function RunView({
                   <HistoryTable
                     history={history}
                     classification={classification}
+                    r2={r2}
                     kept={keptEpoch}
                   />
                 </Collapse>
@@ -911,16 +954,27 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
       history.map((h) => h.val_rmse)
     ),
   ].filter((s) => has(s.values));
-  return { x, loss, accuracy, rmse };
+  const r2 = [
+    series(
+      'val_r2',
+      'Validation',
+      SERIES_COLORS[1],
+      history.map((h) => h.val_r2)
+    ),
+  ].filter((s) => has(s.values));
+  return { x, loss, accuracy, rmse, r2 };
 }
 
 function HistoryTable({
   history,
   classification,
+  r2,
   kept,
 }: {
   history: HistoryEntry[];
   classification: boolean;
+  /** Add the validation R² (regressions). */
+  r2: boolean;
   /** The epoch whose weights are kept (shown in bold). */
   kept: number | null;
 }) {
@@ -940,6 +994,7 @@ function HistoryTable({
             ) : (
               <Table.Th>Val. RMSE</Table.Th>
             )}
+            {r2 && <Table.Th>Val. R²</Table.Th>}
             <Table.Th>Time</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -957,6 +1012,7 @@ function HistoryTable({
               ) : (
                 <Table.Td>{formatMetric(entry.val_rmse)}</Table.Td>
               )}
+              {r2 && <Table.Td>{formatR2(entry.val_r2)}</Table.Td>}
               <Table.Td>{formatDuration(entry.seconds)}</Table.Td>
             </Table.Tr>
           ))}
@@ -974,10 +1030,13 @@ function HistoryTable({
 function TestResultCard({
   run,
   classification,
+  r2,
   active,
 }: {
   run: RunDetail;
   classification: boolean;
+  /** Show the R² next to the RMSE (regressions). */
+  r2: boolean;
   active: boolean;
 }) {
   const state = run.state;
@@ -989,6 +1048,7 @@ function TestResultCard({
           loss: metrics.test_loss ?? null,
           accuracy: metrics.test_accuracy ?? null,
           rmse: metrics.test_rmse ?? null,
+          r2: metrics.test_r2 ?? null,
         }
       : null;
   const result = state?.test ?? fromMetrics;
@@ -1015,14 +1075,10 @@ function TestResultCard({
   return (
     <Paper withBorder p="xs" radius="sm">
       <Group justify="space-between" wrap="nowrap" gap="sm">
-        <div style={{ flexShrink: 0 }}>
-          <Text size="xs" c="dimmed">
-            {label}
-          </Text>
-          <Text fw={600} size="lg" lh={1.3}>
-            {value}
-          </Text>
-        </div>
+        <Group gap="md" wrap="nowrap" align="flex-start" style={{ flexShrink: 0 }}>
+          <Metric label={label} value={value} />
+          {r2 && <Metric label="R²" value={formatR2(result?.r2)} />}
+        </Group>
         <Text size="xs" c="dimmed" ta="right">
           {note}
         </Text>
@@ -1052,6 +1108,7 @@ function TrialsTable({
 }) {
   const settings = searchedSettings(tuning);
   const showRmse = !classification && trials.some((t) => typeof t.val_rmse === 'number');
+  const showR2 = !classification && trials.some((t) => typeof t.val_r2 === 'number');
   const winner = trials.find((t) => t.trial === best) ?? null;
   const finished = trials.filter((t) => t.status === 'completed' || t.status === 'failed').length;
 
@@ -1088,6 +1145,7 @@ function TrialsTable({
                 <Table.Th>Val. loss</Table.Th>
                 {classification && <Table.Th>Val. acc.</Table.Th>}
                 {showRmse && <Table.Th>Val. RMSE</Table.Th>}
+                {showR2 && <Table.Th>Val. R²</Table.Th>}
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -1107,6 +1165,7 @@ function TrialsTable({
                     <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>
                     {classification && <Table.Td>{formatPercent(entry.val_accuracy)}</Table.Td>}
                     {showRmse && <Table.Td>{formatMetric(entry.val_rmse)}</Table.Td>}
+                    {showR2 && <Table.Td>{formatR2(entry.val_r2)}</Table.Td>}
                     <Table.Td>
                       <TrialStatus entry={entry} best={isBest} epochs={epochs} active={active} />
                     </Table.Td>

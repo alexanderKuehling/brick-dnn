@@ -9,13 +9,22 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from brick_dnn_core import training_service
 from brick_dnn_core.api_tokens import create_token
 from brick_dnn_core.mcp import PROTOCOL_VERSIONS, TOOLS
 from brick_dnn_core.models import Project, TrainingRun
 from brickdnn.training import TERMINAL_STATUSES
+from brickdnn.training.state import read_state, write_state
 
 from .helpers import chain
-from .test_training_api import DEMO_GRAPH, QUICK, RANDOM, training_dir  # noqa: F401
+from .test_training_api import (  # noqa: F401 (training_dir is a fixture)
+    DEMO_GRAPH,
+    QUICK,
+    RANDOM,
+    training_dir,
+    use_runner,
+    wait_for_state,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -268,3 +277,50 @@ def test_training(mcp, user, training_dir):  # noqa: F811
 
     result, text = call(mcp, "start_training", graph=DEMO_GRAPH, dataset={"kind": "builtin"})
     assert result["isError"] is True
+
+
+def test_regression_metrics_reach_rest_and_mcp(mcp, user, training_dir, settings):  # noqa: F811
+    """The R² of a neural regression is in the run's metrics, its best trial and its state."""
+    use_runner(settings, "wait")  # does not overwrite the state written below
+    result, text = call(mcp, "start_training", graph=DEMO_GRAPH, dataset=RANDOM, config=QUICK)
+    assert "isError" not in result, text
+    run_id = result["structuredContent"]["id"]
+    wait_for_state(training_dir, run_id)
+    process = training_service._PROCESSES[run_id]
+    process.kill()
+    process.wait(timeout=5)
+    directory = training_dir / "runs" / run_id
+    state = read_state(directory)
+    entry = {"epoch": 1, "train_loss": 0.4, "val_loss": 0.3, "train_accuracy": None}
+    entry.update(val_accuracy=None, val_rmse=12.5, val_r2=0.81, seconds=0.1)
+    trial = {"trial": 1, "params": {"learning_rate": 0.01}, "status": "completed"}
+    trial.update(message="", epochs_done=1, train_loss=0.4, val_loss=0.3, val_accuracy=None)
+    trial.update(val_rmse=12.5, val_r2=0.81, weights_epoch=1, stopped_early=False, seconds=1.0)
+    state.update(
+        status="completed",
+        message="Finished: validation loss 0.3, RMSE 12.5, R² 0.810; test loss 0.35, …",
+        task="regression",
+        history=[entry],
+        weights_epoch=1,
+        test={"loss": 0.35, "accuracy": None, "rmse": 13.4, "r2": 0.78},
+        trials=[trial],
+        best_trial=1,
+        finished_at=time.time(),
+    )
+    write_state(directory, state)
+
+    expected = {"val_rmse": 12.5, "val_r2": 0.81, "test_rmse": 13.4, "test_r2": 0.78}
+    result, _ = call(mcp, "get_training_run", id=run_id, include=["history"])
+    run = result["structuredContent"]
+    assert run["status"] == "completed"
+    assert {key: run["metrics"][key] for key in expected} == expected
+    assert run["tuning"]["best_trial"]["val_r2"] == 0.81
+    assert run["history"][0]["val_r2"] == 0.81 and run["test"]["r2"] == 0.78
+    _, text = call(mcp, "list_training_runs")
+    listed = json.loads(text)["runs"][0]
+    assert listed["metrics"]["val_r2"] == 0.81 and listed["metrics"]["test_r2"] == 0.78
+    rest = APIClient()
+    rest.force_authenticate(user)
+    detail = rest.get(f"/api/training/runs/{run_id}/").data
+    assert {key: detail["metrics"][key] for key in expected} == expected
+    assert detail["best_trial"]["val_r2"] == 0.81

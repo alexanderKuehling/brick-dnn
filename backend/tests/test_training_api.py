@@ -788,6 +788,7 @@ def test_hyperparameter_search_run(auth_client, training_dir, settings):
         "val_loss": 0.3,
         "val_accuracy": 0.95,
         "val_rmse": None,
+        "val_r2": None,
         "weights_epoch": 1,
     }
     assert data["metrics"]["val_accuracy"] == 0.95

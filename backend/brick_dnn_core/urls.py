@@ -2,7 +2,17 @@ from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView
 
-from . import accounts, data_views, legal, mcp, oauth, projects, upload_links, views
+from . import (
+    accounts,
+    agent_activity,
+    data_views,
+    legal,
+    mcp,
+    oauth,
+    projects,
+    upload_links,
+    views,
+)
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
@@ -31,6 +41,13 @@ urlpatterns = [
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
+    # What AI agents did with the user's API tokens and connected apps (website login only).
+    path("agent-activity/", agent_activity.AgentActivityView.as_view(), name="agent-activity"),
+    path(
+        "agent-activity/summary/",
+        agent_activity.AgentActivitySummaryView.as_view(),
+        name="agent-activity-summary",
+    ),
     # Imprint, privacy policy, terms of use: Markdown files on the server (public).
     path("legal/", legal.legal_index, name="legal"),
     re_path(r"^legal/(?P<page>imprint|privacy|terms)/$", legal.legal_page, name="legal-page"),

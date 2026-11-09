@@ -140,7 +140,7 @@ class StateReporter(Reporter):
                 # Live values of the running trial.
                 current = dict(trials[-1])
                 current["epochs_done"] = entry["epoch"]
-                for key in ("train_loss", "val_loss", "val_accuracy", "val_rmse"):
+                for key in ("train_loss", "val_loss", "val_accuracy", "val_rmse", "val_r2"):
                     current[key] = entry.get(key)
                 self.state["trials"] = [*trials[:-1], current]
             self._write()
@@ -157,6 +157,7 @@ class StateReporter(Reporter):
             "val_loss": None,
             "val_accuracy": None,
             "val_rmse": None,
+            "val_r2": None,
             "weights_epoch": None,
             "stopped_early": False,
             "seconds": None,

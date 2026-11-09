@@ -46,8 +46,8 @@ stored per user.
    [early stopping](#early-stopping-and-the-kept-weights) end the training when the network
    stops improving, or let a [hyperparameter search](#hyperparameter-search) choose some of
    the settings.
-5. Watch loss and accuracy per epoch. You can close the panel; the training continues and the
-   button in the toolbar shows its progress.
+5. Watch loss and accuracy (for a regression: RMSE and R²) per epoch. You can close the panel;
+   the training continues and the button in the toolbar shows its progress.
 6. When the run is finished (or stopped), download the **weights** (`.pt`) and the matching
    **script** (`.py`).
 
@@ -77,8 +77,9 @@ Details:
   line is detected automatically. Features are standardised (mean 0, standard deviation 1).
   - *Classification*: the target is a class index `0 … K-1` or a text label (`setosa`,
     `virginica` …; mapped to indices in alphabetical order). The network needs K outputs.
-  - *Regression*: the target is a number and the network has a single output. The validation
-    error is also reported as RMSE in the units of the target.
+  - *Regression*: the target is a number and the network has a single output. Besides the
+    loss, the validation and test results are reported as RMSE in the units of the target and
+    as R², see [Regression metrics](#regression-metrics).
 - Text models (Input data type `long`) and networks with several inputs or outputs can only be
   trained on demo data so far.
 - Uploads are limited to `BRICKDNN_MAX_UPLOAD_MB` (default 500 MB).
@@ -154,6 +155,29 @@ validates on 12,000 and tests on the 10,000 official test images.
 
 Normalisation statistics (CSV features and targets, converted images) are computed from the
 training part only. With *Max. samples*, validation and test data shrink in proportion.
+
+### Regression metrics
+
+The loss of a regression is the mean squared error of the standardised target (the target
+minus its mean on the training data, divided by its standard deviation there), so it does not
+depend on the units of the data. Every regression run, of a neural network or a
+[classical model](#classical-models), also reports two numbers on the validation data (per
+epoch) and on the test data:
+
+- **RMSE**, the root mean squared error in the units of the target column (a price in euros,
+  a temperature in °C …).
+- **R²**, the coefficient of determination: `1 − SS_res / SS_tot`, the sum of the squared
+  errors divided by the sum of the squared differences of the targets from their mean, both
+  on the validation (or test) rows themselves. 1 is a perfect fit, 0 is no better than always
+  predicting that mean, and it is negative for a network that predicts worse than that, for
+  example in the first epochs. It is the same number as scikit-learn's `r2_score` (with
+  several outputs, their mean R²), and it is not given (null, *–*) when all targets of the
+  split are equal.
+
+The run view shows both next to the loss, per epoch in a curve and in the table of the
+epochs, and in the table of the trials of a search; the list of runs shows the test R²
+(without a test set, the validation R²). Runs of older versions of Brick DNN have no R² for
+neural networks.
 
 ### Early stopping and the kept weights
 
@@ -359,7 +383,9 @@ brickdnn train net.json --data houses.csv --search grid --tune-lr 0.01,0.001 --t
 | `--tune-weight-decay VALUES` | Weight decays to try |
 
 The command prints every trial, a table of all trials (best first) and the test result, and
-saves the weights of the best trial.
+saves the weights of the best trial. Regressions add the RMSE and R² everywhere, for example
+`Epoch   3/10  train loss 0.2412  val loss 0.2287  val rmse 41.27  val R² 0.823` and
+`Test: loss 0.2034, rmse 43.9, R² 0.796`.
 
 ## How it works
 
