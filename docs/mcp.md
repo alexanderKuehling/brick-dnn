@@ -185,6 +185,36 @@ the server by default: `BRICKDNN_MAX_PREDICTIONS`). Everyone who can see the run
 also with read-only access. The same is available as
 [`POST /api/training/runs/<id>/predict/`](api.md#training-login-required).
 
+## Activity log
+
+Everything an assistant or script does with your tokens and connected apps is listed on the
+page **Agent activity** (account menu; on the API tokens page next to each token and app), as
+it happens: the page asks for new entries every few seconds while it is open.
+
+- **What is logged:** every MCP tool call, and every other API request made with an API token
+  (or an app's token), also when it is refused (read-only token, app token outside the MCP
+  server). Using the website is not logged.
+- **Each entry:** the token (name and start, `bdnn_Ab3dEf9h…`) or app, the client's user agent,
+  the tool or REST route, whether it worked (with the error message the assistant got), how
+  long it took, the networks, training runs, datasets, data files and preparations it touched
+  (with id and name, linked) and a sentence such as *Started training “GP 1” on dataset
+  “houses.csv” (#3)*.
+- **Arguments are summarised and redacted:** CSV text becomes its size, lines and columns
+  (`48 KB, 801 lines, 9 columns`), prediction inputs their number (`3 samples with 8
+  values`), graphs their layers (`5 layers (Input, Linear ×2, …), 4 connections`), long texts
+  and descriptions their length, links lose their query. Keys such as `password`, `token`,
+  `secret`, `sig` and anything that looks like a token (`bdnn_…`, a JWT) are stored as
+  `[redacted]`. Names are capped at 120 characters.
+- **Who sees it:** each user sees what their own tokens and apps did, nothing else; the
+  owner of a shared network does not see other members' agents (their changes are in the
+  network's history as usual). Only a website login can read the log, not an API token.
+- **How long:** `BRICKDNN_AGENT_LOG_DAYS` days (default 90), at most 20,000 entries per account;
+  `purge_old_data` deletes older ones daily. `0` turns the log off. Entries outlive a revoked
+  token or a disconnected app (with its name) until they expire; they are part of the data
+  export and deleted with the account ([privacy.md](privacy.md)).
+- Entries are written after the answer has been sent: logging never delays or breaks a tool
+  call. The API is [`GET /api/agent-activity/`](api.md#agent-activity).
+
 ## Details
 
 - JSON-RPC 2.0 over HTTP `POST`, answered with `application/json`. There are no sessions and

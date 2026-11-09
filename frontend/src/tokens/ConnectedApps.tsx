@@ -3,16 +3,19 @@ import { IconPlugConnectedX } from '@tabler/icons-react';
 import { Alert, Badge, Button, Center, Group, Loader, Text, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type OAuthConnection } from '@/api';
+import { api, type ActivityAgent, type AgentKey, type OAuthConnection } from '@/api';
 import { urlHost } from '@/oauth/url';
 import { formatDate } from '@/training/format';
+import { ActivityLink } from './ActivityLink';
 import classes from './Tokens.module.css';
 
 function ConnectionItem({
   connection,
+  activity,
   onDisconnect,
 }: {
   connection: OAuthConnection;
+  activity: ActivityAgent | undefined;
   onDisconnect: () => void;
 }) {
   const host = urlHost(connection.client_uri);
@@ -55,13 +58,24 @@ function ConnectionItem({
           <dt>Last used</dt>
           <dd>{connection.last_used_at ? formatDate(connection.last_used_at) : 'Never'}</dd>
         </div>
+        <div>
+          <dt>Agent activity</dt>
+          <dd>
+            <ActivityLink agentKey={`app:${connection.id}`} activity={activity} />
+          </dd>
+        </div>
       </dl>
     </li>
   );
 }
 
 /** Apps the user allowed to use their account by signing in (OAuth), e.g. the Claude apps. */
-export function ConnectedApps() {
+export function ConnectedApps({
+  activity = new Map(),
+}: {
+  /** What each app did lately, by "app:<id>". */
+  activity?: Map<AgentKey, ActivityAgent>;
+}) {
   const [connections, setConnections] = useState<OAuthConnection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +134,7 @@ export function ConnectedApps() {
             <ConnectionItem
               key={connection.id}
               connection={connection}
+              activity={activity.get(`app:${connection.id}`)}
               onDisconnect={() => disconnect(connection)}
             />
           ))}

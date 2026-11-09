@@ -55,6 +55,8 @@ export function storedSummary(stored: Account['stored']): string[] {
     stored.training_runs > 0 && plural(stored.training_runs, 'training run'),
     stored.api_tokens > 0 && plural(stored.api_tokens, 'API token'),
     stored.connected_apps > 0 && plural(stored.connected_apps, 'connected app'),
+    stored.agent_actions > 0 &&
+      `${plural(stored.agent_actions, 'entry', 'entries')} in the agent activity log`,
   ];
   return lines.filter((line): line is string => Boolean(line));
 }
@@ -289,7 +291,9 @@ function DeleteDialog({
             <List.Item>
               your imported tables, data preparations, datasets and trainings with their files
             </List.Item>
-            <List.Item>your comments, API tokens and connected apps</List.Item>
+            <List.Item>
+              your comments, API tokens, connected apps and the log of their activity
+            </List.Item>
           </List>
           <Text size="sm">
             Networks of other people you worked on stay with them. Download your data first if you

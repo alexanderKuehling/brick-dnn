@@ -87,12 +87,15 @@ Sie können API-Token anlegen oder Apps (z. B. KI-Assistenten über MCP) mit Ihr
 
 Verbinden Sie eine App, ruft diese auf Ihre Veranlassung Daten Ihres Kontos ab und verarbeitet sie bei ihrem Anbieter (z. B. Anthropic bei Claude). Dafür gelten die Datenschutzbestimmungen dieses Anbieters. Sie können die Verbindung jederzeit unter „API tokens“ trennen.
 
+**Protokoll der Agentenaktionen:** Was ein Token oder eine verbundene App in Ihrem Konto tut (jeder Aufruf über MCP oder die API), wird protokolliert und Ihnen unter „Agent activity“ angezeigt: Name des Tokens bzw. der App, Anfang des Tokens, Kennung des Programms (User-Agent), Aktion, Ergebnis mit Fehlermeldung, Dauer, betroffene Netze, Trainings und Datensätze sowie die Argumente in zusammengefasster Form (Größen und Anzahlen statt Dateiinhalten und Eingabedaten, nie Passwörter oder Token). Nur Sie sehen Ihr Protokoll. Es wird nach [90] Tagen automatisch gelöscht (höchstens 20.000 Einträge je Konto), mit dem Konto gelöscht und ist im Datenexport enthalten. Zweck: Nachvollziehbarkeit und Kontrolle dessen, was Assistenten in Ihrem Namen tun. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
+
 ## 10. Speicherdauer und Löschung
 
-- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token und verbundenen Apps gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
+- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps und das Protokoll der Agentenaktionen gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
 - [Falls eingestellt:] **Ungenutzte Uploads und Trainings** werden nach [X] Tagen ohne Nutzung automatisch gelöscht.
 - [Falls eingestellt:] **Inaktive Konten** werden nach [Y] Tagen ohne Login mit allen Inhalten automatisch gelöscht.
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
+- **Protokoll der Agentenaktionen:** nach [90] Tagen (`BRICKDNN_AGENT_LOG_DAYS`).
 - **Server-Logs:** siehe Abschnitt 4.
 - [Backups: werden nach [Z] Tagen überschrieben; gelöschte Daten können bis dahin noch in Backups enthalten sein.]
 

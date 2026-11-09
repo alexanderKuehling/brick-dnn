@@ -88,6 +88,10 @@ streichen.
       „Buy me a coffee“-Links sind nur Links.
 - [ ] **API-Token und verbundene Apps (MCP, z. B. Claude):** gespeichert werden nur Name,
       Präfix, Hash, Zeitpunkte; was eine verbundene App abruft, verarbeitet deren Anbieter.
+- [ ] **Protokoll der Agentenaktionen:** jeder Aufruf mit Token oder App (Aktion, Ergebnis,
+      Dauer, User-Agent, betroffene Objekte, zusammengefasste Argumente ohne Inhalte und
+      Geheimnisse), nur für den Nutzer sichtbar; Speicherdauer `BRICKDNN_AGENT_LOG_DAYS`
+      (Standard 90 Tage), im Export enthalten, mit dem Konto gelöscht.
 - [ ] **Keine E-Mails:** Die App versendet keine.
 - [ ] **Speicherdauer:** bis zur Löschung durch die Nutzer; automatische Löschung nach
       `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` / `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS`, falls

@@ -8,6 +8,7 @@ import { AppShell, MantineProvider } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import { AccountPage } from './account/AccountPage';
+import { AgentActivityPage } from './activity/AgentActivityPage';
 import { AuthProvider } from './auth/AuthContext';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
@@ -60,6 +61,15 @@ export default function App() {
                         element={
                           <RequireAuth>
                             <ApiTokensPage />
+                          </RequireAuth>
+                        }
+                      />
+                      {/* What AI agents did with the user's API tokens and apps. */}
+                      <Route
+                        path="/activity"
+                        element={
+                          <RequireAuth>
+                            <AgentActivityPage />
                           </RequireAuth>
                         }
                       />
