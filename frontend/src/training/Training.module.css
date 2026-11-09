@@ -37,3 +37,9 @@
   background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
   border-radius: var(--mantine-radius-sm);
 }
+
+/* In place of an action button the user may not use, so the rows stay aligned. */
+.actionSpace {
+  flex: none;
+  width: calc(1.75rem * var(--mantine-scale));
+}

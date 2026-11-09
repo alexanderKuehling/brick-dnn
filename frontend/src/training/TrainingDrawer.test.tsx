@@ -1,8 +1,10 @@
-import { render, screen, userEvent, waitFor, within } from '@test-utils';
+import { cleanup, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
-import { api, ApiError } from '@/api';
-import { ANALYSIS, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
+import { notifications } from '@mantine/notifications';
+import { api, ApiError, type ProjectRole } from '@/api';
+import { NO_SCOPE, type TrainingScope } from './access';
+import { ANALYSIS, dataset, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
 import TrainingDrawer, { type TrainingDrawerProps } from './TrainingDrawer';
 import type { DataController } from './useDatasets';
@@ -56,6 +58,7 @@ function controller(overrides: Partial<TrainingController> = {}): TrainingContro
     runsError: null,
     refreshRuns: vi.fn(),
     activeRun: null,
+    scope: NO_SCOPE,
     opened: true,
     open: vi.fn(),
     close: vi.fn(),
@@ -430,5 +433,196 @@ describe('TrainingDrawer', () => {
     expect(screen.getByText(/MNIST · search · 4 trials/)).toBeInTheDocument();
     expect(screen.getByText('96.1%')).toBeInTheDocument();
     expect(screen.getByText('test accuracy')).toBeInTheDocument();
+  });
+});
+
+describe('TrainingDrawer in a shared network', () => {
+  const PLAN_OK = { ok: true, errors: [], warnings: [], plan: null };
+  const network = (role: ProjectRole, shared = true): TrainingScope => ({
+    username: 'ada',
+    project: { id: 5, role, shared },
+  });
+  const RUNS = [
+    summary({ id: 'mine', name: 'My try', status: 'completed', project: 5, started_by: 'ada' }),
+    summary({ id: 'bob', name: 'Bob’s try', status: 'completed', project: 5, started_by: 'bob' }),
+    summary({ id: 'solo', name: 'Solo run', status: 'completed', project: null }),
+    summary({ id: 'other', name: 'Elsewhere', status: 'completed', project: 9, started_by: 'eve' }),
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(notifications, 'show').mockImplementation(() => 'id');
+  });
+
+  it('starts trainings in the network and says who sees them', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(PLAN_OK);
+    vi.mocked(api.training.runs.create).mockResolvedValue(detail({ project: 5 }));
+    renderDrawer({ training: controller({ scope: network('editor') }) });
+    expect(screen.getByText('Visible to everyone in this network')).toBeInTheDocument();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await userEvent.click(startButton());
+    expect(api.training.runs.create).toHaveBeenCalledWith(expect.objectContaining({ project: 5 }));
+  });
+
+  it('does not mention the network while nobody else has access', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(PLAN_OK);
+    vi.mocked(api.training.runs.create).mockResolvedValue(detail());
+    renderDrawer({ training: controller({ scope: network('owner', false) }) });
+    expect(screen.queryByText('Visible to everyone in this network')).not.toBeInTheDocument();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await userEvent.click(startButton());
+    // Still started in the network: people it is shared with later see it.
+    expect(api.training.runs.create).toHaveBeenCalledWith(expect.objectContaining({ project: 5 }));
+  });
+
+  it('starts trainings outside of networks without a project', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(PLAN_OK);
+    vi.mocked(api.training.runs.create).mockResolvedValue(detail());
+    renderDrawer({ training: controller({ scope: { username: 'ada', project: null } }) });
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await userEvent.click(startButton());
+    expect(vi.mocked(api.training.runs.create).mock.calls[0][0]).not.toHaveProperty('project');
+  });
+
+  it('lists the runs of the network from everyone, or all own runs', async () => {
+    renderDrawer({
+      training: controller({ view: 'history', runs: RUNS, scope: network('editor') }),
+    });
+    expect(screen.getByText('My try')).toBeInTheDocument();
+    expect(screen.getByText('Bob’s try')).toBeInTheDocument();
+    expect(screen.getByText(/^by bob · /)).toBeInTheDocument();
+    expect(screen.queryByText('Solo run')).not.toBeInTheDocument();
+    expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument();
+    // Editors delete their own runs; the owner of the network deletes everyone's.
+    expect(screen.getByRole('button', { name: 'Delete My try' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete Bob’s try' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('All my runs'));
+    expect(screen.getByText('My try')).toBeInTheDocument();
+    expect(screen.getByText('Solo run')).toBeInTheDocument();
+    expect(screen.queryByText('Bob’s try')).not.toBeInTheDocument();
+    expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument();
+  });
+
+  it('lets the owner of the network delete runs of others', () => {
+    renderDrawer({
+      training: controller({ view: 'history', runs: RUNS, scope: network('owner') }),
+    });
+    expect(screen.getByRole('button', { name: 'Delete Bob’s try' })).toBeInTheDocument();
+  });
+
+  it('shows viewers the runs, but no way to train', async () => {
+    const training = controller({ runs: RUNS, scope: network('viewer') });
+    renderDrawer({ training });
+    expect(screen.getByText('Trainings of this network')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'New training' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start training' })).not.toBeInTheDocument();
+    expect(screen.getByText(/You can view this network/)).toBeInTheDocument();
+    expect(screen.getByText('Bob’s try')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Delete Bob/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete My try' })).toBeInTheDocument();
+  });
+
+  it('tells viewers when nobody has trained the network yet', () => {
+    renderDrawer({ training: controller({ runs: [], scope: network('viewer') }) });
+    expect(screen.getByText('Nobody has trained this network yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set up a training' })).not.toBeInTheDocument();
+  });
+
+  it('shows who started a run and only what the role allows', () => {
+    const run = detail({ started_by: 'bob', project: 5 });
+    const show = (role: ProjectRole) =>
+      renderDrawer({
+        training: controller({
+          view: 'run',
+          selectedRunId: run.id,
+          detail: run,
+          scope: network(role),
+        }),
+      });
+    show('viewer');
+    expect(screen.getByText(/^by bob · MNIST/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New training' })).not.toBeInTheDocument();
+    cleanup();
+
+    show('editor');
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    cleanup();
+
+    show('owner');
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('reports a refused deletion', async () => {
+    vi.mocked(api.training.runs.remove).mockRejectedValue(
+      new ApiError(403, null, 'Only who started it and the project’s owner can delete it.')
+    );
+    const run = detail({ status: 'completed', started_by: 'eve', project: 9 });
+    const training = controller({
+      view: 'run',
+      selectedRunId: run.id,
+      detail: run,
+      scope: network('owner'),
+    });
+    renderDrawer({ training });
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('dialog', { name: /^Delete/ });
+    expect(within(confirm).getByText(/deleted for everyone in the network/)).toBeInTheDocument();
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    await waitFor(() =>
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'You cannot delete this training' })
+      )
+    );
+    expect(training.forgetRun).not.toHaveBeenCalled();
+  });
+
+  it('forgets a run that someone else deleted already', async () => {
+    vi.mocked(api.training.runs.remove).mockRejectedValue(new ApiError(404, null, 'Not found.'));
+    const run = detail({ status: 'completed', project: 5 });
+    const training = controller({
+      view: 'run',
+      selectedRunId: run.id,
+      detail: run,
+      scope: network('editor'),
+    });
+    renderDrawer({ training });
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: /^Delete/ })).getByRole('button', {
+        name: 'Delete',
+      })
+    );
+    await waitFor(() => expect(training.forgetRun).toHaveBeenCalledWith('r1'));
+    expect(notifications.show).not.toHaveBeenCalled();
+  });
+
+  it('marks datasets shared by others and offers to delete only own ones', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(PLAN_OK);
+    const data = dataController({
+      source: { ...DEFAULT_SOURCE, tab: 'upload' },
+      datasets: [
+        dataset({ id: 1, name: 'Mine', mine: true }),
+        dataset({
+          id: 2,
+          name: 'Churn data',
+          mine: false,
+          owner: 'bob',
+          shared_in: [{ id: 5, name: 'Churn net' }],
+        }),
+      ],
+    });
+    renderDrawer({ training: controller({ data, scope: network('editor') }) });
+    expect(screen.getByText('Your datasets')).toBeInTheDocument();
+    expect(screen.getByText('Shared with you')).toBeInTheDocument();
+    expect(screen.getByText('by bob · shared in “Churn net”')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Mine' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete Churn data' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: /Churn data/ }));
+    expect(data.setSource).toHaveBeenCalledWith(expect.objectContaining({ upload: 2 }));
   });
 });

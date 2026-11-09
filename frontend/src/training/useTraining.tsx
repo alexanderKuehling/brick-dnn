@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunSummary, type TrainingStatus } from '@/api';
+import { isRelevantRun, NO_SCOPE, otherStarter, type TrainingScope } from './access';
 import { isActive, resultText } from './format';
 import { useDatasets, type DataController } from './useDatasets';
 
@@ -38,12 +39,17 @@ export interface TrainingController {
   status: TrainingStatus | null;
   statusError: string | null;
   reloadStatus: () => void;
-  /** The user's runs, newest first; null until loaded (or when logged out). */
+  /**
+   * The user's runs and those of the networks they can open, newest first; null until loaded
+   * (or when logged out).
+   */
   runs: RunSummary[] | null;
   runsError: string | null;
   refreshRuns: () => void;
-  /** The newest active run of this user, if any. */
+  /** The newest active run of this user or of the open network, if any. */
   activeRun: RunSummary | null;
+  /** The user and the saved network open in the builder. */
+  scope: TrainingScope;
 
   opened: boolean;
   open: () => void;
@@ -67,11 +73,16 @@ export interface TrainingController {
 /**
  * Training state of the builder: server capabilities, the user's runs and the polling that
  * keeps them up to date. Shows a notification when a run finishes while it is not on screen.
+ * `scope` names the user and the saved network on the canvas: runs other members started in
+ * it count like the user's own (toolbar, notifications), runs of other networks do not.
  *
  * Past runs stay available whenever training is enabled on the server, even if PyTorch is
  * missing there right now: only starting new trainings needs it.
  */
-export function useTraining(loggedIn: boolean): TrainingController {
+export function useTraining(
+  loggedIn: boolean,
+  scope: TrainingScope = NO_SCOPE
+): TrainingController {
   const [status, setStatus] = useState<TrainingStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusRequest, setStatusRequest] = useState(0);
@@ -86,7 +97,24 @@ export function useTraining(loggedIn: boolean): TrainingController {
 
   const enabled = Boolean(status?.enabled);
   const active = loggedIn && enabled;
-  const activeRun = useMemo(() => runs?.find((run) => isActive(run.status)) ?? null, [runs]);
+  const { username } = scope;
+  const projectId = scope.project?.id ?? null;
+  const projectRole = scope.project?.role ?? null;
+  const projectShared = scope.project?.shared ?? false;
+  const currentScope = useMemo<TrainingScope>(
+    () => ({
+      username,
+      project:
+        projectId === null ? null : { id: projectId, role: projectRole, shared: projectShared },
+    }),
+    [username, projectId, projectRole, projectShared]
+  );
+  const scopeRef = useRef(currentScope);
+  scopeRef.current = currentScope;
+  const activeRun = useMemo(
+    () => runs?.find((run) => isActive(run.status) && isRelevantRun(run, currentScope)) ?? null,
+    [runs, currentScope]
+  );
 
   // Latest values for callbacks that outlive a render (polling, notifications, uploads).
   const shown = useRef({ opened, view, selectedRunId });
@@ -114,6 +142,10 @@ export function useTraining(loggedIn: boolean): TrainingController {
       if (isOpen && currentView === 'run' && shownId === run.id) {
         return; // The user is watching it.
       }
+      if (!isRelevantRun(run, scopeRef.current)) {
+        return; // A run of someone else in another network.
+      }
+      const by = otherStarter(run, scopeRef.current);
       const id = `training-${run.id}`;
       const result = resultText(run);
       const titles = {
@@ -130,7 +162,7 @@ export function useTraining(loggedIn: boolean): TrainingController {
         message: (
           <>
             <Text size="sm">
-              “{run.name}”
+              “{run.name}”{by && ` by ${by}`}
               {status === 'failed'
                 ? `: ${run.message || 'Something went wrong.'}`
                 : result
@@ -426,6 +458,7 @@ export function useTraining(loggedIn: boolean): TrainingController {
     runsError,
     refreshRuns,
     activeRun,
+    scope: currentScope,
     opened,
     open,
     close: useCallback(() => setOpened(false), []),

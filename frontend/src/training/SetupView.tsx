@@ -4,6 +4,7 @@ import {
   IconCircleCheck,
   IconInfoCircle,
   IconPlayerPlay,
+  IconUsers,
 } from '@tabler/icons-react';
 import { Alert, Button, Divider, Group, List, Loader, Stack, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
@@ -18,6 +19,7 @@ import {
   type RunSummary,
   type TrainingStatus,
 } from '@/api';
+import { isOwnDataset, type TrainingProject } from './access';
 import { DataSourcePicker } from './DataSourcePicker';
 import {
   datasetRef,
@@ -37,8 +39,12 @@ interface SetupViewProps {
   status: TrainingStatus;
   doc: GraphDocument;
   networkName: string;
+  /** The saved network the trainings are started in (its members see them), if any. */
+  project?: TrainingProject | null;
   analysis: Analysis | null;
   activeRun: RunSummary | null;
+  /** Who started `activeRun`, if it was someone else. */
+  activeRunBy?: string | null;
   /** Data source and uploads; kept by useTraining so they survive closing the panel. */
   data: DataController;
   onStarted: (run: RunDetail) => void;
@@ -64,8 +70,10 @@ export function SetupView({
   status,
   doc,
   networkName,
+  project = null,
   analysis,
   activeRun,
+  activeRunBy = null,
   data,
   onStarted,
   onOpenRun,
@@ -91,11 +99,15 @@ export function SetupView({
   };
 
   // A remembered upload may have been deleted, a built-in dataset may be unavailable.
-  // Without a (valid) choice, the first built-in dataset and the newest upload are used.
+  // Without a (valid) choice, the first built-in dataset and the newest own upload are used.
   const availableBuiltins = status.builtin_datasets.filter((d) => d.available);
   const builtin =
     availableBuiltins.find((d) => d.id === choice.builtin) ?? availableBuiltins[0] ?? null;
-  const upload = datasets?.find((d) => d.id === choice.upload) ?? datasets?.[0] ?? null;
+  const upload =
+    datasets?.find((d) => d.id === choice.upload) ??
+    datasets?.find(isOwnDataset) ??
+    datasets?.[0] ??
+    null;
   const effective: SourceChoice = {
     ...choice,
     builtin: builtin ? builtin.id : null,
@@ -177,6 +189,7 @@ export function SetupView({
           { builtin: builtinSource }
         ),
         ...(tuning ? { tuning } : {}),
+        ...(project ? { project: project.id } : {}),
       });
       onStarted(run);
     } catch (error) {
@@ -217,7 +230,8 @@ export function SetupView({
       {blockedByActive && activeRun && (
         <Alert color="blue" icon={<Loader size={16} />} title="A training is running">
           <Text size="sm">
-            “{activeRun.name}” is still training. You can start a new one when it has finished.
+            “{activeRun.name}”{activeRunBy ? ` (started by ${activeRunBy})` : ''} is still training.
+            You can start a new one when it has finished.
           </Text>
           <Button size="compact-sm" variant="light" mt="xs" onClick={() => onOpenRun(activeRun.id)}>
             Show it
@@ -284,7 +298,15 @@ export function SetupView({
         </Alert>
       )}
 
-      <Group justify="flex-end">
+      <Group justify="flex-end" gap="sm">
+        {project?.shared && (
+          <Group gap={6} wrap="nowrap" mr="auto">
+            <IconUsers size={14} color="var(--mantine-color-dimmed)" aria-hidden />
+            <Text size="xs" c="dimmed">
+              Visible to everyone in this network
+            </Text>
+          </Group>
+        )}
         <Button
           leftSection={<IconPlayerPlay size={16} />}
           onClick={() => void start()}

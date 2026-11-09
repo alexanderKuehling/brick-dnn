@@ -49,6 +49,14 @@ import { semanticKey, slugify } from '@/builder/graph';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import {
+  canDeleteRun,
+  canStopRun,
+  canTrain,
+  NO_SCOPE,
+  otherStarter,
+  type TrainingScope,
+} from './access';
+import {
   describeParams,
   formatCompact,
   formatDate,
@@ -69,6 +77,8 @@ import classes from './Training.module.css';
 interface RunViewProps {
   run: RunDetail;
   doc: GraphDocument;
+  /** The user and the open network: who started the run and what the user may do. */
+  scope?: TrainingScope;
   onBack: () => void;
   onNewTraining: () => void;
   onUpdate: (run: RunDetail) => void;
@@ -116,6 +126,7 @@ function scriptBase(name: string): string {
 export function RunView({
   run,
   doc,
+  scope = NO_SCOPE,
   onBack,
   onNewTraining,
   onUpdate,
@@ -134,6 +145,7 @@ export function RunView({
   const logViewport = useRef<HTMLDivElement>(null);
 
   const base = scriptBase(run.name);
+  const by = otherStarter(run, scope);
   const sameNetwork = useMemo(() => semanticKey(run.graph) === semanticKey(doc), [run.graph, doc]);
 
   const logLines = state?.log ?? [];
@@ -240,14 +252,16 @@ export function RunView({
         >
           All runs
         </Button>
-        <Button
-          variant="subtle"
-          size="compact-sm"
-          leftSection={<IconPlayerPlay size={14} />}
-          onClick={onNewTraining}
-        >
-          New training
-        </Button>
+        {canTrain(scope) && (
+          <Button
+            variant="subtle"
+            size="compact-sm"
+            leftSection={<IconPlayerPlay size={14} />}
+            onClick={onNewTraining}
+          >
+            New training
+          </Button>
+        )}
       </Group>
 
       <div>
@@ -259,6 +273,7 @@ export function RunView({
         </Group>
         <Text size="xs" c="dimmed" mt={4}>
           {[
+            by && `by ${by}`,
             run.dataset.name,
             tuning && searchLabel(tuning),
             state?.device_label,
@@ -393,7 +408,7 @@ export function RunView({
       )}
 
       <Group gap="xs">
-        {active && (
+        {active && canStopRun(run, scope) && (
           <Button
             color="red"
             variant="light"
@@ -430,14 +445,16 @@ export function RunView({
             Load into editor
           </Button>
         )}
-        <Button
-          variant="subtle"
-          color="red"
-          leftSection={<IconTrash size={16} />}
-          onClick={() => confirmDeleteRun(run, onDeleted)}
-        >
-          Delete
-        </Button>
+        {canDeleteRun(run, scope) && (
+          <Button
+            variant="subtle"
+            color="red"
+            leftSection={<IconTrash size={16} />}
+            onClick={() => confirmDeleteRun(run, onDeleted)}
+          >
+            Delete
+          </Button>
+        )}
       </Group>
 
       {run.has_weights && (

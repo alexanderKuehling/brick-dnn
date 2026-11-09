@@ -1,5 +1,6 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
+import { MantineProvider } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, type RunSummary } from '@/api';
 import { detail, STATUS, summary } from './fixtures';
@@ -164,5 +165,45 @@ describe('useTraining', () => {
     act(() => result.current.forgetRun('r1'));
     await act(async () => resolveStale([summary({ status: 'completed' })]));
     expect(result.current.runs).toEqual([]);
+  });
+
+  it('follows runs of the open network, not those of others elsewhere', async () => {
+    const elsewhere = summary({ id: 'eve', started_by: 'eve', project: 9 });
+    const network = summary({ id: 'bob', started_by: 'bob', project: 5 });
+    vi.mocked(api.training.runs.list).mockResolvedValue([elsewhere, network]);
+    const { result, rerender } = renderHook(
+      ({ project }: { project: number | null }) =>
+        useTraining(true, {
+          username: 'ada',
+          project: project === null ? null : { id: project, role: 'viewer', shared: true },
+        }),
+      { initialProps: { project: 5 as number | null } }
+    );
+    await flush();
+    expect(result.current.activeRun?.id).toBe('bob');
+    expect(result.current.scope.project).toEqual({ id: 5, role: 'viewer', shared: true });
+
+    rerender({ project: null });
+    expect(result.current.activeRun).toBeNull();
+  });
+
+  it('reports finished runs of the network with who started them', async () => {
+    const network = summary({ id: 'bob', name: 'Bob’s run', started_by: 'bob', project: 5 });
+    const elsewhere = summary({ id: 'eve', started_by: 'eve', project: 9 });
+    vi.mocked(api.training.runs.list)
+      .mockResolvedValueOnce([network, elsewhere])
+      .mockResolvedValue([
+        { ...network, status: 'completed' },
+        { ...elsewhere, status: 'completed' },
+      ]);
+    renderHook(() =>
+      useTraining(true, { username: 'ada', project: { id: 5, role: 'editor', shared: true } })
+    );
+    await flush();
+    await wait(LIST_INTERVAL);
+    expect(notifications.show).toHaveBeenCalledTimes(1);
+    const { message } = vi.mocked(notifications.show).mock.calls[0][0];
+    const { container } = render(<MantineProvider>{message}</MantineProvider>);
+    expect(container).toHaveTextContent('“Bob’s run” by bob');
   });
 });

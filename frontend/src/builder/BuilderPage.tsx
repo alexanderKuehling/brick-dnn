@@ -164,7 +164,15 @@ function Builder() {
   );
   const doc = useMemo(() => toDocument(nodes, edges), [nodes, edges]);
   const { analysis, loading: analyzing, error: analysisError } = useAnalysis(doc);
-  const training = useTraining(Boolean(user));
+  // Trainings of a saved network belong to it: its members see them (viewers cannot train).
+  const training = useTraining(Boolean(user), {
+    username: user?.username ?? null,
+    project: project && {
+      id: project.id,
+      role: project.role,
+      shared: Boolean(project.info?.shared),
+    },
+  });
   const [trainingLoaded, setTrainingLoaded] = useState(false);
   const location = useLocation();
   // "Train with this data" in the Data tab opens the training panel here, with the exported
