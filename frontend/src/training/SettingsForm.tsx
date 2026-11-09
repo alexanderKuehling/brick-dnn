@@ -52,6 +52,19 @@ interface SettingsFormProps {
    * this split, so the share fields are shown but cannot be changed.
    */
   predefinedSplit?: number[] | null;
+  /**
+   * A classical model (scikit-learn) is fitted once: only the splits, Max. samples and the
+   * seed apply. `maxRows`: the most training rows it is fitted on on this server.
+   */
+  classical?: ClassicalSettings | null;
+}
+
+export interface ClassicalSettings {
+  /** E.g. "Gaussian process regression". */
+  model: string;
+  maxRows: number | null;
+  /** Gaussian processes optimise their kernel hyperparameters during the fit. */
+  optimisesKernel: boolean;
 }
 
 /** Shown in the fixed fields while the search varies them. */
@@ -68,6 +81,7 @@ export function SettingsForm({
   defaultDevice,
   builtin,
   predefinedSplit = null,
+  classical = null,
 }: SettingsFormProps) {
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
@@ -91,15 +105,124 @@ export function SettingsForm({
   const fixedPercents = fixed ? splitPercents(fixed) : null;
   const testEnabled = fixed ? fixed[2] > 0 : builtin || values.test_enabled;
 
+  const nameField = (
+    <TextInput
+      label="Name"
+      placeholder={namePlaceholder}
+      value={name}
+      onChange={(event) => onNameChange(event.currentTarget.value)}
+      maxLength={120}
+    />
+  );
+  const validationField = (
+    <NumberInput
+      label="Validation split"
+      value={fixedPercents ? fixedPercents[1] : values.val_split}
+      disabled={fixed !== null}
+      onChange={setNumber('val_split')}
+      min={LIMITS.val_split.min}
+      max={LIMITS.val_split.max}
+      step={5}
+      suffix="%"
+      allowNegative={false}
+      decimalScale={1}
+      error={fixed ? undefined : errors.val_split}
+    />
+  );
+  const testFields = (
+    <div>
+      <Switch
+        label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
+        description={
+          fixed
+            ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
+            : builtin
+              ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
+              : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
+        }
+        checked={testEnabled}
+        disabled={fixed !== null || builtin}
+        onChange={(event) => set('test_enabled')(event.currentTarget.checked)}
+      />
+      {testEnabled && (fixed !== null || !builtin) && (
+        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="xs">
+          <NumberInput
+            label="Test split"
+            value={fixedPercents ? fixedPercents[2] : values.test_split}
+            disabled={fixed !== null}
+            onChange={setNumber('test_split')}
+            min={LIMITS.test_split.min}
+            max={LIMITS.test_split.max}
+            step={5}
+            suffix="%"
+            allowNegative={false}
+            decimalScale={1}
+            error={fixed ? undefined : errors.test_split}
+          />
+        </SimpleGrid>
+      )}
+    </div>
+  );
+  const maxRows = classical?.maxRows ?? null;
+  const maxSamplesField = (
+    <NumberInput
+      label="Max. samples"
+      description={
+        classical
+          ? maxRows !== null
+            ? `${classical.model} is fitted on at most ${maxRows.toLocaleString('en-US')} training rows on this server; larger training sets are subsampled.`
+            : 'Training rows to fit on (empty: all).'
+          : undefined
+      }
+      placeholder={maxRows !== null ? `All, up to ${maxRows.toLocaleString('en-US')}` : 'All'}
+      value={values.max_samples}
+      onChange={setNumber('max_samples')}
+      min={LIMITS.max_samples.min}
+      max={maxRows ?? LIMITS.max_samples.max}
+      allowDecimal={false}
+      allowNegative={false}
+      thousandSeparator=","
+      error={errors.max_samples}
+    />
+  );
+  const seedField = (
+    <NumberInput
+      label="Seed"
+      placeholder="Random"
+      value={values.seed}
+      onChange={setNumber('seed')}
+      min={LIMITS.seed.min}
+      max={LIMITS.seed.max}
+      allowDecimal={false}
+      allowNegative={false}
+      error={errors.seed}
+    />
+  );
+
+  if (classical) {
+    return (
+      <Stack gap="sm">
+        {nameField}
+        <Text size="xs" c="dimmed">
+          {classical.model} is fitted once with scikit-learn, on the CPU: only the split, the number
+          of rows and the seed apply
+          {classical.optimisesKernel
+            ? '; the fit optimises the kernel hyperparameters itself.'
+            : '.'}
+        </Text>
+        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+          {validationField}
+          {seedField}
+        </SimpleGrid>
+        {testFields}
+        {maxSamplesField}
+      </Stack>
+    );
+  }
+
   return (
     <Stack gap="sm">
-      <TextInput
-        label="Name"
-        placeholder={namePlaceholder}
-        value={name}
-        onChange={(event) => onNameChange(event.currentTarget.value)}
-        maxLength={120}
-      />
+      {nameField}
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
         <NumberInput
           label="Epochs"
@@ -154,53 +277,10 @@ export function SettingsForm({
           onChange={(value) => value && set('device')(value)}
           allowDeselect={false}
         />
-        <NumberInput
-          label="Validation split"
-          value={fixedPercents ? fixedPercents[1] : values.val_split}
-          disabled={fixed !== null}
-          onChange={setNumber('val_split')}
-          min={LIMITS.val_split.min}
-          max={LIMITS.val_split.max}
-          step={5}
-          suffix="%"
-          allowNegative={false}
-          decimalScale={1}
-          error={fixed ? undefined : errors.val_split}
-        />
+        {validationField}
       </SimpleGrid>
 
-      <div>
-        <Switch
-          label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
-          description={
-            fixed
-              ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
-              : builtin
-                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
-                : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
-          }
-          checked={testEnabled}
-          disabled={fixed !== null || builtin}
-          onChange={(event) => set('test_enabled')(event.currentTarget.checked)}
-        />
-        {testEnabled && (fixed !== null || !builtin) && (
-          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="xs">
-            <NumberInput
-              label="Test split"
-              value={fixedPercents ? fixedPercents[2] : values.test_split}
-              disabled={fixed !== null}
-              onChange={setNumber('test_split')}
-              min={LIMITS.test_split.min}
-              max={LIMITS.test_split.max}
-              step={5}
-              suffix="%"
-              allowNegative={false}
-              decimalScale={1}
-              error={fixed ? undefined : errors.test_split}
-            />
-          </SimpleGrid>
-        )}
-      </div>
+      {testFields}
 
       <div>
         <Switch
@@ -239,29 +319,8 @@ export function SettingsForm({
               allowNegative={false}
               error={errors.weight_decay}
             />
-            <NumberInput
-              label="Max. samples"
-              placeholder="All"
-              value={values.max_samples}
-              onChange={setNumber('max_samples')}
-              min={LIMITS.max_samples.min}
-              max={LIMITS.max_samples.max}
-              allowDecimal={false}
-              allowNegative={false}
-              thousandSeparator=","
-              error={errors.max_samples}
-            />
-            <NumberInput
-              label="Seed"
-              placeholder="Random"
-              value={values.seed}
-              onChange={setNumber('seed')}
-              min={LIMITS.seed.min}
-              max={LIMITS.seed.max}
-              allowDecimal={false}
-              allowNegative={false}
-              error={errors.seed}
-            />
+            {maxSamplesField}
+            {seedField}
           </SimpleGrid>
           <NumberInput
             label="Early stopping"

@@ -25,6 +25,7 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import type { Analysis, GraphDocument } from '@/api';
 import { canTrain, otherStarter, trainingProject, type RunFilter } from './access';
+import { canStartTraining, trainingFamily, unavailableReason, type Family } from './classical';
 import { HistoryView } from './HistoryView';
 import { RunView } from './RunView';
 import { SetupView } from './SetupView';
@@ -86,6 +87,8 @@ function DrawerContent({
   const { status, statusError, scope } = training;
   // Viewers of the network see its runs, but cannot start trainings in it.
   const trainable = canTrain(scope);
+  // Neural networks need PyTorch on the server, classical models scikit-learn.
+  const family = trainingFamily(analysis);
 
   if (!status) {
     return statusError ? (
@@ -113,8 +116,13 @@ function DrawerContent({
   if (!loggedIn) {
     return (
       <Stack gap="md">
-        {!status.available && (
-          <Unavailable reason={status.reason} disabled={false} onRetry={training.reloadStatus} />
+        {!canStartTraining(status, family) && (
+          <Unavailable
+            reason={unavailableReason(status, family)}
+            disabled={false}
+            family={family}
+            onRetry={training.reloadStatus}
+          />
         )}
         <Stack align="center" ta="center" gap="sm" py="xl" px="md">
           <ThemeIcon size={48} radius="xl" variant="light">
@@ -154,8 +162,9 @@ function DrawerContent({
       </Tabs.List>
 
       <Tabs.Panel value="setup">
-        {/* Without PyTorch no new training can start, but past runs stay usable. */}
-        {status.available ? (
+        {/* Without PyTorch (scikit-learn for classical models) no new training can start,
+            but past runs stay usable. */}
+        {canStartTraining(status, family) ? (
           <SetupView
             status={status}
             doc={doc}
@@ -175,7 +184,12 @@ function DrawerContent({
             }}
           />
         ) : (
-          <Unavailable reason={status.reason} disabled={false} onRetry={training.reloadStatus} />
+          <Unavailable
+            reason={unavailableReason(status, family)}
+            disabled={false}
+            family={family}
+            onRetry={training.reloadStatus}
+          />
         )}
       </Tabs.Panel>
 
@@ -263,12 +277,41 @@ function SelectedRun({
 function Unavailable({
   reason,
   disabled,
+  family = 'neural',
   onRetry,
 }: {
   reason: string | null;
   disabled: boolean;
+  family?: Family;
   onRetry: () => void;
 }) {
+  if (family === 'classical' && !disabled) {
+    return (
+      <Stack gap="md">
+        <Alert
+          color="yellow"
+          icon={<IconAlertTriangle size={18} />}
+          title="Training is not available"
+        >
+          {reason ?? 'scikit-learn is not installed on the server.'}
+        </Alert>
+        <Stack gap="xs">
+          <Text size="sm">
+            Classical models (Gaussian processes, SVMs) are fitted with scikit-learn on the machine
+            of the Brick DNN backend; they do not need PyTorch. In the <Code>backend</Code> folder,
+            with the virtual environment active:
+          </Text>
+          <Code block>pip install -r requirements.txt</Code>
+          <Text size="sm" c="dimmed">
+            The Docker image includes scikit-learn. Restart the backend and check again.
+          </Text>
+          <Button variant="light" onClick={onRetry} style={{ alignSelf: 'flex-start' }}>
+            Check again
+          </Button>
+        </Stack>
+      </Stack>
+    );
+  }
   return (
     <Stack gap="md">
       <Alert
