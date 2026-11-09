@@ -276,6 +276,65 @@ export interface SharedNetwork {
 }
 
 // --------------------------------------------------------------------------
+// History and comments of saved networks
+// --------------------------------------------------------------------------
+
+/**
+ * auto: kept after a change (changes by the same person within ten minutes update the same
+ * entry) · named: named by someone, kept for good · restore: an older version made current.
+ */
+export type VersionKind = 'auto' | 'named' | 'restore';
+
+/** An entry in the history of a project (GET /api/projects/<id>/versions/, newest first). */
+export interface ProjectVersion {
+  id: number;
+  /** The project's `version` this entry holds. */
+  version: number;
+  kind: VersionKind;
+  /** The name of named versions; "Restored …" for restores; empty for automatic entries. */
+  label: string;
+  /** The network's name at that time. */
+  name: string;
+  num_layers: number;
+  /** Username of who made the change (or named it); null if the account was deleted. */
+  created_by: string | null;
+  created_at: string;
+  /** The last change merged into this entry. */
+  updated_at: string;
+}
+
+/** One version with its content (GET /api/projects/<id>/versions/<vid>/). */
+export interface ProjectVersionDetail extends ProjectVersion {
+  description: string;
+  graph: GraphDocument;
+}
+
+/** A comment on a project or on one of its layers; replies have a `parent` (one level). */
+export interface ProjectComment {
+  id: number;
+  /** The first comment of the thread; null for the first comment itself. */
+  parent: number | null;
+  /** The layer the thread is about; empty for comments on the whole network. */
+  node_id: string;
+  text: string;
+  author: UserRef;
+  /** Set on the first comment of a thread. */
+  resolved: boolean;
+  /** Username of who resolved the thread. */
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentInput {
+  text: string;
+  /** The layer to comment on (new threads only; replies belong to the layer of their thread). */
+  node_id?: string;
+  /** Reply to this thread. */
+  parent?: number;
+}
+
+// --------------------------------------------------------------------------
 // Training (runs on the machine of the backend, see /api/training/)
 // --------------------------------------------------------------------------
 

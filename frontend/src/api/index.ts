@@ -5,6 +5,7 @@ import type {
   Analysis,
   ApiToken,
   ApiTokenInput,
+  CommentInput,
   Compatibility,
   DataPrep,
   DataPrepInput,
@@ -27,10 +28,13 @@ import type {
   PreviewRequest,
   PreviewResult,
   Project,
+  ProjectComment,
   ProjectData,
   ProjectDataKind,
   ProjectMember,
   ProjectMembers,
+  ProjectVersion,
+  ProjectVersionDetail,
   RunDetail,
   RunInput,
   RunSummary,
@@ -180,6 +184,71 @@ const serverApi = {
         body: regenerate ? { enabled, regenerate } : { enabled },
         auth: true,
       }),
+    /** The history: every change keeps a copy of the new state. */
+    versions: {
+      /** Newest first. Any role. */
+      list: (projectId: number, signal?: AbortSignal) =>
+        request<ProjectVersion[]>(`/api/projects/${projectId}/versions/`, { auth: true, signal }),
+      /** One version with its graph. Any role. */
+      get: (projectId: number, versionId: number, signal?: AbortSignal) =>
+        request<ProjectVersionDetail>(`/api/projects/${projectId}/versions/${versionId}/`, {
+          auth: true,
+          signal,
+        }),
+      /** Owner and editors: keep the current state (on the server) under a name. */
+      create: (projectId: number, label: string) =>
+        request<ProjectVersion>(`/api/projects/${projectId}/versions/`, {
+          method: 'POST',
+          body: { label },
+          auth: true,
+        }),
+      /** Owner and editors: (re)name a version; named versions are kept for good. */
+      rename: (projectId: number, versionId: number, label: string) =>
+        request<ProjectVersion>(`/api/projects/${projectId}/versions/${versionId}/`, {
+          method: 'PATCH',
+          body: { label },
+          auth: true,
+        }),
+      /**
+       * Owner and editors: make the version the current state (a new entry in the history).
+       * Resolves to the updated project; live editors get a `replaced` message.
+       */
+      restore: (projectId: number, versionId: number) =>
+        request<Project>(`/api/projects/${projectId}/versions/${versionId}/restore/`, {
+          method: 'POST',
+          auth: true,
+        }),
+    },
+    /** Comments on the network and its layers. Everyone with access may comment. */
+    comments: {
+      /** Oldest first; `node` limits them to one layer. */
+      list: (projectId: number, node?: string, signal?: AbortSignal) =>
+        request<ProjectComment[]>(
+          `/api/projects/${projectId}/comments/${
+            node === undefined ? '' : `?node=${encodeURIComponent(node)}`
+          }`,
+          { auth: true, signal }
+        ),
+      create: (projectId: number, data: CommentInput) =>
+        request<ProjectComment>(`/api/projects/${projectId}/comments/`, {
+          method: 'POST',
+          body: data,
+          auth: true,
+        }),
+      /** `text`: the author · `resolved`: the author, editors and the owner. */
+      update: (projectId: number, commentId: number, data: { text?: string; resolved?: boolean }) =>
+        request<ProjectComment>(`/api/projects/${projectId}/comments/${commentId}/`, {
+          method: 'PATCH',
+          body: data,
+          auth: true,
+        }),
+      /** The author or the owner; replies are deleted with it. */
+      remove: (projectId: number, commentId: number) =>
+        request<void>(`/api/projects/${projectId}/comments/${commentId}/`, {
+          method: 'DELETE',
+          auth: true,
+        }),
+    },
   },
 
   /** Networks opened through a share link. */
