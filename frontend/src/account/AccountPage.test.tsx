@@ -2,7 +2,7 @@ import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, getTokens, setTokens, type Account } from '@/api';
+import { api, ApiError, getTokens, setTokens, type Account, type Plan, type Usage } from '@/api';
 import { AuthProvider } from '@/auth/AuthContext';
 import { RequireAuth } from '@/components/RequireAuth';
 import { resetLegalInfo } from '@/legal/useLegalInfo';
@@ -22,6 +22,9 @@ vi.mock('@/api', async (importOriginal) => {
         changePassword: vi.fn(),
         exportData: vi.fn(),
         remove: vi.fn(),
+        usage: vi.fn(),
+        setBudget: vi.fn(),
+        setOverage: vi.fn(),
       },
     },
   };
@@ -51,6 +54,57 @@ const ACCOUNT: Account = {
     connected_apps: 0,
     upload_bytes: 3 * 1024 * 1024,
   },
+};
+
+const USAGE: Usage = {
+  period: { start: '2026-11-01', resets_at: '2026-12-01T00:00:00Z' },
+  compute: {
+    unit: 'cpu_minutes',
+    used: 75,
+    limit: 300,
+    remaining: 225,
+    available: 225,
+    allowance: 300,
+    own_budget: null,
+    run_limit: 30,
+    reserved_by_active_runs: 0,
+    by_kind: { training: 74.5, prediction: 0.5 },
+    by_source: [
+      {
+        source: 'token',
+        id: 3,
+        name: 'agent',
+        deleted: false,
+        used_cpu_minutes: 50,
+        budget_cpu_minutes: 60,
+        cost: null,
+      },
+      {
+        source: 'web',
+        id: null,
+        name: 'Web app',
+        deleted: false,
+        used_cpu_minutes: 25,
+        budget_cpu_minutes: null,
+        cost: null,
+      },
+    ],
+  },
+  storage: {
+    used_bytes: 512 * 1024 * 1024,
+    limit_bytes: 1024 * 1024 * 1024,
+    remaining_bytes: 512 * 1024 * 1024,
+    by_kind: { data_sources: 0, datasets: 500 * 1024 * 1024, training_runs: 12 * 1024 * 1024 },
+  },
+  prices: {
+    currency: null,
+    per_cpu_hour: null,
+    per_gb_month: null,
+    compute_cost: null,
+    compute_limit_cost: null,
+    storage_cost_per_month: null,
+  },
+  caller: null,
 };
 
 function renderPage() {
@@ -93,6 +147,7 @@ beforeEach(() => {
     retention: { unused_uploads_days: 90, inactive_accounts_days: 0 },
   });
   vi.mocked(api.account.get).mockResolvedValue(ACCOUNT);
+  vi.mocked(api.account.usage).mockResolvedValue(USAGE);
   vi.spyOn(notifications, 'show').mockImplementation(() => '');
 });
 
@@ -214,4 +269,142 @@ test('deletes the account after confirming with password and username', async ()
   expect(getTokens()).toBeNull();
   // The server ended the logins already: no logout request.
   expect(api.logout).not.toHaveBeenCalled();
+});
+
+test('shows the usage this month and sets the own budget', async () => {
+  vi.mocked(api.account.setBudget).mockResolvedValue({
+    ...USAGE,
+    compute: { ...USAGE.compute, own_budget: 100, limit: 100, remaining: 25 },
+  });
+  renderPage();
+  const section = await screen.findByRole('region', { name: 'Usage & budget' });
+  expect(await within(section).findByText('75 of 300 CPU min')).toBeInTheDocument();
+  expect(
+    within(section).getByRole('progressbar', { name: 'Compute this month: 25% used' })
+  ).toBeInTheDocument();
+  expect(within(section).getByText(/Resets on 1 December 2026 \(UTC\)/)).toBeInTheDocument();
+  expect(within(section).getByText(/“agent” 50 CPU min/)).toBeInTheDocument();
+  expect(within(section).getByText('512 MB of 1.0 GB')).toBeInTheDocument();
+  expect(within(section).getByText(/30 CPU min per training/)).toBeInTheDocument();
+
+  await userEvent.click(
+    within(section).getByRole('button', { name: 'Set the monthly budget of your account' })
+  );
+  const input = await screen.findByLabelText('Monthly budget');
+  await userEvent.type(input, '100');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(api.account.setBudget).toHaveBeenCalledWith(100));
+  expect(await within(section).findByText('75 of 100 CPU min')).toBeInTheDocument();
+  expect(within(section).getByText(/Your monthly budget: 100 CPU min/)).toBeInTheDocument();
+});
+
+test('usage without limits and with prices', async () => {
+  vi.mocked(api.account.usage).mockResolvedValue({
+    ...USAGE,
+    compute: { ...USAGE.compute, limit: null, remaining: null, allowance: null, run_limit: null },
+    storage: { ...USAGE.storage, limit_bytes: null, remaining_bytes: null },
+    prices: { ...USAGE.prices, currency: 'EUR', per_cpu_hour: 0.6, compute_cost: 0.75 },
+  });
+  renderPage();
+  const section = await screen.findByRole('region', { name: 'Usage & budget' });
+  expect(await within(section).findByText('75 CPU min · no limit (€0.75)')).toBeInTheDocument();
+  expect(within(section).queryByRole('progressbar')).not.toBeInTheDocument();
+  expect(within(section).getByText(/No monthly limit applies\./)).toBeInTheDocument();
+});
+
+const FREE: Plan = {
+  key: 'free',
+  name: 'Free',
+  price: 0,
+  currency: 'EUR',
+  cpu_hours_per_month: 0.5,
+  storage_gb: 1,
+  cpu_minutes_per_run: 15,
+  concurrent_trainings: 1,
+  priority: 0,
+  overage_price_per_cpu_hour: null,
+};
+const STARTER: Plan = {
+  ...FREE,
+  key: 'starter',
+  name: 'Starter',
+  price: 5,
+  cpu_hours_per_month: 10,
+  storage_gb: 5,
+  cpu_minutes_per_run: 60,
+  priority: 1,
+  overage_price_per_cpu_hour: 0.4,
+};
+const OVERAGE = {
+  available: false,
+  enabled: false,
+  price_per_cpu_hour: null,
+  currency: 'EUR',
+  cap_cpu_hours: null,
+  used_cpu_minutes: 0,
+  cost: null,
+};
+
+test('shows the plan and the other plans, without buying them', async () => {
+  vi.mocked(api.account.usage).mockResolvedValue({
+    ...USAGE,
+    plan: FREE,
+    unlimited: false,
+    plans: [FREE, STARTER],
+    overage: OVERAGE,
+  });
+  renderPage();
+  const section = await screen.findByRole('region', { name: 'Usage & budget' });
+  expect(await within(section).findByText('Free plan')).toBeInTheDocument();
+  expect(
+    within(section).getByText(
+      '0.5 CPU h per month · 1 GB · 15 CPU min per training · 1 training at a time'
+    )
+  ).toBeInTheDocument();
+  expect(
+    within(section).getByText(/Other plans: Starter \(€5\.00 per month\): 10 CPU h, 5 GB\./)
+  ).toBeInTheDocument();
+  expect(within(section).queryByRole('button', { name: /upgrade|buy/i })).not.toBeInTheDocument();
+  expect(within(section).queryByText(/beyond the monthly allowance/)).not.toBeInTheDocument();
+});
+
+test('unlimited accounts', async () => {
+  vi.mocked(api.account.usage).mockResolvedValue({
+    ...USAGE,
+    compute: { ...USAGE.compute, limit: null, remaining: null, allowance: null, run_limit: null },
+    plan: FREE,
+    unlimited: true,
+    plans: [FREE, STARTER],
+    overage: OVERAGE,
+  });
+  renderPage();
+  const section = await screen.findByRole('region', { name: 'Usage & budget' });
+  expect(await within(section).findByText('Unlimited')).toBeInTheDocument();
+  expect(within(section).getByText(/No limits apply to your account/)).toBeInTheDocument();
+  expect(within(section).queryByText(/Other plans/)).not.toBeInTheDocument();
+  expect(within(section).getByText(/75 CPU min · no limit/)).toBeInTheDocument();
+});
+
+test('switches compute beyond the allowance on, with a cap', async () => {
+  const usage: Usage = {
+    ...USAGE,
+    plan: STARTER,
+    unlimited: false,
+    plans: [FREE, STARTER],
+    overage: { ...OVERAGE, available: true, price_per_cpu_hour: 0.4 },
+  };
+  vi.mocked(api.account.usage).mockResolvedValue(usage);
+  vi.mocked(api.account.setOverage).mockResolvedValue({
+    ...usage,
+    overage: { ...usage.overage!, enabled: true, cap_cpu_hours: 2 },
+  });
+  renderPage();
+  expect(await screen.findByText('Allow compute beyond the monthly allowance')).toBeInTheDocument();
+  const toggle = screen.getByRole('switch');
+  expect(screen.getByText(/Billed at €0\.40 per CPU hour/)).toBeInTheDocument();
+  await userEvent.click(toggle);
+  await userEvent.type(screen.getByLabelText('Most beyond the allowance'), '2');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(api.account.setOverage).toHaveBeenCalledWith(true, 2));
+  await waitFor(() => expect(screen.getByRole('switch')).toBeChecked());
 });

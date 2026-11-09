@@ -24,6 +24,7 @@ import { downloadBlob } from '@/builder/download';
 import { LegalLinks } from '@/legal/LegalLinks';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { formatBytes, formatDate } from '@/training/format';
+import { UsageSection } from '@/usage/UsageSection';
 
 /** The first message the API gave for `field`, or null. */
 export function fieldError(error: unknown, field: string): string | null {
@@ -289,7 +290,7 @@ function DeleteDialog({
             <List.Item>
               your imported tables, data preparations, datasets and trainings with their files
             </List.Item>
-            <List.Item>your comments, API tokens and connected apps</List.Item>
+            <List.Item>your comments, API tokens, connected apps and usage records</List.Item>
           </List>
           <Text size="sm">
             Networks of other people you worked on stay with them. Download your data first if you
@@ -407,6 +408,10 @@ export function AccountPage() {
 
         <Section title="Password">
           <PasswordForm />
+        </Section>
+
+        <Section title="Usage & budget">
+          <UsageSection />
         </Section>
 
         <Section title="Your data">

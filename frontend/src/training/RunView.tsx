@@ -51,6 +51,7 @@ import { semanticKey, slugify } from '@/builder/graph';
 import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { formatCpu } from '@/usage/format';
 import {
   canDeleteRun,
   canStopRun,
@@ -291,8 +292,10 @@ export function RunView({
             run.dataset.name,
             tuning && searchLabel(tuning),
             state?.device_label,
+            run.started_via?.name && `via “${run.started_via.name}”`,
             `started ${formatDate(new Date(startedAt).toISOString())}`,
             formatDuration(elapsed),
+            cpuUsage(run),
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -560,6 +563,22 @@ function ToggleButton({
   );
 }
 
+const STOP_TITLES = {
+  budget: 'Stopped by the compute budget',
+  run_limit: 'Stopped at the limit per training',
+};
+
+/** "2.3 CPU min" used (of its limit while it runs); null before anything was counted. */
+function cpuUsage(run: RunDetail): string | null {
+  const usage = run.usage;
+  if (!usage || (usage.cpu_minutes <= 0 && usage.limit_cpu_minutes === null)) {
+    return null;
+  }
+  return isActive(run.status) && usage.limit_cpu_minutes !== null
+    ? `${formatCpu(usage.cpu_minutes, '')} of ${formatCpu(usage.limit_cpu_minutes)}`
+    : formatCpu(usage.cpu_minutes);
+}
+
 function RunProgress({
   run,
   headline,
@@ -649,8 +668,13 @@ function RunProgress({
     );
   }
   if (run.status === 'stopped') {
+    const reason = run.usage?.stop_reason;
     return (
-      <Alert color="orange" icon={<IconInfoCircle size={18} />}>
+      <Alert
+        color="orange"
+        icon={<IconInfoCircle size={18} />}
+        title={reason === 'budget' || reason === 'run_limit' ? STOP_TITLES[reason] : undefined}
+      >
         {message || 'Training was stopped.'}
       </Alert>
     );

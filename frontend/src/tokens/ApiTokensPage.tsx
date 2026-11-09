@@ -18,6 +18,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, type ApiToken } from '@/api';
 import { formatDate } from '@/training/format';
+import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
 import { ConnectedApps } from './ConnectedApps';
 import { CreateTokenModal } from './CreateTokenModal';
 import { McpSetup } from './McpSetup';
@@ -27,7 +28,15 @@ function isExpired(token: ApiToken, now = Date.now()): boolean {
   return token.expires_at !== null && new Date(token.expires_at).getTime() <= now;
 }
 
-function TokenItem({ token, onRevoke }: { token: ApiToken; onRevoke: () => void }) {
+function TokenItem({
+  token,
+  onRevoke,
+  onBudget,
+}: {
+  token: ApiToken;
+  onRevoke: () => void;
+  onBudget: (budget: number | null) => Promise<void>;
+}) {
   const expired = isExpired(token);
   return (
     <li className={classes.item} aria-label={token.name}>
@@ -77,6 +86,20 @@ function TokenItem({ token, onRevoke }: { token: ApiToken; onRevoke: () => void 
             {token.expires_at ? formatDate(token.expires_at) : 'Never'}
           </dd>
         </div>
+        {token.used_cpu_minutes !== undefined && (
+          <div>
+            <dt>Compute this month</dt>
+            <dd className={classes.budget}>
+              <MonthUsage used={token.used_cpu_minutes} budget={token.budget_cpu_minutes} />
+              <BudgetEditor
+                budget={token.budget_cpu_minutes ?? null}
+                label={`“${token.name}”`}
+                onSave={onBudget}
+                description="CPU minutes per month for everything this token starts. Empty: only your account's limits apply."
+              />
+            </dd>
+          </div>
+        )}
       </dl>
     </li>
   );
@@ -144,7 +167,8 @@ export function ApiTokensPage() {
         <Text size="sm" c="dimmed" mb="md" maw={720}>
           With Brick DNN&apos;s MCP server, an assistant can look up layers and examples, check
           networks, generate PyTorch code and read your networks and training runs. With full
-          access, it can also save networks and start or stop trainings.
+          access, it can also save networks and start or stop trainings. Give a token or app a
+          monthly budget to limit the compute its trainings and predictions may use.
         </Text>
         <McpSetup />
       </section>
@@ -187,7 +211,15 @@ export function ApiTokensPage() {
         {tokens && tokens.length > 0 && (
           <ul className={classes.list} aria-labelledby="tokens-title">
             {tokens.map((token) => (
-              <TokenItem key={token.id} token={token} onRevoke={() => revoke(token)} />
+              <TokenItem
+                key={token.id}
+                token={token}
+                onRevoke={() => revoke(token)}
+                onBudget={async (budget) => {
+                  const updated = await api.apiTokens.setBudget(token.id, budget);
+                  setTokens((list) => list?.map((t) => (t.id === token.id ? updated : t)) ?? null);
+                }}
+              />
             ))}
           </ul>
         )}

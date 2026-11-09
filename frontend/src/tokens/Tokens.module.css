@@ -101,3 +101,11 @@
     color: var(--mantine-color-red-text);
   }
 }
+
+/* The usage of a token or app this month, with the button that sets its budget. */
+.budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--mantine-spacing-xs);
+}

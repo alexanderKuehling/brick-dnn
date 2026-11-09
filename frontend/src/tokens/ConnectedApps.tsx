@@ -6,14 +6,17 @@ import { notifications } from '@mantine/notifications';
 import { api, type OAuthConnection } from '@/api';
 import { urlHost } from '@/oauth/url';
 import { formatDate } from '@/training/format';
+import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
 import classes from './Tokens.module.css';
 
 function ConnectionItem({
   connection,
   onDisconnect,
+  onBudget,
 }: {
   connection: OAuthConnection;
   onDisconnect: () => void;
+  onBudget: (budget: number | null) => Promise<void>;
 }) {
   const host = urlHost(connection.client_uri);
   return (
@@ -55,6 +58,23 @@ function ConnectionItem({
           <dt>Last used</dt>
           <dd>{connection.last_used_at ? formatDate(connection.last_used_at) : 'Never'}</dd>
         </div>
+        {connection.used_cpu_minutes !== undefined && (
+          <div>
+            <dt>Compute this month</dt>
+            <dd className={classes.budget}>
+              <MonthUsage
+                used={connection.used_cpu_minutes}
+                budget={connection.budget_cpu_minutes}
+              />
+              <BudgetEditor
+                budget={connection.budget_cpu_minutes ?? null}
+                label={`“${connection.client_name}”`}
+                onSave={onBudget}
+                description="CPU minutes per month for everything this app starts. Empty: only your account's limits apply."
+              />
+            </dd>
+          </div>
+        )}
       </dl>
     </li>
   );
@@ -121,6 +141,12 @@ export function ConnectedApps() {
               key={connection.id}
               connection={connection}
               onDisconnect={() => disconnect(connection)}
+              onBudget={async (budget) => {
+                const updated = await api.connections.setBudget(connection.id, budget);
+                setConnections(
+                  (list) => list?.map((c) => (c.id === connection.id ? updated : c)) ?? null
+                );
+              }}
             />
           ))}
         </ul>

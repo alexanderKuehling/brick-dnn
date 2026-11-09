@@ -21,7 +21,7 @@ import type { TrainingController } from './useTraining';
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
-  return { ...actual, api: { training: { check: vi.fn() } } };
+  return { ...actual, api: { training: { check: vi.fn(), estimate: vi.fn() } } };
 });
 
 const MLP: GraphDocument = {

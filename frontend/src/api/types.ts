@@ -220,6 +220,10 @@ export interface ApiToken {
   created_at: string;
   last_used_at: string | null;
   expires_at: string | null;
+  /** Monthly compute budget of the token in CPU minutes; null: none. Missing on older servers. */
+  budget_cpu_minutes?: number | null;
+  /** CPU minutes its trainings and predictions used this month. */
+  used_cpu_minutes?: number;
 }
 
 export interface ApiTokenInput {
@@ -271,6 +275,144 @@ export interface OAuthConnection {
   read_only: boolean;
   created_at: string;
   last_used_at: string | null;
+  /** Monthly compute budget of the app in CPU minutes; null: none. Missing on older servers. */
+  budget_cpu_minutes?: number | null;
+  used_cpu_minutes?: number;
+}
+
+// --------------------------------------------------------------------------
+// Usage and budgets (compute is CPU time, counted per calendar month in UTC)
+// --------------------------------------------------------------------------
+
+/** This month's usage of the web app, one API token or one connected app. */
+export interface UsageSource {
+  source: 'web' | 'token' | 'app';
+  /** The token's or connection's id (null for the web app). */
+  id: number | null;
+  name: string;
+  /** The token was revoked or the app disconnected; its usage still counts. */
+  deleted: boolean;
+  used_cpu_minutes: number;
+  budget_cpu_minutes: number | null;
+  /** In `Usage.prices.currency`; null without a price. */
+  cost: number | null;
+}
+
+/** A plan (subscription tier) of the server; null limits are unlimited. */
+export interface Plan {
+  key: string;
+  name: string;
+  /** Per month, in `currency` (only shown: there is no payment yet). */
+  price: number | null;
+  currency: string | null;
+  cpu_hours_per_month: number | null;
+  storage_gb: number | null;
+  cpu_minutes_per_run: number | null;
+  concurrent_trainings: number | null;
+  /** For the job queue (higher goes first). */
+  priority: number;
+  /** Compute beyond the allowance, if the plan offers it (per CPU hour). */
+  overage_price_per_cpu_hour: number | null;
+}
+
+/** GET /api/account/usage/: this month's usage, the limits and what is left. */
+export interface Usage {
+  period: { start: string; resets_at: string };
+  /** The plan the limits come from. Missing on older servers. */
+  plan?: Plan;
+  /** No limit of the plan applies (the usage is still measured). */
+  unlimited?: boolean;
+  /** The plans with prices, when the server offers several (else empty). */
+  plans?: Plan[];
+  /** Compute beyond the monthly allowance (paid plans), switched on by the user. */
+  overage?: {
+    available: boolean;
+    enabled: boolean;
+    price_per_cpu_hour: number | null;
+    currency: string;
+    /** The user's own cap in CPU hours (null: none). */
+    cap_cpu_hours: number | null;
+    used_cpu_minutes: number;
+    cost: number | null;
+  };
+  compute: {
+    unit: 'cpu_minutes';
+    used: number;
+    /** The account's limit this month: the allowance or the own budget, whichever is lower. */
+    limit: number | null;
+    remaining: number | null;
+    /** What the caller can still use (with its token's or app's budget). */
+    available: number | null;
+    /** The server's monthly allowance for the account (null: unlimited). */
+    allowance: number | null;
+    /** The budget the user set for the account (null: none). */
+    own_budget: number | null;
+    /** The most one training may use (null: unlimited). */
+    run_limit: number | null;
+    reserved_by_active_runs: number;
+    by_kind: { training: number; prediction: number };
+    by_source: UsageSource[];
+  };
+  storage: {
+    used_bytes: number;
+    limit_bytes: number | null;
+    remaining_bytes: number | null;
+    by_kind: { data_sources: number; datasets: number; training_runs: number };
+  };
+  prices: {
+    currency: string | null;
+    per_cpu_hour: number | null;
+    per_gb_month: number | null;
+    compute_cost: number | null;
+    compute_limit_cost: number | null;
+    storage_cost_per_month: number | null;
+  };
+  /** With an API token or app: its own usage and budget (null in the web app). */
+  caller: {
+    source: 'token' | 'app';
+    id: number;
+    name: string;
+    used_cpu_minutes: number;
+    budget_cpu_minutes: number | null;
+    remaining_cpu_minutes: number | null;
+  } | null;
+}
+
+/** A rough estimate of the CPU time a planned training will use. */
+export interface CostEstimate {
+  cpu_minutes: number;
+  low_cpu_minutes: number;
+  high_cpu_minutes: number;
+  /** With a configured price: what `cpu_minutes` cost, in `currency`. */
+  cost: number | null;
+  currency: string | null;
+  /** E.g. "48,000 training and 22,000 validation/test samples, 10 epochs, …". */
+  basis: string;
+  note: string;
+  details: Record<string, unknown>;
+}
+
+/** Whether the budgets allow a planned training, and how much it may use. */
+export interface BudgetCheck {
+  allowed: boolean;
+  /** Why a start would be refused. */
+  reason: string | null;
+  /** E.g. the estimate exceeds what the run may use: it would probably be stopped. */
+  warning: string | null;
+  /** The most the run may use (null: unlimited). */
+  run_limit_cpu_minutes: number | null;
+  limit_reason: 'budget' | 'run_limit' | null;
+  /** What is left this month of the budgets that apply (null: no budget applies). */
+  remaining_cpu_minutes?: number | null;
+  resets_at: string;
+  /** budget_exceeded | estimate_too_high | storage_quota_exceeded, when not allowed. */
+  code?: string;
+}
+
+/** The answer of the API when a budget or quota does not allow a request (HTTP 403). */
+export interface BudgetErrorBody {
+  detail: string;
+  code: 'budget_exceeded' | 'estimate_too_high' | 'storage_quota_exceeded';
 }
 
 // --------------------------------------------------------------------------
@@ -596,6 +738,9 @@ export interface Compatibility {
   plan: TrainingPlan | null;
   /** Changes that make the network fit (applied together). Missing from older servers. */
   fixes?: CompatibilityFix[];
+  /** The estimated CPU time of the run (null if it cannot be estimated). */
+  estimate?: CostEstimate | null;
+  budget?: BudgetCheck | null;
 }
 
 export type Optimizer = 'adam' | 'adamw' | 'sgd';
@@ -786,6 +931,22 @@ export interface RunSummary {
   started_by: string;
   /** classical: a scikit-learn model, fitted once (epochs 1). Missing on older servers. */
   family?: 'neural' | 'classical';
+  /** The API token or connected app that started it (null: the web app). */
+  started_via?: { source: 'token' | 'app'; name: string | null } | null;
+  usage?: RunUsage;
+}
+
+/** Why a stopped run stopped: the user, a used-up budget or the limit per training. */
+export type StopReason = 'user' | 'budget' | 'run_limit';
+
+export interface RunUsage {
+  /** CPU minutes counted so far. */
+  cpu_minutes: number;
+  /** The most it may use (its budget or the limit per training); null: unlimited. */
+  limit_cpu_minutes: number | null;
+  /** The estimate made before it started. */
+  estimated_cpu_minutes: number | null;
+  stop_reason: StopReason | null;
 }
 
 /** One finished epoch. Accuracies are null for regression, which reports val_rmse instead. */
@@ -891,6 +1052,8 @@ export interface RunDetail extends RunSummary {
   graph: GraphDocument;
   plan: TrainingPlan | null;
   state: RunState | null;
+  /** In the answer to starting it: it will probably be stopped by its compute limit. */
+  budget_warning?: string | null;
 }
 
 export interface RunInput {

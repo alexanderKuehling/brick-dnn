@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -20,6 +20,8 @@ import {
   type RunSummary,
   type TrainingStatus,
 } from '@/api';
+import { AccountLink, CostEstimate } from '@/usage/CostEstimate';
+import { useCostEstimate } from '@/usage/useCostEstimate';
 import type { TrainingProject } from './access';
 import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
@@ -72,7 +74,15 @@ interface StartError {
   message: string;
   errors?: string[];
   busy?: boolean;
+  /** A budget or the storage quota does not allow it (HTTP 403 with a budget code). */
+  budget?: string;
 }
+
+const BUDGET_TITLES: Record<string, string> = {
+  budget_exceeded: 'Not enough compute budget',
+  estimate_too_high: 'Too much compute for the budget',
+  storage_quota_exceeded: 'The storage of your account is full',
+};
 
 export function SetupView({
   status,
@@ -143,13 +153,38 @@ export function SetupView({
     delete errors.test_split;
   }
   const blockedByActive = activeRun !== null && status.max_concurrent_runs <= 1;
+  const settingsValid = Object.keys(errors).length === 0;
+
+  // The settings as they are sent: for the start and for the estimate of its CPU time.
+  const knownDevice = status.devices.some((d) => d.id === settings.device);
+  const isClassical = classical !== null;
+  const config = useMemo(
+    () =>
+      // A remembered device may not exist on this server (any more).
+      toConfig(
+        { ...settings, device: knownDevice ? settings.device : 'auto' },
+        { builtin: builtinSource, classical: isClassical }
+      ),
+    [settings, knownDevice, builtinSource, isClassical]
+  );
+  const tuning = useMemo(() => (isClassical ? null : toTuning(settings)), [settings, isClassical]);
+  const cost = useCostEstimate(
+    doc,
+    ref,
+    config,
+    tuning,
+    networkValid && ref !== null && check?.ok === true && settingsValid
+  );
+  const refusedByBudget = cost.fresh && cost.budget?.allowed === false;
+
   const canStart =
     networkValid &&
     ref !== null &&
     !compatibility.loading &&
     check?.ok !== false &&
-    Object.keys(errors).length === 0 &&
-    !blockedByActive;
+    settingsValid &&
+    !blockedByActive &&
+    !refusedByBudget;
 
   const deleteDataset = (dataset: Dataset) =>
     modals.openConfirmModal({
@@ -181,26 +216,25 @@ export function SetupView({
     setStarting(true);
     setStartError(null);
     try {
-      const tuning = classical ? null : toTuning(settings);
       const run = await api.training.runs.create({
         name: runName.trim() || networkName.trim() || 'Untitled network',
         graph: doc,
         dataset: ref,
-        // A remembered device may not exist on this server (any more).
-        config: toConfig(
-          {
-            ...settings,
-            device: status.devices.some((d) => d.id === settings.device) ? settings.device : 'auto',
-          },
-          { builtin: builtinSource, classical: classical !== null }
-        ),
+        config,
         ...(tuning ? { tuning } : {}),
         ...(project ? { project: project.id } : {}),
       });
+      if (run.budget_warning) {
+        notifications.show({ color: 'yellow', message: run.budget_warning, autoClose: 10000 });
+      }
       onStarted(run);
     } catch (error) {
       const message = (error as Error).message;
-      if (error instanceof ApiError && error.status === 409) {
+      const code =
+        error instanceof ApiError ? (error.data as { code?: unknown } | null)?.code : null;
+      if (error instanceof ApiError && error.status === 403 && typeof code === 'string') {
+        setStartError({ message, budget: code });
+      } else if (error instanceof ApiError && error.status === 409) {
         setStartError({ message, busy: true });
         onRefresh();
       } else if (error instanceof ApiError && error.status === 503) {
@@ -286,13 +320,22 @@ export function SetupView({
         classical={classical}
       />
 
+      {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}
+
       {startError && (
         <Alert
           color={startError.busy ? 'yellow' : 'red'}
           icon={<IconAlertTriangle size={18} />}
-          title={startError.busy ? 'Another training is running' : 'Cannot start the training'}
+          title={
+            startError.busy
+              ? 'Another training is running'
+              : startError.budget
+                ? (BUDGET_TITLES[startError.budget] ?? 'Not enough budget')
+                : 'Cannot start the training'
+          }
         >
           <Text size="sm">{startError.message}</Text>
+          {startError.budget && <AccountLink />}
           {startError.errors && (
             <List styles={WRAPPING_LIST} size="sm" mt={4}>
               {startError.errors.map((message) => (

@@ -11,8 +11,8 @@ vi.mock('@/api', async (importOriginal) => {
   return {
     ...actual,
     api: {
-      apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
-      connections: { list: vi.fn(), revoke: vi.fn() },
+      apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
+      connections: { list: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
     },
   };
 });
@@ -393,4 +393,68 @@ describe('connected apps', () => {
     );
     expect(screen.getByRole('listitem', { name: 'Claude' })).toBeInTheDocument();
   });
+});
+
+test('shows the compute of tokens and apps this month and sets their budgets', async () => {
+  vi.mocked(api.apiTokens.list).mockResolvedValue([
+    { ...LAPTOP, budget_cpu_minutes: 10, used_cpu_minutes: 12.5 },
+    { ...SCRIPT, budget_cpu_minutes: null, used_cpu_minutes: 0 },
+  ]);
+  vi.mocked(api.connections.list).mockResolvedValue([
+    { ...CLAUDE, budget_cpu_minutes: null, used_cpu_minutes: 3.25 },
+  ]);
+  vi.mocked(api.apiTokens.setBudget).mockResolvedValue({
+    ...SCRIPT,
+    budget_cpu_minutes: 5,
+    used_cpu_minutes: 0,
+  });
+  vi.mocked(api.connections.setBudget).mockResolvedValue({
+    ...CLAUDE,
+    budget_cpu_minutes: 20,
+    used_cpu_minutes: 3.25,
+  });
+  renderPage();
+
+  const laptop = await screen.findByRole('listitem', { name: LAPTOP.name });
+  // Used up: shown in red.
+  expect(within(laptop).getByText('12.5 of 10 CPU min')).toBeInTheDocument();
+  const script = screen.getByRole('listitem', { name: SCRIPT.name });
+  expect(within(script).getByText('0 CPU min')).toBeInTheDocument();
+  await userEvent.click(
+    within(script).getByRole('button', { name: `Set the monthly budget of “${SCRIPT.name}”` })
+  );
+  await userEvent.type(await screen.findByLabelText('Monthly budget'), '5');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(api.apiTokens.setBudget).toHaveBeenCalledWith(SCRIPT.id, 5));
+  expect(await within(script).findByText('0 of 5 CPU min')).toBeInTheDocument();
+
+  const claude = await screen.findByRole('listitem', { name: 'Claude' });
+  expect(within(claude).getByText('3.25 CPU min')).toBeInTheDocument();
+  await userEvent.click(
+    within(claude).getByRole('button', { name: 'Set the monthly budget of “Claude”' })
+  );
+  await userEvent.type(await screen.findByLabelText('Monthly budget'), '20');
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(api.connections.setBudget).toHaveBeenCalledWith(CLAUDE.id, 20));
+  expect(await within(claude).findByText('3.25 of 20 CPU min')).toBeInTheDocument();
+});
+
+test('removing a budget and errors', async () => {
+  vi.mocked(api.apiTokens.list).mockResolvedValue([
+    { ...LAPTOP, budget_cpu_minutes: 10, used_cpu_minutes: 1 },
+  ]);
+  vi.mocked(api.connections.list).mockResolvedValue([]);
+  vi.mocked(api.apiTokens.setBudget)
+    .mockRejectedValueOnce(new ApiError(403, null, 'Change budgets after logging in.'))
+    .mockResolvedValueOnce({ ...LAPTOP, budget_cpu_minutes: null, used_cpu_minutes: 1 });
+  renderPage();
+  const laptop = await screen.findByRole('listitem', { name: LAPTOP.name });
+  await userEvent.click(
+    within(laptop).getByRole('button', { name: `Set the monthly budget of “${LAPTOP.name}”` })
+  );
+  await userEvent.click(await screen.findByRole('button', { name: 'Remove budget' }));
+  expect(await screen.findByText('Change budgets after logging in.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Remove budget' }));
+  await waitFor(() => expect(api.apiTokens.setBudget).toHaveBeenLastCalledWith(LAPTOP.id, null));
+  expect(await within(laptop).findByText('1 CPU min')).toBeInTheDocument();
 });

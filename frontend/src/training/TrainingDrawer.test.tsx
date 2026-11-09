@@ -2,7 +2,7 @@ import { cleanup, render, screen, userEvent, waitFor, within } from '@test-utils
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, type Compatibility, type ProjectRole } from '@/api';
+import { api, ApiError, type Compatibility, type CostEstimate, type ProjectRole } from '@/api';
 import { NO_SCOPE, type TrainingScope } from './access';
 import { ANALYSIS, dataset, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
@@ -20,6 +20,7 @@ vi.mock('@/api', async (importOriginal) => {
         status: vi.fn(),
         datasets: { list: vi.fn(), upload: vi.fn(), remove: vi.fn() },
         check: vi.fn(),
+        estimate: vi.fn(),
         runs: {
           list: vi.fn(),
           get: vi.fn(),
@@ -102,10 +103,38 @@ function renderDrawer(props: Partial<TrainingDrawerProps> = {}) {
 
 const startButton = () => screen.getByRole('button', { name: 'Start training' });
 
+const READY: Compatibility = {
+  ok: true,
+  errors: [],
+  warnings: [],
+  plan: {
+    task: 'demo',
+    summary: 'Demo data: random inputs and a hidden rule to learn (classification).',
+    inputs: [],
+    targets: [],
+    image: null,
+    num_classes: 3,
+    class_names: null,
+    notes: [],
+  },
+};
+
+const ESTIMATE: CostEstimate = {
+  cpu_minutes: 2.1,
+  low_cpu_minutes: 0.7,
+  high_cpu_minutes: 6.3,
+  cost: 0.02,
+  currency: 'EUR',
+  basis: '2,048 training and 512 validation/test samples, 10 epochs',
+  note: 'A rough estimate.',
+  details: {},
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   vi.mocked(api.training.datasets.list).mockResolvedValue([]);
+  vi.spyOn(notifications, 'show').mockImplementation(() => '');
 });
 
 describe('TrainingDrawer', () => {
@@ -214,6 +243,142 @@ describe('TrainingDrawer', () => {
     await userEvent.click(startButton());
     expect(await screen.findByText('Another training is still running.')).toBeInTheDocument();
     expect(training.refreshRuns).toHaveBeenCalled();
+  });
+
+  it('shows the estimated compute and what the run may use', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    vi.mocked(api.training.estimate).mockResolvedValue({
+      ...READY,
+      estimate: ESTIMATE,
+      budget: {
+        allowed: true,
+        reason: null,
+        warning: null,
+        run_limit_cpu_minutes: 30,
+        limit_reason: 'run_limit',
+        remaining_cpu_minutes: 287,
+        resets_at: '2026-12-01T00:00:00Z',
+      },
+    });
+    renderDrawer();
+    // The estimate follows the check (both are debounced).
+    const box = await screen.findByRole('region', { name: 'Estimated compute' }, { timeout: 3000 });
+    expect(within(box).getByText('≈ 2.1 CPU min (0.7–6.3) · €0.02')).toBeInTheDocument();
+    expect(
+      within(box).getByText(
+        'It may use up to 30 CPU min (the limit per training). 287 CPU min left this month, until 1 December 2026.'
+      )
+    ).toBeInTheDocument();
+    // The estimate is for the settings of the start.
+    expect(api.training.estimate).toHaveBeenCalledWith(
+      expect.objectContaining({ nodes: expect.any(Array) }),
+      { kind: 'random' },
+      expect.objectContaining({ epochs: 10, batch_size: 64 }),
+      null,
+      expect.any(AbortSignal)
+    );
+    await waitFor(() => expect(startButton()).toBeEnabled());
+  });
+
+  it('blocks the start when the budget is used up', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    vi.mocked(api.training.estimate).mockResolvedValue({
+      ...READY,
+      estimate: ESTIMATE,
+      budget: {
+        allowed: false,
+        reason: 'The monthly compute allowance of this account is used up: 301 of 300 CPU minutes.',
+        warning: null,
+        run_limit_cpu_minutes: null,
+        limit_reason: null,
+        resets_at: '2026-12-01T00:00:00Z',
+        code: 'budget_exceeded',
+      },
+    });
+    renderDrawer();
+    expect(
+      await screen.findByText('Not enough compute budget', {}, { timeout: 3000 })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/allowance of this account is used up/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Usage & budget' })).toHaveAttribute(
+      'href',
+      '/account'
+    );
+    expect(startButton()).toBeDisabled();
+  });
+
+  it('warns when the run will probably be stopped by its limit', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    vi.mocked(api.training.estimate).mockResolvedValue({
+      ...READY,
+      estimate: ESTIMATE,
+      budget: {
+        allowed: true,
+        reason: null,
+        warning: 'It will probably be stopped before it finishes.',
+        run_limit_cpu_minutes: 1,
+        limit_reason: 'budget',
+        remaining_cpu_minutes: 1,
+        resets_at: '2026-12-01T00:00:00Z',
+      },
+    });
+    vi.mocked(api.training.runs.create).mockResolvedValue({
+      ...detail({ status: 'starting' }),
+      budget_warning: 'It will probably be stopped before it finishes.',
+    });
+    renderDrawer();
+    expect(
+      await screen.findByText(
+        'It will probably be stopped before it finishes.',
+        {},
+        { timeout: 3000 }
+      )
+    ).toBeInTheDocument();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await userEvent.click(startButton());
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'It will probably be stopped before it finishes.' })
+    );
+  });
+
+  it('explains a start refused by a budget', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    vi.mocked(api.training.estimate).mockRejectedValue(new Error('offline'));
+    vi.mocked(api.training.runs.create).mockRejectedValue(
+      new ApiError(
+        403,
+        {
+          detail: 'The monthly budget of the API token “agent” is used up.',
+          code: 'budget_exceeded',
+        },
+        'The monthly budget of the API token “agent” is used up.'
+      )
+    );
+    renderDrawer();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await userEvent.click(startButton());
+    expect(await screen.findByText('Not enough compute budget')).toBeInTheDocument();
+    expect(screen.getByText(/API token “agent” is used up/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Estimated compute' })).not.toBeInTheDocument();
+  });
+
+  it('says why a run was stopped by its budget', () => {
+    const run = detail({
+      status: 'stopped',
+      message: 'Stopped: the compute budget ran out. Stopped after 3 of 10 epochs.',
+      usage: {
+        cpu_minutes: 12.5,
+        limit_cpu_minutes: 12.5,
+        estimated_cpu_minutes: 20,
+        stop_reason: 'budget',
+      },
+      started_via: { source: 'token', name: 'agent' },
+    });
+    renderDrawer({ training: controller({ view: 'run', selectedRunId: run.id, detail: run }) });
+    expect(screen.getByText('Stopped by the compute budget')).toBeInTheDocument();
+    expect(screen.getByText(/Stopped after 3 of 10 epochs/)).toBeInTheDocument();
+    expect(screen.getByText(/via “agent”/)).toBeInTheDocument();
+    expect(screen.getByText(/12\.5 CPU min/)).toBeInTheDocument();
   });
 
   it('lists runs with their results', async () => {
