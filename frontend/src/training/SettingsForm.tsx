@@ -156,7 +156,6 @@ export function SettingsForm({
         />
         <NumberInput
           label="Validation split"
-          description={builtin && !fixed ? 'Of the training images' : undefined}
           value={fixedPercents ? fixedPercents[1] : values.val_split}
           disabled={fixed !== null}
           onChange={setNumber('val_split')}
@@ -177,7 +176,7 @@ export function SettingsForm({
             fixed
               ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
               : builtin
-                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights. The kept weights are measured on them once, after training. Validation data is a share of the training images.'
+                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
                 : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
           }
           checked={testEnabled}

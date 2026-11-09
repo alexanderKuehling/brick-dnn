@@ -85,10 +85,9 @@ describe('SettingsForm', () => {
     render(<Harness builtin />);
     // Validation data is a share of the training images, the official test images are the
     // test set: the switch is on and cannot be changed, and there is no test share.
-    expect(screen.getByLabelText('Validation split')).toHaveAccessibleDescription(
-      'Of the training images'
-    );
+    expect(screen.getByLabelText('Validation split')).toBeInTheDocument();
     const test = screen.getByRole('switch', { name: /official test images/ });
+    expect(test).toHaveAccessibleDescription(/validation split is taken from the training images/);
     expect(test).toBeChecked();
     expect(test).toBeDisabled();
     expect(screen.queryByLabelText('Test split')).not.toBeInTheDocument();
