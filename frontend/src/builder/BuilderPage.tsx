@@ -44,6 +44,8 @@ import {
   type ProjectConflict,
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { Collaboration } from '@/collab/Collaboration';
+import { CollabProvider } from '@/collab/context';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
@@ -98,7 +100,10 @@ interface SaveOptions {
 export function BuilderPage() {
   return (
     <ReactFlowProvider>
-      <Builder />
+      {/* History and comments of the open network, for the canvas, inspector and panels. */}
+      <CollabProvider>
+        <Builder />
+      </CollabProvider>
     </ReactFlowProvider>
   );
 }
@@ -981,6 +986,15 @@ function Builder() {
               <Background gap={20} />
               <Controls showInteractive={!readOnly} />
               {mediumScreen && <MiniMap pannable zoomable nodeColor={miniMapColor(theme, specs)} />}
+              <Collaboration
+                projectId={projectId}
+                role={role}
+                subscribe={live.subscribe}
+                live={live.status === 'live'}
+                unsaved={!isSaved}
+                // Live, the server's `replaced` message brings the restored state.
+                onRestored={(restored) => !live.isTracking() && loadProject(restored)}
+              />
               {nodes.length === 0 && !readOnly && (
                 <Panel position="top-center">
                   <Paper

@@ -22,6 +22,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
+import { LayerComments } from '@/comments/LayerComments';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
 import { formatShape } from './format';
@@ -172,6 +173,8 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
           />
         </Stack>
       </Fieldset>
+      {/* Saved networks: comments on this layer (viewers may comment too). */}
+      <LayerComments key={node.id} nodeId={node.id} />
     </Stack>
   );
 }

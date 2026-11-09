@@ -16,8 +16,10 @@
   and layers being dragged show who does what. Docker Compose runs a small realtime service
   and Redis for it; `manage.py runserver` needs neither.
 - **Version history and comments.** Every change is kept (merged per person and session);
-  name versions and restore any of them. Comment on a network or a layer, reply and resolve
-  threads, viewers too.
+  name versions, preview any of them on a read-only canvas and restore it. Comment on a
+  network or a layer, reply and resolve threads, viewers too. In the builder, *History* and
+  *Comments* open a side panel that follows the live connection, and layers show how many
+  open comments they have.
 - **Shared runs and data.** Trainings started from a shared network are visible to all its
   members; datasets and data preparations can be shared in a network, so members train on
   them and editors improve the preparation.

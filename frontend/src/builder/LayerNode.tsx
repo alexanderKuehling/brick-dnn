@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Text, Tooltip } from '@mantine/core';
+import { CommentMarker } from '@/comments/CommentMarker';
 import { useRemoteSelection } from '@/live/presence';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
@@ -61,6 +62,7 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
             <IconInfoCircle size={16} color="var(--mantine-color-yellow-7)" aria-label="Warning" />
           </Tooltip>
         )}
+        <CommentMarker nodeId={id} />
       </div>
       <div className={classes.body}>
         <Text size="sm" c="dimmed" truncate="end">

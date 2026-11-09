@@ -268,6 +268,7 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       patchProject({ version: next.version, name: message.project.name });
       const own = message.by.id === latest.current.user?.id;
       notifications.show({
+        id: 'live-replaced', // A restore from the history shows its own message instead.
         title: own ? 'The network was replaced' : `${message.by.username} replaced the network`,
         message: own
           ? 'You saved it from another window or app. The new version is shown here.'
