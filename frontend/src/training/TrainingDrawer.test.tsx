@@ -41,9 +41,11 @@ function dataController(overrides: Partial<DataController> = {}): DataController
     datasetsError: null,
     reloadDatasets: vi.fn(),
     uploading: null,
+    uploadProgress: null,
     uploadError: null,
     dismissUploadError: vi.fn(),
     upload: vi.fn(),
+    cancelUpload: vi.fn(),
     remove: vi.fn(),
     ...overrides,
   };

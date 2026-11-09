@@ -4,6 +4,7 @@ import {
   datasetDetails,
   describeParams,
   formatBytes,
+  formatBytesOf,
   formatDuration,
   formatMetric,
   formatPercent,
@@ -39,6 +40,9 @@ describe('training format', () => {
     expect(formatBytes(512)).toBe('512 bytes');
     expect(formatBytes(4551)).toBe('4.4 KB');
     expect(formatBytes(170 * 1024 * 1024)).toBe('170 MB');
+    expect(formatBytesOf(12.3 * 1024 * 1024, 48 * 1024 * 1024)).toBe('12.3 MB of 48.0 MB');
+    expect(formatBytesOf(300 * 1024, 1.5 * 1024 * 1024 * 1024)).toBe('0.0 GB of 1.5 GB');
+    expect(formatBytesOf(200, 900)).toBe('200 bytes of 900 bytes');
     expect(formatDuration(42)).toBe('42 s');
     expect(formatDuration(192)).toBe('3 min 12 s');
     expect(formatDuration(3900)).toBe('1 h 5 min');

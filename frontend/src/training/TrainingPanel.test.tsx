@@ -118,11 +118,11 @@ describe('training panel', () => {
     render(<Panel />);
     await openUploads();
     await userEvent.upload(fileInput(), csv());
-    expect(await screen.findByText(/Uploading and checking/)).toBeInTheDocument();
+    expect(await screen.findByText('Uploading “data.csv” …')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Runs' }));
     await userEvent.click(screen.getByRole('tab', { name: 'New training' }));
-    expect(screen.getByText(/Uploading and checking/)).toBeInTheDocument();
+    expect(screen.getByText('Uploading “data.csv” …')).toBeInTheDocument();
     // A second pick while the first upload runs does not start another one.
     await userEvent.upload(fileInput(), csv());
     expect(api.training.datasets.upload).toHaveBeenCalledTimes(1);
@@ -150,6 +150,66 @@ describe('training panel', () => {
     vi.mocked(api.training.datasets.list).mockResolvedValue([IRIS]);
     await userEvent.click(screen.getByRole('button', { name: 'open panel' }));
     expect(await screen.findByRole('radio', { name: /iris/ })).toBeChecked();
+  });
+
+  /** An upload that runs until `finish` is called or it is aborted, like the real one. */
+  function slowUpload() {
+    const upload: {
+      finish?: (dataset: Dataset) => void;
+      progress?: (sent: number, total: number) => void;
+      signal?: AbortSignal;
+    } = {};
+    vi.mocked(api.training.datasets.upload).mockImplementation((_file, _name, transfer) => {
+      upload.progress = transfer?.onUploadProgress;
+      upload.signal = transfer?.signal;
+      return new Promise((resolve, reject) => {
+        upload.finish = resolve;
+        transfer?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        );
+      });
+    });
+    return upload;
+  }
+
+  const MB = 1024 * 1024;
+
+  it('shows the progress of an upload, then that the server checks the file', async () => {
+    const upload = slowUpload();
+    render(<Panel />);
+    await openUploads();
+    await userEvent.upload(fileInput(), csv());
+    const bar = await screen.findByRole('progressbar', { name: 'Upload of “data.csv”' });
+
+    act(() => upload.progress?.(60 * MB, 240 * MB));
+    await waitFor(() => expect(bar).toHaveAttribute('aria-valuenow', '25'));
+    expect(screen.getByText('60.0 MB of 240.0 MB')).toBeInTheDocument();
+
+    act(() => upload.progress?.(240 * MB, 240 * MB));
+    expect(screen.getByRole('status')).toHaveTextContent('Processing the file on the server …');
+    expect(bar).not.toHaveAttribute('aria-valuenow');
+    // Too late to cancel: the server has the file.
+    expect(screen.queryByRole('button', { name: 'Cancel upload' })).not.toBeInTheDocument();
+
+    await act(async () => upload.finish?.(IRIS));
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /iris/ })).toBeChecked();
+  });
+
+  it('cancels an upload', async () => {
+    const upload = slowUpload();
+    render(<Panel />);
+    await openUploads();
+    await userEvent.upload(fileInput(), csv());
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel upload' }));
+
+    expect(upload.signal?.aborted).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+    expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
+    expect(notifications.show).not.toHaveBeenCalled();
+    // A new upload can start right away.
+    await userEvent.upload(fileInput(), csv());
+    expect(api.training.datasets.upload).toHaveBeenCalledTimes(2);
   });
 
   it('lets the same file be picked again after a failed upload', async () => {

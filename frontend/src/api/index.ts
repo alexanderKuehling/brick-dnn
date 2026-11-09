@@ -1,5 +1,5 @@
 import { DEMO } from '@/demo';
-import { request, requestFile } from './client';
+import { request, requestFile, type UploadOptions } from './client';
 import { createDemoApi } from './demoApi';
 import type {
   Analysis,
@@ -55,6 +55,7 @@ export {
   onTokensChange,
   setTokens,
   type FileDownload,
+  type UploadOptions,
 } from './client';
 
 type ProjectInput = Pick<Project, 'name' | 'graph'> & Partial<Pick<Project, 'description'>>;
@@ -270,7 +271,8 @@ const serverApi = {
       /** The user's own datasets and the ones shared in their projects (`mine`, `owner`). */
       list: (signal?: AbortSignal) =>
         request<Dataset[]>('/api/training/datasets/', { auth: true, signal }),
-      upload: (file: File, name?: string) => {
+      /** A CSV file or a ZIP file of images; `upload` can cancel and follow the upload. */
+      upload: (file: File, name?: string, upload: UploadOptions = {}) => {
         const form = new FormData();
         form.append('file', file);
         if (name) {
@@ -280,6 +282,7 @@ const serverApi = {
           method: 'POST',
           body: form,
           auth: true,
+          ...upload,
         });
       },
       remove: (id: number) =>
@@ -322,11 +325,11 @@ const serverApi = {
         request<DataSource[]>('/api/data/sources/', { auth: true, signal }),
       get: (id: number, signal?: AbortSignal) =>
         request<DataSource>(`/api/data/sources/${id}/`, { auth: true, signal }),
-      /** Import a CSV file; options left out are detected. */
+      /** Import a CSV file; options left out are detected. `upload` can cancel and follow it. */
       upload: (
         file: File,
         options: Partial<ImportOptions> & { name?: string } = {},
-        signal?: AbortSignal
+        upload: UploadOptions = {}
       ) => {
         const form = new FormData();
         form.append('file', file);
@@ -340,7 +343,7 @@ const serverApi = {
           method: 'POST',
           body: form,
           auth: true,
-          signal,
+          ...upload,
         });
       },
       rename: (id: number, name: string) =>

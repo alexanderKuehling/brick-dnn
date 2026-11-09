@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { api, type Dataset } from '@/api';
+import { useUploadProgress, type UploadBytes } from '@/components/useUploadProgress';
 import { formatBytes } from './format';
 import { loadSource, saveSource, type SourceChoice } from './settings';
 
@@ -14,9 +15,13 @@ export interface DataController {
   reloadDatasets: () => void;
   /** Name of the file being uploaded. */
   uploading: string | null;
+  /** How much of it is sent; null for the first moment of an upload. */
+  uploadProgress: UploadBytes | null;
   uploadError: string | null;
   dismissUploadError: () => void;
   upload: (file: File) => void;
+  /** Stop the running upload (without an error). */
+  cancelUpload: () => void;
   /** Delete an uploaded dataset; throws if the server refuses. */
   remove: (dataset: Dataset) => Promise<void>;
 }
@@ -41,6 +46,13 @@ export function useDatasets(
   // Bumped by every change of the list, so a list request that started before is ignored.
   const version = useRef(0);
   const busy = useRef(false);
+  const running = useRef<AbortController | null>(null);
+  const {
+    bytes: uploadProgress,
+    start: startProgress,
+    report: reportProgress,
+    stop: stopProgress,
+  } = useUploadProgress();
 
   useEffect(() => {
     session.current += 1;
@@ -51,8 +63,12 @@ export function useDatasets(
       setUploading(null);
       setUploadError(null);
       busy.current = false;
+      // The upload belonged to the account that logged out.
+      running.current?.abort();
+      running.current = null;
+      stopProgress();
     }
-  }, [active]);
+  }, [active, stopProgress]);
 
   const setSource = useCallback(
     (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) =>
@@ -94,10 +110,20 @@ export function useDatasets(
         return;
       }
       const started = session.current;
+      const controller = new AbortController();
+      running.current = controller;
       busy.current = true;
       setUploading(file.name);
+      startProgress(file.size);
       api.training.datasets
-        .upload(file)
+        .upload(file, undefined, {
+          signal: controller.signal,
+          onUploadProgress: (sent, total) => {
+            if (session.current === started) {
+              reportProgress(sent, total);
+            }
+          },
+        })
         .then((dataset) => {
           if (session.current !== started) {
             return;
@@ -115,7 +141,7 @@ export function useDatasets(
           }
         })
         .catch((error: Error) => {
-          if (session.current !== started) {
+          if (session.current !== started || controller.signal.aborted) {
             return;
           }
           setUploadError(error.message);
@@ -130,11 +156,13 @@ export function useDatasets(
         .finally(() => {
           if (session.current === started) {
             busy.current = false;
+            running.current = null;
             setUploading(null);
+            stopProgress();
           }
         });
     },
-    [active, maxUploadMb, setSource, setupVisible]
+    [active, maxUploadMb, setSource, setupVisible, startProgress, reportProgress, stopProgress]
   );
 
   const remove = useCallback(async (dataset: Dataset) => {
@@ -150,9 +178,11 @@ export function useDatasets(
     datasetsError,
     reloadDatasets,
     uploading,
+    uploadProgress,
     uploadError,
     dismissUploadError: useCallback(() => setUploadError(null), []),
     upload,
+    cancelUpload: useCallback(() => running.current?.abort(), []),
     remove,
   };
 }

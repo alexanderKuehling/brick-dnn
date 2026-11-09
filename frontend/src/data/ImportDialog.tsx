@@ -25,6 +25,8 @@ import {
   ThemeIcon,
 } from '@mantine/core';
 import { api, type DataSource, type ImportOptions, type ImportReport } from '@/api';
+import { UploadProgress } from '@/components/UploadProgress';
+import { useUploadProgress } from '@/components/useUploadProgress';
 import { formatBytes } from '@/training/format';
 import classes from './DataPage.module.css';
 
@@ -150,6 +152,7 @@ export function ImportDialog({
   const resetFile = useRef<() => void>(null);
   /** The running upload; aborted when the dialog is cancelled or the page is left. */
   const upload = useRef<AbortController | null>(null);
+  const progress = useUploadProgress();
 
   useEffect(() => () => upload.current?.abort(), []);
 
@@ -189,6 +192,7 @@ export function ImportDialog({
     upload.current = controller;
     setBusy(true);
     setError(null);
+    progress.start(file.size);
     let source: DataSource;
     try {
       const changed = Object.fromEntries(
@@ -199,12 +203,13 @@ export function ImportDialog({
       source = await api.data.sources.upload(
         file,
         { ...changed, ...(name.trim() ? { name: name.trim() } : {}) },
-        controller.signal
+        { signal: controller.signal, onUploadProgress: progress.report }
       );
     } catch (err) {
       if (!controller.signal.aborted) {
         setError((err as Error).message);
         setBusy(false);
+        progress.stop();
       }
       return;
     }
@@ -218,6 +223,7 @@ export function ImportDialog({
     }
     upload.current = null;
     setBusy(false);
+    progress.stop();
     if (source.report.warnings.length > 0) {
       setImported(source);
     } else {
@@ -417,6 +423,13 @@ export function ImportDialog({
                 {error}
               </Alert>
             )}
+            {busy && file && progress.bytes && (
+              <UploadProgress
+                bytes={progress.bytes}
+                fileName={file.name}
+                processingText="Reading and checking the CSV …"
+              />
+            )}
 
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={close}>
@@ -430,11 +443,6 @@ export function ImportDialog({
                 Import
               </Button>
             </Group>
-            {busy && (
-              <Text size="xs" c="dimmed" ta="right" aria-live="polite">
-                Reading “{file?.name}” and detecting the column types …
-              </Text>
-            )}
           </Stack>
         </form>
       )}

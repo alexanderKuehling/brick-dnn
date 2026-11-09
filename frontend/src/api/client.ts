@@ -153,7 +153,15 @@ export interface RequestOptions {
   /** Send the JWT access token (and refresh it once on 401). */
   auth?: boolean;
   signal?: AbortSignal;
+  /**
+   * Called while a FormData body is sent, with the bytes sent so far and the size of the body.
+   * Such uploads go through XMLHttpRequest: fetch cannot report the progress of an upload.
+   */
+  onUploadProgress?: (sent: number, total: number) => void;
 }
+
+/** How a file upload is sent: `signal` cancels it, `onUploadProgress` follows it. */
+export type UploadOptions = Pick<RequestOptions, 'signal' | 'onUploadProgress'>;
 
 function isAbort(error: unknown): boolean {
   return (error as { name?: unknown } | null)?.name === 'AbortError';
@@ -200,9 +208,85 @@ export async function freshAccessToken(force = false): Promise<string | null> {
   return tokens?.access ?? null;
 }
 
+/** The response headers of an XMLHttpRequest. */
+function xhrHeaders(raw: string): Headers {
+  const headers = new Headers();
+  for (const line of raw.split(/\r?\n/)) {
+    const colon = line.indexOf(':');
+    if (colon > 0) {
+      try {
+        headers.append(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+      } catch {
+        // Skip a header the Headers class does not accept.
+      }
+    }
+  }
+  return headers;
+}
+
+/** Statuses whose response cannot have a body. */
+const NULL_BODY_STATUSES = [204, 205, 304];
+
+/**
+ * Send a FormData body with XMLHttpRequest, which reports the progress of the upload, and
+ * return the answer as a Response. Fails like fetch: a TypeError if the server cannot be
+ * reached, an AbortError when `signal` is aborted.
+ */
+function sendWithProgress(
+  url: string,
+  init: { method: string; headers: Record<string, string>; body: FormData; signal?: AbortSignal },
+  onProgress: (sent: number, total: number) => void
+): Promise<Response> {
+  const { method, headers, body, signal } = init;
+  const aborted = () => new DOMException('The operation was aborted.', 'AbortError');
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(aborted());
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const settle = (finish: () => void) => {
+      signal?.removeEventListener('abort', abort);
+      finish();
+    };
+    xhr.open(method, url);
+    for (const [name, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(name, value);
+    }
+    // Upload events are only sent to listeners that exist before the request is sent.
+    const progress = (event: ProgressEvent) => {
+      if (event.lengthComputable) {
+        onProgress(event.loaded, event.total);
+      }
+    };
+    xhr.upload.onprogress = progress;
+    xhr.upload.onload = progress;
+    xhr.onload = () =>
+      settle(() => {
+        try {
+          const empty = NULL_BODY_STATUSES.includes(xhr.status);
+          resolve(
+            new Response(empty ? null : xhr.responseText, {
+              status: xhr.status,
+              headers: xhrHeaders(xhr.getAllResponseHeaders()),
+            })
+          );
+        } catch (error) {
+          // E.g. status 0, which Response does not accept.
+          reject(error);
+        }
+      });
+    xhr.onerror = () => settle(() => reject(new TypeError('Network request failed')));
+    xhr.onabort = () => settle(() => reject(aborted()));
+    signal?.addEventListener('abort', abort, { once: true });
+    xhr.send(body);
+  });
+}
+
 /** Send a request (refreshing the access token once on 401) and return the raw response. */
 async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
-  const { method = 'GET', body, auth = false, signal } = options;
+  const { method = 'GET', body, auth = false, signal, onUploadProgress } = options;
   const multipart = typeof FormData !== 'undefined' && body instanceof FormData;
 
   // Refresh an access token that has expired (or is about to) before sending, rather than
@@ -225,6 +309,10 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
     }
     if (auth && tokens?.access) {
       headers.Authorization = `Bearer ${tokens.access}`;
+    }
+    if (multipart && onUploadProgress) {
+      const init = { method, headers, body: body as FormData, signal };
+      return sendWithProgress(`${BASE_URL}${path}`, init, onUploadProgress);
     }
     return fetch(`${BASE_URL}${path}`, {
       method,
