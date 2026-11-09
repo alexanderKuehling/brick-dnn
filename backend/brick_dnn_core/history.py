@@ -50,19 +50,19 @@ def record(project: Project, user, kind: str = "auto", label: str = "") -> Proje
         latest.description = project.description
         latest.graph = project.graph
         latest.save()
-        entry = latest
-    else:
-        entry = ProjectVersion.objects.create(
-            project=project,
-            version=project.version,
-            kind=kind,
-            label=label,
-            name=project.name,
-            description=project.description,
-            graph=project.graph,
-            created_by=user if getattr(user, "pk", None) else None,
-        )
-        _prune(project)
+        # The same entry, updated: no need to make every open history panel reload.
+        return latest
+    entry = ProjectVersion.objects.create(
+        project=project,
+        version=project.version,
+        kind=kind,
+        label=label,
+        name=project.name,
+        description=project.description,
+        graph=project.graph,
+        created_by=user if getattr(user, "pk", None) else None,
+    )
+    _prune(project)
     transaction.on_commit(lambda: live.notify_history(project.pk))
     return entry
 

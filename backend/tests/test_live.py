@@ -332,3 +332,29 @@ def test_comments_and_history_reach_live_editors(setup):
 
     async_to_sync(run)()
     assert project.history.first().name == "Changed"
+
+
+@pytestmark_db
+def test_newcomers_see_presence_and_history_is_announced_once(setup):
+    project, ada, bob, cy = setup
+
+    async def run():
+        a, _ = await joined(project.pk, ada)
+        await a.send_json_to({"type": "presence", "state": {"selected": ["n1"]}})
+        # Someone joining later learns what ada has selected, without ada sending it again.
+        c, _ = await joined(project.pk, cy)
+        presence = await next_of(c, "presence")
+        assert presence["user"]["username"] == "ada" and presence["state"] == {"selected": ["n1"]}
+
+        # A new history entry is announced; further changes by the same person in the same
+        # session only update that entry and are not announced again.
+        await a.send_json_to({"type": "ops", "id": "1", "ops": [{"op": "set_meta", "name": "A"}]})
+        await next_of(c, "history")
+        await a.send_json_to({"type": "ops", "id": "2", "ops": [{"op": "set_meta", "name": "B"}]})
+        assert (await next_of(c, "ops"))["id"] == "1"
+        assert (await next_of(c, "ops"))["id"] == "2"
+        assert await c.receive_nothing(timeout=0.5)
+        await a.disconnect()
+        await c.disconnect()
+
+    async_to_sync(run)()

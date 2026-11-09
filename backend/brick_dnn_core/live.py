@@ -352,12 +352,23 @@ def _load(project_id: int, user) -> tuple[dict[str, Any], str] | None:
     return _project_state(project), role_of(user, project)
 
 
+_PROJECT_LOCKS: dict[int, asyncio.Lock] = {}
+
+
+def _project_lock(project_id: int) -> asyncio.Lock:
+    lock = _PROJECT_LOCKS.get(project_id)
+    if lock is None:
+        lock = _PROJECT_LOCKS[project_id] = asyncio.Lock()
+    return lock
+
+
 class ProjectConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self) -> None:
         self.project_id = int(self.scope["url_route"]["kwargs"]["project_id"])
         self.user = None
         self.role: str | None = None
         self.client_id = uuid.uuid4().hex[:12]
+        self.presence: dict[str, Any] | None = None
         self.tokens = float(RATE_BURST)
         self.last_refill = time.monotonic()
         await self.accept()
@@ -403,6 +414,7 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         elif kind == "presence":
             state = content.get("state")
             if isinstance(state, dict):
+                self.presence = state
                 await self._broadcast(
                     {
                         "type": "peer.presence",
@@ -419,14 +431,18 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         if user is None:
             await self.close(code=CLOSE_UNAUTHORIZED)
             return
+        # Join the room before loading, so no change between loading and joining is missed
+        # (messages from the room are handled after this one; older ones carry a lower
+        # version than the hello and are ignored by the client).
+        await self.channel_layer.group_add(group_name(self.project_id), self.channel_name)
         loaded = await database_sync_to_async(_load)(self.project_id, user)
         if loaded is None:
+            await self.channel_layer.group_discard(group_name(self.project_id), self.channel_name)
             await self.close(code=CLOSE_NOT_FOUND)
             return
         self.auth_timer.cancel()
         self.user = user
         state, self.role = loaded
-        await self.channel_layer.group_add(group_name(self.project_id), self.channel_name)
         await self.send_json(
             {
                 "type": "hello",
@@ -455,26 +471,29 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         if not isinstance(ops, list) or not 0 < len(ops) <= MAX_OPS_PER_MESSAGE:
             await self.send_json({"type": "error", "id": message_id, "detail": "Invalid ops."})
             return
-        try:
-            version, applied = await database_sync_to_async(apply_ops)(
-                self.project_id, self.user, ops
+        # One change of a project at a time in this process, so the changes go out in the
+        # order of their versions.
+        async with _project_lock(self.project_id):
+            try:
+                version, applied = await database_sync_to_async(apply_ops)(
+                    self.project_id, self.user, ops
+                )
+            except Project.DoesNotExist:
+                await self.close(code=CLOSE_NOT_FOUND)
+                return
+            if not applied:
+                await self.send_json({"type": "rejected", "id": message_id, "version": version})
+                return
+            await self._broadcast(
+                {
+                    "type": "ops.applied",
+                    "ops": applied,
+                    "version": version,
+                    "by": _user_ref(self.user),
+                    "client_id": self.client_id,
+                    "id": message_id,
+                }
             )
-        except Project.DoesNotExist:
-            await self.close(code=CLOSE_NOT_FOUND)
-            return
-        if not applied:
-            await self.send_json({"type": "rejected", "id": message_id, "version": version})
-            return
-        await self._broadcast(
-            {
-                "type": "ops.applied",
-                "ops": applied,
-                "version": version,
-                "by": _user_ref(self.user),
-                "client_id": self.client_id,
-                "id": message_id,
-            }
-        )
 
     async def _broadcast(self, message: dict[str, Any]) -> None:
         await self.channel_layer.group_send(group_name(self.project_id), message)
@@ -494,7 +513,7 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json(
             {"type": "joined", "client_id": event["client_id"], "user": event["user"]}
         )
-        # Introduce ourselves to the newcomer only.
+        # Introduce ourselves to the newcomer only, with what we have selected etc.
         await self.channel_layer.send(
             event["channel"],
             {
@@ -503,6 +522,16 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
                 "user": _user_ref(self.user),
             },
         )
+        if self.presence is not None:
+            await self.channel_layer.send(
+                event["channel"],
+                {
+                    "type": "peer.presence",
+                    "client_id": self.client_id,
+                    "user": _user_ref(self.user),
+                    "state": self.presence,
+                },
+            )
 
     async def peer_here(self, event: dict[str, Any]) -> None:
         await self.send_json({**event, "type": "joined"})
