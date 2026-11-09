@@ -181,8 +181,12 @@ model.load_state_dict(torch.load("small_cnn.pt"))
 model.eval()
 ```
 
-Prepare new inputs the same way as during training. The run view lists the preprocessing:
-normalisation (mean and standard deviation), image size and class names.
+Prepare new inputs the same way as during training. The values that this needs are saved with
+the weights: in the run view, download **Preprocessing (.json)** next to the weights
+(`brickdnn train` writes `<name>.preprocessing.json` next to `<name>.pt`). It holds the
+normalisation (mean and standard deviation per image channel or CSV column, computed from the
+training part only), the image size and layout or the CSV feature columns and target, and the
+class names. *How to use the weights* in the run view shows the code for one input.
 
 ## Command line
 
@@ -243,7 +247,8 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 - The model is created by executing the code that **Export .py** produces, so the trained
   weights always match the exported script.
 - Run directories live in `BRICKDNN_DATA_DIR/training/runs/<id>/` (`job.json`, `state.json`,
-  `weights.pt` and `output.log` with the full output, useful when a run fails). Uploaded datasets
+  `weights.pt`, `weights.preprocessing.json` and `output.log` with the full output, useful when
+  a run fails). Uploaded datasets
   are in `training/datasets/`, downloaded built-in datasets in `training/builtin/`.
 - Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights
   (of the best epoch so far) and exits. A run whose process disappears (for example because the server was restarted) is

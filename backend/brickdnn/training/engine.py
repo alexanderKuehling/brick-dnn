@@ -6,6 +6,9 @@ The model is built from exactly the code that the export produces, so the saved
     model = NeuralNetwork()
     model.load_state_dict(torch.load("weights.pt"))
 
+How the inputs were prepared (normalisation, image size, CSV columns, class names) is saved
+next to it, in ``weights.preprocessing.json`` (see :func:`.state.preprocessing_path`).
+
 Use :func:`train` with a :class:`TrainingJob` and a :class:`Reporter`; the web runner
 (:mod:`.runner`) and the command line (:mod:`.cli`) only differ in their reporter.
 A job with ``tuning`` settings runs a hyperparameter search (see :mod:`.tuning`).
@@ -33,6 +36,7 @@ from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT, DatasetInfo, builtin_info, random_info
 from .devices import available_devices, default_device, device_label, select_device
 from .reporting import DivergedError, Reporter, StopTraining, TrainingError, short_error
+from .state import finite, preprocessing_path, write_json_atomic
 from .tuning import TuningConfig, describe_params, trial_config
 
 # Progress callbacks per second (at most).
@@ -327,12 +331,21 @@ class _Run:
         )
 
     def _save_weights(self) -> bool:
-        if self.weights_path is None or self.model is None or self.steps == 0:
+        if self.model is None or self.steps == 0:
             return False
-        state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
+        return self._write_weights(self._weights_copy())
+
+    def _write_weights(self, state: dict[str, torch.Tensor]) -> bool:
+        """Save ``state`` and, next to it, how the inputs were prepared: the statistics and
+        settings that new data needs to be prepared the same way (not for demo data)."""
+        if self.weights_path is None:
+            return False
         tmp = self.weights_path.with_name(f".{self.weights_path.name}.tmp")
         torch.save(state, tmp)
         os.replace(tmp, self.weights_path)
+        preprocessing = self.data.preprocessing
+        if preprocessing.get("kind") != "demo":
+            write_json_atomic(preprocessing_path(self.weights_path), finite(preprocessing))
         return True
 
     def _check_stop(self) -> None:
@@ -867,15 +880,9 @@ class _Search(_Run):
 
     def _save_weights(self) -> bool:
         """The weights of the best trial, or of the first trial if it was stopped early."""
-        state = self.best_state
-        if state is None and self.model is not None and self.steps > 0:
-            state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
-        if self.weights_path is None or state is None:
-            return False
-        tmp = self.weights_path.with_name(f".{self.weights_path.name}.tmp")
-        torch.save(state, tmp)
-        os.replace(tmp, self.weights_path)
-        return True
+        if self.best_state is not None:
+            return self._write_weights(self.best_state)
+        return super()._save_weights()
 
 
 def entry_score(history: list[dict[str, Any]], weights_epoch: int | None = None) -> float:

@@ -8,6 +8,10 @@
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
+- **The preprocessing is saved with the weights.** A run's weights come with
+  `weights.preprocessing.json` (normalisation statistics of the training data, image size or
+  CSV columns, class names), the run view offers it as *Preprocessing (.json)* next to the
+  weights, and `brickdnn train` writes `<name>.preprocessing.json` next to `<name>.pt`.
 - **Predictions with the generated CSV script**: `python model.py --predict new.csv` loads the
   saved model and prints a prediction for every row, prepared like the training data.
 - **Early stopping**: `patience` (in the editor under *Advanced settings*, `--patience` on the

@@ -940,6 +940,7 @@ def test_no_test_set_by_default(tmp_path):
     assert result.status == "completed"
     assert rec.info["test_size"] is None and result.test is None and rec.test is None
     assert "test" not in result.message
+    assert not (tmp_path / "weights.preprocessing.json").exists()  # nothing to reuse
 
 
 def test_stopped_runs_are_not_tested(tmp_path):
@@ -969,6 +970,10 @@ def test_csv_test_set_uses_the_training_statistics(tmp_path):
     assert pre["target_mean"] == pytest.approx(float(y[train].mean()), rel=1e-4)
     assert rec.test["rmse"] == pytest.approx(math.sqrt(rec.test["loss"]) * pre["target_std"])
     assert "; test loss " in result.message and result.message.count("RMSE") == 2
+    # Saved with the weights, so that new data can be prepared the same way.
+    saved = json.loads((tmp_path / "weights.preprocessing.json").read_text())
+    assert saved == json.loads(json.dumps(pre))
+    assert saved["columns"] == ["a", "b", "c"] and saved["target"] == "price"
 
 
 @needs_pil
@@ -1716,6 +1721,24 @@ def test_cli_early_stopping(tmp_path, capsys, monkeypatch):
         in out
     )
     assert save.exists()
+
+
+def test_cli_saves_the_preprocessing_next_to_the_weights(tmp_path, capsys):
+    rows = ["a,b,c,d,e,f,g,h,y"] + [",".join(str((i * j) % 7) for j in range(9)) for i in range(40)]
+    data_file = tmp_path / "houses.csv"
+    data_file.write_text("\n".join(rows) + "\n")
+    save = tmp_path / "houses.pt"
+    code = cli.main(
+        ["--example", "tabular_regression", "--data", str(data_file), "--epochs", "1"]
+        + ["--device", "cpu", "--save", str(save)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    sidecar = tmp_path / "houses.preprocessing.json"
+    assert f"Saved the preprocessing (needed to prepare new inputs) to {sidecar}" in out
+    pre = json.loads(sidecar.read_text())
+    assert pre["kind"] == "tabular" and pre["columns"] == list("abcdefgh") and pre["target"] == "y"
+    assert len(pre["mean"]) == len(pre["std"]) == 8 and pre["target_std"] > 0
 
 
 def test_cli_without_torch(monkeypatch, capsys):

@@ -40,6 +40,7 @@ from .datasets import (
     random_info,
 )
 from .reporting import Reporter
+from .state import preprocessing_path
 from .tuning import LABELS, METHODS, TUNABLE, TuningConfig, describe_params, format_value
 
 CSV_SUFFIXES = (".csv", ".tsv", ".txt")
@@ -59,6 +60,7 @@ class ConsoleReporter(Reporter):
         self._last_message = ""
         self._trial: dict[str, Any] | None = None
         self._trials: list[dict[str, Any]] = []
+        self._preprocessing: dict[str, Any] | None = None
 
     def _print(self, text: str, err: bool = False) -> None:
         self._clear()
@@ -89,6 +91,7 @@ class ConsoleReporter(Reporter):
         self._print(line)
 
     def setup(self, info: dict[str, Any]) -> None:
+        self._preprocessing = info.get("preprocessing", self._preprocessing)
         if "train_size" not in info:
             self._print(f"Now training on {info.get('device_label')}.")
             return
@@ -204,6 +207,9 @@ class ConsoleReporter(Reporter):
         self._print(message)
         if weights:
             self._print(f"Saved weights to {self.save}")
+            if (self._preprocessing or {}).get("kind", "demo") != "demo":
+                path = preprocessing_path(self.save)
+                self._print(f"Saved the preprocessing (needed to prepare new inputs) to {path}")
 
     def should_stop(self) -> bool:
         return self.stop

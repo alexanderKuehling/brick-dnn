@@ -294,6 +294,7 @@ describe('TrainingDrawer', () => {
     expect(screen.queryByRole('button', { name: /Stop/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Weights \(\.pt\)/ })).toBeInTheDocument();
     expect(screen.queryByText(/Weights from epoch/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Preprocessing/ })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'How to use the weights' }));
     expect(screen.getByText(/load_state_dict/)).toBeInTheDocument();
@@ -312,7 +313,9 @@ describe('TrainingDrawer', () => {
     });
     run.state!.weights_epoch = 2;
     run.state!.stopped_early = true;
+    run.state!.preprocessing = { kind: 'image', mean: [0.1307], std: [0.3081] };
     renderDrawer({ training: controller({ view: 'run', selectedRunId: run.id, detail: run }) });
+    expect(screen.getByRole('button', { name: /Preprocessing \(\.json\)/ })).toBeInTheDocument();
     expect(
       screen.getByText(
         'Weights from epoch 2 (lowest validation loss) · stopped early after epoch 3'

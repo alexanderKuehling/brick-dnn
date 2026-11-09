@@ -6,6 +6,8 @@ Every run lives in its own directory::
     state.json    live progress, replaced atomically              (written by the runner)
     STOP          created to ask the runner to stop after the current batch
     weights.pt    model.state_dict() after training or stopping   (written by the runner)
+    weights.preprocessing.json   ``preprocessing`` of the state, saved with the weights
+                  (not for demo data): what new inputs need to be prepared the same way
     output.log    stdout/stderr of the runner process             (for debugging)
 
 ``state.json`` looks like this::
@@ -40,7 +42,12 @@ Every run lives in its own directory::
       "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null},  # kept weights on the test
                                      # set; null without a test set or before the end
       "weights": false,              # true once weights.pt exists
-      "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights
+      "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights:
+                                     # {"kind": "image", channels, height, width, layout,
+                                     #  mean, std, class_names}, {"kind": "tabular", columns,
+                                     #  target, mean, std, target_mean, target_std,
+                                     #  class_names} (statistics of the training part only)
+                                     # or {"kind": "demo"}
       "log": ["Downloading MNIST …", "..."],               # last 200 lines
 
       # Hyperparameter search only (null / empty for normal runs):
@@ -90,6 +97,13 @@ HEARTBEAT_SECONDS = 5
 # A run whose state has not been updated for this long is considered dead.
 STALE_SECONDS = 60
 MAX_LOG_LINES = 200
+
+
+def preprocessing_path(weights_path: str | Path) -> Path:
+    """Where the preprocessing is saved next to the weights: ``x.pt`` ->
+    ``x.preprocessing.json``."""
+    path = Path(weights_path)
+    return path.with_name(f"{path.stem}.preprocessing.json")
 
 
 def write_json_atomic(path: str | Path, data: Any) -> None:

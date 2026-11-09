@@ -9,6 +9,7 @@ import {
   formatPercent,
   formatSetting,
   headlineMetric,
+  preprocessingJson,
   progressLabel,
   resultText,
   searchedSettings,
@@ -158,6 +159,16 @@ describe('training format', () => {
     expect(code).toContain('TF.normalize(x, mean=[0.1307], std=[0.3081])');
     expect(code).toContain('x = x.flatten()');
     expect(code).toContain('classes = ["zero", "one"]');
+  });
+
+  it('offers the preprocessing of real data as JSON', () => {
+    const run = detail({ status: 'completed', has_weights: true });
+    expect(preprocessingJson(run)).toBeNull();
+    run.state!.preprocessing = { kind: 'demo' };
+    expect(preprocessingJson(run)).toBeNull();
+    const pre = { kind: 'tabular', columns: ['rooms'], mean: [3.2], std: [1.1] };
+    run.state!.preprocessing = pre;
+    expect(JSON.parse(preprocessingJson(run)!)).toEqual(pre);
   });
 
   it('writes a snippet for CSV regression', () => {

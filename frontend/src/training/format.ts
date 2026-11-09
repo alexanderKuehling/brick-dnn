@@ -286,6 +286,19 @@ export function weightsNote(run: RunDetail): string | null {
   return parts.join(' · ');
 }
 
+/**
+ * How the inputs were prepared (`state.preprocessing`) as a JSON file to download with the
+ * weights: normalisation statistics of the training data, image size or CSV columns and class
+ * names. Null for demo data and runs without it.
+ */
+export function preprocessingJson(run: RunDetail): string | null {
+  const pre = run.state?.preprocessing;
+  if (!pre || !pre.kind || pre.kind === 'demo') {
+    return null;
+  }
+  return `${JSON.stringify(pre, null, 2)}\n`;
+}
+
 // --------------------------------------------------------------------------
 // "How to use the weights" snippet
 // --------------------------------------------------------------------------

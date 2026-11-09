@@ -58,6 +58,7 @@ import {
   formatSetting,
   isActive,
   isClassification,
+  preprocessingJson,
   searchedSettings,
   searchLabel,
   SETTING_LABELS,
@@ -190,6 +191,7 @@ export function RunView({
   const charts = useMemo(() => chartSeries(history, classification), [history, classification]);
   const keptEpoch = state?.weights_epoch ?? null;
   const keptNote = run.has_weights ? weightsNote(run) : null;
+  const preprocessing = run.has_weights ? preprocessingJson(run) : null;
 
   // ---------------------------------------------------------------- actions
   const downloadWeights = async () => {
@@ -416,6 +418,17 @@ export function RunView({
             Weights (.pt)
           </Button>
         )}
+        {preprocessing && (
+          <Button
+            variant="default"
+            leftSection={<IconDownload size={16} />}
+            onClick={() =>
+              downloadText(`${base}.preprocessing.json`, preprocessing, 'application/json')
+            }
+          >
+            Preprocessing (.json)
+          </Button>
+        )}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}
@@ -455,7 +468,10 @@ export function RunView({
           </ToggleButton>
           <Collapse expanded={usageOpened}>
             <Text size="sm" c="dimmed" mb="xs">
-              Download the weights and the script, put both in one folder and load them in Python:
+              Download the weights and the script, put both in one folder and load them in Python
+              {preprocessing
+                ? '. New inputs need the same preprocessing as the training data; its values are also in the preprocessing download (.json).'
+                : ':'}
             </Text>
             <ScrollArea type="auto">
               <CodeView code={weightsSnippet(run, `${base}.py`, `${base}.pt`)} />
