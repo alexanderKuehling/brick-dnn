@@ -35,6 +35,10 @@ services:
       BRICKDNN_TRAINING: ${BRICKDNN_TRAINING:-true}
       BRICKDNN_TRAINING_MAX_RUNS: ${BRICKDNN_TRAINING_MAX_RUNS:-1}
       BRICKDNN_MAX_UPLOAD_MB: ${BRICKDNN_MAX_UPLOAD_MB:-500}
+      # Data tab: largest import (MB) and imports from links (see docs/data-preparation.md).
+      BRICKDNN_DATA_MAX_UPLOAD_MB: ${BRICKDNN_DATA_MAX_UPLOAD_MB:-200}
+      BRICKDNN_DATA_URL_IMPORT: ${BRICKDNN_DATA_URL_IMPORT:-true}
+      BRICKDNN_DATA_URL_ALLOW_PRIVATE: ${BRICKDNN_DATA_URL_ALLOW_PRIVATE:-false}
       # Imprint, privacy policy, terms of use: imprint.md, privacy.md, terms.md in this folder
       # of the data volume (docs/privacy.md); deploy/server/compose.yml mounts one of the server.
       BRICKDNN_LEGAL_DIR: /data/legal

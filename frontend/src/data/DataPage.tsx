@@ -143,7 +143,7 @@ function datasetSummary(dataset: Dataset): string {
 }
 
 /**
- * The Data tab: import CSV files, prepare them step by step with a live preview and analysis,
+ * The Data tab: import data files, prepare them step by step with a live preview and analysis,
  * and turn the result into a training dataset.
  */
 export function DataPage() {
@@ -238,9 +238,9 @@ function LoggedOut() {
           </>
         }
       >
-        Import CSV files, clean and combine them step by step, see what is in them, and turn them
-        into training data. Your files are stored on the Brick DNN server, so this needs a free
-        account, just like saving and training.
+        Import CSV, Excel or JSON files, clean and combine them step by step, see what is in them,
+        and turn them into training data. Your files are stored on the Brick DNN server, so this
+        needs a free account, just like saving and training.
       </Message>
     </Center>
   );
@@ -900,6 +900,8 @@ function Workspace({ resources, status }: WorkspaceProps) {
           onClose={() => setImporting(null)}
           initialFile={importing.file}
           maxUploadMb={status.max_upload_mb}
+          fileTypes={status.file_types}
+          urlImport={status.url_import ?? false}
           currentPrepName={loaded ? prep.name : null}
           onImported={onImported}
         />
@@ -920,7 +922,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
         <div className={classes.dropOverlay} aria-hidden>
           <Stack align="center" gap="xs">
             <IconTableImport size={36} color="var(--mantine-primary-color-filled)" />
-            <Text fw={600}>Drop the CSV file to import it</Text>
+            <Text fw={600}>Drop the file to import it</Text>
           </Stack>
         </div>
       )}
@@ -965,14 +967,15 @@ function Welcome({
         title="Prepare data for training"
         actions={
           <Button leftSection={<IconFileImport size={16} />} onClick={onImport}>
-            Import CSV file
+            Import data
           </Button>
         }
       >
         <Text size="sm" c="dimmed">
-          Import a CSV file (up to {maxUploadMb} MB) or drop it here. Separators, decimal commas,
-          dates and missing values are detected. Then clean and combine the data step by step, see
-          what is in it, and turn it into a training dataset.
+          Import a CSV, Excel, JSON or Parquet file (up to {maxUploadMb} MB), drop it here, or
+          import it from a link. Separators, decimal commas, dates and missing values are detected.
+          Then clean and combine the data step by step, see what is in it, and turn it into a
+          training dataset.
         </Text>
         {sources.length > 0 && (
           <Stack gap={6} mt="lg" align="center">

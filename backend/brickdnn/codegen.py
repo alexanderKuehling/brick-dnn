@@ -12,8 +12,7 @@ from typing import Any
 from .classical import generate_classical
 from .graph import Analysis, GraphValidationError, NodeInfo, analyze
 from .layers import fmt_shape
-
-PROJECT_URL = "https://github.com/alexanderKuehling/brick-dnn"
+from .links import BANNER, PROJECT_URL, SITE_URL  # noqa: F401 (re-exported)
 
 # Names that must not be used for layers, inputs or the class in the generated module:
 # Python keywords and builtins, public attributes of nn.Module (a layer called "compile"
@@ -214,7 +213,7 @@ class _Generator:
             if training:
                 parts.append(self._training_code())
             parts.append(self._main(training))
-        header = self._docstring(training) + "\n\n" + self._imports(training)
+        header = BANNER + "\n" + self._docstring(training) + "\n\n" + self._imports(training)
         # PEP 8: two blank lines between top-level definitions.
         return "\n\n\n".join([header, *parts]) + "\n"
 
@@ -228,7 +227,7 @@ class _Generator:
 
     def _docstring(self, training: bool) -> str:
         name = self.opt.class_name
-        lines = [f'"""{name}: generated with Brick DNN ({PROJECT_URL}).', ""]
+        lines = [f'"""{name}: generated with Brick DNN.', ""]
         for label, ids in (("Input", self.a.inputs), ("Output", self.a.outputs)):
             for nid in ids:
                 suffix = f" {self.var[nid]}" if len(ids) > 1 else ""

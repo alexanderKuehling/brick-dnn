@@ -23,12 +23,12 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from .layers import ClassicalModel, KernelExpr
+from .links import BANNER
 
 if TYPE_CHECKING:
     from .codegen import GeneratorOptions
     from .graph import Analysis
 
-PROJECT_URL = "https://github.com/alexanderKuehling/brick-dnn"
 MODEL_FORMAT = "brickdnn-sklearn-1"
 LINE_LENGTH = 100
 # Names used inside make_model(); kernel variables must not take them.
@@ -143,7 +143,9 @@ class _ClassicalGenerator:
     def render(self) -> str:
         main = self.opt.include_main
         training = main and self.opt.include_training
-        header = self._docstring(main, training) + "\n\n" + self._imports(main, training)
+        header = (
+            BANNER + "\n" + self._docstring(main, training) + "\n\n" + self._imports(main, training)
+        )
         if main:
             header += f"\n\nNUM_FEATURES = {self.n_features}"
         parts = [header, self._make_model()]
@@ -200,7 +202,7 @@ class _ClassicalGenerator:
                 "",
                 "    python this_file.py --predict new_data.csv --save model.joblib",
             ]
-        lines += ["", f"Brick DNN: {PROJECT_URL}", '"""']
+        lines.append('"""')
         return "\n".join(lines)
 
     def _imports(self, main: bool, training: bool) -> str:

@@ -31,12 +31,11 @@ import type { LegalPageName } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { DEMO } from '@/demo';
 import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
+import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
 
 export const HEADER_HEIGHT = 56;
-export const REPOSITORY_URL = 'https://github.com/alexanderKuehling/brick-dnn';
-export const SUPPORT_URL = 'https://buymeacoffee.com/alexanderkzw';
 
 const LEGAL_ICONS: Record<LegalPageName, React.ReactNode> = {
   imprint: <IconId size={16} />,

@@ -96,7 +96,7 @@ export function SourcesPanel({
   if (sources.length === 0) {
     return (
       <Text size="xs" c="dimmed" px="sm" py={4}>
-        No tables yet. Import a CSV file to start.
+        No tables yet. Import a file to start.
       </Text>
     );
   }

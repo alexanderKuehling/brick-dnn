@@ -402,6 +402,7 @@ def check_script_reproduces(tmp_path: Path, main: Table, items: tuple, settings:
     assert not result.failed, [r["error"] for r in result.reports if r["error"]]
     infos = source_infos(main, other)
     script = pandas_script(infos, 1, steps(*items), settings, result, name="Churn – Kunden")
+    assert script.startswith("# Built with Brick DNN: https://brickdnn.com")
     done = run_script(tmp_path, script, "--output", "out.csv")
     assert done.returncode == 0, done.stderr
     assert "Wrote" in done.stdout
@@ -657,6 +658,141 @@ def test_script_reads_messy_files_like_the_import(tmp_path, encoding, header_end
         assert got == [None if pd.isna(v) else v for v in imported.df[name].tolist()], name
 
     done = run_script(tmp_path, script, "--input", "messy.csv", "--output", "out.csv")
+    assert done.returncode == 0, done.stderr
+    write_processed_csv(result.table, tmp_path / "expected.csv", include_split=False)
+    assert (tmp_path / "out.csv").read_text(encoding="utf-8").splitlines() == (
+        (tmp_path / "expected.csv").read_text(encoding="utf-8").splitlines()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The script reads other formats like the import
+# --------------------------------------------------------------------------- #
+
+
+def _script_info(report, imported: Table, filename: str) -> dict:
+    """The SourceInfo the server stores for an import (brick_dnn_core.data_service)."""
+    from brickdnn.data.io import DEFAULT_MISSING
+    from brickdnn.data.readers import SPREADSHEET_ERRORS, WORKBOOK_FORMATS
+
+    missing = list(DEFAULT_MISSING)
+    if report.format in WORKBOOK_FORMATS:
+        missing += list(SPREADSHEET_ERRORS)
+    info = {
+        "id": 1,
+        "name": "data",
+        "filename": filename,
+        "format": report.format,
+        "delimiter": report.delimiter,
+        "decimal": report.decimal,
+        "header": report.header,
+        "encoding": report.encoding,
+        "missing_values": missing,
+        "columns": imported.column_info(),
+    }
+    for key in ("sheet", "json_path", "member"):
+        if getattr(report, key):
+            info[key] = getattr(report, key)
+    return info
+
+
+def _write_formats(tmp_path: Path) -> dict[str, dict]:
+    """A file per format, all with numbers, booleans, dates, texts and missing values."""
+    import gzip
+    import zipfile
+
+    from .test_data_formats import ods_cell, ods_row, write_ods
+
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4, 5],
+            "score": [1.5, None, -3.25, 1e-7, 12.0],
+            "member": [True, False, None, True, False],
+            "since": pd.to_datetime(
+                [
+                    "2024-01-31 00:00",
+                    "2023-05-01 12:30",
+                    None,
+                    "2022-12-24 00:00",
+                    "2021-01-01 00:00",
+                ]
+            ),
+            "city": ["Köln", "NA", "Rom", " Paris ", "Rom"],
+            "label": ["yes", "no", "yes", "no", "yes"],
+        }
+    )
+    records = json.loads(df.to_json(orient="records", date_format="iso"))
+    for rank, record in enumerate(records):
+        record["meta"] = {"rank": rank, "tags": ["a"] * rank}
+    with pd.ExcelWriter(tmp_path / "book.xlsx") as writer:
+        df.head(2).to_excel(writer, sheet_name="First", index=False)
+        df.to_excel(writer, sheet_name="Second", index=False)
+    (tmp_path / "wrapped.json").write_text(json.dumps({"data": records, "count": 5}))
+    (tmp_path / "lines.jsonl").write_text("\n".join(json.dumps(r) for r in records))
+    df.to_parquet(tmp_path / "data.parquet")
+    df.to_feather(tmp_path / "data.feather")
+    csv_text = df.to_csv(index=False, sep=";", decimal=",")
+    (tmp_path / "data.csv.gz").write_bytes(gzip.compress(csv_text.encode()))
+    with zipfile.ZipFile(tmp_path / "data.zip", "w") as archive:
+        archive.writestr("__MACOSX/._x", b"")
+        archive.writestr("export/records.json", json.dumps(records))
+    header = [ods_cell("n"), ods_cell("ok"), ods_cell("day"), ods_cell("word")]
+    first = [ods_cell(1.5), ods_cell(True), ods_cell(("date", "2024-01-31")), ods_cell("a")]
+    second = [ods_cell(2), ods_cell(False), ods_cell(), ods_cell("#N/A")]
+    padding = [ods_cell(repeat=50)]
+    write_ods(
+        tmp_path / "sheet.ods",
+        {"S": [ods_row(header), ods_row(first), ods_row(second), ods_row(padding, repeat=1000)]},
+    )
+    return {
+        "book.xlsx": {"sheet": "Second"},
+        "wrapped.json": {},
+        "lines.jsonl": {},
+        "data.parquet": {},
+        "data.feather": {},
+        "data.csv.gz": {},
+        "data.zip": {},
+        "sheet.ods": {},
+    }
+
+
+def test_script_reads_every_format_like_the_import(tmp_path):
+    pytest.importorskip("openpyxl")
+    pytest.importorskip("pyarrow")
+    from brickdnn.data.io import ImportOptions
+    from brickdnn.data.readers import read_file
+
+    for filename, options in _write_formats(tmp_path).items():
+        path = tmp_path / filename
+        imported, report = read_file(path, ImportOptions.from_dict(options))
+        result = run(imported, settings={})
+        info = _script_info(report, imported, filename)
+        script = pandas_script({1: info}, 1, [], {}, result)
+        namespace: dict = {"__name__": "prepared_module"}
+        exec(compile(script, "prepare_script.py", "exec"), namespace)
+        df = namespace["read_source"](path, namespace["SOURCES"][1])
+        assert list(df.columns) == imported.columns, filename
+        for name, kind in imported.kinds.items():
+            got = [None if pd.isna(v) else v for v in df[name].tolist()]
+            want = [None if pd.isna(v) else v for v in imported.df[name].tolist()]
+            assert got == want, (filename, name, kind)
+    assert report.format == "ods" and imported.n_rows == 2
+
+
+def test_script_for_an_excel_source_runs_on_its_own(tmp_path):
+    pytest.importorskip("openpyxl")
+    from brickdnn.data.io import ImportOptions
+    from brickdnn.data.readers import read_file
+
+    _write_formats(tmp_path)
+    imported, report = read_file(tmp_path / "book.xlsx", ImportOptions(sheet="Second"))
+    items = (("impute", {"columns": ["score"], "strategy": "median"}),)
+    result = run(imported, *items, settings={"target": "label"})
+    info = _script_info(report, imported, "book.xlsx")
+    script = pandas_script({1: info}, 1, steps(*items), {"target": "label"}, result)
+    assert "Needs Python 3.10+ with pandas 2 and numpy, openpyxl." in script
+    assert "'sheet': 'Second'" in script and "'format': 'xlsx'" in script
+    done = run_script(tmp_path, script, "--output", "out.csv")
     assert done.returncode == 0, done.stderr
     write_processed_csv(result.table, tmp_path / "expected.csv", include_split=False)
     assert (tmp_path / "out.csv").read_text(encoding="utf-8").splitlines() == (

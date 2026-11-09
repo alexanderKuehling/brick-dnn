@@ -13,7 +13,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Accounts:** username, e-mail address, password hash, sign-up, last login and last activity, accepted terms of use (time and version) | database | the account is deleted: by its owner, an admin, or the purge of inactive accounts |
 | **Logins:** refresh tokens (with their id, user and expiry) | database | 7 days after their last use; `purge_old_data` removes expired ones daily. Access tokens (30 minutes) are not stored |
 | **Networks:** graph, description, version history, comments, members, share link | database | deleted by their owner (or with the account) |
-| **Data tab imports:** the uploaded CSV file and the table read from it | `BRICKDNN_DATA_DIR/prepare/sources/<id>/` | deleted by the user, with the account, or when unused (below) |
+| **Data tab imports:** the uploaded or downloaded file (CSV, Excel, JSON, Parquet ...), the link it came from (without its query) and the table read from it | `BRICKDNN_DATA_DIR/prepare/sources/<id>/` | deleted by the user, with the account, or when unused (below) |
 | **Data preparations:** steps and settings | database | deleted by the user, with the account or with their source |
 | **Training datasets:** an uploaded CSV file or the images of a ZIP file | `BRICKDNN_DATA_DIR/training/datasets/<id>/` | as imports |
 | **Training runs:** network, settings and metrics; job, state, log and trained weights | database; `BRICKDNN_DATA_DIR/training/runs/<id>/` | as imports (finished runs only) |

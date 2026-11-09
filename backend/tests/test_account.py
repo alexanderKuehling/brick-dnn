@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import os
@@ -443,6 +444,19 @@ def test_export_lists_files_beyond_the_limit(ada, ada_client, ada_data, settings
     assert files["pets"]["included"] is False
     included = [name for name in archive.namelist() if name.startswith("files/")]
     assert included == [files["Iris"]["path"]]
+
+
+def test_export_includes_files_of_any_format(ada_client, dirs):
+    content = json.dumps([{"x": 1, "y": 2}, {"x": 3, "y": 4}]).encode()
+    source = import_csv(ada_client, "points.json.gz", gzip.compress(content))
+    assert source.status_code == 201, source.data
+    stored = dirs / "prepare" / "sources" / str(source.data["id"]) / "original.json.gz"
+    assert stored.is_file()
+    archive = export(ada_client)
+    entry = next(e for e in read_json(archive, "files.json") if e["id"] == source.data["id"])
+    assert entry["included"] is True
+    assert entry["path"].endswith("/points.json.gz")
+    assert gzip.decompress(archive.read(entry["path"])) == content
 
 
 def test_export_reports_missing_files(ada, ada_client, ada_data, dirs):

@@ -23,6 +23,8 @@
   `family`, `output_kind` and `input_slots`; the analysis adds `output_kind`, `kernel` and
   `task` per node and `family` and `classical` for the network; `GET /api/training/` adds
   `classical`, runs `family`, and the run metrics `val_r2` and `test_r2`.
+- After the first training of a user that completes, a notification asks once (per browser)
+  for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
   - *Legal pages:* an imprint, privacy policy and terms of use are Markdown files the
     operator puts into `BRICKDNN_LEGAL_DIR` (on the server `/srv/brick-dnn/legal`), shown at
@@ -118,11 +120,32 @@
 - **Upload progress.** Importing a CSV file in the Data tab and uploading a training dataset
   show a progress bar with the percentage and the megabytes sent, then a striped bar while the
   server reads and checks the file. A training upload can be cancelled while it is sent.
+- **More import formats in the Data tab.** Besides CSV, the Data tab imports Excel workbooks
+  (`.xlsx`, `.xls`; the dialog asks which sheet when there are several), OpenDocument
+  spreadsheets (`.ods`), JSON (records, objects of columns, records inside `{"data": [...]}`;
+  nested objects become `a.b` columns), JSON Lines, Parquet and Feather / Arrow files, also
+  packed as `.gz`, `.bz2`, `.xz` or a `.zip` file with one data file. Every format ends in the
+  same typed table as a CSV file, and the downloadable pandas script reads it the same way.
+  Size, row, column and cell limits apply to every format, also after unpacking (ZIP and gzip
+  bombs are refused). New dependencies: openpyxl, xlrd, pyarrow, defusedxml (pyarrow adds
+  about 170 MB to the backend image).
+- **Import from a link.** The Data tab and `POST /api/data/sources/` with `{"url": ...}`
+  import a file from a public link; share links of Google Sheets (the tab as CSV), Google
+  Drive, GitHub, Hugging Face and Dropbox are turned into download links. The server refuses
+  links to private, loopback, link-local and other non-public addresses (also after
+  redirects; the connection goes to the checked address), limits redirects, time and size,
+  and sends no credentials. `BRICKDNN_DATA_URL_IMPORT=false` switches link imports off,
+  `BRICKDNN_DATA_URL_ALLOW_PRIVATE=true` allows private addresses for local installations.
+  Database connections are not supported yet.
 
 ### Changed
 - The backend requires **scikit-learn** (for classical models; it brings SciPy and joblib),
   which makes the Docker image about 190 MB larger. `brickdnn[train]` includes it, and the new
   extra `brickdnn[classic]` installs only it.
+- Generated scripts start with a comment line that links to Brick DNN
+  (`# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn`):
+  the PyTorch code (also from the MCP tool and with the trained weights) and the pandas script
+  of the Data tab.
 - **Built-in datasets validate on their training images.** Without a test set, MNIST,
   Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
   `val_split`, so the images that chose the best epoch were also the reported result. Now

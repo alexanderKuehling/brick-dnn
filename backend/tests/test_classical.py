@@ -438,6 +438,7 @@ def test_script_is_valid_python(model, options):
     code = generate_code(model_graph(model), options)
     ast.parse(code)
     assert "def make_model() -> Pipeline:" in code
+    assert code.startswith("# Built with Brick DNN: https://brickdnn.com")
     assert "import torch" not in code
     assert ("def main()" in code) == options.get("include_main", True)
     assert ("def fit(" in code) == (options == {})

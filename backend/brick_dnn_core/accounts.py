@@ -383,13 +383,14 @@ def _uploads(user) -> list[tuple[dict[str, Any], list[tuple[Path, str]]]]:
     empty list of files means they are missing."""
     uploads = []
     for source in DataSource.objects.filter(owner=user).order_by("pk"):
+        # The file as uploaded or downloaded: original.csv, original.xlsx, original.json.gz ...
+        path = data_service.original_file(source.pk)
         name = get_valid_filename(Path(source.filename).name) if source.filename else ""
         if name in ("", ".", ".."):
-            name = data_service.ORIGINAL_FILE
-        path = data_service.source_dir(source.pk) / data_service.ORIGINAL_FILE
+            name = path.name if path else data_service.ORIGINAL_FILE
         target = f"files/data_sources/{source.pk}/{name}"
         entry = {"kind": "data_source", "id": source.pk, "name": source.name, "path": target}
-        uploads.append((entry, [(path, target)] if path.is_file() else []))
+        uploads.append((entry, [(path, target)] if path else []))
     for dataset in Dataset.objects.filter(owner=user).order_by("pk"):
         root = training.dataset_dir(dataset.pk)
         entry = {"kind": "dataset", "id": dataset.pk, "name": dataset.name}
