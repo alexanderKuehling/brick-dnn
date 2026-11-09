@@ -498,6 +498,8 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         final = training.dataset_dir(dataset.pk)
         shutil.rmtree(final, ignore_errors=True)  # left over from an earlier database
         os.replace(work, final)
+        # Shared preparation: its projects can train on the result as well.
+        dataset.projects.set(prep.projects.all())
     except BaseException:
         shutil.rmtree(work, ignore_errors=True)
         if dataset is not None:

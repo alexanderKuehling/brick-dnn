@@ -1,4 +1,5 @@
 import type { GraphDocument, Project, ProjectRole } from '@/api/types';
+import type { LiveOp } from '@/live/protocol';
 
 /** The builder's working copy is kept in localStorage so a reload never loses work. */
 export interface Draft {
@@ -11,6 +12,8 @@ export interface Draft {
   role?: ProjectRole | null;
   /** The working copy had no unsaved changes when it was stored. */
   saved?: boolean;
+  /** Live editing: changes the server had not confirmed yet; they are sent after a reload. */
+  pending?: LiveOp[];
 }
 
 const DRAFT_KEY = 'brickdnn:draft';
@@ -37,6 +40,9 @@ export function loadDraft(): Draft | null {
           ? (draft.role as ProjectRole)
           : null,
       saved: projectId !== null && draft.saved === true,
+      ...(projectId !== null && Array.isArray(draft.pending) && draft.pending.length > 0
+        ? { pending: draft.pending }
+        : {}),
     };
   } catch {
     return null;

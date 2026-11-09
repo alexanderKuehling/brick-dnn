@@ -1,4 +1,5 @@
 .node {
+  position: relative;
   width: 220px;
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   border-radius: var(--mantine-radius-md);
@@ -14,6 +15,19 @@
   &[data-selected] {
     outline: 2px solid var(--mantine-primary-color-filled);
     outline-offset: 2px;
+  }
+
+  /* Selected by someone else (live editing); a ring around the own selection if both. */
+  &[data-remote] {
+    outline: 2px solid var(--remote-color);
+    outline-offset: 2px;
+  }
+
+  &[data-remote][data-selected] {
+    outline-color: var(--mantine-primary-color-filled);
+    box-shadow:
+      0 0 0 4px var(--mantine-color-body),
+      0 0 0 6px var(--remote-color);
   }
 
   &[data-error] {
@@ -83,4 +97,23 @@
       border-radius: 50%;
     }
   }
+}
+
+/* The name of the person who has the layer selected, above its top left corner. */
+.remoteTag {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: -2px;
+  max-width: 100%;
+  padding: 1px 6px;
+  overflow: hidden;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--remote-color);
+  color: var(--mantine-color-white);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }

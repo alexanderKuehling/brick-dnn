@@ -1,0 +1,27 @@
+/* The status dot of the live badge in the toolbar. */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+/* The rest of "Offline – changes will sync": phones only show "Offline". */
+.more {
+  @media (max-width: $mantine-breakpoint-sm) {
+    display: none;
+  }
+}
+
+/* "Live", "Saving…" and "Offline": phones only show the dot (screen readers the label). */
+.label {
+  @media (max-width: $mantine-breakpoint-xs) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

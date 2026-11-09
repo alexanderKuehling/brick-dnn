@@ -8,6 +8,37 @@
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
+- **Live editing.** Everyone with access works on a network at the same time over a WebSocket
+  (`/api/ws/projects/<id>/`, Django Channels): changes are applied on the server in order and
+  reach everyone at once, and you see who else is here and what they select. In the builder a
+  saved network saves itself as you edit (a status replaces the save button; changes made
+  while offline are sent when the connection is back), and the avatars, selection outlines
+  and layers being dragged show who does what. Docker Compose runs a small realtime service
+  and Redis for it; `manage.py runserver` needs neither.
+- **Version history and comments.** Every change is kept (merged per person and session);
+  name versions, preview any of them on a read-only canvas and restore it. Comment on a
+  network or a layer, reply and resolve threads, viewers too. In the builder, *History* and
+  *Comments* open a side panel that follows the live connection, and layers show how many
+  open comments they have.
+- **Shared runs and data.** Trainings started from a shared network are visible to all its
+  members; datasets and data preparations can be shared in a network, so members train on
+  them and editors improve the preparation.
+- **Predictions with trained networks.** `POST /api/training/runs/<id>/predict/` and the MCP
+  tool `predict` run a finished run's network on up to 64 samples on the server and return
+  the most likely classes with their probabilities, or the predicted values in the units of
+  the target. Inputs are prepared like the training data (CSV rows by column name or in
+  column order; images as arrays with pixels 0–255, 0–1 or already normalised). The network
+  runs in a separate process with a timeout, one prediction at a time by default
+  (`BRICKDNN_MAX_PREDICTIONS`), with its own rate limit (`BRICKDNN_PREDICT_RATE`).
+- **More MCP tools.** `get_weights_download` gives assistants a download link for the trained
+  weights, valid for 15 minutes without login (signed for the run and the user, and refused
+  once the user loses access), together with the model code, the preprocessing and a snippet
+  that loads the weights. `upload_dataset` stores a small CSV file sent as text as a training
+  dataset (up to `BRICKDNN_MCP_UPLOAD_MB`, default 5 MB), optionally shared in a project.
+  `delete_project` (owner), `delete_training_run` (who started it, the project's owner) and
+  `delete_dataset` (own datasets not in use) are marked destructive; read-only access never
+  sees them. The REST API and MCP use the same delete code, so live editors are told when a
+  project is deleted either way.
 - **The preprocessing is saved with the weights.** A run's weights come with
   `weights.preprocessing.json` (normalisation statistics of the training data, image size or
   CSV columns, class names), the run view offers it as *Preprocessing (.json)* next to the
@@ -39,16 +70,14 @@
   the rows with a seed (`--seed`, default 0, also for the initial weights) and save a
   checkpoint with the weights and the preprocessing: `torch.load("model.pt")` now returns
   `{"state_dict": ..., "preprocessing": ...}` instead of the bare `state_dict`.
+- An e-mail address is required to create an account, and each address can be used by one
+  account only (people are invited to shared networks by e-mail, too). Existing accounts
+  without one keep working.
 
 ### Fixed
 - The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have
   no effect with the other settings, such as `padding_size` when `padding` is `same` or
   `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
-
-### Changed
-- An e-mail address is required to create an account, and each address can be used by one
-  account only (people are invited to shared networks by e-mail, too). Existing accounts
-  without one keep working.
 
 ## 1.1.0 (2026-11-09)
 

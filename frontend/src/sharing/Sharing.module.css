@@ -121,6 +121,15 @@
   }
 }
 
+/* Live editing: people who are not here right now are dimmed. */
+.liveAvatar {
+  opacity: 0.55;
+
+  &[data-here] {
+    opacity: 1;
+  }
+}
+
 /* The "View only" text: the narrowest phones only show the icon (screen readers still read it). */
 .badgeLabel {
   @media (max-width: 22.4em) {

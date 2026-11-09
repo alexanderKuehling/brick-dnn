@@ -6,12 +6,21 @@ import {
   Center,
   Group,
   Loader,
+  SegmentedControl,
   Stack,
   Text,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
 import type { RunSummary } from '@/api';
+import {
+  canDeleteRun,
+  canTrain,
+  filterRuns,
+  otherStarter,
+  type RunFilter,
+  type TrainingScope,
+} from './access';
 import {
   formatDate,
   formatDuration,
@@ -30,7 +39,17 @@ interface HistoryViewProps {
   onOpen: (id: string) => void;
   onDeleted: (id: string) => void;
   onNewTraining: () => void;
+  /** The user and the open network: decides what is listed and what they may do. */
+  scope: TrainingScope;
+  /** With an open network: its runs (from everyone) or all of the user's own. */
+  filter: RunFilter;
+  onFilterChange: (filter: RunFilter) => void;
 }
+
+const FILTERS: { value: RunFilter; label: string }[] = [
+  { value: 'network', label: 'This network' },
+  { value: 'mine', label: 'All my runs' },
+];
 
 /** The headline number of a run and what it is (the test result if there is one). */
 function headline(run: RunSummary): [string, string] | null {
@@ -48,6 +67,9 @@ export function HistoryView({
   onOpen,
   onDeleted,
   onNewTraining,
+  scope,
+  filter,
+  onFilterChange,
 }: HistoryViewProps) {
   if (error && !runs) {
     return (
@@ -66,22 +88,47 @@ export function HistoryView({
       </Center>
     );
   }
-  if (runs.length === 0) {
+  const network = scope.project !== null;
+  const shownFilter: RunFilter = network ? filter : 'mine';
+  const shown = filterRuns(runs, scope, shownFilter);
+  const trainable = canTrain(scope);
+  const toggle = network && (
+    <SegmentedControl
+      size="xs"
+      fullWidth
+      aria-label="Show runs"
+      data={FILTERS}
+      value={shownFilter}
+      onChange={(value) => onFilterChange(value as RunFilter)}
+      mb="xs"
+    />
+  );
+
+  if (shown.length === 0) {
     return (
-      <Stack align="center" gap="xs" py="xl">
-        <Text c="dimmed" size="sm">
-          No trainings yet.
-        </Text>
-        <Button variant="light" onClick={onNewTraining}>
-          Set up a training
-        </Button>
-      </Stack>
+      <>
+        {toggle}
+        <Stack align="center" gap="xs" py="xl">
+          <Text c="dimmed" size="sm" ta="center">
+            {shownFilter === 'network'
+              ? 'Nobody has trained this network yet.'
+              : 'No trainings yet.'}
+          </Text>
+          {trainable && (
+            <Button variant="light" onClick={onNewTraining}>
+              Set up a training
+            </Button>
+          )}
+        </Stack>
+      </>
     );
   }
 
   return (
     <Stack gap={4}>
-      {runs.map((run) => {
+      {toggle}
+      {shown.map((run) => {
+        const by = otherStarter(run, scope);
         const result = headline(run);
         const duration = run.finished_at
           ? formatDuration((Date.parse(run.finished_at) - Date.parse(run.created_at)) / 1000)
@@ -103,6 +150,7 @@ export function HistoryView({
                   </Group>
                   <Text size="xs" c="dimmed" truncate>
                     {[
+                      by && `by ${by}`,
                       run.dataset.name,
                       run.tuning && searchLabel(run.tuning),
                       formatDate(run.created_at),
@@ -124,16 +172,21 @@ export function HistoryView({
                 )}
               </Group>
             </UnstyledButton>
-            <Tooltip label="Delete">
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => confirmDeleteRun(run, onDeleted)}
-                aria-label={`Delete ${run.name}`}
-              >
-                <IconTrash size={16} />
-              </ActionIcon>
-            </Tooltip>
+            {canDeleteRun(run, scope) ? (
+              <Tooltip label="Delete">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => confirmDeleteRun(run, onDeleted)}
+                  aria-label={`Delete ${run.name}`}
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Tooltip>
+            ) : (
+              // Keeps the rows aligned.
+              <span className={classes.actionSpace} aria-hidden />
+            )}
           </Group>
         );
       })}

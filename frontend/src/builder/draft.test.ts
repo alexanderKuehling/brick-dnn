@@ -39,4 +39,12 @@ describe('draft', () => {
     );
     expect(loadDraft()).toMatchObject({ version: null, role: null });
   });
+
+  it('keeps live changes the server had not confirmed, for projects only', () => {
+    const pending = [{ op: 'remove_node' as const, id: 'fc' }];
+    saveDraft({ doc: DOC, name: 'Net', projectId: 4, version: 7, saved: false, pending });
+    expect(loadDraft()?.pending).toEqual(pending);
+    saveDraft({ doc: DOC, name: 'Net', projectId: null, pending });
+    expect(loadDraft()?.pending).toBeUndefined();
+  });
 });

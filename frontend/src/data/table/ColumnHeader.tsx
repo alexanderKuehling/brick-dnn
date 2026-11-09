@@ -18,6 +18,7 @@ import {
 import { ActionIcon, Badge, Menu, UnstyledButton, VisuallyHidden } from '@mantine/core';
 import type { ColumnInfo, ColumnProfile, NewStep } from '@/api/types';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
+import { usePrepAccess } from '../prepAccess';
 import { columnStepActions, type ColumnActionKey } from './columnActions';
 import { formatCount, formatShare } from './format';
 import { KIND_LABELS, KindIcon } from './kinds';
@@ -71,6 +72,8 @@ export function ColumnHeader({
   onRename,
   onCast,
 }: ColumnHeaderProps) {
+  // Viewers of a shared preparation cannot add steps or change the target.
+  const { readOnly } = usePrepAccess();
   const actions = columnStepActions(column, profile, missing, isTarget);
   const drop = actions.find((action) => action.key === 'drop');
   const others = actions.filter((action) => action.key !== 'drop');
@@ -100,76 +103,84 @@ export function ColumnHeader({
           </VisuallyHidden>
           {sort && <SortIcon size={12} aria-hidden className={classes.sortIcon} />}
         </UnstyledButton>
-        <Menu position="bottom-end" shadow="md" width={270} withinPortal>
-          <Menu.Target>
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label={`Actions for column ${column.name}`}
-            >
-              <IconChevronDown size={14} />
-            </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Label>
-              {column.name} · {KIND_LABELS[column.kind]}
-            </Menu.Label>
-            {isTarget && (
-              <Menu.Label className={classes.menuNote}>
-                Target column: what the model learns to predict. It is not encoded, filled or
-                dropped like a feature.
-              </Menu.Label>
-            )}
-            <Menu.Item
-              leftSection={<IconTarget size={14} />}
-              disabled={isTarget}
-              onClick={() => onSetTarget(column.name)}
-            >
-              {isTarget ? 'This is the target' : 'Use as target'}
-            </Menu.Item>
-            {onShowColumn && (
-              <Menu.Item
-                leftSection={<IconChartHistogram size={14} />}
-                onClick={() => onShowColumn(column.name)}
+        {(!readOnly || onShowColumn) && (
+          <Menu position="bottom-end" shadow="md" width={270} withinPortal>
+            <Menu.Target>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label={`Actions for column ${column.name}`}
               >
-                Show in Analysis
-              </Menu.Item>
-            )}
-            <Menu.Divider />
-            <Menu.Label>{isTarget ? 'Add a step for the target' : 'Add a step'}</Menu.Label>
-            {others.map((action) => {
-              const ActionIconComponent = ACTION_ICONS[action.key];
-              return (
+                <IconChevronDown size={14} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>
+                {column.name} · {KIND_LABELS[column.kind]}
+              </Menu.Label>
+              {isTarget && (
+                <Menu.Label className={classes.menuNote}>
+                  Target column: what the model learns to predict. It is not encoded, filled or
+                  dropped like a feature.
+                </Menu.Label>
+              )}
+              {!readOnly && (
                 <Menu.Item
-                  key={action.key}
-                  leftSection={<ActionIconComponent size={14} />}
-                  onClick={() => onAddStep(action.step)}
+                  leftSection={<IconTarget size={14} />}
+                  disabled={isTarget}
+                  onClick={() => onSetTarget(column.name)}
                 >
-                  {action.label}
+                  {isTarget ? 'This is the target' : 'Use as target'}
                 </Menu.Item>
-              );
-            })}
-            <Menu.Item leftSection={<IconCursorText size={14} />} onClick={onRename}>
-              Rename…
-            </Menu.Item>
-            <Menu.Item leftSection={<IconTransform size={14} />} onClick={onCast}>
-              Change type…
-            </Menu.Item>
-            {drop && (
-              <>
-                <Menu.Divider />
+              )}
+              {onShowColumn && (
                 <Menu.Item
-                  color="red"
-                  leftSection={<IconTrash size={14} />}
-                  onClick={() => onAddStep(drop.step)}
+                  leftSection={<IconChartHistogram size={14} />}
+                  onClick={() => onShowColumn(column.name)}
                 >
-                  {drop.label}
+                  Show in Analysis
                 </Menu.Item>
-              </>
-            )}
-          </Menu.Dropdown>
-        </Menu>
+              )}
+              {!readOnly && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Label>{isTarget ? 'Add a step for the target' : 'Add a step'}</Menu.Label>
+                  {others.map((action) => {
+                    const ActionIconComponent = ACTION_ICONS[action.key];
+                    return (
+                      <Menu.Item
+                        key={action.key}
+                        leftSection={<ActionIconComponent size={14} />}
+                        onClick={() => onAddStep(action.step)}
+                      >
+                        {action.label}
+                      </Menu.Item>
+                    );
+                  })}
+                  <Menu.Item leftSection={<IconCursorText size={14} />} onClick={onRename}>
+                    Rename…
+                  </Menu.Item>
+                  <Menu.Item leftSection={<IconTransform size={14} />} onClick={onCast}>
+                    Change type…
+                  </Menu.Item>
+                  {drop && (
+                    <>
+                      <Menu.Divider />
+                      <Menu.Item
+                        color="red"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => onAddStep(drop.step)}
+                      >
+                        {drop.label}
+                      </Menu.Item>
+                    </>
+                  )}
+                </>
+              )}
+            </Menu.Dropdown>
+          </Menu>
+        )}
       </div>
       <div className={classes.headMeta}>
         {isTarget && (

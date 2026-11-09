@@ -19,6 +19,7 @@ import {
   type ComboboxLikeRenderOptionInput,
 } from '@mantine/core';
 import type { ColumnInfo, ColumnKind, DataSource, StepParamSpec } from '@/api/types';
+import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
 import { KindIcon } from '../table/kinds';
 import { allowedColumns, columnsProblem, formatCellValue, parseCellValue } from './params';
@@ -49,6 +50,8 @@ const comboboxProps = { withinPortal: true, shadow: 'md' } as const;
 /** One form field of a pipeline step, chosen by the param kind of the step catalog. */
 export function StepParamField(props: StepParamFieldProps) {
   const { param, value, onChange, sources, currentSourceId, params, error } = props;
+  // In a preparation of someone else, combine steps name tables the user cannot see.
+  const { sharedBy } = usePrepAccess();
   const description = param.help || undefined;
 
   switch (param.kind) {
@@ -83,11 +86,15 @@ export function StepParamField(props: StepParamFieldProps) {
       const chosen = value === null || value === undefined || value === '' ? null : String(value);
       let problem: string | null = null;
       if (chosen !== null && !others.some((s) => String(s.id) === chosen)) {
-        problem =
-          Number(chosen) === currentSourceId
-            ? 'Choose another table than the one you are preparing.'
-            : 'This table does not exist (any more).';
-        data.push({ value: chosen, label: `Table #${chosen}` });
+        if (Number(chosen) === currentSourceId) {
+          problem = 'Choose another table than the one you are preparing.';
+        } else if (!sharedBy) {
+          problem = 'This table does not exist (any more).';
+        }
+        data.push({
+          value: chosen,
+          label: sharedBy ? `A table of ${sharedBy} (#${chosen})` : `Table #${chosen}`,
+        });
       }
       return (
         <Select

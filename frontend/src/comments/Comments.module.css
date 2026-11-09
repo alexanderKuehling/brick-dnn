@@ -1,0 +1,109 @@
+/* A thread: the first comment, its replies and the reply box. */
+.thread {
+  padding: var(--mantine-spacing-sm);
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+
+  &[data-resolved] {
+    background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+  }
+
+  &[data-highlight] {
+    border-color: var(--mantine-primary-color-filled);
+  }
+}
+
+.comment {
+  display: flex;
+  gap: var(--mantine-spacing-xs);
+  min-width: 0;
+}
+
+.commentBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.commentHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 26px;
+}
+
+.author {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  flex: none;
+}
+
+.headerActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.text {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Replies are indented under the first comment. */
+.replies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  margin-top: var(--mantine-spacing-xs);
+  padding-left: var(--mantine-spacing-xs);
+  border-left: 2px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+/* The layer a thread is about: opens it on the canvas. */
+.layer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-bottom: 6px;
+  padding: 1px 8px;
+  border-radius: var(--mantine-radius-xl);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+
+  &:where(button):hover {
+    background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  }
+}
+
+.layerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The number of open threads on a layer, in its header on the canvas. */
+.marker {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--mantine-radius-xl);
+  background: var(--mantine-color-yellow-filled);
+  color: var(--mantine-color-black);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}

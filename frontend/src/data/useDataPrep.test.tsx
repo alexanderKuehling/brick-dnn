@@ -410,4 +410,40 @@ describe('useDataPrep', () => {
     await advance(AUTOSAVE_DELAY * 2);
     expect(update()).not.toHaveBeenCalled();
   });
+
+  it('changes and saves nothing of a preparation shared to look at', async () => {
+    get().mockResolvedValue({ ...PREP, owner: 'bob', role: 'viewer' });
+    const { result } = await mountLoaded();
+    expect(result.current.readOnly).toBe(true);
+    act(() => result.current.setSteps([]));
+    act(() => result.current.setName('Mine now'));
+    let added: string | null = 'x';
+    act(() => {
+      added = result.current.addStep({ type: 'drop_columns', params: { columns: ['notes'] } });
+    });
+    expect(added).toBeNull();
+    expect(result.current.steps).toEqual(PREP.steps);
+    expect(result.current.name).toBe('Churn model data');
+    await act(() => result.current.flush());
+    await advance(AUTOSAVE_DELAY * 2);
+    expect(update()).not.toHaveBeenCalled();
+    expect(result.current.saveStatus).toBe('saved');
+    // The preview still works, e.g. up to a step.
+    act(() => result.current.setUpto('s1'));
+    await advance(PREVIEW_DELAY);
+    expect(preview()).toHaveBeenLastCalledWith(
+      10,
+      expect.objectContaining({ upto: 's1' }),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('saves the changes of an editor of a shared preparation', async () => {
+    get().mockResolvedValue({ ...PREP, owner: 'bob', role: 'editor' });
+    const { result } = await mountLoaded();
+    expect(result.current.readOnly).toBe(false);
+    act(() => result.current.setSteps([]));
+    await advance(AUTOSAVE_DELAY);
+    expect(update()).toHaveBeenCalledWith(10, expect.objectContaining({ steps: [] }));
+  });
 });

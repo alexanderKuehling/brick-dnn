@@ -5,6 +5,7 @@ import type {
   Analysis,
   ApiToken,
   ApiTokenInput,
+  CommentInput,
   Compatibility,
   DataPrep,
   DataPrepInput,
@@ -27,8 +28,13 @@ import type {
   PreviewRequest,
   PreviewResult,
   Project,
+  ProjectComment,
+  ProjectData,
+  ProjectDataKind,
   ProjectMember,
   ProjectMembers,
+  ProjectVersion,
+  ProjectVersionDetail,
   RunDetail,
   RunInput,
   RunSummary,
@@ -44,6 +50,7 @@ export * from './types';
 export {
   ApiError,
   apiBaseUrl,
+  freshAccessToken,
   getTokens,
   onTokensChange,
   setTokens,
@@ -151,6 +158,25 @@ const serverApi = {
           auth: true,
         }),
     },
+    /** Training datasets and data preparations shared in a project. */
+    data: {
+      /** Any role. */
+      list: (projectId: number, signal?: AbortSignal) =>
+        request<ProjectData>(`/api/projects/${projectId}/data/`, { auth: true, signal }),
+      /** Owners and editors of the project share one of their own items there. */
+      add: (projectId: number, kind: ProjectDataKind, id: number) =>
+        request<ProjectData>(`/api/projects/${projectId}/data/`, {
+          method: 'POST',
+          body: { kind, id },
+          auth: true,
+        }),
+      /** Stop sharing an item there (its owner or the project's owner). */
+      remove: (projectId: number, kind: ProjectDataKind, id: number) =>
+        request<void>(`/api/projects/${projectId}/data/${kind}/${id}/`, {
+          method: 'DELETE',
+          auth: true,
+        }),
+    },
     /** Owner only: turn the view link on or off, or replace it (the old one stops working). */
     setLink: (projectId: number, enabled: boolean, regenerate = false) =>
       request<ShareLink>(`/api/projects/${projectId}/link/`, {
@@ -158,6 +184,71 @@ const serverApi = {
         body: regenerate ? { enabled, regenerate } : { enabled },
         auth: true,
       }),
+    /** The history: every change keeps a copy of the new state. */
+    versions: {
+      /** Newest first. Any role. */
+      list: (projectId: number, signal?: AbortSignal) =>
+        request<ProjectVersion[]>(`/api/projects/${projectId}/versions/`, { auth: true, signal }),
+      /** One version with its graph. Any role. */
+      get: (projectId: number, versionId: number, signal?: AbortSignal) =>
+        request<ProjectVersionDetail>(`/api/projects/${projectId}/versions/${versionId}/`, {
+          auth: true,
+          signal,
+        }),
+      /** Owner and editors: keep the current state (on the server) under a name. */
+      create: (projectId: number, label: string) =>
+        request<ProjectVersion>(`/api/projects/${projectId}/versions/`, {
+          method: 'POST',
+          body: { label },
+          auth: true,
+        }),
+      /** Owner and editors: (re)name a version; named versions are kept for good. */
+      rename: (projectId: number, versionId: number, label: string) =>
+        request<ProjectVersion>(`/api/projects/${projectId}/versions/${versionId}/`, {
+          method: 'PATCH',
+          body: { label },
+          auth: true,
+        }),
+      /**
+       * Owner and editors: make the version the current state (a new entry in the history).
+       * Resolves to the updated project; live editors get a `replaced` message.
+       */
+      restore: (projectId: number, versionId: number) =>
+        request<Project>(`/api/projects/${projectId}/versions/${versionId}/restore/`, {
+          method: 'POST',
+          auth: true,
+        }),
+    },
+    /** Comments on the network and its layers. Everyone with access may comment. */
+    comments: {
+      /** Oldest first; `node` limits them to one layer. */
+      list: (projectId: number, node?: string, signal?: AbortSignal) =>
+        request<ProjectComment[]>(
+          `/api/projects/${projectId}/comments/${
+            node === undefined ? '' : `?node=${encodeURIComponent(node)}`
+          }`,
+          { auth: true, signal }
+        ),
+      create: (projectId: number, data: CommentInput) =>
+        request<ProjectComment>(`/api/projects/${projectId}/comments/`, {
+          method: 'POST',
+          body: data,
+          auth: true,
+        }),
+      /** `text`: the author · `resolved`: the author, editors and the owner. */
+      update: (projectId: number, commentId: number, data: { text?: string; resolved?: boolean }) =>
+        request<ProjectComment>(`/api/projects/${projectId}/comments/${commentId}/`, {
+          method: 'PATCH',
+          body: data,
+          auth: true,
+        }),
+      /** The author or the owner; replies are deleted with it. */
+      remove: (projectId: number, commentId: number) =>
+        request<void>(`/api/projects/${projectId}/comments/${commentId}/`, {
+          method: 'DELETE',
+          auth: true,
+        }),
+    },
   },
 
   /** Networks opened through a share link. */
@@ -176,6 +267,7 @@ const serverApi = {
     /** What the server can do (public, no login needed). */
     status: (signal?: AbortSignal) => request<TrainingStatus>('/api/training/', { signal }),
     datasets: {
+      /** The user's own datasets and the ones shared in their projects (`mine`, `owner`). */
       list: (signal?: AbortSignal) =>
         request<Dataset[]>('/api/training/datasets/', { auth: true, signal }),
       upload: (file: File, name?: string) => {
@@ -201,14 +293,17 @@ const serverApi = {
         signal,
       }),
     runs: {
+      /** The user's runs and the runs of the projects they can open, newest first. */
       list: (signal?: AbortSignal) =>
         request<RunSummary[]>('/api/training/runs/', { auth: true, signal }),
       get: (id: string, signal?: AbortSignal) =>
         request<RunDetail>(`/api/training/runs/${id}/`, { auth: true, signal }),
       create: (data: RunInput) =>
         request<RunDetail>('/api/training/runs/', { method: 'POST', body: data, auth: true }),
+      /** Who started it and the owner and editors of its project; others get HTTP 403. */
       stop: (id: string) =>
         request<RunDetail>(`/api/training/runs/${id}/stop/`, { method: 'POST', auth: true }),
+      /** Who started it and the owner of its project; others get HTTP 403. */
       remove: (id: string) =>
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
@@ -258,14 +353,17 @@ const serverApi = {
         request<void>(`/api/data/sources/${id}/`, { method: 'DELETE', auth: true }),
     },
     preps: {
+      /** Own preparations and the ones shared in the user's projects (`role`, `owner`). */
       list: (signal?: AbortSignal) =>
         request<DataPrep[]>('/api/data/preps/', { auth: true, signal }),
       get: (id: number, signal?: AbortSignal) =>
         request<DataPrep>(`/api/data/preps/${id}/`, { auth: true, signal }),
       create: (data: DataPrepInput) =>
         request<DataPrep>('/api/data/preps/', { method: 'POST', body: data, auth: true }),
+      /** Owner and editors (who cannot change the source). Viewers get HTTP 403. */
       update: (id: number, data: Partial<DataPrepInput>) =>
         request<DataPrep>(`/api/data/preps/${id}/`, { method: 'PATCH', body: data, auth: true }),
+      /** Owner only (others get HTTP 404). */
       remove: (id: number) =>
         request<void>(`/api/data/preps/${id}/`, { method: 'DELETE', auth: true }),
       /** Run the (possibly unsaved) pipeline and return reports, profile and a sample. */

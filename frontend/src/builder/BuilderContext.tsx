@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { Analysis, LayerSpec } from '@/api/types';
+import type { PresenceStore } from '@/live/presence';
 import type { LayerNodeData } from './graph';
 
 export interface BuilderContextValue {
@@ -13,6 +14,8 @@ export interface BuilderContextValue {
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
   focusNode: (id: string) => void;
+  /** Live editing: who else is here and what they have selected. */
+  presence?: PresenceStore | null;
 }
 
 export const BuilderContext = createContext<BuilderContextValue | null>(null);

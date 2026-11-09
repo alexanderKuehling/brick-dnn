@@ -61,7 +61,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
 - **MCP server for AI assistants**: add Brick DNN as a connector in Claude (or another MCP
   client), sign in with OAuth, and let it build, check, save and train networks in your
-  account; you decide whether it may change things or only look. Personal API tokens work
+  account, upload small CSV datasets, predict with trained networks and hand you their
+  weights; you decide whether it may change things or only look. Personal API tokens work
   for clients without OAuth and for scripts against the REST API. See
   [docs/mcp.md](docs/mcp.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
@@ -256,9 +257,11 @@ frontend/  React + Mantine + React Flow (TypeScript)
    │  every edit → POST /api/analyze/ (debounced) → shapes and errors on the canvas
    │  export     → POST /api/generate/
    │  training   → POST /api/training/runs/, then polls the run once per second
+   │  live editing of shared networks → WebSocket /api/ws/projects/<id>/
    ▼
-backend/   Django REST API: accounts (JWT), saved networks, datasets, training runs
+backend/   Django REST API: accounts (JWT), saved and shared networks, datasets, training runs
    │          starts one process per training run, reads its progress from state.json
+   │          live editing: Django Channels (served by Daphne), Redis between the processes
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
    ├── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
@@ -274,12 +277,13 @@ brick-dnn/
 │   ├── brickdnn/            code generator (standalone package + CLI)
 │   │   ├── training/        training engine, runner process, `brickdnn train`
 │   │   └── data/            data preparation: import, steps, analysis, export
-│   ├── brick_dnn_core/      Django app: API views, Project model
+│   ├── brick_dnn_core/      Django app: API views, models, sharing, live editing, MCP, OAuth
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
 ├── frontend/
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
+│       ├── sharing/         share dialog, networks shared by link
 │       ├── training/        training panel: data, settings, live progress, history
 │       ├── data/            Data tab: pipeline editor, data table, analysis views
 │       ├── api/             typed API client

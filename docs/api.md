@@ -76,7 +76,7 @@ account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=fal
 For scripts and AI assistants: personal tokens that do not expire after 30 minutes. Send them
 like an access token, `Authorization: Bearer bdnn_…`; requests then act as the token's owner.
 Read-only tokens may only use `GET` and the `POST` endpoints that change nothing (analyze,
-generate, training check, MCP). The MCP server for AI assistants is described in
+generate, training check, predictions, MCP). The MCP server for AI assistants is described in
 [mcp.md](mcp.md).
 
 | Method | Path                         | Body                                         | Response                       |
@@ -118,6 +118,13 @@ For MCP clients; details in [mcp.md](mcp.md).
 | GET / POST    | `/api/projects/<id>/members/`          | List members / invite `{user: username or e-mail, role}` (owner) |
 | PATCH / DELETE| `/api/projects/<id>/members/<member>/` | Change the role (owner) / remove (owner) or leave (the member) |
 | POST          | `/api/projects/<id>/link/`             | `{enabled, regenerate?}`: view link on or off (owner) |
+| GET / POST    | `/api/projects/<id>/versions/`         | History, newest first / name the current state `{label}` (editors) |
+| GET / PATCH   | `/api/projects/<id>/versions/<v>/`     | One version with its graph / rename it `{label}` (editors) |
+| POST          | `/api/projects/<id>/versions/<v>/restore/` | Make it the current state (editors)              |
+| GET / POST    | `/api/projects/<id>/comments/`         | Comments (`?node=<layer id>`) / comment `{text, node_id?, parent?}` (everyone with access) |
+| PATCH / DELETE| `/api/projects/<id>/comments/<c>/`     | `{text}` (author), `{resolved}` (author, editors, owner) / delete (author, owner) |
+| GET / POST    | `/api/projects/<id>/data/`             | Datasets and preparations shared in the project / add your own `{kind: "dataset" or "prep", id}` (owner, editors) |
+| DELETE        | `/api/projects/<id>/data/<kind>/<item>/` | Stop sharing it there (its owner or the project's owner) |
 | GET           | `/api/shared/<token>/`                 | A network shared by link (no login needed)           |
 | POST          | `/api/shared/<token>/duplicate/`       | Copy a linked network into your account              |
 
@@ -133,6 +140,51 @@ it; turning it on again creates a new one.
 **Conflicts.** `version` goes up with every change. A `PATCH` with `version` that is not the
 current one answers `409` with `{detail, project}` (the current state) and saves nothing;
 without `version`, the save overwrites.
+
+**History.** Every change keeps a copy of the new state. Changes by the same person within ten
+minutes update the latest automatic entry; at most 200 automatic entries are kept, named ones
+for good. A version is `{id, version, kind: "auto" | "named" | "restore", label, name,
+num_layers, created_by, created_at, updated_at}` (plus `description` and `graph` when fetched
+alone). Restoring is a normal change, so it is undone by restoring another version.
+
+**Comments.** `{id, parent, node_id, text, author: {id, username}, resolved, resolved_by,
+created_at, updated_at}`. Replies (`parent`) belong to the layer of their thread; deleting a
+comment deletes its replies.
+
+**Shared data and runs.** Members see datasets shared in their projects in
+`GET /api/training/datasets/` (with `owner`, `mine` and `shared_in`) and can train on them;
+editors of the project can change shared data preparations (not their source) and export
+them. A training started with `"project": <id>` (owner or editor of it) belongs to the
+project: members see it (`GET /api/training/runs/?project=<id>`, with `project` and
+`started_by`), who started it and the project's editors can stop it, who started it and the
+project's owner can delete it.
+
+### Live editing (WebSocket)
+
+`ws(s)://<host>/api/ws/projects/<id>/` lets everyone with access work on a project at the same
+time. Send `{"type": "auth", "token": "<JWT access token>"}` first; the server answers
+`{"type": "hello", project: {id, name, description, graph, version}, role, client_id, user}`.
+Then:
+
+| Client sends | |
+| --- | --- |
+| `{"type": "ops", "id": "<your message id>", "ops": [...]}` | Changes (owner and editors) |
+| `{"type": "presence", "state": {...}}` | E.g. selected layers or a layer being dragged; passed on, not stored |
+| `{"type": "ping"}` | Answered with `pong` |
+
+Ops: `add_node {node}`, `update_node {id, set: {params?, position?, name?, type?}}` (params are
+merged key by key, `null` removes a key), `remove_node {id}` (with its connections),
+`add_edge {source, target}`, `remove_edge {source, target}`, `set_meta {name?, description?}`.
+The server applies them in order to the stored graph and sends
+`{"type": "ops", ops, version, by, client_id, id}` to everyone, the sender included. Ops that
+cannot be applied (e.g. a change to a layer someone deleted) are left out; if none could be
+applied, the sender gets `rejected`.
+
+Other messages from the server: `joined` / `left` (who is here), `presence`, `replaced` (the
+whole project changed: saved through the REST API or MCP, or a version was restored),
+`comment` (`action`: created, updated or deleted), `history`, `access` (your role changed;
+`null`: removed), `deleted`, `error`. Close codes: 4401 not logged in, 4403 access removed,
+4404 no such project (or no access), 4429 too many messages.
 
 ## Training (login required)
 
@@ -151,7 +203,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept) |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
-| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`)           |
+| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`); with `?sig=…` from a download link without login |
+| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
 (`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
@@ -213,6 +266,49 @@ weights_epoch}`). In a search, `state.trials` lists every trial with its `params
 the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
 `metrics` belong to the running trial and, at the end, to the best one. The file format is
 documented in `backend/brickdnn/training/state.py`.
+
+**Download links.** `GET /api/training/runs/<id>/weights/?sig=…` works without login: the
+MCP tool `get_weights_download` creates such links. They are valid for 15 minutes, signed for
+one run and one user, and refused (`403`, with the reason in `detail`) when they have expired,
+were changed or belong to another run, or when that user can no longer see the run. Without
+`sig`, the endpoint needs a login as before.
+
+**Predictions.** `POST /api/training/runs/<id>/predict/` runs the trained network of a finished
+or stopped run (everyone who can see the run, also with a read-only token):
+
+```json
+{ "inputs": [{"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}, [6.7, 3.0, 5.2, 2.3]], "top_k": 2 }
+```
+
+```json
+{
+  "run": { "id": "…", "name": "Iris net" },
+  "task": "classification",
+  "predictions": [
+    { "class": "setosa", "index": 0, "probability": 0.97, "top": [{ "class": "setosa", "index": 0, "probability": 0.97 }, { "class": "versicolor", "index": 1, "probability": 0.02 }] },
+    { "class": "virginica", "index": 2, "probability": 0.88, "top": [...] }
+  ]
+}
+```
+
+At most 64 samples and 250,000 numbers. Networks trained on a CSV file take one row per sample,
+as an object `{column: value}` or a list in column order, with the raw values of the CSV file
+(`input_scale` `raw`, the default) or already standardised ones (`normalized`); regression
+answers `{"value": …}` per sample in the units of the target column (named in `target`). Image
+networks take one image per sample as a nested array of channels × height × width (grayscale
+also height × width) or in the shape of the Input layer, and need `input_scale`: `raw`
+(pixels 0–255), `unit` (0–1) or `normalized` (normalised like in training, see
+`state.preprocessing`). Runs on demo data take
+arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
+`top_k` (1–10, default 3) is the number of classes in `top`.
+
+The inputs are checked and prepared like the training data from the run's
+`state.preprocessing`; the network then runs in a separate process (CPU, at most 30 seconds,
+`BRICKDNN_MAX_PREDICTIONS` at a time, default 1). Answers: `400 {"detail", "inputs"}` when the
+inputs do not fit (`inputs` describes what the network takes), `409` when the run has no
+weights or its preprocessing is unknown (e.g. it failed early), `503` when training is
+disabled, PyTorch is missing or other predictions are running (`Retry-After: 5`), `500` when the
+prediction itself fails or takes too long, `429` above the rate limit.
 
 ## Data preparation (login required)
 
@@ -304,9 +400,10 @@ All data endpoints except `GET /api/data/` answer `503` when data preparation is
 
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
 20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
-preparations: 60/hour, previews and downloads of preparations: 1200/hour, MCP requests:
-600/hour, OAuth registration, token and revocation requests: 120/minute. Adjust with
-`BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
-`BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
+preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
+1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
+120/minute. Adjust with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
+`BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
+`BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
 `BRICKDNN_SHARING_RATE` (invitations and link changes, 120/hour)
 (e.g. `100/minute`).

@@ -6,6 +6,8 @@ services:
       args:
         # Set to "true" to install PyTorch (CPU) and enable training in the UI.
         INSTALL_TORCH: ${BRICKDNN_INSTALL_TORCH:-false}
+    # The realtime service runs the same image.
+    image: brick-dnn-backend:local
     # A minimal init process reaps training processes whose gunicorn worker was restarted.
     init: true
     environment:
@@ -21,8 +23,40 @@ services:
       DATABASE_URL: ${DATABASE_URL:-}
       # nginx in the frontend container is the one proxy in front of Django.
       BRICKDNN_NUM_PROXIES: 1
+      # Live editing: the backend tells the realtime service about saves through Redis.
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - brickdnn-data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Live editing (WebSockets under /api/ws/): the same image, served by Daphne.
+  realtime:
+    image: brick-dnn-backend:local
+    pull_policy: never
+    command: ["daphne", "--bind", "0.0.0.0", "--port", "8001", "brick_dnn_site.asgi:application"]
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DATABASE_URL: ${DATABASE_URL:-}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      # The data volume holds the SQLite database and the generated secret key.
+      - brickdnn-data:/data
+    depends_on:
+      - backend
+      - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 2)"]
+      interval: 30s
+      timeout: 5s
+    restart: unless-stopped
+
+  # Passes live-editing messages between the server processes; keeps nothing on disk.
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb"]
     restart: unless-stopped
 
   frontend:
@@ -31,6 +65,7 @@ services:
       - "${BRICKDNN_PORT:-8080}:80"
     depends_on:
       - backend
+      - realtime
     restart: unless-stopped
 
 volumes:

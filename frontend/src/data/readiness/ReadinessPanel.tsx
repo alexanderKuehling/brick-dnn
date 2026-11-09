@@ -21,6 +21,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import type { DataFix, NewStep, Readiness, ReadinessIssue } from '@/api/types';
+import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
 import classes from './ReadinessPanel.module.css';
 
@@ -55,6 +56,8 @@ export function ReadinessPanel({
   fixesDisabled = false,
   exportBlocked = null,
 }: ReadinessPanelProps) {
+  // Viewers of a shared preparation see the problems, but neither fix them nor export.
+  const { readOnly } = usePrepAccess();
   // Fixes added since the last check; they disappear with the next preview.
   const [applied, setApplied] = useState<ReadonlySet<string>>(() => new Set());
   const [checked, setChecked] = useState(readiness);
@@ -67,7 +70,7 @@ export function ReadinessPanel({
   const errors = readiness.issues.filter((issue) => issue.severity === 'error');
   const warnings = readiness.issues.filter((issue) => issue.severity !== 'error');
   const pendingFixes: DataFix[] = [];
-  for (const issue of errors) {
+  for (const issue of readOnly ? [] : errors) {
     if (issue.fix && !applied.has(fixKey(issue.fix))) {
       if (!pendingFixes.some((fix) => fixKey(fix) === fixKey(issue.fix!))) {
         pendingFixes.push(issue.fix);
@@ -175,7 +178,7 @@ export function ReadinessPanel({
           issues={errors}
           applied={applied}
           disabled={fixesDisabled}
-          onFix={(fix) => apply([fix])}
+          onFix={readOnly ? undefined : (fix) => apply([fix])}
         />
       )}
       {warnings.length > 0 && (
@@ -184,7 +187,7 @@ export function ReadinessPanel({
           issues={warnings}
           applied={applied}
           disabled={fixesDisabled}
-          onFix={(fix) => apply([fix])}
+          onFix={readOnly ? undefined : (fix) => apply([fix])}
         />
       )}
       {readiness.issues.length === 0 && (
@@ -204,24 +207,28 @@ export function ReadinessPanel({
             Fix all ({pendingFixes.length})
           </Button>
         )}
-        <Button
-          leftSection={<IconDatabaseExport size={16} />}
-          onClick={onExport}
-          loading={exporting}
-          disabled={!ready}
-        >
-          Create training dataset
-        </Button>
+        {!readOnly && (
+          <Button
+            leftSection={<IconDatabaseExport size={16} />}
+            onClick={onExport}
+            loading={exporting}
+            disabled={!ready}
+          >
+            Create training dataset
+          </Button>
+        )}
       </Group>
-      <Text size="xs" c="dimmed" mt={-8}>
-        {ready
-          ? 'Saves the prepared data with its split; it appears in the Train panel under “Your data”.'
-          : exportBlocked && errors.length > 0
-            ? `${exportBlocked} Available once it and the problems above are fixed.`
-            : exportBlocked
-              ? `${exportBlocked} Available once it is fixed.`
-              : 'Available once the problems above are fixed.'}
-      </Text>
+      {!readOnly && (
+        <Text size="xs" c="dimmed" mt={-8}>
+          {ready
+            ? 'Saves the prepared data with its split; it appears in the Train panel under “Your data”.'
+            : exportBlocked && errors.length > 0
+              ? `${exportBlocked} Available once it and the problems above are fixed.`
+              : exportBlocked
+                ? `${exportBlocked} Available once it is fixed.`
+                : 'Available once the problems above are fixed.'}
+        </Text>
+      )}
     </Stack>
   );
 }
@@ -231,7 +238,8 @@ interface IssueListProps {
   issues: ReadinessIssue[];
   applied: ReadonlySet<string>;
   disabled: boolean;
-  onFix: (fix: DataFix) => void;
+  /** Without it, the fixes are not offered (read-only views). */
+  onFix?: (fix: DataFix) => void;
 }
 
 function IssueList({ title, issues, applied, disabled, onFix }: IssueListProps) {
@@ -273,7 +281,7 @@ function IssueList({ title, issues, applied, disabled, onFix }: IssueListProps) 
                   </Text>
                 )}
               </div>
-              {issue.fix && (
+              {issue.fix && onFix && (
                 <Button
                   size="compact-sm"
                   variant={done ? 'subtle' : 'light'}

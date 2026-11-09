@@ -70,6 +70,8 @@ export interface StepCardProps {
   previewing: boolean;
   /** Scroll the card into view once (after it was added). */
   scrollIntoView?: boolean;
+  /** Shown, not changed: no actions, the settings are disabled. */
+  readOnly?: boolean;
 }
 
 const DETAILS_SHOWN = 4;
@@ -99,6 +101,7 @@ export function StepCard({
   onPreviewToggle,
   previewing,
   scrollIntoView = false,
+  readOnly = false,
 }: StepCardProps) {
   const formId = useId();
   const ref = useRef<HTMLLIElement>(null);
@@ -131,7 +134,7 @@ export function StepCard({
   const fieldError = spec && status === 'error' ? errorField(spec, ranReport) : null;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+    if (readOnly || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
       return;
     }
     event.preventDefault();
@@ -144,7 +147,7 @@ export function StepCard({
     }
   };
 
-  const actionsMenu = (
+  const actionsMenu = readOnly ? null : (
     <Menu position="bottom-end" shadow="md" withinPortal>
       <Menu.Target>
         <ActionIcon variant="subtle" color="gray" aria-label={`Actions for step ${index + 1}`}>
@@ -256,7 +259,7 @@ export function StepCard({
           onKeyDown={onKeyDown}
           aria-expanded={expanded}
           aria-controls={expanded ? formId : undefined}
-          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          aria-keyshortcuts={readOnly ? undefined : 'Alt+ArrowUp Alt+ArrowDown'}
         >
           <IconChevronRight
             size={14}
@@ -296,6 +299,7 @@ export function StepCard({
         <Switch
           size="xs"
           checked={step.enabled}
+          disabled={readOnly}
           aria-label={`Use step ${index + 1} (${label})`}
           onChange={(event) => onChange({ ...step, enabled: event.currentTarget.checked })}
         />
@@ -385,29 +389,34 @@ export function StepCard({
       )}
 
       {expanded && (
-        <Stack gap="sm" className={classes.form} id={formId}>
-          {visibleParams.map((param) => (
-            <StepParamField
-              key={param.name}
-              param={param}
-              value={paramValue(param, step.params)}
-              params={step.params}
-              columns={columns}
-              sources={sources}
-              currentSourceId={currentSourceId}
-              mappingKeysAreColumns={param.key_kind ? param.key_kind === 'column' : keysAreColumns}
-              error={fieldError?.param === param.name ? fieldError.message : null}
-              onChange={(value) =>
-                onChange({ ...step, params: { ...step.params, [param.name]: value } })
-              }
-            />
-          ))}
-          {visibleParams.length === 0 && (
-            <Text size="sm" c="dimmed">
-              This step has no settings.
-            </Text>
-          )}
-        </Stack>
+        // A disabled fieldset keeps every kind of field from changing (read-only views).
+        <fieldset disabled={readOnly} className={classes.form} id={formId}>
+          <Stack gap="sm">
+            {visibleParams.map((param) => (
+              <StepParamField
+                key={param.name}
+                param={param}
+                value={paramValue(param, step.params)}
+                params={step.params}
+                columns={columns}
+                sources={sources}
+                currentSourceId={currentSourceId}
+                mappingKeysAreColumns={
+                  param.key_kind ? param.key_kind === 'column' : keysAreColumns
+                }
+                error={fieldError?.param === param.name ? fieldError.message : null}
+                onChange={(value) =>
+                  onChange({ ...step, params: { ...step.params, [param.name]: value } })
+                }
+              />
+            ))}
+            {visibleParams.length === 0 && (
+              <Text size="sm" c="dimmed">
+                This step has no settings.
+              </Text>
+            )}
+          </Stack>
+        </fieldset>
       )}
     </Paper>
   );

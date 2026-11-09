@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import {
   IconAlertTriangle,
+  IconEye,
   IconHistory,
   IconLock,
   IconPlayerPlay,
@@ -22,6 +24,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import type { Analysis, GraphDocument } from '@/api';
+import { canTrain, otherStarter, trainingProject, type RunFilter } from './access';
 import { HistoryView } from './HistoryView';
 import { RunView } from './RunView';
 import { SetupView } from './SetupView';
@@ -42,6 +45,9 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
   const { training } = props;
   const theme = useMantineTheme();
   const phone = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
+  // Kept while the drawer is closed (its content is not).
+  const [filter, setFilter] = useState<RunFilter>('network');
+  const trainable = canTrain(training.scope);
 
   return (
     <Drawer
@@ -51,12 +57,12 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
       size={phone ? '100%' : 560}
       title={
         <Group gap="xs">
-          <IconPlayerPlay size={18} />
-          <Text fw={600}>Train this network</Text>
+          {trainable ? <IconPlayerPlay size={18} /> : <IconHistory size={18} />}
+          <Text fw={600}>{trainable ? 'Train this network' : 'Trainings of this network'}</Text>
         </Group>
       }
     >
-      <DrawerContent {...props} />
+      <DrawerContent {...props} filter={filter} onFilterChange={setFilter} />
     </Drawer>
   );
 }
@@ -70,8 +76,12 @@ function DrawerContent({
   onLogin,
   onShowProblems,
   onLoadNetwork,
-}: TrainingDrawerProps) {
-  const { status, statusError } = training;
+  filter,
+  onFilterChange,
+}: TrainingDrawerProps & { filter: RunFilter; onFilterChange: (filter: RunFilter) => void }) {
+  const { status, statusError, scope } = training;
+  // Viewers of the network see its runs, but cannot start trainings in it.
+  const trainable = canTrain(scope);
 
   if (!status) {
     return statusError ? (
@@ -117,7 +127,7 @@ function DrawerContent({
     );
   }
 
-  const tab = training.view === 'setup' ? 'setup' : 'runs';
+  const tab = training.view === 'setup' && trainable ? 'setup' : 'runs';
   return (
     <Tabs
       value={tab}
@@ -125,9 +135,11 @@ function DrawerContent({
       keepMounted={false}
     >
       <Tabs.List mb="md">
-        <Tabs.Tab value="setup" leftSection={<IconPlayerPlay size={14} />}>
-          New training
-        </Tabs.Tab>
+        {trainable && (
+          <Tabs.Tab value="setup" leftSection={<IconPlayerPlay size={14} />}>
+            New training
+          </Tabs.Tab>
+        )}
         <Tabs.Tab
           value="runs"
           leftSection={<IconHistory size={14} />}
@@ -144,8 +156,10 @@ function DrawerContent({
             status={status}
             doc={doc}
             networkName={networkName}
+            project={trainingProject(scope)}
             analysis={analysis}
             activeRun={training.activeRun}
+            activeRunBy={training.activeRun && otherStarter(training.activeRun, scope)}
             data={training.data}
             onStarted={training.applyRun}
             onOpenRun={training.openRun}
@@ -161,6 +175,20 @@ function DrawerContent({
       </Tabs.Panel>
 
       <Tabs.Panel value="runs">
+        {!trainable && (
+          <Group gap={6} wrap="nowrap" align="flex-start" mb="sm">
+            <IconEye
+              size={16}
+              color="var(--mantine-color-dimmed)"
+              style={{ flexShrink: 0, marginTop: 2 }}
+              aria-hidden
+            />
+            <Text size="xs" c="dimmed">
+              You can view this network: you see how it was trained, but cannot start trainings in
+              it. To train it yourself, duplicate it.
+            </Text>
+          </Group>
+        )}
         {training.view === 'run' && training.selectedRunId ? (
           <SelectedRun training={training} doc={doc} onLoadNetwork={onLoadNetwork} />
         ) : (
@@ -171,6 +199,9 @@ function DrawerContent({
             onOpen={training.openRun}
             onDeleted={training.forgetRun}
             onNewTraining={training.showSetup}
+            scope={scope}
+            filter={filter}
+            onFilterChange={onFilterChange}
           />
         )}
       </Tabs.Panel>
@@ -213,6 +244,7 @@ function SelectedRun({
       <RunView
         run={detail}
         doc={doc}
+        scope={training.scope}
         onBack={training.showHistory}
         onNewTraining={training.showSetup}
         onUpdate={training.applyRun}

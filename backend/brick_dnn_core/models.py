@@ -124,6 +124,8 @@ class DataPrep(models.Model):
     steps = models.JSONField(default=list)
     # {"target", "task", "split": {"val", "test", "seed", "stratify"}}
     settings = models.JSONField(default=default_prep_settings)
+    # Projects whose members may use it (editors of those projects may change it too).
+    projects = models.ManyToManyField("Project", blank=True, related_name="data_preps")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -151,6 +153,8 @@ class Dataset(models.Model):
     prepared_from = models.ForeignKey(
         DataPrep, on_delete=models.SET_NULL, null=True, blank=True, related_name="datasets"
     )
+    # Projects whose members may train on it.
+    projects = models.ManyToManyField("Project", blank=True, related_name="datasets")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -186,6 +190,10 @@ class TrainingRun(models.Model):
     dataset = models.JSONField(default=dict)
     upload = models.ForeignKey(
         Dataset, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
+    )
+    # Started from a shared project: its members see the run.
+    project = models.ForeignKey(
+        "Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
     )
     config = models.JSONField(default=dict)
     # Hyperparameter search settings (TuningConfig.to_dict()); null for a normal training.
@@ -302,3 +310,69 @@ class OAuthConnection(models.Model):
 
     def __str__(self) -> str:
         return f"{self.client.name} ({self.owner})"
+
+
+class ProjectVersion(models.Model):
+    """A saved state of a project for its history.
+
+    Changes by the same person within a few minutes update the latest automatic entry
+    instead of adding one each time (see history.py). Named versions are kept for good.
+    """
+
+    KINDS = [("auto", "Automatic"), ("named", "Named"), ("restore", "Restored")]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="history")
+    version = models.PositiveIntegerField()
+    kind = models.CharField(max_length=10, choices=KINDS, default="auto")
+    label = models.CharField(max_length=120, blank=True)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, max_length=2000)
+    graph = models.JSONField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.project.name} v{self.version} ({self.kind})"
+
+
+class Comment(models.Model):
+    """A comment on a project, optionally on one of its layers (``node_id``).
+
+    Replies point to the first comment of the thread (one level).
+    """
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments"
+    )
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="replies"
+    )
+    node_id = models.CharField(max_length=100, blank=True)
+    text = models.TextField(max_length=5000)
+    resolved = models.BooleanField(default=False)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.author} on {self.project.name}: {self.text[:40]}"

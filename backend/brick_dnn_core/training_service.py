@@ -4,6 +4,8 @@ Every run is trained by its own process (``python -m brickdnn.training.runner <r
 so the web server never imports PyTorch. The API writes ``job.json`` into the run
 directory, starts the process and afterwards only looks at the files the process writes
 (``state.json``, ``weights.pt``). See :mod:`brickdnn.training.state` for the file format.
+Predictions with the trained weights also run in a process of their own
+(``python -m brickdnn.training.predict <run_dir>``), one per request.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import serializers
 
 from brickdnn import analyze
@@ -49,6 +52,7 @@ from brickdnn.training import (
     builtin_info,
     check_compatibility,
     extract_image_zip,
+    inference,
     inspect_csv,
     inspect_image_folder,
     random_info,
@@ -92,6 +96,11 @@ UNEXPECTED_MESSAGE = "The training process stopped unexpectedly."
 NOT_STARTED_MESSAGE = "The training process did not start."
 STOPPED_MESSAGE = "Training was stopped."
 WRONG_FILE_MESSAGE = "Upload a .csv file or a .zip file with one folder per class."
+IN_USE_MESSAGE = "This dataset is used by a training that is still running. Stop it first."
+PREDICT_BUSY_MESSAGE = "The server is busy with other predictions. Try again in a few seconds."
+# A prediction (starting Python, loading PyTorch and the weights, a forward pass on the CPU)
+# that takes longer than this is stopped. It blocks a web server worker meanwhile.
+PREDICT_TIMEOUT_SECONDS = 30
 
 PROBE_CACHE_KEY = "brickdnn:training:probe"
 PROBE_CACHE_SECONDS = 600
@@ -124,6 +133,18 @@ class TrainingUnavailable(Exception):
 
 class TrainingBusy(Exception):
     """The maximum number of concurrent trainings is reached."""
+
+
+class DatasetInUse(Exception):
+    """A dataset cannot be deleted while a training uses it."""
+
+
+class PredictionUnavailable(Exception):
+    """The run cannot predict: no weights, or how its inputs were prepared is unknown."""
+
+
+class PredictionFailed(Exception):
+    """The prediction process failed or took too long. The message is shown to the user."""
 
 
 class IncompatibleNetwork(Exception):
@@ -385,7 +406,10 @@ def resolve_dataset(user, ref: Any) -> ResolvedDataset:
             dataset_id = int(dataset_id)
         if not isinstance(dataset_id, int) or isinstance(dataset_id, bool):
             raise TrainingInputError("Choose one of your uploaded datasets.")
-        dataset = Dataset.objects.filter(owner=user, pk=dataset_id).first()
+        from .shared_data import visible_datasets
+
+        # Your own datasets and the ones shared in your projects.
+        dataset = visible_datasets(user).filter(pk=dataset_id).first()
         if dataset is None:
             raise TrainingInputError(
                 "This dataset does not exist (any more). Upload it again or choose another one."
@@ -417,6 +441,14 @@ def dataset_in_use(dataset: Dataset) -> bool:
     return dataset.runs.filter(status__in=ACTIVE_STATUSES).exists()
 
 
+def delete_dataset(dataset: Dataset) -> None:
+    """Delete a dataset with its files. Raises :class:`DatasetInUse` while a training uses
+    it. The caller checks that the user owns it."""
+    if dataset_in_use(dataset):
+        raise DatasetInUse(IN_USE_MESSAGE)
+    dataset.delete()  # the files are removed by a post_delete signal
+
+
 # --------------------------------------------------------------------------- #
 # Starting runs
 # --------------------------------------------------------------------------- #
@@ -445,7 +477,13 @@ def active_run_count() -> int:
 
 
 def start_run(
-    user, name: Any, graph: Any, dataset_ref: Any, config: Any, tuning: Any = None
+    user,
+    name: Any,
+    graph: Any,
+    dataset_ref: Any,
+    config: Any,
+    tuning: Any = None,
+    project_id: Any = None,
 ) -> TrainingRun:
     """Validate everything and start a training process.
 
@@ -465,6 +503,15 @@ def start_run(
     if len(name) > 120:
         raise TrainingInputError("The name can be at most 120 characters long.")
     validate_graph(graph)
+    project = None
+    if project_id is not None:
+        from .shared_data import editable_projects
+
+        if isinstance(project_id, bool) or not isinstance(project_id, int):
+            raise TrainingInputError("'project' must be the id of a project.")
+        project = editable_projects(user).filter(pk=project_id).first()
+        if project is None:
+            raise TrainingInputError("You can only train in projects you own or can edit.")
     try:
         training_config = TrainingConfig.from_dict(config)
         search = TuningConfig.from_dict(tuning) if tuning is not None else None
@@ -482,6 +529,7 @@ def start_run(
             raise TrainingBusy(BUSY_MESSAGE)
         run = TrainingRun.objects.create(
             owner=user,
+            project=project,
             name=name,
             graph=graph,
             dataset=dataset.summary,
@@ -508,13 +556,21 @@ def start_run(
     return run
 
 
-def runner_command() -> list[str]:
-    command = settings.TRAINING_RUNNER_COMMAND
+def _command(configured: Any, module: str) -> list[str]:
+    command = configured
     if not command:
-        command = [sys.executable, "-m", "brickdnn.training.runner"]
+        command = [sys.executable, "-m", module]
     elif isinstance(command, str):
         command = shlex.split(command)
     return [str(part) for part in command]
+
+
+def runner_command() -> list[str]:
+    return _command(settings.TRAINING_RUNNER_COMMAND, "brickdnn.training.runner")
+
+
+def predict_command() -> list[str]:
+    return _command(settings.TRAINING_PREDICT_COMMAND, "brickdnn.training.predict")
 
 
 def _launch(run: TrainingRun, job: dict[str, Any]) -> None:
@@ -834,6 +890,13 @@ def terminate_run(run: TrainingRun) -> None:
         _kill(run, wait=3.0)
 
 
+def delete_run(run: TrainingRun) -> None:
+    """Delete a run with its files, killing its process first if it is still active. The
+    caller checks that the user may delete it (``shared_data.can_delete_run``)."""
+    terminate_run(run)
+    run.delete()  # the run directory is removed by a post_delete signal
+
+
 def state_of(run: TrainingRun) -> dict[str, Any] | None:
     """state.json for the API. NaN/infinity become None.
 
@@ -860,6 +923,161 @@ def state_of(run: TrainingRun) -> dict[str, Any] | None:
 def weights_path(run: TrainingRun) -> Path | None:
     path = run_dir(run.pk) / WEIGHTS_FILE
     return path if run.has_weights and path.is_file() else None
+
+
+def weights_filename(run: TrainingRun) -> str:
+    return (slugify(run.name) or "weights") + ".pt"
+
+
+def no_weights_reason(run: TrainingRun) -> str:
+    """Why a run has no weights to download or predict with (for the user)."""
+    if run.status in ACTIVE_STATUSES:
+        return (
+            f"This run is still {run.status}: its weights are saved when it finishes or is stopped."
+        )
+    if run.status == "failed":
+        return f"This run failed before it saved weights: {run.message}"
+    return "This run has no trained weights (it was stopped before the training started)."
+
+
+# --------------------------------------------------------------------------- #
+# Predictions with the trained weights
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class Prediction:
+    """Checked and prepared inputs, ready for :func:`run_prediction`."""
+
+    run: TrainingRun
+    preprocessing: dict[str, Any]
+    inputs: inference.PreparedInputs
+
+
+def prepare_prediction(
+    run: TrainingRun, inputs: Any, input_scale: Any = None, top_k: Any = None
+) -> Prediction:
+    """Check that ``run`` can predict and prepare ``inputs`` like its training data (cheap:
+    no process is started). Raises :class:`TrainingUnavailable`,
+    :class:`PredictionUnavailable` or :class:`TrainingInputError`."""
+    reason = unavailable_reason()
+    if reason:
+        raise TrainingUnavailable(reason)
+    if weights_path(run) is None:
+        raise PredictionUnavailable(no_weights_reason(run))
+    preprocessing = (state_of(run) or {}).get("preprocessing")
+    try:
+        prepared = inference.prepare_inputs(run.plan, preprocessing, inputs, input_scale, top_k)
+    except inference.UnknownPreprocessing as exc:
+        raise PredictionUnavailable(str(exc)) from None
+    except inference.InvalidInputs as exc:
+        raise TrainingInputError(str(exc)) from None
+    return Prediction(run, preprocessing, prepared)
+
+
+def describe_inputs(run: TrainingRun) -> str | None:
+    """What the network of ``run`` takes, for error messages (None if unknown)."""
+    preprocessing = (state_of(run) or {}).get("preprocessing")
+    try:
+        return inference.describe_inputs(run.plan, preprocessing)
+    except inference.UnknownPreprocessing:
+        return None
+
+
+def run_prediction(prediction: Prediction) -> dict[str, Any]:
+    """Run the network on the prepared inputs in a separate process.
+
+    Raises :class:`TrainingBusy` (too many predictions at once) or
+    :class:`PredictionFailed`.
+    """
+    run, prepared = prediction.run, prediction.inputs
+    with _prediction_slot():
+        result = _predict_process(run, {"inputs": prepared.tensors})
+    try:
+        predictions = inference.read_outputs(
+            run.plan, prediction.preprocessing, result["outputs"], prepared.count, prepared.top_k
+        )
+    except ValueError as exc:
+        raise PredictionFailed(str(exc)) from None
+    answer: dict[str, Any] = {
+        "run": {"id": str(run.pk), "name": run.name},
+        "task": run.plan.get("task"),
+        "predictions": predictions,
+    }
+    if (
+        prepared.kind == "tabular"
+        and inference.class_names(run.plan, prediction.preprocessing) is None
+    ):
+        answer["target"] = prediction.preprocessing.get("target")
+    if prepared.kind == "demo":
+        answer["note"] = "Trained on random demo data: the predictions mean nothing."
+    return answer
+
+
+@contextlib.contextmanager
+def _prediction_slot():
+    """At most TRAINING_MAX_PREDICTIONS predictions at a time, across server processes (an
+    exclusive lock on one of as many lock files; POSIX only)."""
+    if fcntl is None:  # pragma: no cover - Windows
+        yield
+        return
+    root = training_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    for slot in range(max(1, int(settings.TRAINING_MAX_PREDICTIONS))):
+        handle = open(root / f".predict-{slot}.lock", "a")  # noqa: SIM115 (closed below)
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            continue
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            handle.close()
+        return
+    raise TrainingBusy(PREDICT_BUSY_MESSAGE)
+
+
+def _predict_process(run: TrainingRun, request: dict[str, Any]) -> dict[str, Any]:
+    """Start ``python -m brickdnn.training.predict <run dir>`` and return its answer."""
+    directory = run_dir(run.pk)
+    command = [*predict_command(), str(directory)]
+    try:
+        result = subprocess.run(
+            command,
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=PREDICT_TIMEOUT_SECONDS,
+            cwd=directory,
+            env=_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        raise PredictionFailed(
+            f"The prediction took longer than {PREDICT_TIMEOUT_SECONDS} seconds and was stopped."
+        ) from None
+    except OSError:
+        logger.exception("Could not start the prediction process %s", command)
+        raise PredictionFailed(
+            "The prediction process could not be started. See the server log for details."
+        ) from None
+    answer = None
+    for line in reversed(result.stdout.strip().splitlines()):
+        if line.strip().startswith("{"):
+            with contextlib.suppress(ValueError):
+                answer = json.loads(line)
+            break
+    if isinstance(answer, dict) and isinstance(answer.get("error"), str):
+        raise PredictionFailed(answer["error"][:500])
+    if result.returncode == 0 and isinstance(answer, dict) and "outputs" in answer:
+        return answer
+    lines = [line.strip() for line in result.stderr.splitlines() if line.strip()]
+    detail = lines[-1][:300] if lines else f"exit code {result.returncode}"
+    logger.warning("Prediction for run %s failed: %s", run.pk, result.stderr[-2000:])
+    raise PredictionFailed(f"The prediction failed: {detail}")
 
 
 # --------------------------------------------------------------------------- #

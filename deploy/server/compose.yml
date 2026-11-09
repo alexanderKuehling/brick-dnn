@@ -17,6 +17,18 @@ services:
     mem_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
     memswap_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
 
+  # Live editing only passes small messages on: little CPU and memory.
+  realtime:
+    environment:
+      BRICKDNN_NUM_PROXIES: 2
+    cpus: "0.5"
+    mem_limit: 256m
+    memswap_limit: 256m
+
+  redis:
+    mem_limit: 64m
+    memswap_limit: 64m
+
   frontend:
     # Only Caddy talks to nginx: nothing is published on port 8080.
     ports: !reset []
