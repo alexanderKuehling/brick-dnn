@@ -4,6 +4,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, getTokens, setTokens, type Account } from '@/api';
 import { AuthProvider } from '@/auth/AuthContext';
+import { RequireAuth } from '@/components/RequireAuth';
 import { resetLegalInfo } from '@/legal/useLegalInfo';
 import { AccountPage, storedSummary } from './AccountPage';
 
@@ -57,8 +58,16 @@ function renderPage() {
     <AuthProvider>
       <MemoryRouter initialEntries={['/account']}>
         <Routes>
-          <Route path="/account" element={<AccountPage />} />
+          <Route
+            path="/account"
+            element={
+              <RequireAuth>
+                <AccountPage />
+              </RequireAuth>
+            }
+          />
           <Route path="/" element={<p>Home page</p>} />
+          <Route path="/login" element={<p>Login page</p>} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>
@@ -198,7 +207,9 @@ test('deletes the account after confirming with password and username', async ()
   expect(getTokens()).not.toBeNull();
 
   await userEvent.click(confirm);
+  // To the home page, not to the login page RequireAuth sends logged-out visitors to.
   expect(await screen.findByText('Home page')).toBeInTheDocument();
+  expect(screen.queryByText('Login page')).toBeNull();
   expect(api.account.remove).toHaveBeenLastCalledWith('guess', 'ada');
   expect(getTokens()).toBeNull();
   // The server ended the logins already: no logout request.

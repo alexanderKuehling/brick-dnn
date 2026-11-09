@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconAlertCircle, IconAlertTriangle, IconDownload, IconTrash } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -229,6 +229,18 @@ function DeleteDialog({
   );
   const [busy, setBusy] = useState(false);
   const confirmed = username === account.username && password !== '';
+  const deleted = useRef(false);
+
+  // Forget the login only once this page is gone: logged out on /account, the login page would
+  // be shown instead of the home page.
+  useEffect(
+    () => () => {
+      if (deleted.current) {
+        logout(false); // the server ended every login already
+      }
+    },
+    [logout]
+  );
 
   const remove = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -248,8 +260,7 @@ function DeleteDialog({
       setBusy(false);
       return;
     }
-    // The server ended every login already.
-    logout(false);
+    deleted.current = true;
     notifications.show({
       color: 'green',
       title: 'Your account was deleted',
