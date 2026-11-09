@@ -41,6 +41,7 @@ from . import downloads, history
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
 from . import training_service as training
+from . import upload_links as links
 from .api_tokens import uses_api_token
 from .models import ApiToken, DataPrep, DataSource, Project, TrainingRun
 from .oauth import McpAuthentication
@@ -107,6 +108,7 @@ and fixes) and apply_readiness_fix or update_data_prep (step types: list_prep_st
 readiness says ready. export_training_dataset then gives the dataset reference for
 check_training and start_training; predict takes the prepared feature columns it lists.
 get_data_prep_script returns the pandas script that prepares new data the same way.
+Files too large to pass as text: create_upload_link gives a one-time link for curl.
 
 Answers are compact: lists are capped with their totals, and arguments such as include,
 columns_offset or types ask for more."""
@@ -452,6 +454,13 @@ def upload_dataset(request: Request, args: dict[str, Any]) -> Any:
         "reference": {"kind": "upload", "id": dataset.pk},
         "next": "Pass the reference as dataset to check_training and start_training.",
     }
+
+
+def create_upload_link(request: Request, args: dict[str, Any]) -> Any:
+    try:
+        return links.create_link(request, request.user, args["purpose"], args)
+    except links.UploadLinkError as exc:
+        raise ToolError(str(exc)) from None
 
 
 # --------------------------------------------------------------------------- #
@@ -1201,6 +1210,42 @@ TOOLS: dict[str, Tool] = {
                 },
             },
             ("name", "csv"),
+            writes=True,
+        ),
+        Tool(
+            "create_upload_link",
+            "Create an upload link",
+            "A one-time link (valid 15 minutes, no login needed) to upload a local file "
+            "with a shell command such as curl, for files too large to pass as text. "
+            "purpose data_source imports it into the Data tab like import_data (any format "
+            "import_data reads, with its options); training_dataset stores a CSV or ZIP file "
+            "like upload_dataset. Returns the url and ready-to-run curl commands; the curl "
+            "answer is the JSON that import_data or upload_dataset would return (with the "
+            "new id or the dataset reference). The size limit is that of the web app. Which "
+            "way to send a file: small file (up to the import_data limit) as text or base64; "
+            "a local file and a shell: this link; a public file: import_data with url; "
+            "otherwise ask the user to upload it in the Brick DNN web app.",
+            create_upload_link,
+            {
+                "purpose": {"type": "string", "enum": list(links.PURPOSES)},
+                "filename": {
+                    "type": "string",
+                    "description": "Name of the file with its ending, e.g. sales.xlsx (the "
+                    "ending decides the format)",
+                },
+                "name": {"type": "string", "maxLength": 120, "description": "Default: file name"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "training_dataset: also share it in this project",
+                },
+                "delimiter": {"type": "string", "description": "data_source: CSV delimiter"},
+                "decimal": {"type": "string", "description": "data_source: '.' or ','"},
+                "header": {"type": "string", "enum": ["auto", "yes", "no"]},
+                "encoding": {"type": "string", "description": "data_source: auto, utf-8 …"},
+                "missing_values": {"type": "array", "items": {"type": "string"}},
+                "sheet": {"type": "string", "description": "data_source: sheet of a workbook"},
+            },
+            ("purpose", "filename"),
             writes=True,
         ),
         Tool(
