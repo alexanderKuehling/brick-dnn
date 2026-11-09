@@ -36,6 +36,7 @@ import { PeopleAvatars } from '@/sharing/PeopleAvatars';
 import sharingClasses from '@/sharing/Sharing.module.css';
 import { progressLabel } from '@/training/format';
 import { formatCount } from './format';
+import classes from './Toolbar.module.css';
 
 interface ToolbarProps {
   name: string;
@@ -342,9 +343,23 @@ export function Toolbar(props: ToolbarProps) {
         </Button>
         {!readOnly && <TrainButton run={props.trainingRun} onClick={props.onTrain} />}
         <Tooltip label="Download the PyTorch script (Ctrl+E)">
-          <Button leftSection={<IconDownload size={16} />} onClick={props.onExportPython}>
+          <Button
+            leftSection={<IconDownload size={16} />}
+            onClick={props.onExportPython}
+            className={classes.exportLabelled}
+          >
             Export .py
           </Button>
+        </Tooltip>
+        <Tooltip label="Export .py: download the PyTorch script">
+          <ActionIcon
+            size="lg"
+            onClick={props.onExportPython}
+            className={classes.exportIcon}
+            aria-label="Download the PyTorch script"
+          >
+            <IconDownload size={18} />
+          </ActionIcon>
         </Tooltip>
         <Tooltip label="Properties">
           <ActionIcon

@@ -39,8 +39,8 @@ export function LiveBadge({ indicator }: { indicator: LiveIndicator }) {
         style={{ flexShrink: 0 }}
         aria-label={`${badge.label}${badge.more ?? ''}`}
       >
-        {/* Phones show the dot only (the offline state keeps its word). */}
-        <span className={indicator === 'offline' ? undefined : classes.label}>{badge.label}</span>
+        {/* Phones show the dot only (green, a spinner, yellow): the toolbar is full there. */}
+        <span className={classes.label}>{badge.label}</span>
         {badge.more && <span className={classes.more}>{badge.more}</span>}
       </Badge>
     </Tooltip>

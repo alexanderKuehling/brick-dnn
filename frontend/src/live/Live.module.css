@@ -14,7 +14,7 @@
   }
 }
 
-/* "Live" and "Saving…": phones only show the dot. */
+/* "Live", "Saving…" and "Offline": phones only show the dot (screen readers the label). */
 .label {
   @media (max-width: $mantine-breakpoint-xs) {
     position: absolute;
