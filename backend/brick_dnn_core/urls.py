@@ -2,7 +2,17 @@ from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView
 
-from . import accounts, agent_activity, data_views, legal, mcp, oauth, projects, views
+from . import (
+    accounts,
+    agent_activity,
+    billing_views,
+    data_views,
+    legal,
+    mcp,
+    oauth,
+    projects,
+    views,
+)
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
@@ -39,6 +49,25 @@ urlpatterns = [
         "agent-activity/summary/",
         agent_activity.AgentActivitySummaryView.as_view(),
         name="agent-activity-summary",
+    ),
+    # Paid plans with Paddle (billing.py). Only the first one answers while billing is off.
+    path("billing/", billing_views.billing_info, name="billing"),
+    path("billing/subscription/", billing_views.SubscriptionView.as_view(), name="billing-state"),
+    path("billing/checkout/", billing_views.CheckoutView.as_view(), name="billing-checkout"),
+    path("billing/change-plan/", billing_views.ChangePlanView.as_view(), name="billing-change"),
+    path("billing/cancel/", billing_views.CancelView.as_view(), name="billing-cancel"),
+    path("billing/reactivate/", billing_views.ReactivateView.as_view(), name="billing-reactivate"),
+    path("billing/portal/", billing_views.PortalView.as_view(), name="billing-portal"),
+    path("billing/refresh/", billing_views.RefreshView.as_view(), name="billing-refresh"),
+    # Paddle posts its notifications here, to the address as it was entered there (Django
+    # cannot redirect a POST to add the slash).
+    path(
+        "billing/paddle/webhook/", billing_views.PaddleWebhookView.as_view(), name="paddle-webhook"
+    ),
+    path(
+        "billing/paddle/webhook",
+        billing_views.PaddleWebhookView.as_view(),
+        name="paddle-webhook-no-slash",
     ),
     # Imprint, privacy policy, terms of use: Markdown files on the server (public).
     path("legal/", legal.legal_index, name="legal"),

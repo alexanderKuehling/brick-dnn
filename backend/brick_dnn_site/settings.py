@@ -27,10 +27,15 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+# Secrets are never read from the site settings file: it is in the public repository.
+SITE_ENV_SECRETS = frozenset({"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET"})
+
+
 def load_site_settings(environ=os.environ) -> None:
     """Defaults from the file ``BRICKDNN_SITE_ENV`` names: ``BRICKDNN_…=value`` lines kept in
     the repository for one public server (``deploy/sites/<domain>/settings.env``, see
-    deploy/sites/README.md). A variable that is set and not empty in the environment wins."""
+    deploy/sites/README.md). A variable that is set and not empty in the environment wins.
+    Secrets (``SITE_ENV_SECRETS``) are ignored there."""
     path = environ.get("BRICKDNN_SITE_ENV")
     if not path:
         return
@@ -43,7 +48,7 @@ def load_site_settings(environ=os.environ) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = (part.strip() for part in line.split("=", 1))
-        if name.startswith("BRICKDNN_") and not environ.get(name):
+        if name.startswith("BRICKDNN_") and name not in SITE_ENV_SECRETS and not environ.get(name):
             environ[name] = value
 
 
@@ -317,6 +322,11 @@ REST_FRAMEWORK = {
         "oauth": os.environ.get("BRICKDNN_OAUTH_RATE", "120/minute"),
         # Changing the e-mail address or password, exporting the data, deleting the account.
         "account": os.environ.get("BRICKDNN_ACCOUNT_RATE", "30/hour"),
+        # Paid plans: opening the checkout, changing or cancelling the subscription.
+        "billing": os.environ.get("BRICKDNN_BILLING_RATE", "60/hour"),
+        # Paddle's notifications (per IP address: Paddle sends them from a few servers, and
+        # several per payment).
+        "billing_webhook": os.environ.get("BRICKDNN_BILLING_WEBHOOK_RATE", "600/minute"),
     },
 }
 
@@ -353,6 +363,37 @@ EXPORT_MAX_FILES_MB = float(os.environ.get("BRICKDNN_EXPORT_MAX_FILES_MB", "200"
 # the page "Agent activity"): entries older than this many days are deleted by
 # `manage.py purge_old_data`. 0: nothing is logged (and the purge deletes what is there).
 AGENT_LOG_DAYS = max(0, int(os.environ.get("BRICKDNN_AGENT_LOG_DAYS") or 90))
+
+# Paid plans with Paddle Billing (brick_dnn_core.billing, docs/billing.md). Paddle sells the
+# plans as the merchant of record; a paid subscription sets the account's plan (BRICKDNN_PLANS).
+# Off unless all of it is configured: the environment, the client-side token, at least one
+# price, the API key and the webhook secret. With it off, the app shows no prices or checkout.
+#   BRICKDNN_PADDLE_ENV           sandbox or live
+#   BRICKDNN_PADDLE_CLIENT_TOKEN  the client-side token for Paddle.js (test_… or live_…; public)
+#   BRICKDNN_PADDLE_PRICES        the Paddle price of each paid plan: starter=pri_…,plus=pri_…
+#                                 (or JSON; several prices of one plan separated by "|": the
+#                                 first is sold, the others stay valid for who subscribed to them)
+#   BRICKDNN_PADDLE_OVERAGE_PRODUCT  the Paddle product (pro_…) that compute beyond the
+#                                 allowance is billed as; empty: overage is not billed
+# The two secrets only come from the environment (the server's .env), never from the site file:
+#   BRICKDNN_PADDLE_API_KEY         server-side API key
+#   BRICKDNN_PADDLE_WEBHOOK_SECRET  secret of the notification destination (several while
+#                                   rotating: separated by commas)
+PADDLE_ENV = os.environ.get("BRICKDNN_PADDLE_ENV", "").strip().lower()
+PADDLE_CLIENT_TOKEN = os.environ.get("BRICKDNN_PADDLE_CLIENT_TOKEN", "").strip()
+PADDLE_PRICES = os.environ.get("BRICKDNN_PADDLE_PRICES", "").strip()
+PADDLE_OVERAGE_PRODUCT = os.environ.get("BRICKDNN_PADDLE_OVERAGE_PRODUCT", "").strip()
+PADDLE_API_KEY = os.environ.get("BRICKDNN_PADDLE_API_KEY", "").strip()
+PADDLE_WEBHOOK_SECRETS = env_list("BRICKDNN_PADDLE_WEBHOOK_SECRET")
+# A notification is accepted if it was signed at most this many seconds ago (0: any age).
+# Every event is processed once, whatever its age (its id is remembered).
+PADDLE_WEBHOOK_TOLERANCE = int(os.environ.get("BRICKDNN_PADDLE_WEBHOOK_TOLERANCE") or 300)
+# After a failed payment the account keeps its plan for this many days while Paddle retries.
+PADDLE_GRACE_DAYS = int(os.environ.get("BRICKDNN_PADDLE_GRACE_DAYS") or 7)
+# Overage below this amount (in BRICKDNN_PRICE_CURRENCY) is not billed for a month.
+PADDLE_OVERAGE_MIN_CHARGE = env_number("BRICKDNN_PADDLE_OVERAGE_MIN_CHARGE", 0.5)
+# For tests and trying things out: another address for Paddle's API (a fake Paddle).
+PADDLE_API_URL = os.environ.get("BRICKDNN_PADDLE_API_URL", "").strip()
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

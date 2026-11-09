@@ -9,7 +9,8 @@ class BrickDnnCoreConfig(AppConfig):
 
     def ready(self) -> None:
         # Connects the signal handlers that delete training and data files with their objects.
-        from . import data_service, training_service  # noqa: F401
+        # billing: its check of the Paddle settings.
+        from . import billing, data_service, training_service  # noqa: F401
         from .supabase import protect_after_migrate
 
         # On Supabase, hide the tables from its Data API after every migrate (see supabase.py).

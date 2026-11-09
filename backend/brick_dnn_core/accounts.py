@@ -10,7 +10,10 @@ limited (``account`` scope). Deleting an account deletes everything it owns:
 - its memberships in other people's projects, its comments on them (replies of others to a
   thread it started go with it, as when it deletes the thread itself), API tokens,
   connected apps and the activity log of its agents;
-- its usage records (the compute it used, see budgets.py) and budgets.
+- its usage records (the compute it used, see budgets.py) and budgets;
+- what is kept about its paid plan (billing.py). A subscription at Paddle is cancelled first,
+  at once; if Paddle cannot be reached, the account is not deleted (the request fails), so
+  that nobody goes on paying for an account that is gone.
 
 Other people's projects it worked on stay; their history keeps the versions it saved, without
 saying who. All its logins end: its refresh tokens are blacklisted. See docs/privacy.md.
@@ -52,7 +55,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from brickdnn.training import ACTIVE_STATUSES
 
-from . import budgets, data_service, live
+from . import billing, budgets, data_service, live
 from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
@@ -127,7 +130,10 @@ def log_out_everywhere(user) -> None:
 def delete_account(user, stop_trainings: bool = True) -> None:
     """Delete ``user`` and everything they own (see the module docstring). Files are removed
     and live editors told once the deletion is committed. ``stop_trainings``: kill active
-    trainings first (the purge command skips accounts with active trainings instead)."""
+    trainings first (the purge command skips accounts with active trainings instead).
+    Raises ``billing.BillingUnavailable`` (and deletes nothing) if the account's subscription
+    at Paddle cannot be cancelled."""
+    billing.cancel_for_deletion(user)
     if stop_trainings:
         for run in TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES):
             training.terminate_run(run)
@@ -180,11 +186,18 @@ datasets.json            your training datasets
 training_runs.json       your trainings: network, settings, status and metrics
 usage.json               the compute (CPU time) your trainings and predictions used, per
                          month, with the API token or app that caused it, and your limits
-files.json               the uploaded files: where they are in this ZIP file, or why not
+{billing}files.json               the uploaded files: where they are in this ZIP file, or why not
 files/                   the uploaded files themselves
 
 Not included: trained weights (download them from a run in the app) and data of other people,
 e.g. their comments on your networks.
+"""
+
+
+# Only in the export of an account that bought a plan.
+BILLING_README = """billing.json             your paid plan: customer and subscription numbers at Paddle (the
+                         seller), status and dates, and compute billed beyond the allowance.
+                         Paddle keeps your payment data and invoices.
 """
 
 
@@ -453,7 +466,13 @@ def export_account(user, out: IO[bytes]) -> None:
     """Write a ZIP file with everything stored about ``user`` (see README) to ``out``."""
     with ZipFile(out, "w", compression=ZIP_DEFLATED) as archive:
         today = timezone.now().date().isoformat()
-        archive.writestr("README.txt", README.format(username=user.get_username(), date=today))
+        paid = billing.export_records(user)
+        archive.writestr(
+            "README.txt",
+            README.format(
+                username=user.get_username(), date=today, billing=BILLING_README if paid else ""
+            ),
+        )
         _json(archive, "account.json", _account(user))
         _json(archive, "projects.json", _projects(user))
         _json(archive, "memberships.json", _memberships(user))
@@ -466,6 +485,8 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "datasets.json", _datasets(user))
         _json(archive, "training_runs.json", _runs(user))
         _json(archive, "usage.json", budgets.export_records(user))
+        if paid:
+            _json(archive, "billing.json", paid)
         _json(archive, "files.json", _write_files(user, archive))
 
 
@@ -534,6 +555,7 @@ class AccountView(AccountApiView):
         serializer.is_valid(raise_exception=True)
         request.user.email = serializer.validated_data["email"]
         request.user.save(update_fields=["email"])
+        billing.email_changed(request.user)  # invoices of a paid plan go to this address
         return Response(account_data(request.user))
 
 

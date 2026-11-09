@@ -94,8 +94,8 @@ def unused_runs(cutoff: datetime) -> QuerySet[TrainingRun]:
 
 def inactive_users(cutoff: datetime) -> QuerySet:
     """Accounts nobody has logged in to, refreshed a login of or used an API token or a
-    connected app of since ``cutoff``. Staff accounts and accounts with an active training
-    are never included."""
+    connected app of since ``cutoff``. Staff accounts, accounts with an active training and
+    accounts with a paid subscription (billing.py) are never included."""
     User = get_user_model()
     return (
         User.objects.filter(is_staff=False, is_superuser=False)
@@ -104,6 +104,7 @@ def inactive_users(cutoff: datetime) -> QuerySet:
         .exclude(api_tokens__last_used_at__gte=cutoff)
         .exclude(oauth_connections__last_used_at__gte=cutoff)
         .exclude(training_runs__status__in=ACTIVE_STATUSES)
+        .exclude(billing__status__in=("active", "trialing", "past_due", "paused"))
         .order_by("pk")
     )
 
