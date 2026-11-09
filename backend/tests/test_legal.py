@@ -105,6 +105,25 @@ def test_empty_and_oversized_files_are_ignored(legal_dir, monkeypatch):
     assert pages == {"imprint": False, "privacy": False, "terms": False}
 
 
+def test_several_folders_first_one_wins(settings, tmp_path):
+    # The server: files on the server first, then the texts of its domain in the repository.
+    server, site, missing = tmp_path / "server", tmp_path / "site", tmp_path / "missing"
+    settings.LEGAL_DIR = f"{server}:{missing}:{site}"
+    write(site, "imprint", IMPRINT)
+    write(site, "privacy", PRIVACY)
+    write(server, "privacy", "# Datenschutz\n\nVom Server.\n")
+    write(server, "imprint", "  \n")  # empty: the next folder's file counts
+    client = APIClient()
+    assert client.get("/api/legal/").data["pages"] == {
+        "imprint": True,
+        "privacy": True,
+        "terms": False,
+    }
+    assert client.get("/api/legal/imprint/").data["content"] == IMPRINT.strip()
+    assert "Vom Server." in client.get("/api/legal/privacy/").data["content"]
+    assert client.get("/api/legal/terms/").status_code == 404
+
+
 def test_markdown_is_returned_as_text(legal_dir):
     """The API hands out the Markdown as it is; the app renders it without raw HTML."""
     text = "# Hi\n\n<script>alert(1)</script>\n"

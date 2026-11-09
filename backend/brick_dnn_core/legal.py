@@ -1,8 +1,10 @@
 """Imprint, privacy policy and terms of use: Markdown files the operator puts on the server.
 
 The files live in ``settings.LEGAL_DIR`` (``BRICKDNN_LEGAL_DIR``, by default ``legal/`` in the
-data directory) and are read on every request, so a changed file is online at once. A page
-whose file is missing or empty is not offered. If ``terms.md`` exists, sign-up asks to accept
+data directory) and are read on every request, so a changed file is online at once. It can name
+several folders, separated by ``:``: each page comes from the first folder that has it (the
+server takes files on the server first, then the texts of its domain in the repository). A
+page whose file is missing or empty is not offered. If ``terms.md`` exists, sign-up asks to accept
 the terms (see ``RegisterSerializer``); the acceptance is stored with the version, a hash of
 the file. Templates: ``deploy/legal/``; more in docs/privacy.md.
 """
@@ -11,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -48,15 +51,24 @@ class LegalPage:
         }
 
 
-def legal_dir() -> Path:
-    return Path(settings.LEGAL_DIR)
+def legal_dirs() -> list[Path]:
+    """The folders of ``LEGAL_DIR`` (separated by ``:``), in order."""
+    return [Path(part) for part in str(settings.LEGAL_DIR).split(os.pathsep) if part.strip()]
 
 
 def read_page(page: str) -> LegalPage | None:
-    """The page from ``<LEGAL_DIR>/<page>.md``, or None if it is not set up."""
+    """The page from ``<folder>/<page>.md`` of the first folder of ``LEGAL_DIR`` that has a
+    non-empty one, or None if it is not set up."""
     if page not in PAGES:
         return None
-    path = legal_dir() / f"{page}.md"
+    for folder in legal_dirs():
+        found = _read_file(page, folder / f"{page}.md")
+        if found is not None:
+            return found
+    return None
+
+
+def _read_file(page: str, path: Path) -> LegalPage | None:
     try:
         if not path.is_file():
             return None

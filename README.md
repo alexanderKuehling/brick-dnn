@@ -326,7 +326,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false`                 | Allow links to private network addresses (trusted local installations only) |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
-| `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …) |
+| `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …); several separated by `:`, the first with a page wins |
 | `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |
 | `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` | `0` (off)        | Delete accounts unused for this many days, with everything they own |
 | `BRICKDNN_EXPORT_MAX_FILES_MB` | `200`                      | Uploaded files included in a user's data export      |

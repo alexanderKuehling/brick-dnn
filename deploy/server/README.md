@@ -62,15 +62,19 @@ The same by hand, on your machine, in the repository:
 6. Push to `main`, or start a deploy by hand: GitHub → *Actions* → *Deploy server* →
    *Run workflow*.
 
-7. Put the imprint, privacy policy and terms of use on the server (templates and a checklist
-   in [`deploy/legal/`](../legal/README.md)):
+7. Add the imprint, privacy policy and terms of use (templates and a checklist in
+   [`deploy/legal/`](../legal/README.md)), in one of two ways:
 
-   ```bash
-   scp imprint.md privacy.md terms.md root@SERVER:/srv/brick-dnn/legal/
-   ```
+   - in the repository as `deploy/sites/<BRICKDNN_DOMAIN>/legal/{imprint,privacy,terms}.md`
+     (see [`deploy/sites/`](../sites/README.md)): they go online with the next deploy;
+   - or on the server, where they are online at once and take precedence:
 
-   They are online at once, without a deploy: the app links each page whose file exists, and
-   with `terms.md` sign-up asks to accept the terms. See [docs/privacy.md](../../docs/privacy.md).
+     ```bash
+     scp imprint.md privacy.md terms.md root@SERVER:/srv/brick-dnn/legal/
+     ```
+
+   The app links each page whose file exists, and with `terms.md` sign-up asks to accept the
+   terms. See [docs/privacy.md](../../docs/privacy.md).
 
 ## Security
 
@@ -124,7 +128,7 @@ copy it, then run the deploy again (GitHub → *Actions* → *Deploy server* →
 | --- | --- |
 | Deployed code (a checkout of `main`) | `/opt/brick-dnn` |
 | Settings | `/opt/brick-dnn/.env` |
-| Imprint, privacy policy, terms of use | `/srv/brick-dnn/legal/{imprint,privacy,terms}.md` |
+| Imprint, privacy policy, terms of use | `/srv/brick-dnn/legal/{imprint,privacy,terms}.md`, else `deploy/sites/<domain>/legal/` of the checkout |
 | Files (datasets, runs; SQLite without `DATABASE_URL`) | Docker volume `brick-dnn_brickdnn-data` |
 | HTTPS certificates | Docker volume `brick-dnn_caddy-data` |
 

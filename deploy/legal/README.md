@@ -16,8 +16,11 @@ Hintergründe (auf Englisch) stehen in [docs/privacy.md](../../docs/privacy.md).
 
 Der Ordner ist `BRICKDNN_LEGAL_DIR`:
 
-- **Server mit `deploy/server/`:** `/srv/brick-dnn/legal` (legt `setup.sh` an). Von Ihrem
-  Rechner aus:
+- **Server mit `deploy/server/`:** am einfachsten im Repository unter
+  `deploy/sites/<Ihre Domain>/legal/` (die Domain wie `BRICKDNN_DOMAIN` in der `.env` des
+  Servers, siehe [`deploy/sites/`](../sites/README.md)); sie gehen mit dem nächsten Deploy
+  online. Oder direkt auf den Server nach `/srv/brick-dnn/legal` (legt `setup.sh` an; diese
+  Dateien haben Vorrang):
 
   ```bash
   scp imprint.md privacy.md terms.md root@SERVER:/srv/brick-dnn/legal/
