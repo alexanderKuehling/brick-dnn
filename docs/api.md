@@ -114,6 +114,13 @@ For MCP clients; details in [mcp.md](mcp.md).
 | GET / POST    | `/api/projects/<id>/members/`          | List members / invite `{user: username or e-mail, role}` (owner) |
 | PATCH / DELETE| `/api/projects/<id>/members/<member>/` | Change the role (owner) / remove (owner) or leave (the member) |
 | POST          | `/api/projects/<id>/link/`             | `{enabled, regenerate?}`: view link on or off (owner) |
+| GET / POST    | `/api/projects/<id>/versions/`         | History, newest first / name the current state `{label}` (editors) |
+| GET / PATCH   | `/api/projects/<id>/versions/<v>/`     | One version with its graph / rename it `{label}` (editors) |
+| POST          | `/api/projects/<id>/versions/<v>/restore/` | Make it the current state (editors)              |
+| GET / POST    | `/api/projects/<id>/comments/`         | Comments (`?node=<layer id>`) / comment `{text, node_id?, parent?}` (everyone with access) |
+| PATCH / DELETE| `/api/projects/<id>/comments/<c>/`     | `{text}` (author), `{resolved}` (author, editors, owner) / delete (author, owner) |
+| GET / POST    | `/api/projects/<id>/data/`             | Datasets and preparations shared in the project / add your own `{kind: "dataset" or "prep", id}` (owner, editors) |
+| DELETE        | `/api/projects/<id>/data/<kind>/<item>/` | Stop sharing it there (its owner or the project's owner) |
 | GET           | `/api/shared/<token>/`                 | A network shared by link (no login needed)           |
 | POST          | `/api/shared/<token>/duplicate/`       | Copy a linked network into your account              |
 
@@ -129,6 +136,51 @@ it; turning it on again creates a new one.
 **Conflicts.** `version` goes up with every change. A `PATCH` with `version` that is not the
 current one answers `409` with `{detail, project}` (the current state) and saves nothing;
 without `version`, the save overwrites.
+
+**History.** Every change keeps a copy of the new state. Changes by the same person within ten
+minutes update the latest automatic entry; at most 200 automatic entries are kept, named ones
+for good. A version is `{id, version, kind: "auto" | "named" | "restore", label, name,
+num_layers, created_by, created_at, updated_at}` (plus `description` and `graph` when fetched
+alone). Restoring is a normal change, so it is undone by restoring another version.
+
+**Comments.** `{id, parent, node_id, text, author: {id, username}, resolved, resolved_by,
+created_at, updated_at}`. Replies (`parent`) belong to the layer of their thread; deleting a
+comment deletes its replies.
+
+**Shared data and runs.** Members see datasets shared in their projects in
+`GET /api/training/datasets/` (with `owner`, `mine` and `shared_in`) and can train on them;
+editors of the project can change shared data preparations (not their source) and export
+them. A training started with `"project": <id>` (owner or editor of it) belongs to the
+project: members see it (`GET /api/training/runs/?project=<id>`, with `project` and
+`started_by`), who started it and the project's editors can stop it, who started it and the
+project's owner can delete it.
+
+### Live editing (WebSocket)
+
+`ws(s)://<host>/api/ws/projects/<id>/` lets everyone with access work on a project at the same
+time. Send `{"type": "auth", "token": "<JWT access token>"}` first; the server answers
+`{"type": "hello", project: {id, name, description, graph, version}, role, client_id, user}`.
+Then:
+
+| Client sends | |
+| --- | --- |
+| `{"type": "ops", "id": "<your message id>", "ops": [...]}` | Changes (owner and editors) |
+| `{"type": "presence", "state": {...}}` | E.g. selected layers or a layer being dragged; passed on, not stored |
+| `{"type": "ping"}` | Answered with `pong` |
+
+Ops: `add_node {node}`, `update_node {id, set: {params?, position?, name?, type?}}` (params are
+merged key by key, `null` removes a key), `remove_node {id}` (with its connections),
+`add_edge {source, target}`, `remove_edge {source, target}`, `set_meta {name?, description?}`.
+The server applies them in order to the stored graph and sends
+`{"type": "ops", ops, version, by, client_id, id}` to everyone, the sender included. Ops that
+cannot be applied (e.g. a change to a layer someone deleted) are left out; if none could be
+applied, the sender gets `rejected`.
+
+Other messages from the server: `joined` / `left` (who is here), `presence`, `replaced` (the
+whole project changed: saved through the REST API or MCP, or a version was restored),
+`comment` (`action`: created, updated or deleted), `history`, `access` (your role changed;
+`null`: removed), `deleted`, `error`. Close codes: 4401 not logged in, 4403 access removed,
+4404 no such project (or no access), 4429 too many messages.
 
 ## Training (login required)
 

@@ -8,6 +8,16 @@
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
+- **Live editing.** Everyone with access works on a network at the same time over a WebSocket
+  (`/api/ws/projects/<id>/`, Django Channels): changes are applied on the server in order and
+  reach everyone at once, and you see who else is here and what they select. Docker Compose
+  runs a small realtime service and Redis for it; `manage.py runserver` needs neither.
+- **Version history and comments.** Every change is kept (merged per person and session);
+  name versions and restore any of them. Comment on a network or a layer, reply and resolve
+  threads, viewers too.
+- **Shared runs and data.** Trainings started from a shared network are visible to all its
+  members; datasets and data preparations can be shared in a network, so members train on
+  them and editors improve the preparation.
 
 ## 1.1.0 (2026-11-09)
 
