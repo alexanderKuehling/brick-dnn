@@ -6,8 +6,15 @@ interface AuthContextValue {
   /** False until the stored session (if any) has been checked. */
   ready: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  /** `acceptTerms`: the user agreed to the server's terms of use (if it has some). */
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    acceptTerms?: boolean
+  ) => Promise<void>;
+  /** `endSession: false` only forgets the login here (e.g. after deleting the account). */
+  logout: (endSession?: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -48,17 +55,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(await api.me());
   }, []);
 
-  const register = useCallback(async (username: string, email: string, password: string) => {
-    const { user: created, access, refresh } = await api.register(username, email, password);
-    setTokens({ access, refresh });
-    setUser(created);
-  }, []);
+  const register = useCallback(
+    async (username: string, email: string, password: string, acceptTerms = false) => {
+      const {
+        user: created,
+        access,
+        refresh,
+      } = acceptTerms
+        ? await api.register(username, email, password, true)
+        : await api.register(username, email, password);
+      setTokens({ access, refresh });
+      setUser(created);
+    },
+    []
+  );
 
-  const logout = useCallback(() => {
+  const logout = useCallback((endSession = true) => {
     const current = getTokens();
     setTokens(null);
     setUser(null);
-    if (current) {
+    if (current && endSession) {
       api.logout(current.refresh).catch(() => undefined);
     }
   }, []);

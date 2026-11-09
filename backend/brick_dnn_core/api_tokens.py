@@ -17,6 +17,7 @@ from rest_framework import authentication, exceptions, permissions
 from rest_framework.request import Request
 
 from .models import ApiToken, OAuthConnection
+from .retention import record_activity
 
 PREFIX = "bdnn_"
 # Shown in the list of tokens, so users can tell them apart.
@@ -93,6 +94,7 @@ class ApiTokenAuthentication(authentication.BaseAuthentication):
             token.last_used_at = now
             if token.connection_id is not None:
                 OAuthConnection.objects.filter(pk=token.connection_id).update(last_used_at=now)
+            record_activity(token.owner_id)
         return token.owner, token
 
     def authenticate_header(self, request: Request) -> str:

@@ -62,6 +62,16 @@ The same by hand, on your machine, in the repository:
 6. Push to `main`, or start a deploy by hand: GitHub → *Actions* → *Deploy server* →
    *Run workflow*.
 
+7. Put the imprint, privacy policy and terms of use on the server (templates and a checklist
+   in [`deploy/legal/`](../legal/README.md)):
+
+   ```bash
+   scp imprint.md privacy.md terms.md root@SERVER:/srv/brick-dnn/legal/
+   ```
+
+   They are online at once, without a deploy: the app links each page whose file exists, and
+   with `terms.md` sign-up asks to accept the terms. See [docs/privacy.md](../../docs/privacy.md).
+
 ## Security
 
 - The firewall lets only SSH, HTTP and HTTPS in; SSH accepts keys only. Security updates are
@@ -80,6 +90,7 @@ answers while they run, the containers get different shares of the server:
 | --- | --- |
 | `backend`: Django with all its trainings | at most 3/4 of the CPUs and of the memory, no swap |
 | `realtime` (live editing, Daphne) and `redis` | small fixed limits: half a CPU and 256 MB, 64 MB |
+| `cleanup` (deletes old data once a day, sleeps in between) | half a CPU and 256 MB |
 | `caddy` and `frontend` (nginx) | the other quarter, shared with the system; the CPU first when it is busy, killed last |
 
 - Every deploy computes the limits from the size of the server, so they follow a resize
@@ -113,6 +124,7 @@ copy it, then run the deploy again (GitHub → *Actions* → *Deploy server* →
 | --- | --- |
 | Deployed code (a checkout of `main`) | `/opt/brick-dnn` |
 | Settings | `/opt/brick-dnn/.env` |
+| Imprint, privacy policy, terms of use | `/srv/brick-dnn/legal/{imprint,privacy,terms}.md` |
 | Files (datasets, runs; SQLite without `DATABASE_URL`) | Docker volume `brick-dnn_brickdnn-data` |
 | HTTPS certificates | Docker volume `brick-dnn_caddy-data` |
 
@@ -125,7 +137,18 @@ $C logs -f --tail 100 backend  # logs
 docker stats --no-stream       # CPU and memory per container
 nano .env && $C up -d          # change settings
 sudo -u deploy brickdnn-deploy <commit>   # deploy another commit of main, e.g. an older one
+$C logs cleanup                # what the daily clean-up deleted
+$C exec backend python manage.py purge_old_data --dry-run   # what it would delete now
 ```
+
+Old data is only deleted automatically if `.env` sets `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS`
+or `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` (then `$C up -d`); see
+[docs/privacy.md](../../docs/privacy.md). Docker keeps at most 30 MB of logs per container,
+and nginx logs shortened IP addresses only.
+
+Servers set up before the legal pages existed: create the folder once with
+`ssh root@SERVER install -d -m 755 -o deploy -g deploy /srv/brick-dnn/legal` (the next deploy
+would otherwise create it, owned by root).
 
 The server keeps files on its disk; turn on Hetzner's backups (or back up the Docker volume
 `brick-dnn_brickdnn-data`) to keep them safe. Accounts and networks are in the database.

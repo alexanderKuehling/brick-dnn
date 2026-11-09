@@ -236,6 +236,8 @@ REST_FRAMEWORK = {
         # OAuth app registration, tokens and revocation (per IP address: apps like Claude
         # call it from their servers, for all their users).
         "oauth": os.environ.get("BRICKDNN_OAUTH_RATE", "120/minute"),
+        # Changing the e-mail address or password, exporting the data, deleting the account.
+        "account": os.environ.get("BRICKDNN_ACCOUNT_RATE", "30/hour"),
     },
 }
 
@@ -253,6 +255,21 @@ PUBLIC_URL = os.environ.get("BRICKDNN_PUBLIC_URL", "").rstrip("/")
 
 # Set to "false" to disable public sign-up (e.g. for a private instance).
 ALLOW_REGISTRATION = env_bool("BRICKDNN_ALLOW_REGISTRATION", True)
+
+# Privacy and legal pages (see docs/privacy.md). The imprint, privacy policy and terms of use
+# are Markdown files in LEGAL_DIR (imprint.md, privacy.md, terms.md), read on every request:
+# a page whose file is missing is not offered. With terms.md, sign-up asks to accept them.
+LEGAL_DIR = Path(os.environ.get("BRICKDNN_LEGAL_DIR", DATA_DIR / "legal"))
+# Automatic deletion by `manage.py purge_old_data` (the cleanup service of Docker Compose runs
+# it daily). 0 or unset: off. Data sources, datasets and finished training runs nobody has
+# used for this many days:
+DELETE_UNUSED_UPLOADS_DAYS = int(os.environ.get("BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS") or 0)
+# Accounts (with everything they own) that nobody has logged in to or used for this many days.
+# Staff accounts are never deleted automatically.
+DELETE_INACTIVE_ACCOUNTS_DAYS = int(os.environ.get("BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS") or 0)
+# The data export of an account includes uploaded files up to this many MB in total; larger
+# files are listed only.
+EXPORT_MAX_FILES_MB = float(os.environ.get("BRICKDNN_EXPORT_MAX_FILES_MB", "200"))
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

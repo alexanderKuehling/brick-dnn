@@ -77,6 +77,7 @@ from brickdnn.training.tuning import (
 )
 
 from .models import Dataset, TrainingRun
+from .retention import touch
 from .serializers import validate_graph_document
 
 try:  # POSIX only: serialises run starts across server processes
@@ -417,6 +418,7 @@ def resolve_dataset(user, ref: Any) -> ResolvedDataset:
         path = dataset_path(dataset)
         if not path.exists():
             raise TrainingInputError("The files of this dataset are missing. Upload it again.")
+        touch(dataset)
         info = DatasetInfo.from_dict(dataset.info)
         summary = {"kind": "upload", "id": dataset.pk, "name": dataset.name}
         return ResolvedDataset(info, path, dataset, summary)

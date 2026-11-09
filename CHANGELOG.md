@@ -5,6 +5,27 @@
 ### Added
 - After the first training of a user that completes, a notification asks once (per browser)
   for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
+- **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
+  - *Legal pages:* an imprint, privacy policy and terms of use are Markdown files the
+    operator puts into `BRICKDNN_LEGAL_DIR` (on the server `/srv/brick-dnn/legal`), shown at
+    `/imprint`, `/privacy` and `/terms` with a safe Markdown subset (no HTML) and linked from
+    the header, the phone menu and the login and sign-up pages when they exist. German
+    templates and a checklist of what the privacy policy must cover are in `deploy/legal/`.
+  - *Terms at sign-up:* with terms of use, sign-up asks to accept them; the acceptance is
+    stored with the versions of the terms and the privacy policy.
+  - *Account page* (`/account`): change the e-mail address and the password, download
+    everything stored about the account as a ZIP file (JSON and the uploaded files), delete
+    the account with everything it owns (password and username to confirm; running trainings
+    are stopped, files removed, logins ended, live editors told).
+  - *Automatic deletion (off by default):* `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` deletes data
+    sources, datasets and finished runs nobody has used for that long,
+    `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` inactive accounts. `manage.py purge_old_data
+    [--dry-run]` does it; a small `cleanup` service in Docker Compose runs it daily and also
+    removes expired logins.
+  - Uploads in the Data tab and for training ask not to upload personal or confidential data.
+  - Docker keeps at most 3 × 10 MB of logs per container; nginx logs shortened IP addresses
+    and paths without query strings; the app is sent with `Referrer-Policy`,
+    `X-Content-Type-Options` and `Permissions-Policy` headers.
 - The Input layer follows the training data: choosing a dataset (also with *Train with this
   data* in the Data tab) sets the Input shape and the number of outputs when only those keep
   the network from fitting, with a notification and *Undo*; an empty canvas gets a small
