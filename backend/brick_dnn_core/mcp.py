@@ -38,6 +38,7 @@ from brickdnn.training.config import TrainingConfig
 
 from . import data_service as data
 from . import downloads, history
+from . import mcp_compact as compact
 from . import mcp_data as data_answers
 from . import training_service as training
 from .api_tokens import uses_api_token
@@ -56,9 +57,7 @@ from .projects import delete_project as remove_project
 from .retention import touch
 from .serializers import (
     DataPrepSerializer,
-    DatasetSerializer,
     ProjectSerializer,
-    RunDetailSerializer,
     RunSummarySerializer,
 )
 from .shared_data import (
@@ -107,7 +106,10 @@ preview_data_prep (column profiles, sample rows and the readiness check: errors,
 and fixes) and apply_readiness_fix or update_data_prep (step types: list_prep_steps) until
 readiness says ready. export_training_dataset then gives the dataset reference for
 check_training and start_training; predict takes the prepared feature columns it lists.
-get_data_prep_script returns the pandas script that prepares new data the same way."""
+get_data_prep_script returns the pandas script that prepares new data the same way.
+
+Answers are compact: lists are capped with their totals, and arguments such as include,
+columns_offset or types ask for more."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -257,12 +259,22 @@ def _require_training() -> None:
         raise ToolError(training.DISABLED_REASON)
 
 
+@contextlib.contextmanager
+def _compact_errors():
+    try:
+        yield
+    except compact.CompactError as exc:
+        raise ToolError(str(exc)) from None
+
+
 def list_layer_types(request: Request, args: dict[str, Any]) -> Any:
-    return service.layers()
+    with _compact_errors():
+        return compact.layer_catalog(service.layers(), args.get("types"))
 
 
 def list_examples(request: Request, args: dict[str, Any]) -> Any:
-    return service.examples()
+    with _compact_errors():
+        return compact.examples(service.examples(), args.get("id"))
 
 
 def analyze_network(request: Request, args: dict[str, Any]) -> Any:
@@ -350,12 +362,12 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "reason": capabilities["reason"],
         "devices": capabilities["devices"],
         "builtin_datasets": capabilities["builtin_datasets"],
-        # Your own datasets and the ones shared in your projects (see "owner" and "mine").
-        "your_datasets": DatasetSerializer(
-            visible_datasets(request.user).select_related("owner", "prepared_from"),
-            many=True,
-            context={"user": request.user},
-        ).data,
+        # Your own datasets and the ones shared in your projects (see "owner" and "mine"),
+        # without their columns (get_dataset).
+        "your_datasets": [
+            compact.dataset_summary(dataset, request.user)
+            for dataset in visible_datasets(request.user).select_related("owner")
+        ],
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
@@ -363,6 +375,23 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
         "upload_dataset_max_mb": _megabytes(upload_limit()),
     }
+
+
+def get_dataset(request: Request, args: dict[str, Any]) -> Any:
+    dataset_id = _int_id(args, "a dataset")
+    dataset = (
+        visible_datasets(request.user)
+        .select_related("owner", "prepared_from")
+        .filter(pk=dataset_id)
+        .first()
+    )
+    if dataset is None:
+        raise ToolError("No such dataset. get_training_options lists the user's datasets.")
+    touch(dataset)
+    with _compact_errors():
+        return compact.dataset_detail(
+            dataset, request.user, args.get("columns_limit"), args.get("columns_offset")
+        )
 
 
 def upload_limit() -> int:
@@ -419,7 +448,7 @@ def upload_dataset(request: Request, args: dict[str, Any]) -> Any:
     if project is not None:
         dataset.projects.add(project)
     return {
-        "dataset": DatasetSerializer(dataset, context={"user": request.user}).data,
+        "dataset": compact.dataset_detail(dataset, request.user),
         "reference": {"kind": "upload", "id": dataset.pk},
         "next": "Pass the reference as dataset to check_training and start_training.",
     }
@@ -879,7 +908,11 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
         config = training.parse_config(args.get("config"))
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
-    return training.check(args["graph"], dataset, config).to_dict()
+    result = training.check(args["graph"], dataset, config).to_dict()
+    if isinstance(result.get("plan"), dict):  # up to 1,000 class names
+        plan = result["plan"]
+        plan["class_names"] = compact.capped_names(plan.get("class_names"))
+    return result
 
 
 class _TrainingScope:
@@ -916,11 +949,27 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
     runs = visible_runs(request.user).select_related("owner")
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
-    return RunSummarySerializer(runs, many=True).data
+    limit = args.get("limit", 20)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ToolError("'limit' must be a whole number from 1 to 100.")
+    if args.get("status") is not None:
+        runs = runs.filter(status=args["status"])
+    if args.get("project_id") is not None:
+        runs = runs.filter(project_id=_data_id(args, "project_id", "a project"))
+    runs = runs.order_by("-created_at")
+    total = runs.count()
+    shown = [compact.run_summary(run) for run in runs[:limit]]
+    answer: dict[str, Any] = {"total": total, "runs": shown}
+    if total > len(shown):
+        answer["note"] = f"The newest {len(shown)} of {total} runs; raise limit to see more."
+    return answer
 
 
 def get_training_run(request: Request, args: dict[str, Any]) -> Any:
-    return RunDetailSerializer(_run(request, args)).data
+    run = _run(request, args)
+    with _compact_errors():
+        includes = compact.run_includes(args.get("include"))
+        return compact.run_detail(run, training.state_of(run), includes, args.get("log_lines"))
 
 
 def stop_training(request: Request, args: dict[str, Any]) -> Any:
@@ -1006,17 +1055,26 @@ TOOLS: dict[str, Tool] = {
             "classical models such as GaussianProcessRegressor or SVC) with their parameters: "
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
-            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes.",
+            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes. "
+            "Compact by default (one line per parameter); types gives the full specs with "
+            "help texts of some types.",
             list_layer_types,
-            {},
+            {
+                "types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Full specs of these types, e.g. ['Conv2d', 'LSTM']",
+                }
+            },
         ),
         Tool(
             "list_examples",
             "List example networks",
-            "Example networks with their graphs (MLP, CNN, ResNet block, LSTM, Transformer, "
-            "Gaussian process regression, SVM classifier, …): good starting points.",
+            "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
+            "regression, SVM classifier, …): good starting points. Lists names and "
+            "descriptions; id gives one example with its graph.",
             list_examples,
-            {},
+            {"id": {"type": "string", "description": "An example id: returns its graph"}},
         ),
         Tool(
             "analyze_network",
@@ -1102,9 +1160,25 @@ TOOLS: dict[str, Tool] = {
             "PyTorch; classical: Gaussian processes and SVMs with scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "
-            "the hyperparameter search options (tuning, neural networks only).",
+            "the hyperparameter search options (tuning, neural networks only). Datasets are "
+            "summaries (rows, features, target, task, classes, reference); get_dataset shows "
+            "the columns of one.",
             get_training_options,
             {},
+        ),
+        Tool(
+            "get_dataset",
+            "Show a dataset",
+            "One training dataset: rows, task, target, the class names (capped) and its "
+            "columns, a page at a time (columns_limit, default 50; columns_offset), with the "
+            "total in n_columns. The features come first, the target is the last column.",
+            get_dataset,
+            {
+                "id": {"type": "integer", "description": "Dataset id from get_training_options"},
+                "columns_limit": {"type": "integer", "minimum": 0, "maximum": 500},
+                "columns_offset": {"type": "integer", "minimum": 0},
+            },
+            ("id",),
         ),
         Tool(
             "upload_dataset",
@@ -1525,18 +1599,50 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "list_training_runs",
             "List training runs",
-            "The user's training runs with status, progress and final metrics, newest first.",
+            "The user's training runs, newest first: status, epochs done, final metrics, one "
+            "line each, with the total. At most limit runs (default 20); status and "
+            "project_id filter them.",
             list_training_runs,
-            {},
+            {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "starting",
+                        "preparing",
+                        "running",
+                        "completed",
+                        "stopped",
+                        "failed",
+                    ],
+                },
+                "project_id": {"type": "integer", "description": "Runs of this project only"},
+            },
         ),
         Tool(
             "get_training_run",
             "Show a training run",
-            "One training run with its settings, its history of metrics per epoch and its "
-            "status. Classical models have one entry (the fit) and state.classical with the "
-            "fitted kernel, log marginal likelihood or support vectors.",
+            "One training run, as a summary by default: status and message, settings, epochs "
+            "done, the best epoch, the final and test metrics (loss, accuracy, RMSE, R²), "
+            "the rows per split, tuning (trials and the best one), classical (the fitted "
+            "kernel, log marginal likelihood or support vectors) and the end of the log if "
+            "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
+            "epochs plus the best and the last), graph, plan, log (the last log_lines "
+            "lines), trials and preprocessing.",
             get_training_run,
-            {"id": {"type": "string"}},
+            {
+                "id": {"type": "string"},
+                "include": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": list(compact.RUN_INCLUDES)},
+                },
+                "log_lines": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": compact.MAX_LOG_LINES,
+                    "description": f"With include log (default {compact.DEFAULT_LOG_LINES})",
+                },
+            },
             ("id",),
         ),
         Tool(

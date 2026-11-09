@@ -159,8 +159,13 @@ def test_layers_examples_analyze_and_code(mcp):
     assert any(layer["type"] == "Linear" for layer in json.loads(text)["layers"])
     assert "structuredContent" in result
 
-    _, text = call(mcp, "list_examples")
-    assert json.loads(text)[0]["graph"]["nodes"]
+    result, _ = call(mcp, "list_examples")
+    first = result["structuredContent"]["examples"][0]
+    assert "graph" not in first and first["name"]
+    result, _ = call(mcp, "list_examples", id=first["id"])
+    assert result["structuredContent"]["graph"]["nodes"]
+    result, text = call(mcp, "list_examples", id="nope")
+    assert result["isError"] is True and first["id"] in text
 
     result, text = call(mcp, "analyze_network", graph=GRAPH)
     assert result["structuredContent"]["valid"] is True
@@ -254,8 +259,9 @@ def test_training(mcp, user, training_dir):  # noqa: F811
             break
         time.sleep(0.05)
     assert status == "completed"
-    _, text = call(mcp, "list_training_runs")
-    assert [run["name"] for run in json.loads(text)] == ["MCP run"]
+    result, _ = call(mcp, "list_training_runs")
+    listing = result["structuredContent"]
+    assert listing["total"] == 1 and [run["name"] for run in listing["runs"]] == ["MCP run"]
 
     result, text = call(mcp, "get_training_run", id="not-a-uuid")
     assert result["isError"] is True
