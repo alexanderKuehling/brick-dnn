@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from brickdnn import EXAMPLES, analyze
+
+# Examples by family: neural networks (PyTorch) and classical models (scikit-learn).
+NEURAL_EXAMPLES = sorted(k for k, v in EXAMPLES.items() if analyze(v["graph"]).family == "neural")
+CLASSICAL_EXAMPLES = sorted(set(EXAMPLES) - set(NEURAL_EXAMPLES))
+
 
 def chain(*layers: tuple[str, dict[str, Any]]) -> dict[str, Any]:
     """Build a sequential graph: chain(("Input", {...}), ("Linear", {...}), ...)."""

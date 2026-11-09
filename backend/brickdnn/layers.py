@@ -10,6 +10,11 @@ Each layer knows
 Shapes never include the batch dimension: an MNIST image is ``(1, 28, 28)``,
 a sequence of 32 token ids is ``(32,)``.
 
+Besides the neural layers there are *classical* bricks (scikit-learn): kernels for Gaussian
+processes, whose output is a kernel instead of a tensor, and classical models (Gaussian
+processes, support vector machines) that take the features straight from the Input layer.
+See the end of this module and ``docs/graph-format.md``.
+
 To add a new layer, subclass :class:`Layer`, fill in the class attributes and
 decorate it with :func:`register`. See ``docs/adding-a-layer.md``.
 """
@@ -197,7 +202,21 @@ def fmt_float(value: float) -> str:
 
 REGISTRY: dict[str, type[Layer]] = {}
 
-CATEGORIES = ("Input", "Basic", "Convolution", "Normalization", "Sequence", "Merge")
+CATEGORIES = (
+    "Input",
+    "Basic",
+    "Convolution",
+    "Normalization",
+    "Sequence",
+    "Merge",
+    "Kernels",
+    "Classical models",
+)
+# What flows out of a brick (and so along each of its connections): data, or a kernel of a
+# Gaussian process.
+OUTPUT_KINDS = ("tensor", "kernel")
+# Neural layers (PyTorch), classical bricks (scikit-learn), or both (the Input layer).
+FAMILIES = ("neural", "classical", "shared")
 
 
 def register(cls: type[Layer]) -> type[Layer]:
@@ -234,6 +253,8 @@ class Layer:
     has_module: ClassVar[bool] = True
     input_dtypes: ClassVar[tuple[str, ...]] = ("float",)
     name_prefix: ClassVar[str] = "layer"
+    output_kind: ClassVar[str] = "tensor"
+    family: ClassVar[str] = "neural"
 
     def __init__(self, raw_params: dict[str, Any] | None = None):
         raw_params = raw_params or {}
@@ -255,7 +276,26 @@ class Layer:
             "params": [p.to_dict() for p in cls.params],
             "min_inputs": cls.min_inputs,
             "max_inputs": cls.max_inputs,
+            "family": cls.family,
+            "output_kind": cls.output_kind,
+            "input_slots": cls.input_slots(),
         }
+
+    @classmethod
+    def input_slots(cls) -> list[dict[str, Any]]:
+        """What the brick takes: one entry per kind of incoming connection, with how many
+        connections of that kind it needs (``min``) and accepts (``max``, None: any)."""
+        if cls.max_inputs == 0:
+            return []
+        return [
+            {
+                "name": "input",
+                "label": "Input",
+                "kind": "tensor",
+                "min": cls.min_inputs,
+                "max": cls.max_inputs,
+            }
+        ]
 
     @classmethod
     def param(cls, name: str) -> Param:
@@ -282,7 +322,7 @@ class Layer:
         """Validate the input shapes, fill in ``auto`` params, return the output shape."""
         raise NotImplementedError
 
-    def num_params(self) -> int:
+    def num_params(self) -> int | None:
         return 0
 
     def init_code(self) -> str:
@@ -362,6 +402,7 @@ class Input(Layer):
     max_inputs = 0
     has_module = False
     name_prefix = "x"
+    family = "shared"
 
     def infer(self, inputs: list[Shape]) -> Shape:
         if len(self.p["shape"]) > 4:
@@ -1114,6 +1155,693 @@ class Concat(Layer):
         dim = self.p["dim"]
         torch_dim = dim + 1 if dim >= 0 else dim  # skip the batch dimension
         return [f"{out} = torch.cat([{', '.join(inputs)}], dim={torch_dim})"]
+
+
+# --------------------------------------------------------------------------- #
+# Kernels of Gaussian processes (scikit-learn)
+# --------------------------------------------------------------------------- #
+
+# scikit-learn optimises kernel hyperparameters within these bounds unless told otherwise.
+DEFAULT_BOUNDS = (1e-5, 1e5)
+HYPERPARAMETER_MODES = ("optimize", "custom bounds", "fixed")
+
+
+@dataclass(frozen=True)
+class KernelExpr:
+    """A scikit-learn kernel as code: a call such as ``RBF(length_scale=1.0)`` (``name``
+    and ``args``, a class of ``sklearn.gaussian_process.kernels``) or the sum or product
+    (``op`` "+" or "*") of other kernels (``terms``)."""
+
+    name: str = ""
+    args: tuple[str, ...] = ()
+    op: str = ""
+    terms: tuple[KernelExpr, ...] = ()
+    hint: str = "kernel"  # variable name for this kernel in generated code
+    hyperparameters: int = 0  # hyperparameters of this call that the GP optimises
+
+    @property
+    def precedence(self) -> int:
+        """3 for a call, 2 for a product, 1 for a sum (like Python's operators)."""
+        return {"": 3, "*": 2, "+": 1}[self.op]
+
+    def leaves(self) -> list[KernelExpr]:
+        """The calls, in the order in which :meth:`code` writes them."""
+        if not self.op:
+            return [self]
+        return [leaf for term in self.terms for leaf in term.leaves()]
+
+    def call(self) -> str:
+        return f"{self.name}({', '.join(self.args)})"
+
+    def code(self, names: list[str] | None = None) -> str:
+        """Python code for the kernel; ``names`` replace the calls (one per leaf, in order)."""
+        return self._code(list(names) if names is not None else None)
+
+    def _code(self, names: list[str] | None) -> str:
+        if not self.op:
+            return names.pop(0) if names is not None else self.call()
+        parts = []
+        for term in self.terms:
+            text = term._code(names)
+            parts.append(f"({text})" if term.precedence < self.precedence else text)
+        return f" {self.op} ".join(parts)
+
+    def split(self, names: list[str] | None = None) -> list[str]:
+        """The code of the top-level terms with their operators, for line breaks:
+        ``["a * b", "+ c"]``."""
+        if not self.op:
+            return [self.code(names)]
+        queue = list(names) if names is not None else None
+        parts = []
+        for index, term in enumerate(self.terms):
+            text = term._code(queue)
+            text = f"({text})" if term.precedence < self.precedence else text
+            parts.append(text if index == 0 else f"{self.op} {text}")
+        return parts
+
+    def classes(self) -> list[str]:
+        """The kernel classes the code uses (sorted), for the import line."""
+        return sorted({leaf.name for leaf in self.leaves()})
+
+    def count(self) -> int:
+        """Hyperparameters of the whole kernel that the GP optimises."""
+        return sum(leaf.hyperparameters for leaf in self.leaves())
+
+
+def combine(op: str, terms: list[KernelExpr]) -> KernelExpr:
+    return KernelExpr(op=op, terms=tuple(terms))
+
+
+def _bounds_params(name: str, label: str) -> tuple[Param, ...]:
+    return (
+        Param(
+            f"{name}_min",
+            f"{label}: lower bound",
+            "float",
+            default=DEFAULT_BOUNDS[0],
+            show_if=("hyperparameters", "custom bounds"),
+        ),
+        Param(
+            f"{name}_max",
+            f"{label}: upper bound",
+            "float",
+            default=DEFAULT_BOUNDS[1],
+            show_if=("hyperparameters", "custom bounds"),
+        ),
+    )
+
+
+HYPERPARAMETERS_PARAM = Param(
+    "hyperparameters",
+    "Hyperparameters",
+    "select",
+    default="optimize",
+    options=HYPERPARAMETER_MODES,
+    help=(
+        "optimize: the Gaussian process fits them to the training data, starting from the "
+        "values above (within 1e-05 … 1e+05); custom bounds: within the bounds below; "
+        "fixed: they keep these values."
+    ),
+)
+
+
+class Kernel(Layer):
+    """A kernel brick: no data input, its output is a kernel for a Gaussian process.
+
+    ``hyper`` lists the names of the kernel's hyperparameters, which are also the names of
+    their parameters (initial values) and of their scikit-learn arguments.
+    """
+
+    category = "Kernels"
+    family = "classical"
+    output_kind = "kernel"
+    min_inputs = 0
+    max_inputs = 0
+    has_module = False
+    sklearn_name: ClassVar[str]
+    hyper: ClassVar[tuple[str, ...]] = ()
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        mode = self.p.get("hyperparameters", "fixed")
+        for name in self.hyper:
+            label = self.param(name).label
+            value = self.p[name]
+            if value <= 0:
+                raise LayerError(f"{label} must be greater than 0.")
+            if mode == "optimize" and not DEFAULT_BOUNDS[0] <= value <= DEFAULT_BOUNDS[1]:
+                raise LayerError(
+                    f"{label} {value:g} is outside the bounds 1e-05 … 1e+05 within which the "
+                    "Gaussian process optimises it. Choose 'custom bounds' or 'fixed'."
+                )
+            if mode == "custom bounds":
+                low, high = self.p[f"{name}_min"], self.p[f"{name}_max"]
+                if not 0 < low < high:
+                    raise LayerError(
+                        f"The bounds of {label} must be positive, the lower one below the "
+                        "upper one."
+                    )
+                if not low <= value <= high:
+                    raise LayerError(f"{label} {value:g} is outside its bounds {low:g} … {high:g}.")
+
+    def infer(self, inputs: list[Shape]) -> Shape:  # pragma: no cover - kernels have no shape
+        raise LayerError(f"{self.label} is a kernel, not a layer.")
+
+    def num_params(self) -> int:
+        """The hyperparameters the Gaussian process optimises (none if they are fixed)."""
+        return 0 if self.p.get("hyperparameters") == "fixed" else len(self.hyper)
+
+    def extra_args(self) -> list[str]:
+        """Arguments besides the hyperparameters, e.g. ``nu=1.5``."""
+        return []
+
+    def kernel(self, terms: list[KernelExpr]) -> KernelExpr:
+        """The kernel of this brick (``terms``: the kernels connected to it)."""
+        args = [f"{name}={fmt_float(self.p[name])}" for name in self.hyper]
+        args += self.extra_args()
+        mode = self.p.get("hyperparameters")
+        for name in self.hyper:
+            if mode == "fixed":
+                args.append(f'{name}_bounds="fixed"')
+            elif mode == "custom bounds":
+                low, high = fmt_float(self.p[f"{name}_min"]), fmt_float(self.p[f"{name}_max"])
+                args.append(f"{name}_bounds=({low}, {high})")
+        return KernelExpr(
+            name=self.sklearn_name,
+            args=tuple(args),
+            hint=self.name_prefix,
+            hyperparameters=self.num_params(),
+        )
+
+
+def _length_scale() -> Param:
+    return Param(
+        "length_scale",
+        "Length scale",
+        "float",
+        default=1.0,
+        help="How far apart (in standardised feature units) inputs still look alike. "
+        "Initial value: the Gaussian process optimises it unless it is fixed.",
+    )
+
+
+@register
+class RBF(Kernel):
+    type = "RBF"
+    label = "RBF kernel"
+    description = (
+        "Radial basis function (squared exponential) kernel for smooth functions. "
+        "The most common kernel of Gaussian processes."
+    )
+    sklearn_name = "RBF"
+    hyper = ("length_scale",)
+    params = (
+        _length_scale(),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("length_scale", "Length scale"),
+    )
+    name_prefix = "rbf"
+
+
+@register
+class Matern(Kernel):
+    type = "Matern"
+    label = "Matérn kernel"
+    description = (
+        "Like RBF, but for rougher functions: ν = 0.5 is the exponential kernel, "
+        "1.5 gives once and 2.5 twice differentiable functions."
+    )
+    sklearn_name = "Matern"
+    hyper = ("length_scale",)
+    params = (
+        _length_scale(),
+        Param(
+            "nu",
+            "Smoothness ν",
+            "select",
+            default="1.5",
+            options=("0.5", "1.5", "2.5"),
+            help="Smaller values give rougher functions (ν is not optimised).",
+        ),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("length_scale", "Length scale"),
+    )
+    name_prefix = "matern"
+
+    def extra_args(self) -> list[str]:
+        return [f"nu={self.p['nu']}"]
+
+
+@register
+class RationalQuadratic(Kernel):
+    type = "RationalQuadratic"
+    label = "Rational quadratic kernel"
+    description = "A mixture of RBF kernels of different length scales; alpha weights the mixture."
+    sklearn_name = "RationalQuadratic"
+    hyper = ("length_scale", "alpha")
+    params = (
+        _length_scale(),
+        Param(
+            "alpha",
+            "Alpha",
+            "float",
+            default=1.0,
+            help="Weighting of large and small length scales (large values: like RBF).",
+        ),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("length_scale", "Length scale"),
+        *_bounds_params("alpha", "Alpha"),
+    )
+    name_prefix = "rational_quadratic"
+
+
+@register
+class ExpSineSquared(Kernel):
+    type = "ExpSineSquared"
+    label = "Periodic kernel"
+    description = (
+        "Exp-sine-squared kernel for periodic functions: the periodicity is the distance "
+        "after which the function repeats."
+    )
+    sklearn_name = "ExpSineSquared"
+    hyper = ("length_scale", "periodicity")
+    params = (
+        _length_scale(),
+        Param(
+            "periodicity",
+            "Periodicity",
+            "float",
+            default=1.0,
+            help="Period in standardised feature units (the features are standardised "
+            "before the kernel sees them).",
+        ),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("length_scale", "Length scale"),
+        *_bounds_params("periodicity", "Periodicity"),
+    )
+    name_prefix = "periodic"
+
+
+@register
+class DotProduct(Kernel):
+    type = "DotProduct"
+    label = "Dot product kernel"
+    description = (
+        "Linear kernel σ₀² + x·x′ (Bayesian linear regression). Multiply it with itself "
+        "for polynomial trends."
+    )
+    sklearn_name = "DotProduct"
+    hyper = ("sigma_0",)
+    params = (
+        Param("sigma_0", "Sigma₀", "float", default=1.0, help="Inhomogeneity (offset)."),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("sigma_0", "Sigma₀"),
+    )
+    name_prefix = "dot_product"
+
+
+@register
+class WhiteKernel(Kernel):
+    type = "WhiteKernel"
+    label = "White noise kernel"
+    description = (
+        "Independent noise on every sample. Add it (KernelSum) to learn how noisy the targets are."
+    )
+    sklearn_name = "WhiteKernel"
+    hyper = ("noise_level",)
+    params = (
+        Param(
+            "noise_level",
+            "Noise level",
+            "float",
+            default=0.1,
+            help="Noise variance (of the standardised targets if Normalize targets is on).",
+        ),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("noise_level", "Noise level"),
+    )
+    name_prefix = "white"
+
+
+@register
+class ConstantKernel(Kernel):
+    type = "ConstantKernel"
+    label = "Constant kernel"
+    description = (
+        "A constant: multiply another kernel with it (KernelProduct) to scale that kernel, "
+        "add it (KernelSum) for a constant offset."
+    )
+    sklearn_name = "ConstantKernel"
+    hyper = ("constant_value",)
+    params = (
+        Param("constant_value", "Constant", "float", default=1.0),
+        HYPERPARAMETERS_PARAM,
+        *_bounds_params("constant_value", "Constant"),
+    )
+    name_prefix = "constant"
+
+
+class _KernelCombination(Kernel):
+    min_inputs = 2
+    max_inputs = None
+    op: ClassVar[str]
+
+    @classmethod
+    def input_slots(cls) -> list[dict[str, Any]]:
+        return [{"name": "kernels", "label": "Kernels", "kind": "kernel", "min": 2, "max": None}]
+
+    def num_params(self) -> int:
+        return 0
+
+    def kernel(self, terms: list[KernelExpr]) -> KernelExpr:
+        return combine(self.op, terms)
+
+
+@register
+class KernelSum(_KernelCombination):
+    type = "KernelSum"
+    label = "Kernel sum"
+    description = (
+        "Adds two or more kernels, e.g. RBF + WhiteKernel for a smooth function with noise."
+    )
+    op = "+"
+    name_prefix = "kernel_sum"
+
+
+@register
+class KernelProduct(_KernelCombination):
+    type = "KernelProduct"
+    label = "Kernel product"
+    description = (
+        "Multiplies two or more kernels, e.g. ConstantKernel × RBF to scale a kernel, or "
+        "RBF × ExpSineSquared for a slowly changing periodic pattern."
+    )
+    op = "*"
+    name_prefix = "kernel_product"
+
+
+# --------------------------------------------------------------------------- #
+# Classical models (scikit-learn)
+# --------------------------------------------------------------------------- #
+
+
+def fmt_str(value: str) -> str:
+    return '"' + value + '"'
+
+
+class ClassicalModel(Layer):
+    """A scikit-learn estimator. It takes a flat feature vector straight from the Input
+    layer (Gaussian processes optionally also a kernel) and ends the network: its output is
+    the prediction, one value (regression) or one class (classification) per sample.
+
+    The analysis calls :meth:`setup` instead of :meth:`infer`.
+    """
+
+    category = "Classical models"
+    family = "classical"
+    has_module = False
+    task: ClassVar[str]  # regression | classification
+    estimator: ClassVar[str]  # the scikit-learn class
+    module: ClassVar[str]  # where it is imported from
+    takes_kernel: ClassVar[bool] = False
+    # Which training row limit applies (brickdnn.training.limits): gaussian_process | svm
+    scale: ClassVar[str]
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        self.kernel: KernelExpr | None = None
+        self.kernel_connected = False
+
+    @classmethod
+    def input_slots(cls) -> list[dict[str, Any]]:
+        slots: list[dict[str, Any]] = [
+            {"name": "features", "label": "Features", "kind": "tensor", "min": 1, "max": 1}
+        ]
+        if cls.takes_kernel:
+            slots.append(
+                {"name": "kernel", "label": "Kernel", "kind": "kernel", "min": 0, "max": 1}
+            )
+        return slots
+
+    def infer(self, inputs: list[Shape]) -> Shape:  # pragma: no cover - see setup()
+        raise LayerError(f"{self.label} is a classical model.")
+
+    def setup(self, kernel: KernelExpr | None) -> Shape | None:
+        """Remember the kernel (Gaussian processes) and return the output shape: ``(1,)``
+        for regression, None for classification (one class per sample; the number of
+        classes comes from the data)."""
+        if self.takes_kernel:
+            self.kernel_connected = kernel is not None
+            self.kernel = kernel or self.default_kernel()
+        return (1,) if self.task == "regression" else None
+
+    def default_kernel(self) -> KernelExpr | None:
+        return None
+
+    def num_params(self) -> int | None:
+        """Unknown before training (e.g. the support vectors of an SVM)."""
+        return None
+
+    def estimator_args(self) -> list[str]:
+        """Keyword arguments of the estimator as code (a GP's kernel is ``kernel=kernel``)."""
+        raise NotImplementedError
+
+
+def _gp_default_kernel(noise: bool) -> KernelExpr:
+    scaled = combine("*", [ConstantKernel().kernel([]), RBF().kernel([])])
+    return combine("+", [scaled, WhiteKernel().kernel([])]) if noise else scaled
+
+
+_RESTARTS = Param(
+    "n_restarts_optimizer",
+    "Optimizer restarts",
+    "int",
+    default=0,
+    minimum=0,
+    maximum=20,
+    help="Fit the kernel hyperparameters again from this many random starting points and "
+    "keep the best fit (slower, but less likely to get stuck).",
+)
+
+
+class _GaussianProcess(ClassicalModel):
+    module = "sklearn.gaussian_process"
+    takes_kernel = True
+    max_inputs = 2
+    scale = "gaussian_process"
+
+    def num_params(self) -> int:
+        """Hyperparameters of the default kernel (a connected kernel counts its own)."""
+        if self.kernel is None or self.kernel_connected:
+            return 0
+        return self.kernel.count()
+
+    def _restarts(self) -> list[str]:
+        restarts = self.p["n_restarts_optimizer"]
+        if not restarts:
+            return []
+        # The restarts start from random hyperparameters: a fixed seed keeps runs repeatable.
+        return [f"n_restarts_optimizer={restarts}", "random_state=0"]
+
+
+@register
+class GaussianProcessRegressor(_GaussianProcess):
+    type = "GaussianProcessRegressor"
+    label = "Gaussian process regression"
+    description = (
+        "Predicts a number with its uncertainty. Connect the Input (features) and optionally "
+        "a kernel; without one it uses ConstantKernel × RBF + WhiteKernel. Fitting takes "
+        "O(n³): for up to a few thousand training rows."
+    )
+    task = "regression"
+    estimator = "GaussianProcessRegressor"
+    params = (
+        Param(
+            "alpha",
+            "Alpha",
+            "float",
+            default=1e-10,
+            minimum=0.0,
+            help="Added to the diagonal of the kernel matrix: keeps the fit numerically "
+            "stable. To learn the noise of the targets, add a WhiteKernel instead.",
+        ),
+        Param(
+            "normalize_y",
+            "Normalize targets",
+            "bool",
+            default=True,
+            help="Standardise the targets before fitting (recommended unless they are "
+            "already centred around 0 with variance 1).",
+        ),
+        _RESTARTS,
+    )
+    name_prefix = "gp"
+
+    def default_kernel(self) -> KernelExpr:
+        return _gp_default_kernel(noise=True)
+
+    def estimator_args(self) -> list[str]:
+        return [
+            "kernel=kernel",
+            f"alpha={fmt_float(self.p['alpha'])}",
+            f"normalize_y={self.p['normalize_y']}",
+            *self._restarts(),
+        ]
+
+
+@register
+class GaussianProcessClassifier(_GaussianProcess):
+    type = "GaussianProcessClassifier"
+    label = "Gaussian process classification"
+    description = (
+        "Classifies with class probabilities (Laplace approximation; with more than two "
+        "classes one Gaussian process per class). Connect the Input (features) and optionally "
+        "a kernel; without one it uses ConstantKernel × RBF. The classes come from the data. "
+        "Fitting takes O(n³): for up to a few thousand training rows."
+    )
+    task = "classification"
+    estimator = "GaussianProcessClassifier"
+    params = (_RESTARTS,)
+    name_prefix = "gp"
+
+    def default_kernel(self) -> KernelExpr:
+        return _gp_default_kernel(noise=False)
+
+    def estimator_args(self) -> list[str]:
+        return ["kernel=kernel", *self._restarts()]
+
+
+SVM_KERNELS = ("linear", "poly", "rbf", "sigmoid")
+
+
+def _svm_params() -> tuple[Param, ...]:
+    return (
+        Param(
+            "kernel",
+            "Kernel",
+            "select",
+            default="rbf",
+            options=SVM_KERNELS,
+            help="The SVM's own kernel (kernel bricks only work with Gaussian processes).",
+        ),
+        Param(
+            "C",
+            "C (regularisation)",
+            "float",
+            default=1.0,
+            help="Larger values fit the training data more closely, smaller ones regularise more.",
+        ),
+        Param(
+            "gamma",
+            "Gamma",
+            "select",
+            default="scale",
+            options=("scale", "auto", "value"),
+            help="Coefficient of the rbf, poly and sigmoid kernels: scale = 1 / (features × "
+            "variance), auto = 1 / features, or a value.",
+        ),
+        Param("gamma_value", "Gamma value", "float", default=0.1, show_if=("gamma", "value")),
+        Param(
+            "degree",
+            "Degree",
+            "int",
+            default=3,
+            minimum=1,
+            maximum=10,
+            show_if=("kernel", "poly"),
+        ),
+        Param(
+            "coef0",
+            "Coef0",
+            "float",
+            default=0.0,
+            help="Independent term of the poly and sigmoid kernels.",
+        ),
+    )
+
+
+class _SupportVectorMachine(ClassicalModel):
+    module = "sklearn.svm"
+    scale = "svm"
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        if self.p["C"] <= 0:
+            raise LayerError("C must be greater than 0.")
+        if self.p["gamma"] == "value" and self.p["gamma_value"] <= 0:
+            raise LayerError("Gamma value must be greater than 0.")
+
+    def svm_args(self) -> list[str]:
+        kernel = self.p["kernel"]
+        args = [f"kernel={fmt_str(kernel)}", f"C={fmt_float(self.p['C'])}"]
+        if kernel != "linear":
+            gamma = self.p["gamma"]
+            value = fmt_float(self.p["gamma_value"]) if gamma == "value" else fmt_str(gamma)
+            args.append(f"gamma={value}")
+        if kernel == "poly":
+            args.append(f"degree={self.p['degree']}")
+        if kernel in ("poly", "sigmoid"):
+            args.append(f"coef0={fmt_float(self.p['coef0'])}")
+        return args
+
+
+@register
+class SVR(_SupportVectorMachine):
+    type = "SVR"
+    label = "Support vector regression"
+    description = (
+        "Predicts a number with an ε-insensitive support vector machine. Connect the Input "
+        "(features). Fitting takes O(n²) or more: for up to tens of thousands of training "
+        "rows."
+    )
+    task = "regression"
+    estimator = "SVR"
+    params = (
+        *_svm_params(),
+        Param(
+            "epsilon",
+            "Epsilon",
+            "float",
+            default=0.1,
+            minimum=0.0,
+            help="Errors smaller than this (in the units of the target) are not penalised.",
+        ),
+    )
+    name_prefix = "svr"
+
+    def estimator_args(self) -> list[str]:
+        return [*self.svm_args(), f"epsilon={fmt_float(self.p['epsilon'])}"]
+
+
+@register
+class SVC(_SupportVectorMachine):
+    type = "SVC"
+    label = "Support vector classification"
+    description = (
+        "Classifies with a support vector machine; Platt scaling turns its scores into class "
+        "probabilities. Connect the Input (features); the classes come from the data. "
+        "Fitting takes O(n²) or more: for up to tens of thousands of training rows."
+    )
+    task = "classification"
+    estimator = "SVC"
+    params = (
+        *_svm_params(),
+        Param(
+            "class_weight",
+            "Class weights",
+            "select",
+            default="none",
+            options=("none", "balanced"),
+            help="balanced: weight the classes inversely to their frequency (for imbalanced data).",
+        ),
+    )
+    name_prefix = "svc"
+
+    def estimator_args(self) -> list[str]:
+        args = self.svm_args()
+        if self.p["class_weight"] == "balanced":
+            args.append('class_weight="balanced"')
+        return args
 
 
 def layer_specs() -> list[dict[str, Any]]:

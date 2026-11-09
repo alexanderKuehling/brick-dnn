@@ -1,0 +1,45 @@
+{
+  "id": "svm_classifier",
+  "name": "SVM classifier",
+  "description": "A classical model (scikit-learn): a support vector machine with an RBF kernel classifies rows of 4 numeric features (e.g. the iris flowers) and gives class probabilities. The classes come from the target column of the data.",
+  "order": 8,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            4
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "svc",
+        "type": "SVC",
+        "params": {
+          "kernel": "rbf",
+          "C": 1.0,
+          "gamma": "scale",
+          "class_weight": "none"
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-svc",
+        "source": "features",
+        "target": "svc"
+      }
+    ]
+  }
+}

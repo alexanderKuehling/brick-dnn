@@ -12,7 +12,7 @@ import pytest
 from brickdnn import EXAMPLES, GraphValidationError, analyze, generate_code
 from brickdnn.codegen import GeneratorOptions
 
-from .helpers import build_model, chain
+from .helpers import NEURAL_EXAMPLES, build_model, chain
 from .test_layers import CASES, single_layer_graph
 
 try:
@@ -55,7 +55,7 @@ def test_example_code_is_valid_python(example_id):
 
 
 @needs_torch
-@pytest.mark.parametrize("example_id", sorted(EXAMPLES))
+@pytest.mark.parametrize("example_id", NEURAL_EXAMPLES)
 def test_example_runs_in_pytorch(example_id):
     check_against_torch(EXAMPLES[example_id]["graph"])
 

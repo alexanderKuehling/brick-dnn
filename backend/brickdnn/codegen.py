@@ -9,6 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from .classical import generate_classical
 from .graph import Analysis, GraphValidationError, NodeInfo, analyze
 from .layers import fmt_shape
 
@@ -126,7 +127,8 @@ class GeneratorOptions:
 
 
 def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None = None) -> str:
-    """Generate PyTorch code for ``graph``.
+    """Generate PyTorch code for ``graph``, or a scikit-learn script for a classical
+    network (a Gaussian process or SVM, see :mod:`brickdnn.classical`).
 
     Raises :class:`GraphValidationError` if the graph contains errors.
     """
@@ -135,6 +137,8 @@ def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None 
     analysis = analyze(graph)
     if not analysis.valid:
         raise GraphValidationError(analysis)
+    if analysis.family == "classical":
+        return generate_classical(analysis, options)
     return _Generator(analysis, options).render()
 
 
