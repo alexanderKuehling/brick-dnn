@@ -2,8 +2,9 @@
 
 Real data is rarely ready for a neural network: values are missing, a few outliers dominate a
 column, categories are text, dates are strings, and the interesting table is spread over two
-files. The **Data** tab turns such CSV files into a clean training dataset, shows what the data
-looks like on the way, and keeps every decision visible and reproducible.
+files. The **Data** tab turns such files (CSV, Excel, JSON, Parquet …, also straight from a
+link) into a clean training dataset, shows what the data looks like on the way, and keeps every
+decision visible and reproducible.
 
 Like training, data preparation runs on the machine that runs the backend and needs an account,
 because imported files are stored per user. It needs pandas in the backend environment (part
@@ -11,11 +12,13 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
 
 ## Workflow
 
-1. Open **Data** in the header and **import a CSV file**. Brick DNN detects the separator
-   (`,` `;` tab `|`), decimal commas (`1,5`), the header line, the text encoding and common
-   placeholders for missing values (`NA`, `N/A`, `null`, `-`, `?` …). Every column gets a type:
-   *numeric*, *boolean*, *date/time*, *categorical* or *text*. If the detection is wrong, set
-   the options under **Advanced** or fix the type later with a *Change type* step.
+1. Open **Data** in the header and **import data**: a file from your computer or a link (see
+   [Importing](#importing) for the formats). For CSV files Brick DNN detects the separator
+   (`,` `;` tab `|`), decimal commas (`1,5`), the header line and the text encoding; for every
+   format it detects common placeholders for missing values (`NA`, `N/A`, `null`, `-`, `?` …)
+   and gives every column a type: *numeric*, *boolean*, *date/time*, *categorical* or *text*.
+   If the detection is wrong, set the options under **Import options** or fix the type later
+   with a *Change type* step.
 2. A **preparation** is created for the file. Choose the **target** (the column to predict)
    and the task (*automatic*, classification or regression) in the *Target & split* card.
 3. Add **steps** (below). After every change the preview runs again: each step reports what
@@ -29,6 +32,54 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
    *Prepared*.
 
 Preparations are saved automatically. Several preparations can use the same file.
+
+## Importing
+
+| Format | Files | Notes |
+| ------ | ----- | ----- |
+| CSV and other text | `.csv` `.tsv` `.tab` `.psv` `.txt` | separator, decimal mark, header and encoding are detected |
+| Excel | `.xlsx` `.xlsm`, `.xls` (Excel 97–2003) | choose the **sheet**; the header row is detected; formulas give the value Excel saved; error values (`#N/A`, `#DIV/0!` …) are missing values |
+| OpenDocument | `.ods` (LibreOffice, OpenOffice) | like Excel |
+| JSON | `.json` | a list of objects (one per row), an object of columns (`{"a": [1, 2], "b": [3, 4]}`), such a list inside an object (e.g. `{"data": [...], "meta": ...}`, found up to three levels down) or pandas' `split` format; nested objects become columns like `address.city`, lists stay JSON text |
+| JSON Lines | `.jsonl` `.ndjson` | one object per line |
+| Parquet | `.parquet` | column types are kept; nested records become `a.b` columns |
+| Feather / Arrow | `.feather` `.arrow` (Arrow IPC file or stream) | like Parquet |
+| Packed | `.gz` `.bz2` `.xz`, `.zip` | a packed file of one of the formats above; a ZIP file must hold exactly one data file (`__MACOSX`, hidden files and a README are ignored) |
+
+The content decides, not the name: a tab-separated text named `.xls` (a common "Excel export"
+of web applications) is read as text, a `.txt` file with JSON as JSON. Every format ends in
+the same typed table: cells are read as text the way a CSV file would show them and typed by
+the same rules (header detection, missing-value markers, leading zeros kept as text, warnings
+for almost-numeric columns), while columns that already have a type in the file (numbers,
+booleans and dates in Excel, JSON, Parquet) keep it.
+
+**Workbooks with several sheets.** After the first sheet with values was read, the dialog asks
+which sheet to import; choosing another one imports that sheet instead. Over the API, pass
+the option `sheet` (the name); without it, the first sheet with values is imported, and the
+report lists all sheets.
+
+**From a link.** The tab *From a link* imports a file that is on the public internet: the
+server downloads it (up to the import size limit) and reads it like an upload. Share links
+are turned into download links:
+
+| Link | Downloaded |
+| ---- | ---------- |
+| Google Sheets `https://docs.google.com/spreadsheets/d/<id>/edit#gid=<tab>` (shared with *Anyone with the link*) | the tab as CSV (`…/export?format=csv&gid=<tab>`); published sheets (`…/d/e/…/pubhtml`) too |
+| Google Drive `https://drive.google.com/file/d/<id>/view` | the file |
+| GitHub `https://github.com/<owner>/<repo>/blob/<branch>/<path>` | `raw.githubusercontent.com/…` |
+| Hugging Face `https://huggingface.co/datasets/<owner>/<name>/blob/<branch>/<file>` | `…/resolve/…` |
+| Dropbox `…?dl=0` | `…?dl=1` |
+
+Only `http`/`https` links without a user name or password work. Because the server makes
+the request, links to private networks are refused (see [Security of link
+imports](#security-of-link-imports)); a self-hosted installation can allow them with
+`BRICKDNN_DATA_URL_ALLOW_PRIVATE=true`, e.g. to import from a file server in the same network.
+The link is stored with the table (people you share a preparation with can see it), so do not
+import links that contain secrets.
+
+**Databases** (PostgreSQL, MySQL …) cannot be connected yet: a hosted service that connects to
+databases its users name needs its own security design (credentials, network access). Export
+the table as CSV or Parquet and import that.
 
 ## Train, validation and test rows
 
@@ -98,7 +149,9 @@ charts that show single rows from a random sample, which is always labelled):
 | **Recipe (.json)** | Source files, import settings, every step with its settings and the values it learned. |
 | **Python script (.py)** | A standalone pandas script with a `prepare(df)` function that applies the same steps with the learned values written in, so new data for predictions is prepared exactly like the training data. |
 
-The script needs only pandas and numpy:
+The script reads each source like the import did (same format, sheet, separator, decimal mark,
+missing-value markers and column types; packed files too). It needs pandas and numpy, plus
+`openpyxl` for Excel `.xlsx`, `xlrd` for `.xls` and `pyarrow` for Parquet / Feather sources:
 
 ```bash
 python churn_prepare.py --input customers.csv --output prepared.csv   # --source-2 regions.csv … for joined tables
@@ -121,11 +174,48 @@ also apply to new data; class balancing does not.
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
 | `BRICKDNN_DATA_PREP` | `true` | Set to `false` to switch the Data tab off |
-| `BRICKDNN_DATA_MAX_UPLOAD_MB` | `200` | Largest CSV import in MB |
+| `BRICKDNN_DATA_MAX_UPLOAD_MB` | `200` | Largest import in MB: uploads, downloads from links and the unpacked content of `.gz` / `.zip` files |
 | `BRICKDNN_DATA_MAX_ROWS` | `2000000` | Most rows per imported file |
 | `BRICKDNN_DATA_MAX_COLUMNS` | no limit | Most columns per imported file (a single step may add at most 2,000 columns) |
+| `BRICKDNN_DATA_URL_IMPORT` | `true` | Set to `false` to switch imports from links off |
+| `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false` | Set to `true` to allow links to private, loopback and other non-public addresses (only for installations in a trusted network) |
 | `BRICKDNN_DATA_RATE` | `1200/hour` | Previews per user (they run on every change) |
+| `BRICKDNN_UPLOAD_RATE` | `60/hour` | Imports per user (files and links count together) and dataset uploads |
 
 Data is processed in memory with pandas. Importing needs roughly 10–15 times the file size
 in RAM for a moment (a 100 MB file: about 1.5 GB) and takes a few seconds per 10 MB; previews
 afterwards are fast, because the imported table is stored column by column.
+
+Formats that pack data well get extra limits, checked before and while reading, so that a
+small file cannot expand into a huge table: the unpacked content of a `.gz` / `.bz2` / `.xz`
+/ `.zip` file may be at most `BRICKDNN_DATA_MAX_UPLOAD_MB`; the unpacked XML of an Excel or
+OpenDocument workbook and the uncompressed data of a Parquet or Feather file at most four
+times that; and a table has at most as many cells (rows × columns) as a CSV file of the size
+limit could hold (half a cell per byte). Excel files are slower to read than CSV files
+(roughly 10–20 seconds per million cells).
+
+Excel `.xlsx`, `.xls`, Parquet and Feather need `openpyxl`, `xlrd` and `pyarrow` (part of
+`requirements.txt` and of `pip install "brickdnn[data]"`; pyarrow adds about 170 MB to the
+Docker image). Without them, the other formats keep working and these files get a clear
+message.
+
+## Security of link imports
+
+The server downloads the file at a link, so a link must not reach services that are only
+meant to be reachable from the server (server-side request forgery):
+
+- only `http` and `https`; links with a user name or password are refused; no cookies,
+  credentials or headers of the user are sent, and proxies from the environment are not used;
+- the host name is resolved once, and **every** address it resolves to must be public:
+  private (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), loopback, link-local (including
+  cloud metadata at `169.254.169.254`), multicast, shared (`100.64/10`), reserved and other
+  special IPv4 and IPv6 addresses are refused, also when they are hidden in IPv4-mapped,
+  6to4, Teredo or NAT64 IPv6 addresses;
+- the connection goes to exactly the address that was checked (a second DNS lookup could
+  answer differently), while TLS still verifies the certificate for the host name;
+- redirects are followed by hand, at most 5, and every new location is checked again;
+- the connection times out after 10 seconds, a pause of 30 seconds ends the download, and the
+  whole download may take 3 minutes; the size limit applies while the file streams in (a
+  larger `Content-Length` is refused at once);
+- answers that are web pages (HTML) are refused with a hint, e.g. for Google Sheets that are
+  not shared publicly.

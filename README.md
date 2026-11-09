@@ -52,8 +52,10 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer,
   and download the trained weights together with the matching script. See
   [docs/training.md](docs/training.md).
-- **Data preparation and analysis** in the *Data* tab: import messy CSV files, join and append
-  tables, fill missing values (median, KNN …), detect and clip outliers (IQR, z-score,
+- **Data preparation and analysis** in the *Data* tab: import messy CSV files, Excel and
+  OpenDocument workbooks (choose the sheet), JSON / JSON Lines, Parquet and Feather files, also
+  zipped or gzipped, or straight from a link (Google Sheets, GitHub, Hugging Face …), join and
+  append tables, fill missing values (median, KNN …), detect and clip outliers (IQR, z-score,
   quantiles), scale, transform, bin and encode columns, split dates, balance classes, and see
   every step's effect in charts: distributions, box plots, missing values, correlation
   heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
@@ -265,7 +267,7 @@ backend/   Django REST API: accounts (JWT), saved and shared networks, datasets,
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
    ├── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
-   └── brickdnn/data/       data preparation with pandas: CSV import, steps, profiles, export
+   └── brickdnn/data/       data preparation with pandas: imports, steps, profiles, export
 ```
 
 The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
@@ -313,6 +315,9 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_TRAINING`            | `true`                     | Set to `false` to disable training                   |
 | `BRICKDNN_TRAINING_MAX_RUNS`   | `1`                        | Trainings running at the same time (all users)       |
 | `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
+| `BRICKDNN_DATA_MAX_UPLOAD_MB`  | `200`                      | Largest import in the Data tab (file, link or unpacked) |
+| `BRICKDNN_DATA_URL_IMPORT`     | `true`                     | Set to `false` to switch imports from links off      |
+| `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false`                 | Allow links to private network addresses (trusted local installations only) |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
