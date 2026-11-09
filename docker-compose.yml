@@ -28,6 +28,18 @@ x-budgets: &budgets
   BRICKDNN_PRICE_PER_GB_MONTH: ${BRICKDNN_PRICE_PER_GB_MONTH:-}
   BRICKDNN_PRICE_CURRENCY: ${BRICKDNN_PRICE_CURRENCY:-}
 
+# Paid plans with Paddle (docs/billing.md); all unset: off. The backend sells and manages the
+# subscriptions, the cleanup service checks them once a day and bills overage. The API key and
+# the webhook secret only come from .env; the others can also be in the settings of the domain.
+x-paddle: &paddle
+  BRICKDNN_PADDLE_ENV: ${BRICKDNN_PADDLE_ENV:-}
+  BRICKDNN_PADDLE_CLIENT_TOKEN: ${BRICKDNN_PADDLE_CLIENT_TOKEN:-}
+  BRICKDNN_PADDLE_PRICES: ${BRICKDNN_PADDLE_PRICES:-}
+  BRICKDNN_PADDLE_OVERAGE_PRODUCT: ${BRICKDNN_PADDLE_OVERAGE_PRODUCT:-}
+  BRICKDNN_PADDLE_API_KEY: ${BRICKDNN_PADDLE_API_KEY:-}
+  BRICKDNN_PADDLE_WEBHOOK_SECRET: ${BRICKDNN_PADDLE_WEBHOOK_SECRET:-}
+  BRICKDNN_PADDLE_GRACE_DAYS: ${BRICKDNN_PADDLE_GRACE_DAYS:-}
+
 services:
   backend:
     build:
@@ -40,7 +52,7 @@ services:
     # A minimal init process reaps training processes whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: [*retention, *budgets]
+      <<: [*retention, *budgets, *paddle]
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -92,9 +104,10 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # Once a day: deletes old data if BRICKDNN_DELETE_* is set, and expired logins. The same
+  # Once a day: deletes old data if BRICKDNN_DELETE_* is set, and expired logins; with paid
+  # plans (docs/billing.md) it also checks the subscriptions and bills overage. The same
   # image; it sleeps most of the time. The first run is ten minutes after a start (the backend
-  # migrates the database first). `docker compose logs cleanup` shows what it deleted.
+  # migrates the database first). `docker compose logs cleanup` shows what it did.
   cleanup:
     image: brick-dnn-backend:local
     pull_policy: never
@@ -103,9 +116,9 @@ services:
     command:
       - sh
       - -c
-      - "sleep 600; while true; do python manage.py purge_old_data; sleep 86400; done"
+      - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; sleep 86400; done"
     environment:
-      <<: *retention
+      <<: [*retention, *budgets, *paddle]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
