@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- The Input layer follows the training data: choosing a dataset (also with *Train with this
+  data* in the Data tab) sets the Input shape and the number of outputs when only those keep
+  the network from fitting, with a notification and *Undo*; an empty canvas gets a small
+  network for the data. Otherwise *Adapt network to “…”* in the training panel and *Set from
+  dataset* in the Input layer's properties do it with one click. `POST /api/training/check/`
+  (and the MCP tool `check_training`) return these changes as `fixes`. Image folders also fit
+  a flat Input (`3·S·S` or `S·S` values) now, like the built-in datasets.
 - **Sanity checks in the Data tab's Readiness view.** Besides what blocks the export, the
   view now finds what makes a network poor or its scores misleading, each with the affected
   columns and, where a step solves it, a one-click fix: possible target leakage (a feature

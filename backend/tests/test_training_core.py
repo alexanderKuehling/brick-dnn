@@ -801,7 +801,8 @@ def test_image_folder_plan(tmp_path):
 @pytest.mark.parametrize(
     "shape,message",
     [
-        ([12288], "set the Input shape to channels, height, width"),
+        ([1000], "set the Input shape to channels, height, width"),
+        ([4], "set the Input shape to channels, height, width"),  # not 2×2 images
         ([2, 8, 8], "The Input has 2 channels"),
         ([1, 2048, 2048], "at most 1024×1024"),
     ],
@@ -812,6 +813,210 @@ def test_image_folder_input_errors(tmp_path, shape, message):
     result = check(graph, info)
     assert not result.ok
     assert message in result.errors[0]
+
+
+@pytest.mark.parametrize(
+    "shape,image",
+    [
+        ([12288], {"channels": 3, "height": 64, "width": 64, "layout": "flat"}),
+        ([784], {"channels": 1, "height": 28, "width": 28, "layout": "flat"}),
+    ],
+)
+def test_image_folder_into_a_flat_input(tmp_path, shape, image):
+    info = image_info(tmp_path)
+    graph = chain(("Input", {"shape": shape}), ("Linear", {"out_features": 2}))
+    result = check(graph, info)
+    assert result.ok, result.errors
+    assert result.plan.image == image
+    side = image["height"]
+    assert (
+        f"Each image is flattened to {shape[0]:,} values ({image['channels']}×{side}×{side})."
+        in (result.plan.notes)
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Suggested fixes
+# --------------------------------------------------------------------------- #
+
+
+def fixes_of(graph, info):
+    """``{node id: params}`` of the suggested fixes; they must make the network fit."""
+    if isinstance(graph, str):
+        graph = EXAMPLES[graph]["graph"]
+    result = check_compatibility(graph, info)
+    assert result.to_dict()["fixes"] == result.fixes
+    if result.fixes:
+        changes = {fix["node"]: fix["params"] for fix in result.fixes}
+        fixed = {
+            **graph,
+            "nodes": [
+                {**n, "params": {**n.get("params", {}), **changes.get(n["id"], {})}}
+                for n in graph["nodes"]
+            ],
+        }
+        assert check_compatibility(fixed, info).ok
+    return {fix["node"]: fix["params"] for fix in result.fixes}
+
+
+def test_fixes_for_a_csv_file(tmp_path):
+    info = csv_info(tmp_path, IRIS)
+    result = check("mlp_mnist", info)
+    assert not result.ok
+    assert result.fixes == [
+        {
+            "node": "input",
+            "type": "Input",
+            "params": {"shape": [4]},
+            "previous": {"shape": [784]},
+            "summary": "Input shape 784 → 4",
+        },
+        {
+            "node": "fc3",
+            "type": "Linear",
+            "params": {"out_features": 3},
+            "previous": {"out_features": 10},
+            "summary": "Outputs of the last layer 10 → 3",
+        },
+    ]
+    # The errors and warnings stay as they are.
+    assert "Set the Input shape to 4." in result.errors[0]
+
+
+def test_fixes_for_csv_targets(tmp_path):
+    regression = csv_info(tmp_path, "a,b,price\n" + "\n".join(f"{i},{i},{i}.5" for i in range(6)))
+    assert fixes_of("mlp_mnist", regression) == {
+        "input": {"shape": [2]},
+        "fc3": {"out_features": 1},
+    }
+    assert fixes_of("tabular_regression", regression) == {"features": {"shape": [2]}}
+    integers = csv_info(tmp_path, "a,label\n1,0\n2,1\n3,2\n4,1\n")
+    # Classification by class index: one output per index; with 1 output a regression.
+    assert fixes_of("mlp_mnist", integers) == {
+        "input": {"shape": [1]},
+        "fc3": {"out_features": 3},
+    }
+    assert fixes_of("tabular_regression", integers) == {"features": {"shape": [1]}}
+    negative = csv_info(tmp_path, "a,label\n1,-1\n2,1\n3,2\n4,1\n")
+    assert fixes_of(
+        chain(("Input", {"shape": [1]}), ("Linear", {"out_features": 4})), negative
+    ) == {"n1": {"out_features": 1}}
+
+
+def test_fixes_for_prepared_data(tmp_path):
+    """Data tab datasets: class names only for classification, class indices as targets."""
+    info = csv_info(tmp_path, "a,b,y\n" + "\n".join(f"{i},{i},{i % 3}" for i in range(9)))
+    info.predefined_split = [6, 2, 1]
+    info.class_names = ["low", "mid", "high"]
+    assert fixes_of("tabular_regression", info) == {
+        "features": {"shape": [2]},
+        "out": {"out_features": 3},
+    }
+    # Fits, but 7 outputs are never the right answer: offered without an error.
+    seven = chain(("Input", {"shape": [2]}), ("Linear", {"out_features": 7}))
+    assert check(seven, info).ok
+    assert fixes_of(seven, info) == {"n1": {"out_features": 3}}
+    info.class_names = None  # regression
+    assert fixes_of("mlp_mnist", info) == {"input": {"shape": [2]}, "fc3": {"out_features": 1}}
+
+
+@pytest.mark.parametrize(
+    "example_id,dataset,expected",
+    [
+        ("mlp_mnist", "mnist", {}),
+        ("mlp_mnist", "cifar10", {"input": {"shape": [3072]}}),  # stays flat
+        ("cnn_mnist", "cifar10", {}),  # converted to grayscale and resized: works
+        ("resnet_block", "mnist", {}),
+        (
+            "tabular_regression",
+            "mnist",
+            {"features": {"shape": [784]}, "out": {"out_features": 10}},
+        ),
+        ("lstm_sentiment", "mnist", {}),  # text models: nothing to suggest
+        ("multi_input", "mnist", {}),
+    ],
+)
+def test_fixes_for_builtin_datasets(example_id, dataset, expected):
+    assert fixes_of(example_id, builtin_info(dataset)) == expected
+
+
+def test_fixes_keep_the_kind_of_input():
+    cnn = chain(
+        ("Input", {"shape": [4]}),
+        ("Reshape", {"shape": [1, 2, 2]}),
+        ("Conv2d", {"out_channels": 4, "kernel_size": [1, 1]}),
+        ("Flatten", {}),
+        ("Linear", {"out_features": 10}),
+    )
+    # A Reshape needs the flat size; a channels-first Input for Conv2d and Flatten.
+    assert fixes_of(cnn, builtin_info("mnist")) == {}  # 784 cannot be reshaped into 1×2×2
+    channels = chain(
+        ("Input", {"shape": [2, 16, 16]}),
+        ("Conv2d", {"out_channels": 4}),
+        ("Flatten", {}),
+        ("Linear", {"out_features": 10}),
+    )
+    assert fixes_of(channels, builtin_info("cifar10")) == {"n0": {"shape": [3, 16, 16]}}
+    rows = chain(("Input", {"shape": [2000, 2000]}), ("LSTM", {"hidden_size": 8}), ("Linear", {}))
+    assert fixes_of(rows, builtin_info("mnist")) == {
+        "n0": {"shape": [28, 28]},
+        "n2": {"out_features": 10},
+    }
+
+
+def test_fixes_for_image_folders(tmp_path):
+    info = image_info(tmp_path)
+    # The MLP takes the images flattened (28×28 grayscale); only the outputs change.
+    assert fixes_of("mlp_mnist", info) == {"fc3": {"out_features": 2}}
+    assert fixes_of("tabular_regression", info) == {
+        "features": {"shape": [12288]},
+        "out": {"out_features": 2},
+    }
+    flatten = chain(("Input", {"shape": [5]}), ("Flatten", {}), ("Linear", {"out_features": 2}))
+    assert fixes_of(flatten, info) == {"n0": {"shape": [12288]}}
+    conv = chain(
+        ("Input", {"shape": [4, 2048, 1024]}),
+        ("Conv2d", {"out_channels": 2}),
+        ("AdaptiveAvgPool2d", {}),
+        ("Flatten", {}),
+        ("Linear", {"out_features": 2}),
+    )
+    assert fixes_of(conv, info) == {"n0": {"shape": [3, 1024, 512]}}
+
+
+def test_fixes_for_the_last_layer_behind_activations(tmp_path):
+    info = csv_info(tmp_path, IRIS)
+    graph = chain(
+        ("Input", {"shape": [4]}),
+        ("Linear", {"out_features": 8}),
+        ("Dropout", {"p": 0.1}),
+        ("Activation", {"function": "relu"}),
+    )
+    assert fixes_of(graph, info) == {"n1": {"out_features": 3}}
+    # A layer that changes the shape (or a second branch) is not changed.
+    graph["nodes"][2] = {"id": "n2", "type": "Reshape", "params": {"shape": [2, 4]}}
+    assert fixes_of(graph, info) == {}
+
+
+def test_no_fixes_when_other_layers_would_have_to_change(tmp_path):
+    info = csv_info(tmp_path, IRIS)
+    fixed = chain(("Input", {"shape": [5]}), ("Linear", {"in_features": 5, "out_features": 3}))
+    assert fixes_of(fixed, info) == {}
+    assert fixes_of("cnn_mnist", info) == {}
+    assert fixes_of("mlp_mnist", random_info()) == {}
+    # An analysis (instead of the graph) cannot be changed: no fixes.
+    from brickdnn.graph import analyze
+
+    assert check_compatibility(analyze(EXAMPLES["mlp_mnist"]["graph"]), info).fixes == []
+
+
+def test_fixes_with_long_inputs_and_saved_projects(tmp_path):
+    info = csv_info(tmp_path, IRIS)
+    graph = chain(("Input", {"shape": [4], "dtype": "long"}), ("Embedding", {}), ("Flatten", {}))
+    assert fixes_of(graph, info) == {}  # the Embedding needs token ids
+    # Saved project files ({"name", "graph"}) work as well.
+    project = {"name": "MLP", "graph": EXAMPLES["mlp_mnist"]["graph"]}
+    assert [f["node"] for f in check_compatibility(project, info).fixes] == ["input", "fc3"]
 
 
 # --------------------------------------------------------------------------- #

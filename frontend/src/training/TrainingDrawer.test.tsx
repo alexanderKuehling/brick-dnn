@@ -2,7 +2,7 @@ import { cleanup, render, screen, userEvent, waitFor, within } from '@test-utils
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, type ProjectRole } from '@/api';
+import { api, ApiError, type Compatibility, type ProjectRole } from '@/api';
 import { NO_SCOPE, type TrainingScope } from './access';
 import { ANALYSIS, dataset, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
@@ -37,6 +37,7 @@ function dataController(overrides: Partial<DataController> = {}): DataController
   return {
     source: DEFAULT_SOURCE,
     setSource: vi.fn(),
+    selection: 0,
     datasets: [],
     datasetsError: null,
     reloadDatasets: vi.fn(),
@@ -649,5 +650,75 @@ describe('TrainingDrawer in a shared network', () => {
 
     await userEvent.click(screen.getByRole('radio', { name: /Churn data/ }));
     expect(data.setSource).toHaveBeenCalledWith(expect.objectContaining({ upload: 2 }));
+  });
+
+  describe('adapting the network to the data', () => {
+    const MISFIT: Compatibility = {
+      ok: false,
+      errors: ['The Input expects shape (784), but the CSV file has 4 feature columns.'],
+      warnings: [],
+      plan: null,
+      fixes: [
+        {
+          node: 'in',
+          type: 'Input',
+          params: { shape: [4] },
+          previous: { shape: [784] },
+          summary: 'Input shape 784 → 4',
+        },
+        {
+          node: 'fc',
+          type: 'Linear',
+          params: { out_features: 3 },
+          previous: { out_features: 10 },
+          summary: 'Outputs of the last layer 10 → 3',
+        },
+      ],
+    };
+    const iris = () =>
+      controller({
+        data: dataController({
+          source: { tab: 'upload', builtin: null, upload: 7 },
+          datasets: [dataset({ id: 7, name: 'iris' })],
+        }),
+      });
+
+    it('offers the suggested changes with one click', async () => {
+      const adapt = vi.fn();
+      renderDrawer({
+        training: iris(),
+        fit: {
+          compatibility: { result: MISFIT, loading: false, error: null, fresh: true },
+          adapt,
+        },
+      });
+      expect(screen.getByText('Does not fit the data')).toBeInTheDocument();
+      expect(screen.getByText('To fit “iris”, change:')).toBeInTheDocument();
+      expect(screen.getByText('Input shape 784 → 4')).toBeInTheDocument();
+      expect(screen.getByText('Outputs of the last layer 10 → 3')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Adapt network to “iris”' }));
+      expect(adapt).toHaveBeenCalledTimes(1);
+      // The builder checks the network: the view does not ask the server itself.
+      expect(api.training.check).not.toHaveBeenCalled();
+      expect(startButton()).toBeDisabled();
+    });
+
+    it('waits for the check of the current network', () => {
+      renderDrawer({
+        training: iris(),
+        fit: {
+          compatibility: { result: MISFIT, loading: true, error: null, fresh: false },
+          adapt: null,
+        },
+      });
+      expect(screen.getByRole('button', { name: 'Adapt network to “iris”' })).toBeDisabled();
+    });
+
+    it('is not offered without the builder', async () => {
+      vi.mocked(api.training.check).mockResolvedValue(MISFIT);
+      renderDrawer({ training: iris() });
+      expect(await screen.findByText('Does not fit the data')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Adapt network/ })).not.toBeInTheDocument();
+    });
   });
 });

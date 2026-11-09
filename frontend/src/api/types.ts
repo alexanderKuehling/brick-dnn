@@ -447,11 +447,28 @@ export interface TrainingPlan {
   notes: string[];
 }
 
+/**
+ * A suggested change that makes the network fit the data: set `params` on the layer `node`.
+ * Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are ever
+ * changed.
+ */
+export interface CompatibilityFix {
+  node: string;
+  type: string;
+  params: Params;
+  /** The current values of `params`. */
+  previous: Params;
+  /** E.g. "Input shape 784 → 4". */
+  summary: string;
+}
+
 export interface Compatibility {
   ok: boolean;
   errors: string[];
   warnings: string[];
   plan: TrainingPlan | null;
+  /** Changes that make the network fit (applied together). Missing from older servers. */
+  fixes?: CompatibilityFix[];
 }
 
 export type Optimizer = 'adam' | 'adamw' | 'sgd';

@@ -2,12 +2,15 @@ import {
   IconAlertTriangle,
   IconCircleCheck,
   IconCopy,
+  IconDatabase,
   IconInfoCircle,
   IconTrash,
 } from '@tabler/icons-react';
 import {
   ActionIcon,
   Alert,
+  Badge,
+  Button,
   Divider,
   Fieldset,
   Group,
@@ -24,7 +27,7 @@ import {
 } from '@mantine/core';
 import { LayerComments } from '@/comments/LayerComments';
 import { categoryColor } from '@/theme';
-import { useBuilder } from './BuilderContext';
+import { useBuilder, type InputFit } from './BuilderContext';
 import { formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
 import { ParamField } from './ParamField';
@@ -63,6 +66,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
     updateNode,
     deleteNode,
     duplicateNode,
+    inputFit,
   } = useBuilder();
   const spec = specs[node.data.type];
   const info = analysis?.nodes[node.id];
@@ -137,6 +141,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         <Stat label="Output shape" value={formatShape(info?.output_shape)} />
         <Stat label="Parameters" value={info?.num_params?.toLocaleString('en-US') ?? '–'} />
       </SimpleGrid>
+      {inputFit && inputFit.nodeId === node.id && !readOnly && <DatasetFit fit={inputFit} />}
 
       {/* View only: the settings are shown, but every field is disabled. */}
       <Fieldset variant="unstyled" disabled={readOnly} p={0} m={0}>
@@ -183,6 +188,41 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
       {/* Saved networks: comments on this layer (viewers may comment too). */}
       <LayerComments key={node.id} nodeId={node.id} />
     </Stack>
+  );
+}
+
+/** The Input layer and the dataset chosen in the training panel. */
+function DatasetFit({ fit }: { fit: InputFit }) {
+  if (fit.matches) {
+    return (
+      <Badge
+        color="green"
+        variant="light"
+        leftSection={<IconCircleCheck size={12} />}
+        style={{ alignSelf: 'flex-start', textTransform: 'none' }}
+      >
+        Matches “{fit.datasetName}”
+      </Badge>
+    );
+  }
+  return (
+    <Paper withBorder p="xs" radius="sm">
+      <Group justify="space-between" gap="xs">
+        <Text size="xs" c="dimmed" style={{ flex: '1 1 140px' }}>
+          Training data “{fit.datasetName}”: {fit.summary}
+        </Text>
+        {fit.apply && (
+          <Button
+            size="compact-xs"
+            variant="light"
+            leftSection={<IconDatabase size={12} />}
+            onClick={fit.apply}
+          >
+            Set from dataset
+          </Button>
+        )}
+      </Group>
+    </Paper>
   );
 }
 
