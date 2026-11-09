@@ -106,7 +106,9 @@ on CIFAR-10); otherwise the Input gets the shape of the data, flat when it is fl
 change too, e.g. a CNN on a CSV file or a Linear layer with a fixed number of input features;
 the check then explains what to do. Opening a network does not change it, even if a dataset is
 remembered from before, and people who can only view a network never get any of this. In a
-shared network, the changes reach the others like any edit.
+shared network, the changes reach the others like any edit. For a
+[classical model](#classical-models) only the Input's shape is ever changed: its output
+follows the data.
 
 ### Settings
 

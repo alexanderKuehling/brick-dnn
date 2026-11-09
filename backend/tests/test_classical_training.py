@@ -198,6 +198,25 @@ def test_plans_of_classical_models():
     assert result.ok and "predicts them as numbers" in result.warnings[0]
 
 
+def test_suggested_fixes_only_change_the_input():
+    wide = csv_info(num_features=6, columns=list("abcdefy"), **TEXT)
+    result = check_compatibility(model_graph("SVC"), wide)
+    assert not result.ok
+    assert result.fixes == [
+        {
+            "node": "in",
+            "type": "Input",
+            "params": {"shape": [6]},
+            "previous": {"shape": [4]},
+            "summary": "Input shape 4 → 6",
+        }
+    ]
+    assert not check_compatibility(model_graph("SVC"), csv_info(**TEXT)).fixes  # fits
+    # Nothing helps a regression model on class labels, or a classical model on images.
+    assert not check_compatibility(model_graph("SVR"), csv_info(**TEXT)).fixes
+    assert not check_compatibility(model_graph("SVC"), builtin_info("mnist")).fixes
+
+
 def test_demo_data_plans():
     plan = check_compatibility(model_graph("SVC"), random_info()).plan
     assert plan.task == "demo" and plan.num_classes == 3
