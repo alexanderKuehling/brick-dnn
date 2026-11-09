@@ -13,6 +13,7 @@ import {
   resultText,
   searchedSettings,
   searchLabel,
+  weightsNote,
   weightsSnippet,
 } from './format';
 import {
@@ -121,6 +122,21 @@ describe('training format', () => {
     expect(datasetDetails(csv)).toBe('150 rows · 4 features · 3 classes · 4.4 KB');
   });
 
+  it('says which weights a run keeps', () => {
+    const run = detail({ status: 'completed', has_weights: true });
+    expect(weightsNote(run)).toBeNull(); // older runs and runs that are not over
+    run.state!.weights_epoch = 3;
+    expect(weightsNote(run)).toBe('Weights from epoch 3');
+    run.state!.weights_epoch = 2;
+    expect(weightsNote(run)).toBe(
+      'Weights from epoch 2 (lowest validation loss) · 3 epochs trained'
+    );
+    run.state!.stopped_early = true;
+    expect(weightsNote(run)).toBe(
+      'Weights from epoch 2 (lowest validation loss) · stopped early after epoch 3'
+    );
+  });
+
   it('writes a snippet that prepares images like the training did', () => {
     const run = detail({ status: 'completed', has_weights: true });
     run.state!.preprocessing = {
@@ -184,9 +200,18 @@ describe('training settings', () => {
       val_split: 60,
       max_samples: 5,
       seed: 1.5,
+      patience: 0,
     });
     expect(Object.keys(errors).sort()).toEqual(
-      ['batch_size', 'epochs', 'learning_rate', 'max_samples', 'seed', 'val_split'].sort()
+      [
+        'batch_size',
+        'epochs',
+        'learning_rate',
+        'max_samples',
+        'patience',
+        'seed',
+        'val_split',
+      ].sort()
     );
   });
 
@@ -214,7 +239,11 @@ describe('training settings', () => {
       device: 'auto',
       max_samples: null,
       seed: 7,
+      patience: null,
+      restore_best: true,
     });
+    const early = toConfig({ ...DEFAULT_SETTINGS, patience: '5', restore_best: false });
+    expect(early).toMatchObject({ patience: 5, restore_best: false });
     const test = { ...DEFAULT_SETTINGS, test_enabled: true, test_split: 12.5 };
     expect(toConfig(test).test_split).toBe(0.125);
     // Built-in datasets only switch their official test images on.

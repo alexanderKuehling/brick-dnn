@@ -91,6 +91,19 @@ describe('SettingsForm', () => {
     expect(toConfig(latest, { builtin: true }).test_split).toBe(0.2);
   });
 
+  it('offers early stopping and the choice of the kept weights', async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
+    const patience = screen.getByLabelText('Early stopping');
+    expect(patience).toHaveAttribute('placeholder', 'Off');
+    expect(toConfig(latest)).toMatchObject({ patience: null, restore_best: true });
+    await userEvent.type(patience, '5');
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Keep the weights of the best epoch' })
+    );
+    expect(toConfig(latest)).toMatchObject({ patience: 5, restore_best: false });
+  });
+
   it('sets up a hyperparameter search', async () => {
     render(<Harness />);
     expect(screen.queryByText('Method')).not.toBeInTheDocument();

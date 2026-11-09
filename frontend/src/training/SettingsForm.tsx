@@ -227,44 +227,64 @@ export function SettingsForm({
         Advanced settings
       </Button>
       <Collapse expanded={advanced}>
-        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
+        <Stack gap="sm">
+          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
+            <NumberInput
+              label="Weight decay"
+              value={tuned.weight_decay ? '' : values.weight_decay}
+              placeholder={tuned.weight_decay ? SEARCHED : undefined}
+              disabled={tuned.weight_decay}
+              onChange={setNumber('weight_decay')}
+              min={LIMITS.weight_decay.min}
+              max={LIMITS.weight_decay.max}
+              step={0.0001}
+              decimalScale={6}
+              allowNegative={false}
+              error={errors.weight_decay}
+            />
+            <NumberInput
+              label="Max. samples"
+              placeholder="All"
+              value={values.max_samples}
+              onChange={setNumber('max_samples')}
+              min={LIMITS.max_samples.min}
+              max={LIMITS.max_samples.max}
+              allowDecimal={false}
+              allowNegative={false}
+              thousandSeparator=","
+              error={errors.max_samples}
+            />
+            <NumberInput
+              label="Seed"
+              placeholder="Random"
+              value={values.seed}
+              onChange={setNumber('seed')}
+              min={LIMITS.seed.min}
+              max={LIMITS.seed.max}
+              allowDecimal={false}
+              allowNegative={false}
+              error={errors.seed}
+            />
+          </SimpleGrid>
           <NumberInput
-            label="Weight decay"
-            value={tuned.weight_decay ? '' : values.weight_decay}
-            placeholder={tuned.weight_decay ? SEARCHED : undefined}
-            disabled={tuned.weight_decay}
-            onChange={setNumber('weight_decay')}
-            min={LIMITS.weight_decay.min}
-            max={LIMITS.weight_decay.max}
-            step={0.0001}
-            decimalScale={6}
-            allowNegative={false}
-            error={errors.weight_decay}
-          />
-          <NumberInput
-            label="Max. samples"
-            placeholder="All"
-            value={values.max_samples}
-            onChange={setNumber('max_samples')}
-            min={LIMITS.max_samples.min}
-            max={LIMITS.max_samples.max}
+            label="Early stopping"
+            description="Stop when the validation loss has not improved for this many epochs"
+            placeholder="Off"
+            value={values.patience}
+            onChange={setNumber('patience')}
+            min={LIMITS.patience.min}
+            max={LIMITS.patience.max}
             allowDecimal={false}
             allowNegative={false}
-            thousandSeparator=","
-            error={errors.max_samples}
+            error={errors.patience}
           />
-          <NumberInput
-            label="Seed"
-            placeholder="Random"
-            value={values.seed}
-            onChange={setNumber('seed')}
-            min={LIMITS.seed.min}
-            max={LIMITS.seed.max}
-            allowDecimal={false}
-            allowNegative={false}
-            error={errors.seed}
+          <Checkbox
+            label="Keep the weights of the best epoch"
+            description="Test and save the weights with the lowest validation loss, not those of the last epoch."
+            checked={values.restore_best}
+            onChange={(event) => set('restore_best')(event.currentTarget.checked)}
           />
-        </SimpleGrid>
+        </Stack>
       </Collapse>
     </Stack>
   );
@@ -433,8 +453,8 @@ function SearchFields({ values, onChange, errors }: SearchFieldsProps) {
           {grid
             ? 'Every combination of the chosen values is trained.'
             : 'Learning rates are drawn evenly on a log scale.'}{' '}
-          All trials use the same data and starting weights; the lowest validation loss after the
-          last epoch wins.
+          All trials use the same data and starting weights; the trial with the lowest validation
+          loss wins.
         </Text>
       </Stack>
     </Paper>

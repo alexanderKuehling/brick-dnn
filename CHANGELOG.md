@@ -8,6 +8,19 @@
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
+- **Early stopping**: `patience` (in the editor under *Advanced settings*, `--patience` on the
+  command line) ends a training when the validation loss has not improved for that many
+  epochs. Off by default.
+
+### Changed
+- **Training keeps the weights of the best epoch.** The weights with the lowest validation
+  loss are now tested and saved (`weights.pt`) instead of those of the last epoch, also when a
+  run is stopped; `restore_best: false` (`--no-restore-best`) keeps the last epoch as before.
+  The run state names the epoch (`weights_epoch`) and whether the run `stopped_early`, the
+  run's `metrics` are those of that epoch once it has ended, and the result message says so,
+  e.g. *"Stopped early after epoch 12: no improvement for 5 epochs; kept the weights of epoch
+  7."* A hyperparameter search does the same per trial and ranks the trials by the validation
+  loss of their kept weights instead of their last epoch.
 
 ### Fixed
 - The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have

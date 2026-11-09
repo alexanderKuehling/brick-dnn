@@ -32,6 +32,10 @@ export interface SettingsValues {
   max_samples: NumberField;
   /** Empty: a random seed. */
   seed: NumberField;
+  /** Early stopping: epochs without improvement of the validation loss. Empty: off. */
+  patience: NumberField;
+  /** Keep the weights of the epoch with the lowest validation loss (not the last one). */
+  restore_best: boolean;
 
   /** Hyperparameter search instead of a single training. */
   search: boolean;
@@ -61,6 +65,7 @@ const NUMBER_FIELDS = [
   'weight_decay',
   'max_samples',
   'seed',
+  'patience',
   'search_trials',
   'lr_min',
   'lr_max',
@@ -68,6 +73,7 @@ const NUMBER_FIELDS = [
 
 const BOOLEAN_FIELDS = [
   'test_enabled',
+  'restore_best',
   'search',
   'tune_learning_rate',
   'tune_batch_size',
@@ -92,6 +98,8 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   weight_decay: 0,
   max_samples: '',
   seed: '',
+  patience: '',
+  restore_best: true,
   search: false,
   search_method: 'random',
   search_trials: 10,
@@ -119,6 +127,7 @@ export const LIMITS = {
   held_out: { max: 80 },
   max_samples: { min: 10, max: 1_000_000_000 },
   seed: { min: 0, max: 2 ** 31 - 1 },
+  patience: { min: 1, max: 1000 },
   /** Same limits as backend/brickdnn/training/tuning.py. */
   search_trials: { min: 1, max: 100 },
 } as const;
@@ -273,6 +282,7 @@ export function validateSettings(values: SettingsValues): SettingsErrors {
   }
   set('max_samples', wholeNumber(values.max_samples, LIMITS.max_samples, false));
   set('seed', wholeNumber(values.seed, LIMITS.seed, false));
+  set('patience', wholeNumber(values.patience, LIMITS.patience, false));
 
   if (values.search) {
     const grid = values.search_method === 'grid';
@@ -347,6 +357,8 @@ export function toConfig(
     device: values.device,
     max_samples: number(values.max_samples),
     seed: number(values.seed),
+    patience: number(values.patience),
+    restore_best: values.restore_best,
   };
 }
 

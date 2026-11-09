@@ -38,8 +38,10 @@ stored per user.
    and explains what to change, for example *"The network outputs 5 values, but MNIST has 10
    classes. The last layer should output 10 values."*
 4. Adjust the settings (epochs, batch size, learning rate, optimizer, device) and press
-   **Start training**. Optionally hold out a [test set](#validation-and-test-data) or let a
-   [hyperparameter search](#hyperparameter-search) choose some of the settings.
+   **Start training**. Optionally hold out a [test set](#validation-and-test-data), let
+   [early stopping](#early-stopping-and-the-kept-weights) end the training when the network
+   stops improving, or let a [hyperparameter search](#hyperparameter-search) choose some of
+   the settings.
 5. Watch loss and accuracy per epoch. You can close the panel; the training continues and the
    button in the toolbar shows its progress.
 6. When the run is finished (or stopped), download the **weights** (`.pt`) and the matching
@@ -89,6 +91,8 @@ Details:
 | Device | Automatic | CUDA → Apple GPU (Apple Silicon) → CPU |
 | Max. samples | all | Train on a subset for quick experiments; validation shrinks in proportion |
 | Seed | random | Fix it for reproducible runs |
+| Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs |
+| Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch |
 
 The loss is chosen from the task: cross-entropy for classification (the network should end
 with raw scores, not Softmax), mean squared error for regression.
@@ -98,11 +102,12 @@ with raw scores, not Softmax), mean squared error for regression.
 The data is split randomly (with the seed) into up to three parts:
 
 - **Training data** is what the network learns from.
-- **Validation data** is measured after every epoch (the curves). The hyperparameter search
-  also uses it to compare trials, so after a search the validation result is slightly
-  optimistic.
+- **Validation data** is measured after every epoch (the curves). It also chooses the kept
+  weights (the best epoch) and, in a search, the best trial, so the validation result is
+  slightly optimistic.
 - **Test data** (optional, *Test split* > 0) is not touched until training is over. Then the
-  final model is measured on it once. This is the number to report. Stopped runs are not tested.
+  kept weights are measured on it once. This is the number to report. Stopped runs are not
+  tested.
 
 | Data | Without test set | With test set |
 | ---- | ---------------- | ------------- |
@@ -111,6 +116,23 @@ The data is split randomly (with the seed) into up to three parts:
 
 Normalisation statistics (CSV features and targets, converted images) are computed from the
 training part only. With *Max. samples*, validation and test data shrink in proportion.
+
+### Early stopping and the kept weights
+
+Training longer does not always help: once the network starts to memorise the training data
+(overfitting), the validation loss goes up again. Brick DNN therefore remembers the weights of
+the epoch with the **lowest validation loss** and keeps those at the end: they are measured on
+the test set and saved as `weights.pt`, and the run view says which epoch they come from
+(`weights_epoch` in the run state). Switch *Keep the best weights* off (`restore_best: false`,
+`--no-restore-best`) to keep the weights of the last epoch instead.
+
+With **early stopping** (*Patience* N, `patience`, `--patience N`), the training ends when the
+validation loss has not improved for N epochs in a row, for example *"Stopped early after epoch
+12: no improvement for 5 epochs; kept the weights of epoch 7."* Such a run counts as completed
+and is tested like any other. Early stopping is off by default, so every epoch is trained.
+
+A run you stop yourself also keeps the weights of the best epoch so far (or, without *Keep the
+best weights*, those of the moment it stopped).
 
 ### Hyperparameter search
 
@@ -126,11 +148,14 @@ settings and otherwise the normal settings (every trial runs the full number of 
   the learning rates are then picked from a list as well).
 - All trials use the same training and validation data and start from the same initial
   weights with the same order of batches, so only the settings make the difference.
-- The trial with the **lowest validation loss after its last epoch** wins. Its weights are
-  saved, its curves are shown, and it is the model that is measured on the test set.
+- Every trial keeps the weights of its best epoch (see
+  [above](#early-stopping-and-the-kept-weights)) and may stop early; the trial whose kept
+  weights have the **lowest validation loss** wins. Its weights are saved, its curves are
+  shown, and it is the model that is measured on the test set.
 - A trial whose loss becomes NaN or that runs out of memory (for example with a large batch
   size) is marked as failed; the search continues with the next one.
-- Stopping a search keeps the best trial finished so far.
+- Stopping a search keeps the best trial finished so far (during the first trial: its best
+  epoch so far).
 
 In the editor, switch on **Hyperparameter search** in the settings and tick the settings to
 tune; the normal fields of those settings are then filled in by the search. The run view lists
@@ -169,9 +194,10 @@ brickdnn train my_cnn.json --data mnist --test-split 0.2        # test on the of
 ```
 
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,
-`--test-split`, `--device`, `--max-samples`, `--seed`, `--save weights.pt`, `--data-root`
+`--test-split`, `--device`, `--max-samples`, `--seed`, `--patience N` (early stopping),
+`--no-restore-best` (keep the weights of the last epoch), `--save weights.pt`, `--data-root`
 (download folder for built-in datasets, default `~/.cache/brickdnn/datasets`). Press
-<kbd>Ctrl</kbd>+<kbd>C</kbd> to stop early; the weights are saved anyway.
+<kbd>Ctrl</kbd>+<kbd>C</kbd> to stop; the weights of the best epoch so far are saved anyway.
 
 Hyperparameter search: any of the following options starts one. `VALUES` is a comma-separated
 list or, for the learning rate and weight decay, a range `MIN:MAX`.
@@ -214,8 +240,8 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 - Run directories live in `BRICKDNN_DATA_DIR/training/runs/<id>/` (`job.json`, `state.json`,
   `weights.pt` and `output.log` with the full output, useful when a run fails). Uploaded datasets
   are in `training/datasets/`, downloaded built-in datasets in `training/builtin/`.
-- Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights and
-  exits. A run whose process disappears (for example because the server was restarted) is
+- Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights
+  (of the best epoch so far) and exits. A run whose process disappears (for example because the server was restarted) is
   marked as failed.
 
 The REST endpoints are documented in [api.md](api.md#training-login-required).

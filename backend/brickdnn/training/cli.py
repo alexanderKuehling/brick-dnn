@@ -5,6 +5,7 @@ brickdnn train graph.json --data random                # demo data with a hidden
 brickdnn train graph.json --data houses.csv --save houses.pt
 brickdnn train graph.json --data photos.zip            # or a folder with one folder per class
 brickdnn train graph.json --data houses.csv --test-split 0.2       # hold out a test set
+brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopping
 brickdnn train graph.json --data mnist --tune --trials 20          # hyperparameter search
 brickdnn train graph.json --data mnist --tune-lr 1e-4:1e-2 --tune-batch-size 32,64
 
@@ -145,8 +146,11 @@ class ConsoleReporter(Reporter):
         if trial["status"] == "failed":
             self._print(f"{name} failed: {trial['message']}")
         elif trial["status"] == "completed":
+            kept = trial.get("weights_epoch")
+            epoch = f"epoch {kept}: " if kept and kept != trial.get("epochs_done") else ""
+            early = "  (stopped early)" if trial.get("stopped_early") else ""
             best = "  (best so far)" if best_trial == trial["trial"] else ""
-            self._print(f"{name}: {_metrics(trial, 'val')}{best}")
+            self._print(f"{name}: {epoch}{_metrics(trial, 'val')}{early}{best}")
 
     def search_end(self, result: dict[str, Any]) -> None:
         self._trial = None
@@ -265,6 +269,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", choices=DEVICES, help="default auto")
     parser.add_argument("--max-samples", type=int, help="train on at most this many samples")
     parser.add_argument("--seed", type=int, help="random seed for a repeatable run")
+    parser.add_argument(
+        "--patience",
+        type=int,
+        metavar="N",
+        help="stop early when the validation loss has not improved for N epochs (default: off)",
+    )
+    parser.add_argument(
+        "--restore-best",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="keep (test and save) the weights of the epoch with the lowest validation loss "
+        "instead of those of the last epoch (default: on)",
+    )
     parser.add_argument("--save", help="where to store the weights (default <graph name>.pt)")
     parser.add_argument(
         "--data-root",
@@ -373,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
                 "device": args.device,
                 "max_samples": args.max_samples,
                 "seed": args.seed,
+                "patience": args.patience,
+                "restore_best": args.restore_best,
             }
         )
         tuning = tuning_from_args(args)

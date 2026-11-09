@@ -52,6 +52,17 @@ def _float(
     return number
 
 
+def _bool(data: dict[str, Any], name: str, label: str, default: bool) -> bool:
+    value = data.get(name)
+    if value is None or value == "":
+        return default
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    if not isinstance(value, bool):
+        raise ConfigError(f"{label} must be true or false.")
+    return value
+
+
 def _choice(data: dict[str, Any], name: str, label: str, default: str, options: tuple[str, ...]):
     value = data.get(name)
     if value is None or value == "":
@@ -81,6 +92,12 @@ class TrainingConfig:
     # Train on at most this many samples (quick experiments on large datasets).
     max_samples: int | None = None
     seed: int | None = None
+    # Early stopping: end the training when the validation loss has not improved for this
+    # many epochs (None: always train all epochs).
+    patience: int | None = None
+    # Keep the weights of the epoch with the lowest validation loss (they are tested and
+    # saved) instead of those of the last epoch.
+    restore_best: bool = True
 
     @property
     def has_test(self) -> bool:
@@ -113,6 +130,8 @@ class TrainingConfig:
             device=_choice(data, "device", "Device", cls.device, DEVICES),
             max_samples=_int(data, "max_samples", "Max. samples", None, 10, 10**9),
             seed=_int(data, "seed", "Seed", None, 0, 2**31 - 1),
+            patience=_int(data, "patience", "Patience", None, 1, 1000),
+            restore_best=_bool(data, "restore_best", "Restore best weights", cls.restore_best),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -72,6 +72,7 @@ class Recorder(Reporter):
         self.trials_started: list[dict] = []
         self.trials_ended: list[tuple[dict, int | None]] = []
         self.search = None
+        self.kept = None
 
     def status(self, status, message):
         self.statuses.append((status, message))
@@ -101,6 +102,10 @@ class Recorder(Reporter):
     def search_end(self, result):
         self.search = result
         self.events.append(("search_end", result["best_trial"]))
+
+    def weights_kept(self, result):
+        self.kept = result
+        self.events.append(("weights_kept", result["weights_epoch"]))
 
     def test_end(self, result):
         self.test = result
@@ -917,9 +922,9 @@ def test_demo_training_with_a_test_set(tmp_path):
     assert result.test == rec.test
     assert rec.events[-2:] == [("test_end",), ("finish", "completed")]
     assert ("running", "Testing the final model …") in rec.statuses
-    assert result.message.startswith("Finished: validation accuracy ")
-    assert "; test accuracy " in result.message
-    # The test set is measured with the saved (final) weights.
+    assert result.message.startswith("Finished")
+    assert "alidation accuracy " in result.message and "; test accuracy " in result.message
+    # The test set is measured with the saved (kept) weights.
     plan = check_compatibility(graph, random_info()).plan
     prepared = data.demo_data(plan, config(test_split=0.25), torch.Generator().manual_seed(0))
     loss = evaluate_saved_weights(graph, tmp_path, prepared.test)
@@ -1011,6 +1016,204 @@ def test_builtin_conversion_statistics_use_only_training_images(tmp_path, fake_t
 
 
 # --------------------------------------------------------------------------- #
+# Early stopping and the kept weights
+# --------------------------------------------------------------------------- #
+
+
+def scripted_validation(monkeypatch, losses, states):
+    """Replace the validation loss by ``losses`` (one per epoch; a dict by learning rate
+    for a search) and record the weights after every epoch in ``states``."""
+    original = engine._Run._validate
+
+    def validate(self, epoch):
+        _, accuracy, rmse = original(self, epoch)
+        script = losses[self.config.learning_rate] if isinstance(losses, dict) else losses
+        key = (self.config.learning_rate, epoch) if isinstance(losses, dict) else epoch
+        states[key] = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+        return script[epoch - 1], accuracy, rmse
+
+    monkeypatch.setattr(engine._Run, "_validate", validate)
+
+
+def saved_weights_equal(tmp_path, state):
+    saved = torch.load(tmp_path / "weights.pt")
+    return saved.keys() == state.keys() and all(torch.equal(saved[k], state[k]) for k in saved)
+
+
+class StopAfterEpoch(Recorder):
+    """Asks to stop as soon as the given epoch has ended."""
+
+    def __init__(self, epoch):
+        super().__init__()
+        self.after = epoch
+        self.stopping = False
+
+    def epoch_end(self, entry, best):
+        super().epoch_end(entry, best)
+        self.stopping = self.stopping or entry["epoch"] >= self.after
+
+    def should_stop(self):
+        return self.stopping
+
+
+def test_early_stopping_keeps_the_weights_of_the_best_epoch(tmp_path, monkeypatch):
+    states = {}
+    scripted_validation(monkeypatch, [0.9, 0.5, 0.3, 0.4, 0.35, 0.6, 0.2, 0.1], states)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, rec = run_job(graph, random_info(), tmp_path, epochs=8, patience=3, max_samples=64)
+    assert result.status == "completed", result.message
+    assert [h["epoch"] for h in result.history] == [1, 2, 3, 4, 5, 6]
+    assert result.weights_epoch == 3 and result.stopped_early
+    assert rec.kept == {"weights_epoch": 3, "stopped_early": True}
+    assert rec.best["epoch"] == 3
+    assert result.message.startswith(
+        "Stopped early after epoch 6: no improvement for 3 epochs; kept the weights of "
+        "epoch 3. Validation accuracy "
+    )
+    accuracy = result.history[2]["val_accuracy"]
+    assert f"Validation accuracy {accuracy * 100:.1f}%." in result.message
+    assert (
+        "Stopping early after epoch 6: the validation loss has not improved for 3 epochs "
+        "(best: epoch 3)." in rec.logs
+    )
+    assert saved_weights_equal(tmp_path, states[3])
+
+
+def test_best_epoch_weights_are_kept_and_tested(tmp_path, monkeypatch):
+    states = {}
+    scripted_validation(monkeypatch, [0.5, 0.3, 0.4, 0.45], states)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, rec = run_job(graph, random_info(), tmp_path, epochs=4, test_split=0.2)
+    assert result.status == "completed", result.message
+    assert len(result.history) == 4 and not result.stopped_early
+    assert result.weights_epoch == 2
+    assert rec.events[-3:] == [("weights_kept", 2), ("test_end",), ("finish", "completed")]
+    assert result.message.startswith(
+        "Finished 4 epochs; kept the weights of epoch 2 (lowest validation loss). "
+        "Validation accuracy "
+    )
+    assert "; test accuracy " in result.message
+    assert saved_weights_equal(tmp_path, states[2])
+    # The test set is measured with the kept weights.
+    plan = check_compatibility(graph, random_info()).plan
+    prepared = data.demo_data(plan, config(test_split=0.2), torch.Generator().manual_seed(0))
+    loss = evaluate_saved_weights(graph, tmp_path, prepared.test)
+    assert loss == pytest.approx(rec.test["loss"], rel=1e-4)
+
+
+def test_without_restore_best_the_last_epoch_is_kept(tmp_path, monkeypatch):
+    states = {}
+    scripted_validation(monkeypatch, [0.5, 0.3, 0.4, 0.45, 0.2], states)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, rec = run_job(
+        graph, random_info(), tmp_path, epochs=5, patience=2, restore_best=False, max_samples=64
+    )
+    assert result.status == "completed", result.message
+    assert len(result.history) == 4 and result.stopped_early
+    assert result.weights_epoch == 4 and rec.kept == {"weights_epoch": 4, "stopped_early": True}
+    assert result.message.startswith(
+        "Stopped early after epoch 4: no improvement for 2 epochs. Validation accuracy "
+    )
+    assert saved_weights_equal(tmp_path, states[4])
+
+
+def test_no_early_stop_in_the_last_epoch(tmp_path, monkeypatch):
+    scripted_validation(monkeypatch, [0.3, 0.4, 0.5], {})
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, _ = run_job(graph, random_info(), tmp_path, epochs=3, patience=2, max_samples=64)
+    assert len(result.history) == 3 and not result.stopped_early and result.weights_epoch == 1
+
+
+def test_stopping_keeps_the_best_weights_so_far(tmp_path, monkeypatch):
+    states = {}
+    scripted_validation(monkeypatch, [0.3, 0.5, 0.2], states)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    rec = StopAfterEpoch(2)
+    result, _ = run_job(graph, random_info(), tmp_path, reporter=rec, epochs=5, max_samples=64)
+    assert result.status == "stopped"
+    assert result.message == (
+        "Stopped after 2 of 5 epochs. Kept the weights of epoch 1 (lowest validation loss)."
+    )
+    assert result.weights_epoch == 1 and rec.kept == {"weights_epoch": 1, "stopped_early": False}
+    assert saved_weights_equal(tmp_path, states[1])
+    # Without restore_best, the weights are those of the unfinished epoch.
+    result, rec = run_job(
+        graph,
+        random_info(),
+        tmp_path,
+        reporter=StopAfterEpoch(2),
+        epochs=5,
+        max_samples=64,
+        restore_best=False,
+    )
+    assert result.message == "Stopped after 2 of 5 epochs."
+    assert result.weights and result.weights_epoch is None and rec.kept["weights_epoch"] is None
+
+
+def test_search_ranks_trials_by_their_kept_weights(tmp_path, monkeypatch):
+    states = {}
+    # Trial 1 is best in its first epoch and then overfits (stopped early after epoch 3);
+    # trial 2 ends better than trial 1 ends, but not better than trial 1's best epoch.
+    losses = {0.01: [0.2, 0.5, 0.6, 0.1], 0.001: [0.4, 0.3, 0.25, 0.22]}
+    scripted_validation(monkeypatch, losses, states)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}}
+    result, rec = search_job(
+        graph, tmp_path, tuning, epochs=4, patience=2, max_samples=64, test_split=0.2
+    )
+    assert result.status == "completed", result.message
+    first, second = result.trials
+    assert (first["epochs_done"], first["weights_epoch"], first["stopped_early"]) == (3, 1, True)
+    assert first["val_loss"] == 0.2 and first["val_accuracy"] is not None
+    assert (second["epochs_done"], second["weights_epoch"], second["stopped_early"]) == (
+        4,
+        4,
+        False,
+    )
+    assert result.best_trial == 1 and result.weights_epoch == 1 and result.stopped_early
+    assert rec.kept == {"weights_epoch": 1, "stopped_early": True}
+    assert len(result.history) == 3  # the curves of the best trial
+    assert result.message.startswith(
+        "Finished 2 trials. Best: trial 1 (learning rate 0.01), stopped early, weights of "
+        "epoch 1: validation accuracy "
+    )
+    assert saved_weights_equal(tmp_path, states[(0.01, 1)])
+    events = [e for e in rec.events if e[0] != "epoch_end"]
+    assert events[-4:] == [
+        ("search_end", 1),
+        ("weights_kept", 1),
+        ("test_end",),
+        ("finish", "completed"),
+    ]
+
+
+def test_stopping_a_search_in_the_first_trial_keeps_its_best_epoch(tmp_path, monkeypatch):
+    states = {}
+    scripted_validation(monkeypatch, {0.01: [0.3, 0.5, 0.2], 0.001: [0.1]}, states)
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}}
+    result, rec = search_job(
+        EXAMPLES["mlp_mnist"]["graph"],
+        tmp_path,
+        tuning,
+        reporter=StopAfterEpoch(2),
+        epochs=3,
+        max_samples=64,
+    )
+    assert result.status == "stopped" and result.best_trial is None
+    assert result.weights_epoch == 1 and rec.kept["weights_epoch"] == 1
+    assert saved_weights_equal(tmp_path, states[(0.01, 1)])
+
+
+def test_state_reporter_records_the_kept_weights(tmp_path):
+    reporter = runner.StateReporter(tmp_path, epochs=5, heartbeat=0.05)
+    assert st.read_state(tmp_path)["weights_epoch"] is None
+    reporter.weights_kept({"weights_epoch": 3, "stopped_early": True})
+    reporter.finish("completed", "Stopped early after epoch 5.", True)
+    state = st.read_state(tmp_path)
+    assert state["weights_epoch"] == 3 and state["stopped_early"] is True
+
+
+# --------------------------------------------------------------------------- #
 # Hyperparameter search
 # --------------------------------------------------------------------------- #
 
@@ -1042,7 +1245,9 @@ def test_search_keeps_the_best_trial(tmp_path):
         "history": result.history,
         "best": result.best,
     }
-    assert result.history[-1]["val_loss"] == best["val_loss"]
+    kept = next(h for h in result.history if h["epoch"] == best["weights_epoch"])
+    assert kept["val_loss"] == best["val_loss"] == min(h["val_loss"] for h in result.history)
+    assert result.weights_epoch == best["weights_epoch"]
     assert rec.info["tuning"] == TuningConfig.from_dict(tuning).to_dict()
     assert rec.info["trials_total"] == 4
     train_size = rec.info["train_size"]
@@ -1053,6 +1258,7 @@ def test_search_keeps_the_best_trial(tmp_path):
     assert events == [
         *[(kind, n) for n in range(1, 5) for kind in ("trial_start", "trial_end")],
         ("search_end", best["trial"]),
+        ("weights_kept", best["weights_epoch"]),
         ("test_end",),
         ("finish", "completed"),
     ]
@@ -1459,11 +1665,34 @@ def test_cli_tuning_options():
         (["--tune-lr", "fast"], "'fast' is not a number"),
         (["--trials", "0"], "the number of trials must be at least 1"),
         (["--test-split", "0.6"], "Test split must be at least 0 and at most 0.5."),
+        (["--patience", "0"], "Patience must be between 1 and 1,000."),
     ],
 )
 def test_cli_search_errors(args, message, capsys):
     assert cli.main(["--example", "mlp_mnist", *args]) == 1
     assert message in capsys.readouterr().err
+
+
+def test_cli_early_stopping(tmp_path, capsys, monkeypatch):
+    parser = cli.build_parser()
+    args = parser.parse_args(["--example", "mlp_mnist"])
+    assert args.patience is None and args.restore_best is None  # the defaults of the config
+    args = parser.parse_args(["--patience", "3", "--no-restore-best"])
+    assert args.patience == 3 and args.restore_best is False
+    monkeypatch.setattr(engine._Run, "_validate", lambda self, epoch: (epoch / 10, 0.5, None))
+    save = tmp_path / "early.pt"
+    code = cli.main(
+        ["--example", "mlp_mnist", "--epochs", "5", "--patience", "2", "--device", "cpu"]
+        + ["--max-samples", "64", "--seed", "0", "--save", str(save)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Stopping early after epoch 3: the validation loss has not improved for 2 epochs" in out
+    assert (
+        "Stopped early after epoch 3: no improvement for 2 epochs; kept the weights of epoch 1."
+        in out
+    )
+    assert save.exists()
 
 
 def test_cli_without_torch(monkeypatch, capsys):

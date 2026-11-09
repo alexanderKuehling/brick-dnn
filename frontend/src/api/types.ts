@@ -382,6 +382,16 @@ export interface TrainingConfig {
   device: string;
   max_samples: number | null;
   seed: number | null;
+  /**
+   * Early stopping: end the training when the validation loss has not improved for this many
+   * epochs (null: off). Missing in runs from before early stopping existed.
+   */
+  patience?: number | null;
+  /**
+   * Test and save the weights of the epoch with the lowest validation loss instead of those
+   * of the last epoch (default true; missing in older runs, which kept the last epoch).
+   */
+  restore_best?: boolean;
 }
 
 // --------------------------------------------------------------------------
@@ -444,7 +454,10 @@ export interface TrialParams {
 
 export type TrialStatus = 'running' | 'completed' | 'failed' | 'stopped';
 
-/** One trial of a search. The metrics are those of its last (or latest) epoch. */
+/**
+ * One trial of a search. The metrics are those of the epoch whose weights the trial keeps
+ * (`weights_epoch`); while it runs, and for failed or stopped trials, of its latest epoch.
+ */
 export interface TrialEntry {
   /** Counts from 1. */
   trial: number;
@@ -457,26 +470,34 @@ export interface TrialEntry {
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
+  /** The epoch whose weights the trial keeps (missing in older runs). */
+  weights_epoch?: number | null;
+  /** Ended by early stopping. */
+  stopped_early?: boolean;
   seconds: number | null;
 }
 
-/** The trial with the lowest final validation loss; its weights are kept. */
+/** The trial whose kept weights have the lowest validation loss; its weights are kept. */
 export interface BestTrial {
   trial: number;
   params: TrialParams;
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
+  weights_epoch?: number | null;
 }
 
-/** The final model measured on the test set. */
+/** The kept weights measured on the test set. */
 export interface TestResult {
   loss: number | null;
   accuracy: number | null;
   rmse: number | null;
 }
 
-/** Metrics of the last finished epoch (of the best trial once a search has ended). */
+/**
+ * Metrics of the last finished epoch while a run is active, then of the epoch whose weights
+ * are kept (of the best trial once a search has ended).
+ */
 export interface RunMetrics {
   train_loss: number | null;
   val_loss: number | null;
@@ -506,7 +527,7 @@ export interface RunSummary {
   epochs: number;
   /** Finished epochs (of the running trial in a search). */
   epochs_done: number;
-  /** Metrics of the last finished epoch. */
+  /** Metrics of the last finished epoch, at the end of the kept one. */
   metrics: RunMetrics | null;
   best: BestEpoch | null;
   /** Set for a hyperparameter search. */
@@ -563,7 +584,14 @@ export interface RunState {
   history: HistoryEntry[];
   progress: RunProgress | null;
   best: BestEpoch | null;
-  /** The final model on the test set. */
+  /**
+   * The epoch whose weights are tested and saved (the best one, or the last one without
+   * `restore_best`); null before the epochs are over. Missing in runs of older versions.
+   */
+  weights_epoch?: number | null;
+  /** True if early stopping ended the training (in a search: the best trial). */
+  stopped_early?: boolean;
+  /** The kept weights on the test set. */
   test?: TestResult | null;
   weights: boolean;
   /** How inputs were prepared; needed to reuse the weights. Shape defined by the engine. */

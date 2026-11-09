@@ -61,6 +61,7 @@ import {
   searchedSettings,
   searchLabel,
   SETTING_LABELS,
+  weightsNote,
   weightsSnippet,
 } from './format';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
@@ -187,6 +188,8 @@ export function RunView({
     : null;
 
   const charts = useMemo(() => chartSeries(history, classification), [history, classification]);
+  const keptEpoch = state?.weights_epoch ?? null;
+  const keptNote = run.has_weights ? weightsNote(run) : null;
 
   // ---------------------------------------------------------------- actions
   const downloadWeights = async () => {
@@ -367,7 +370,7 @@ export function RunView({
               Values per epoch
             </ToggleButton>
             <Collapse expanded={tableOpened}>
-              <HistoryTable history={history} classification={classification} />
+              <HistoryTable history={history} classification={classification} kept={keptEpoch} />
             </Collapse>
           </div>
         </Stack>
@@ -439,6 +442,11 @@ export function RunView({
           Delete
         </Button>
       </Group>
+      {keptNote && (
+        <Text size="xs" c="dimmed" mt={-8}>
+          {keptNote}
+        </Text>
+      )}
 
       {run.has_weights && (
         <div>
@@ -625,9 +633,12 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
 function HistoryTable({
   history,
   classification,
+  kept,
 }: {
   history: HistoryEntry[];
   classification: boolean;
+  /** The epoch whose weights are kept (shown in bold). */
+  kept: number | null;
 }) {
   return (
     <ScrollArea.Autosize mah={260} type="auto">
@@ -650,7 +661,7 @@ function HistoryTable({
         </Table.Thead>
         <Table.Tbody>
           {history.map((entry) => (
-            <Table.Tr key={entry.epoch}>
+            <Table.Tr key={entry.epoch} fw={entry.epoch === kept ? 700 : undefined}>
               <Table.Td>{entry.epoch}</Table.Td>
               <Table.Td>{formatMetric(entry.train_loss)}</Table.Td>
               <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>
