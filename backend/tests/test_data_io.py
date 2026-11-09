@@ -380,6 +380,8 @@ def test_import_options_from_dict():
     assert ImportOptions.from_dict({"delimiter": "", "missing_values": ""}) == ImportOptions()
     assert ImportOptions.from_dict({"missing_values": ["NA"]}).missing_values == ["NA"]
     assert ImportOptions.from_dict({"encoding": "UTF-8"}).encoding == "utf-8"
+    assert ImportOptions.from_dict({"sheet": " Q1 "}).sheet == " Q1 "
+    assert ImportOptions.from_dict({"sheet": "  "}).sheet is None
     round_trip = ImportOptions.from_dict(options.to_dict())
     assert round_trip == options
 
@@ -397,6 +399,8 @@ def test_import_options_from_dict():
         ({"missing_values": [None]}, "every entry must be a text or a number"),
         ({"max_rows": 0}, "Row limit"),
         ({"max_rows": "ten"}, "Row limit"),
+        ({"sheet": 2}, "Sheet: invalid value"),
+        ({"sheet": "x" * 201}, "Sheet: the name can be at most 200"),
         ([1, 2], "must be an object"),
     ],
 )
@@ -415,6 +419,12 @@ def test_report_to_dict():
         "rows": 3,
         "columns": 2,
         "warnings": ["x"],
+        "format": "csv",
+        "compression": None,
+        "member": None,
+        "sheet": None,
+        "sheets": [],
+        "json_path": None,
     }
     assert "NA" in DEFAULT_MISSING and "" in DEFAULT_MISSING
 

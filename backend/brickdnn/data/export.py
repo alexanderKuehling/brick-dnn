@@ -15,9 +15,10 @@ counts in the dataset info (``DatasetInfo.predefined_split``), and the training 
 
 **SourceInfo** (how to read a source again, for the pandas script)::
 
-    {"id": 3, "name": "Customers", "filename": "customers.csv", "delimiter": ";",
-     "decimal": ",", "header": True, "encoding": "utf-8",
-     "missing_values": ["", "NA", ...], "columns": [{"name", "kind"}, ...]}
+    {"id": 3, "name": "Customers", "filename": "customers.csv", "format": "csv",
+     "delimiter": ";", "decimal": ",", "header": True, "encoding": "utf-8",
+     "missing_values": ["", "NA", ...], "columns": [{"name", "kind"}, ...],
+     "sheet": "Q1", "json_path": ["data"], "member": "x.csv"}   (the last three if they apply)
 
 **The pandas script** works on DataFrames in the storage format of
 :mod:`brickdnn.data.table` (numbers and booleans as float64, dates as datetime64, strings as
@@ -300,13 +301,90 @@ def parse_dates(text):
     return best
 
 
+def read_bytes(path, info):
+    """The content of a data file, unpacked if it is packed (.gz, .bz2, .xz or a .zip file
+    with one data file)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    for magic, unpack in ((b"\x1f\x8b", gzip), (b"BZh", bz2), (b"\xfd7zXZ\x00", lzma)):
+        if data.startswith(magic):
+            return unpack.decompress(data)
+    if data.startswith(b"PK\x03\x04") and info.get("format", "csv") not in ("xlsx", "ods"):
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            names = [
+                name
+                for name in archive.namelist()
+                if not name.endswith("/")
+                and not name.startswith("__MACOSX/")
+                and not name.rsplit("/", 1)[-1].startswith((".", "~$"))
+            ]
+            member = [n for n in names if n.rsplit("/", 1)[-1] == info.get("member")]
+            return archive.read((member or names)[0])
+    return data
+
+
 def read_cells(path, info):
-    """All cells of a CSV file as strings (no header handling yet), like the import."""
+    """All cells of a data file as strings (no header handling yet), like the import."""
+    data = read_bytes(path, info)
+    fmt = info.get("format", "csv")
+    if fmt in ("xlsx", "xls", "ods"):
+        names, rows, close = open_workbook(io.BytesIO(data), fmt)
+        try:
+            sheet = info.get("sheet") if info.get("sheet") in names else names[0]
+            return grid_frame([[cell_text(v) for v in row] for row in rows(sheet)])
+        finally:
+            close()
+    if fmt in ("json", "jsonl"):
+        text = data.decode("utf-16" if data[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig")
+        if fmt == "jsonl":
+            document = [json.loads(line) for line in text.split("\n") if line.strip()]
+        else:
+            document = json.loads(text)
+        names, columns = json_columns(find_json_table(document, info.get("json_path"))[0])
+        if names is None:
+            return grid_frame([[cell_text(v) for v in row] for row in columns])
+        return named_frame(names, columns)
+    if fmt in ("parquet", "feather"):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if fmt == "parquet":
+            table = pq.read_table(pa.BufferReader(data))
+        elif data.startswith(b"ARROW1"):
+            table = pa.ipc.open_file(pa.BufferReader(data)).read_all()
+        else:
+            table = pa.ipc.open_stream(pa.BufferReader(data)).read_all()
+        while any(pa.types.is_struct(field.type) for field in table.schema):
+            table = table.flatten()
+        columns = [table.column(i).to_pandas().tolist() for i in range(table.num_columns)]
+        return named_frame(table.column_names, columns)
+    return read_text_cells(data, info)
+
+
+def grid_frame(rows):
+    """Rows of cell texts as a table: without empty rows and columns (a sheet, JSON rows)."""
+    rows = [row for row in rows if any(text.strip() for text in row)]
+    frame = pd.DataFrame(rows, dtype=object)
+    frame = frame.where(frame.notna(), "")
+    used = [i for i in range(frame.shape[1]) if frame.iloc[:, i].str.strip().ne("").any()]
+    return frame.iloc[:, used]
+
+
+def named_frame(names, columns):
+    """Named columns as a table of cell texts whose first row holds the names."""
+    return pd.DataFrame(
+        {i: [names[i]] + [cell_text(v) for v in column] for i, column in enumerate(columns)},
+        dtype=object,
+    )
+
+
+def read_text_cells(data, info):
+    """All cells of a CSV file as strings, like the import."""
     encoding = {"utf-8": "utf-8-sig"}.get(info["encoding"], info["encoding"])
-    with open(path, encoding=encoding, newline="") as f:
-        first = f.readline()
+    text = data.decode(encoding)
+    first = re.split(r"\r\n|\r|\n", text, maxsplit=1)[0]
     # Excel's "sep=;" hint line
-    skip = 1 if re.fullmatch(r"\s*sep=.\s*", first.rstrip("\r\n"), re.IGNORECASE) else 0
+    skip = 1 if re.fullmatch(r"\s*sep=.\s*", first, re.IGNORECASE) else 0
     options = {
         "sep": info["delimiter"],
         "header": None,
@@ -315,15 +393,13 @@ def read_cells(path, info):
         "keep_default_na": False,
         "na_filter": False,
         "skip_blank_lines": True,
-        "encoding": encoding,
     }
     try:
-        cells = pd.read_csv(path, **options)
+        cells = pd.read_csv(io.StringIO(text), **options)
     except pd.errors.ParserError:  # a line has more values than the first one
-        with open(path, encoding=encoding, newline="") as f:
-            rows = csv.reader(f, delimiter=info["delimiter"])
-            widest = max((len(row) for row in rows), default=1)
-        cells = pd.read_csv(path, names=list(range(widest)), **options).fillna("")
+        rows = csv.reader(io.StringIO(text, newline=""), delimiter=info["delimiter"])
+        widest = max((len(row) for row in rows), default=1)
+        cells = pd.read_csv(io.StringIO(text), names=list(range(widest)), **options).fillna("")
     # Lines that end with a delimiter give empty columns at the end: drop them.
     while cells.shape[1] > 1 and (cells.iloc[:, -1].str.strip() == "").all():
         cells = cells.iloc[:, :-1]
@@ -331,8 +407,9 @@ def read_cells(path, info):
 
 
 def read_source(path, info):
-    """Read a CSV file like the Brick DNN import did: same delimiter, decimal mark,
-    encoding, missing-value markers and column types; rows without any value are skipped."""
+    """Read a data file like the Brick DNN import did: same format (sheet, delimiter,
+    decimal mark, encoding), missing-value markers and column types; rows without any value
+    are skipped."""
     cells = read_cells(path, info)
     columns = info["columns"]
     if cells.shape[1] != len(columns):
@@ -371,7 +448,25 @@ def _reader_source() -> str:
     text = _READER.replace("__TRUE__", repr(true_values)).replace("__FALSE__", repr(false_values))
     text = text.replace("__FORMATS__", pprint.pformat(formats, width=96, sort_dicts=False))
     time = r'TIME = r"(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)?"' + "\n"
-    return time + text.strip("\n") + "\n"
+    return time + text.strip("\n") + "\n\n\n" + _shared_source()
+
+
+def _shared_source() -> str:
+    """The readers of brickdnn.data.formats that the script shares with the import."""
+    from . import formats
+
+    parts = [
+        "class DataError(ValueError):",
+        '    """A file that cannot be read."""',
+        "",
+        "",
+    ]
+    for item in formats.SHARED:
+        if isinstance(item, str):
+            parts.append(f"{item} = {getattr(formats, item)!r}")
+        else:
+            parts += ["", "", *textwrap.dedent(inspect.getsource(item)).rstrip().splitlines()]
+    return "\n".join(parts) + "\n"
 
 
 def _default_missing() -> list[str]:
@@ -387,9 +482,10 @@ def _script_info(info: dict[str, Any], fallback_columns: list[dict[str, str]]) -
     """The part of a SourceInfo the script needs, with columns as {name: kind}."""
     columns = info.get("columns") or fallback_columns
     missing = info.get("missing_values")
-    return {
+    script_info = {
         "name": str(info.get("name") or ""),
         "filename": str(info.get("filename") or "data.csv"),
+        "format": str(info.get("format") or "csv"),
         "delimiter": str(info.get("delimiter") or ","),
         "decimal": str(info.get("decimal") or "."),
         "header": bool(info.get("header", True)),
@@ -399,6 +495,26 @@ def _script_info(info: dict[str, Any], fallback_columns: list[dict[str, str]]) -
         ],
         "columns": {str(c["name"]): str(c["kind"]) for c in columns},
     }
+    if info.get("sheet"):
+        script_info["sheet"] = str(info["sheet"])
+    if isinstance(info.get("json_path"), list) and info["json_path"]:
+        script_info["json_path"] = [str(key) for key in info["json_path"]]
+    if info.get("member"):
+        script_info["member"] = str(info["member"])
+    return script_info
+
+
+_FORMAT_LIBRARIES = {"xlsx": "openpyxl", "xls": "xlrd", "parquet": "pyarrow", "feather": "pyarrow"}
+
+
+def _libraries(infos: dict[Any, dict[str, Any]]) -> str:
+    """ ", openpyxl and pyarrow" for the libraries the formats of the sources need."""
+    needed = sorted(
+        {_FORMAT_LIBRARIES[i["format"]] for i in infos.values() if i["format"] in _FORMAT_LIBRARIES}
+    )
+    if not needed:
+        return ""
+    return ", " + (" and ".join(needed) if len(needed) <= 2 else ", ".join(needed))
 
 
 def comment(text: Any) -> str:
@@ -560,7 +676,7 @@ def pandas_script(
         "Usage:",
         f"    python {slug}_prepare.py --input {main_file} --output prepared.csv",
         "",
-        "Needs Python 3.10+ with pandas 2 and numpy.",
+        "Needs Python 3.10+ with pandas 2 and numpy" + _libraries(script_infos) + ".",
         '"""',
     ]
 
@@ -569,9 +685,18 @@ def pandas_script(
         "from __future__ import annotations",
         "",
         "import argparse",
+        "import bz2",
         "import csv",
+        "import datetime",
+        "import gzip",
+        "import io",
+        "import json",
+        "import lzma",
+        "import math",
         "import re",
         "import sys",
+        "import zipfile",
+        "from xml.etree.ElementTree import iterparse",
         "",
         "import numpy as np",
         "import pandas as pd",
@@ -585,8 +710,8 @@ def pandas_script(
         out.append(f"CLASS_NAMES = {pprint.pformat(class_names, width=96, compact=True)}")
     out += [
         "",
-        "# How the data files were imported: delimiter, decimal mark, encoding, missing-value",
-        "# markers and the type of every column.",
+        "# How the data files were imported: format (sheet, delimiter, decimal mark, encoding),",
+        "# missing-value markers and the type of every column.",
         "SOURCES = {",
         *(
             f"    {i!r}: {pprint.pformat(info, width=92, compact=True, sort_dicts=False)},".replace(
@@ -623,7 +748,7 @@ def pandas_script(
         "    parser.add_argument(",
         '        "--input",',
         '        default=SOURCES[MAIN_SOURCE]["filename"],',
-        '        help="CSV file of " + repr(SOURCES[MAIN_SOURCE]["name"]) + " (default: %(default)s)",',
+        '        help="Data file of " + repr(SOURCES[MAIN_SOURCE]["name"]) + " (default: %(default)s)",',
         "    )",
     ]
     for i in others:
@@ -631,7 +756,7 @@ def pandas_script(
             "    parser.add_argument(",
             f'        "--source-{i}",',
             f'        default=SOURCES[{i!r}]["filename"],',
-            f'        help="CSV file of " + repr(SOURCES[{i!r}]["name"]) + " (default: %(default)s)",',
+            f'        help="Data file of " + repr(SOURCES[{i!r}]["name"]) + " (default: %(default)s)",',
             "    )",
         ]
     out += [

@@ -1,4 +1,5 @@
-"""Reading CSV files into a :class:`~brickdnn.data.table.Table`.
+"""Reading CSV files into a :class:`~brickdnn.data.table.Table`, and typing the columns of
+every import (other formats: :mod:`brickdnn.data.readers`).
 
 The reader is forgiving, because real files are messy: it detects the delimiter
 (``,`` ``;`` tab ``|``), decimal commas (``1,5``, also with thousands separators like
@@ -31,7 +32,7 @@ import io
 import json
 import re
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -135,6 +136,8 @@ class ImportOptions:
     missing_values: list[str] | None = None
     # Stop after this many data rows (None: read everything; limits are checked anyway).
     max_rows: int | None = None
+    # The sheet of a workbook (Excel, OpenDocument); None: the first one with values.
+    sheet: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> ImportOptions:
@@ -182,6 +185,14 @@ class ImportOptions:
             if not isinstance(max_rows, int) or isinstance(max_rows, bool) or max_rows < 1:
                 raise DataError("Row limit: enter a whole number of at least 1.")
             options.max_rows = max_rows
+
+        sheet = data.get("sheet")
+        if sheet is not None and not isinstance(sheet, str):
+            raise DataError(f"Sheet: invalid value {sheet!r}.")
+        if sheet and sheet.strip():
+            if len(sheet) > 200:
+                raise DataError("Sheet: the name can be at most 200 characters long.")
+            options.sheet = sheet
         return options
 
     def to_dict(self) -> dict[str, Any]:
@@ -192,15 +203,25 @@ class ImportOptions:
 class ImportReport:
     """What the reader detected and anything the user should know. Stored with the source."""
 
-    delimiter: str
+    delimiter: str | None  # None: not a CSV file
     decimal: str
     header: bool
-    encoding: str
+    encoding: str | None  # None: a binary file (Excel, Parquet ...)
     rows: int
     columns: int
     # Human-readable notes, e.g. "Column 'price' is categorical because 12 values are not
     # numbers, e.g. 'n.a.', 'free'. Use “Change type” to convert it."
     warnings: list[str] = field(default_factory=list)
+    # csv, xlsx, xls, ods, json, jsonl, parquet or feather (see brickdnn.data.readers)
+    format: str = "csv"
+    # gzip, bz2, xz or zip if the file was packed; member: the file inside the ZIP file
+    compression: str | None = None
+    member: str | None = None
+    # Workbooks: the imported sheet and the names of all sheets
+    sheet: str | None = None
+    sheets: list[str] = field(default_factory=list)
+    # JSON: the keys that lead to the table, e.g. ["data"] for {"data": [...]}
+    json_path: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -384,6 +405,13 @@ class _Cells:
         missing = pd.Series(values, dtype=object).isin(tokens).to_numpy(dtype=bool)
         return cls(values, missing, codes.astype(np.int32))
 
+    def __len__(self) -> int:
+        return len(self.codes)
+
+    def select(self, rows: np.ndarray | slice) -> None:
+        """Keep the rows selected by a boolean mask or a slice."""
+        self.codes = self.codes[rows]
+
     def row_missing(self) -> np.ndarray:
         return self.missing[self.codes]
 
@@ -401,6 +429,86 @@ class _Cells:
             candidates = candidates.copy()
             candidates[first] = False
         return _spread(self.values[candidates].tolist(), n)
+
+
+@dataclass
+class _Typed:
+    """A column whose values already have a type (Parquet, Feather, numbers in JSON ...), in
+    the storage format of its kind. Gives the same result as typing its texts would."""
+
+    values: np.ndarray
+    kind: str
+
+    @classmethod
+    def from_series(cls, series: pd.Series) -> _Typed | None:
+        """The typed column, or None if its values have to be typed from their texts."""
+        dtype = series.dtype
+        if isinstance(dtype, pd.CategoricalDtype):
+            return None
+        if pd.api.types.is_bool_dtype(dtype):
+            return cls(series.to_numpy(dtype=np.float64, na_value=np.nan, copy=True), "boolean")
+        if pd.api.types.is_numeric_dtype(dtype) and not pd.api.types.is_complex_dtype(dtype):
+            values = series.to_numpy(dtype=np.float64, na_value=np.nan, copy=True)
+            values[~np.isfinite(values)] = np.nan
+            return cls(values, "numeric")
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+            return cls._dates(series)
+        if pd.api.types.is_timedelta64_dtype(dtype):
+            return cls(series.dt.total_seconds().to_numpy(dtype=np.float64), "numeric")
+        if not pd.api.types.is_object_dtype(dtype):
+            return None
+        items = series.tolist()
+        types = {_value_type(v) for v in items if not _is_missing(v)}
+        if types == {"boolean"} or types == {"number"}:
+            try:
+                values = np.array(
+                    [np.nan if _is_missing(v) else float(v) for v in items], dtype=np.float64
+                )
+            except OverflowError:  # a whole number too large for a float: like its text
+                return None
+            values[~np.isfinite(values)] = np.nan
+            return cls(values, "boolean" if types == {"boolean"} else "numeric")
+        return None
+
+    @classmethod
+    def _dates(cls, series: pd.Series) -> _Typed | None:
+        if getattr(series.dt, "tz", None) is not None:
+            series = series.dt.tz_convert("UTC").dt.tz_localize(None)
+        try:
+            return cls(series.to_numpy(dtype="datetime64[ns]", copy=True), "datetime")
+        except (OverflowError, ValueError, pd.errors.OutOfBoundsDatetime):
+            return None
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+    def select(self, rows: np.ndarray | slice) -> None:
+        self.values = self.values[rows]
+
+    def row_missing(self) -> np.ndarray:
+        if self.kind == "datetime":
+            return np.isnat(self.values)
+        return np.isnan(self.values)
+
+    def typed(self, name: str, warnings: list[str]) -> tuple[np.ndarray, str]:
+        if self.row_missing().all():
+            warnings.append(f"Column '{name}' is empty (no values in any row).")
+            return np.full(len(self.values), None, dtype=object), "categorical"
+        return self.values, self.kind
+
+
+def _is_missing(value: Any) -> bool:
+    if value is None or value is pd.NA or value is pd.NaT:
+        return True
+    return isinstance(value, (float, np.floating)) and not np.isfinite(value)
+
+
+def _value_type(value: Any) -> str:
+    if isinstance(value, (bool, np.bool_)):
+        return "boolean"
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return "number"
+    return "other"
 
 
 def read_csv(
@@ -469,33 +577,162 @@ def read_csv(
     decimal = options.decimal
     if decimal == "auto":
         decimal = _detect_decimal(columns, delimiter)
-    if options.header == "auto":
-        header = _detect_header(columns, decimal)
-    else:
-        header = options.header == "yes"
-    if header:
-        if len(columns[0].codes) <= 1:
-            raise DataError("The file has a header line but no data rows.")
-        names = [c.values[c.codes[0]] for c in columns]
-        for c in columns:
-            c.codes = c.codes[1:]
-    else:
-        names = [f"column_{i + 1}" for i in range(len(columns))]
+    names, header, n_rows = _rows_and_names(
+        columns,
+        None,
+        options,
+        decimal,
+        max_rows,
+        warnings,
+        count_rows=_record_counter(text),
+    )
+    del text
+    table = _typed_table(names, columns, decimal, n_rows, warnings)
+    report = ImportReport(
+        delimiter=delimiter,
+        decimal=decimal,
+        header=header,
+        encoding=encoding,
+        rows=n_rows,
+        columns=len(names),
+        warnings=warnings,
+    )
+    return table, report
+
+
+def _record_counter(text: str) -> Callable[[bool], int]:
+    """Counts the data rows of a CSV text (for the message when there are too many)."""
+    return lambda header: _count_records(text) - (1 if header else 0)
+
+
+def missing_tokens(options: ImportOptions, extra: Sequence[str] = ()) -> set[str]:
+    """The cell values that mean "missing" (always including the empty text)."""
+    tokens = set(DEFAULT_MISSING if options.missing_values is None else options.missing_values)
+    return tokens | set(extra) | {""}
+
+
+def table_from_rows(
+    rows: list[list[str]],
+    options: ImportOptions,
+    tokens: set[str],
+    *,
+    max_rows: int | None = None,
+    max_columns: int | None = None,
+    more_rows: bool = False,
+    warnings: list[str],
+) -> tuple[Table, bool]:
+    """A table from rows of cell texts (a sheet, JSON rows) whose first row may hold the
+    column names: ``(table, header)``. Columns without any value (not even a name) are left
+    out; the header is detected unless ``options.header`` says otherwise. ``more_rows``:
+    the reader stopped before the end (the row limit is exceeded if the rows say so)."""
+    frame = pd.DataFrame(rows, dtype=object)
+    frame = frame.where(frame.notna(), "")
+    used = [i for i in range(frame.shape[1]) if frame.iloc[:, i].str.strip().ne("").any()]
+    if max_columns is not None and len(used) > max_columns:
+        raise DataError(
+            f"The file has {len(used):,} columns; at most {max_columns:,} are supported."
+        )
+    if not used:
+        raise DataError("The file is empty.")
+    columns = [_Cells.from_series(frame.iloc[:, i], tokens) for i in used]
+    del frame
+    names, header, n_rows = _rows_and_names(
+        columns,
+        None,
+        options,
+        ".",
+        max_rows,
+        warnings,
+        count_rows=lambda header: None if more_rows else len(rows) - (1 if header else 0),
+    )
+    return _typed_table(names, columns, ".", n_rows, warnings), header
+
+
+def table_from_columns(
+    names: list[str],
+    values: Sequence[pd.Series | list[Any]],
+    options: ImportOptions,
+    *,
+    max_rows: int | None = None,
+    total_rows: int | None = None,
+    warnings: list[str],
+) -> Table:
+    """A table from named columns (JSON records, Parquet ...). Columns that already have
+    a type (numbers, booleans, dates) keep it; others are typed from their texts like CSV
+    columns (see :func:`brickdnn.data.formats.cell_text`)."""
+    from .formats import cell_text
+
+    tokens = missing_tokens(options)
+    # A custom missing-value marker like "-999" also applies to numbers: then every value
+    # goes through its text, as in a CSV file.
+    keep_types = tokens <= set(DEFAULT_MISSING)
+    columns: list[_Cells | _Typed] = []
+    for column in values:
+        series = column if isinstance(column, pd.Series) else pd.Series(column, dtype=object)
+        typed = _Typed.from_series(series) if keep_types else None
+        if typed is None:
+            texts = pd.Series([cell_text(v) for v in series.tolist()], dtype=object)
+            columns.append(_Cells.from_series(texts, tokens))
+        else:
+            columns.append(typed)
+    if not columns:
+        raise DataError("The file has no columns.")
+    names, _, n_rows = _rows_and_names(
+        columns,
+        names,
+        options,
+        ".",
+        max_rows,
+        warnings,
+        count_rows=lambda header: total_rows,
+    )
+    return _typed_table(names, columns, ".", n_rows, warnings)
+
+
+def _rows_and_names(
+    columns: Sequence[_Cells | _Typed],
+    names: list[str] | None,
+    options: ImportOptions,
+    decimal: str,
+    max_rows: int | None,
+    warnings: list[str],
+    count_rows: Callable[[bool], int | None],
+) -> tuple[list[str], bool, int]:
+    """Header line, column names, empty rows and row limits, the same for every format:
+    ``(names, header, rows)``. ``names`` None: the first row may hold the names (then all
+    columns are cell texts). ``count_rows(header)``: all data rows of the file, for the
+    message when there are too many (None if unknown)."""
+    if names is None:
+        cells = [c for c in columns if isinstance(c, _Cells)]
         if options.header == "auto":
-            warnings.append(
-                f"No header line found; the columns are named column_1 … "
-                f"column_{len(columns)}. Import again with “Header: yes” if the first line "
-                "holds the column names."
-            )
+            header = _detect_header(cells, decimal)
+        else:
+            header = options.header == "yes"
+        if header:
+            if len(cells[0]) <= 1:
+                raise DataError("The file has a header line but no data rows.")
+            names = [c.values[c.codes[0]] for c in cells]
+            for c in cells:
+                c.select(slice(1, None))
+        else:
+            names = [f"column_{i + 1}" for i in range(len(columns))]
+            if options.header == "auto":
+                warnings.append(
+                    f"No header line found; the columns are named column_1 … "
+                    f"column_{len(columns)}. Import again with “Header: yes” if the first line "
+                    "holds the column names."
+                )
+    else:
+        header = True
     names = _clean_names(names, warnings)
 
     # Lines without any value (e.g. ";;;" at the end of Excel exports) carry no data.
     empty_rows = np.logical_and.reduce([c.row_missing() for c in columns])
     if empty_rows.any():
         for c in columns:
-            c.codes = c.codes[~empty_rows]
+            c.select(~empty_rows)
         warnings.append(f"Skipped {_count(int(empty_rows.sum()), 'empty row')}.")
-    n_rows = len(columns[0].codes)
+    n_rows = len(columns[0])
     if n_rows == 0:
         raise DataError("The file has no data rows.")
 
@@ -506,30 +743,36 @@ def read_csv(
     ):
         n_rows = options.max_rows
         for c in columns:
-            c.codes = c.codes[:n_rows]
+            c.select(slice(0, n_rows))
         warnings.append(f"Read only the first {n_rows:,} data rows (row limit).")
     elif max_rows is not None and n_rows > max_rows:
-        total = _count_records(text) - (1 if header else 0)
+        total = count_rows(header)
+        if total is None:
+            raise DataError(
+                f"The file has more than {max_rows:,} rows; at most {max_rows:,} are supported."
+            )
         raise DataError(
             f"The file has {max(total, max_rows + 1):,} rows; at most {max_rows:,} are supported."
         )
-    del text
+    return names, header, n_rows
 
+
+def _typed_table(
+    names: list[str],
+    columns: Sequence[_Cells | _Typed],
+    decimal: str,
+    n_rows: int,
+    warnings: list[str],
+) -> Table:
     data: dict[str, np.ndarray] = {}
     kinds: dict[str, str] = {}
     for name, cells in zip(names, columns, strict=True):
-        data[name], kinds[name] = _type_column(name, cells, decimal, warnings)
+        if isinstance(cells, _Typed):
+            data[name], kinds[name] = cells.typed(name, warnings)
+        else:
+            data[name], kinds[name] = _type_column(name, cells, decimal, warnings)
     df = pd.DataFrame(data, index=pd.RangeIndex(n_rows))
-    report = ImportReport(
-        delimiter=delimiter,
-        decimal=decimal,
-        header=header,
-        encoding=encoding,
-        rows=n_rows,
-        columns=len(names),
-        warnings=warnings,
-    )
-    return Table(df, kinds), report
+    return Table(df, kinds)
 
 
 def _count(n: int, word: str) -> str:
