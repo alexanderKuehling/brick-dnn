@@ -104,6 +104,7 @@ SECRET_VALUE = re.compile(
 NAME_KEYS = {"name", "class_name", "label", "filename"}
 # Texts only stored as their length: free text of the user (and e-mail addresses of others).
 LENGTH_ONLY_KEYS = {"description", "text", "user", "email", "query"}
+UUID = re.compile(r"^[0-9a-fA-F]{8}-?([0-9a-fA-F]{4}-?){3}[0-9a-fA-F]{12}$")
 CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
@@ -436,6 +437,8 @@ def run_ref(user, run_id: Any, name: Any = None) -> dict[str, Any] | None:
         name = _safe(
             lambda: visible_runs(user).filter(pk=run_id).values_list("name", flat=True).first()
         )
+        if not name and not UUID.match(run_id):
+            return None  # not a run id at all (agents make mistakes)
     return target("run", run_id, name)
 
 
