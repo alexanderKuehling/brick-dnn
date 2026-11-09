@@ -180,8 +180,13 @@ def test_script_trains_classifier_on_csv(tmp_path):
     (tmp_path / "data.csv").write_text("\n".join(rows) + "\n")
     result = run_script(generate_code(payload), tmp_path, "--csv", "data.csv", "--epochs", "2")
     assert result.returncode == 0, result.stderr
+    assert "Training on cpu: 80 rows, 20 for validation" in result.stdout
     assert "val acc" in result.stdout
-    assert (tmp_path / "model.pt").exists()
+    checkpoint = torch.load(tmp_path / "model.pt", weights_only=True)
+    pre = checkpoint["preprocessing"]
+    assert pre["columns"] == ["a", "b", "c"] and pre["target"] == "label"
+    assert pre["task"] == "classification" and pre["num_classes"] == 2
+    build_model(generate_code(payload)).load_state_dict(checkpoint["state_dict"])
 
 
 @needs_torch
@@ -192,7 +197,96 @@ def test_script_trains_regression_on_csv(tmp_path):
     result = run_script(code, tmp_path, "--csv", "data.csv", "--epochs", "1", "--save", "w.pt")
     assert result.returncode == 0, result.stderr
     assert "val loss" in result.stdout
-    assert (tmp_path / "w.pt").exists()
+    assert "Saved the weights and the preprocessing to w.pt" in result.stdout
+    pre = torch.load(tmp_path / "w.pt", weights_only=True)["preprocessing"]
+    assert pre["columns"] == [] and pre["target"] == "target" and pre["task"] == "regression"
+    assert len(pre["mean"]) == len(pre["std"]) == 8
+    assert pre["std"][0] == 1.0  # the first column is constant (0) and stays as it is
+
+
+def regression_csv(tmp_path, n=50):
+    """A CSV file with a header and features whose statistics differ between subsets."""
+    gen = torch.Generator().manual_seed(3)
+    values = torch.randn(n, 3, generator=gen) * torch.tensor([1.0, 10.0, 100.0])
+    values[:, 0] += torch.arange(n) / 5  # a trend: every subset has another mean
+    target = (values @ torch.tensor([1.0, 0.1, 0.01])).tolist()
+    lines = ["a,b,c,price"] + [
+        ",".join(f"{v:.5f}" for v in row) + f",{t:.5f}" for row, t in zip(values.tolist(), target)
+    ]
+    (tmp_path / "data.csv").write_text("\n".join(lines) + "\n")
+    return values
+
+
+@needs_torch
+def test_script_split_is_seeded_and_standardises_with_the_training_rows(tmp_path):
+    values = regression_csv(tmp_path)
+    code = generate_code(chain(("Input", {"shape": [3]}), ("Linear", {"out_features": 1})))
+
+    def train(*args):
+        result = run_script(code, tmp_path, "--csv", "data.csv", "--epochs", "3", *args)
+        assert result.returncode == 0, result.stderr
+        return [line for line in result.stdout.splitlines() if line.startswith("Epoch")]
+
+    first = train("--save", "one.pt")
+    assert train("--save", "two.pt") == first  # same seed (0), same split and training
+    assert train("--save", "three.pt", "--seed", "7") != first
+    one = torch.load(tmp_path / "one.pt", weights_only=True)
+    two = torch.load(tmp_path / "two.pt", weights_only=True)
+    assert all(torch.equal(one["state_dict"][k], two["state_dict"][k]) for k in one["state_dict"])
+
+    # Mean and standard deviation come from the 40 training rows of the seeded split.
+    order = torch.randperm(50, generator=torch.Generator().manual_seed(0))
+    train_rows = order[10:]
+    pre = one["preprocessing"]
+    assert pre["columns"] == ["a", "b", "c"] and pre["target"] == "price"
+    assert pre["mean"] == pytest.approx(values[train_rows].mean(dim=0).tolist(), rel=1e-4)
+    assert pre["std"] == pytest.approx(values[train_rows].std(dim=0).tolist(), rel=1e-4)
+    assert pre["mean"][0] != pytest.approx(float(values[:, 0].mean()), rel=1e-4)
+
+
+@needs_torch
+def test_script_predicts_new_rows_like_the_training_data(tmp_path):
+    payload = chain(
+        ("Input", {"shape": [3]}),
+        ("Linear", {"out_features": 8}),
+        ("Activation", {}),
+        ("BatchNorm1d", {}),
+        ("Linear", {"out_features": 3}),
+    )
+    code = generate_code(payload)
+    rows = ["a,b,c,label"] + [f"{i % 7},{(i * 3) % 5},{i % 11},{i % 3}" for i in range(60)]
+    (tmp_path / "data.csv").write_text("\n".join(rows) + "\n")
+    result = run_script(code, tmp_path, "--csv", "data.csv", "--epochs", "3")
+    assert result.returncode == 0, result.stderr
+
+    new = torch.tensor([[1.0, 2.0, 3.0], [6.0, 0.0, 10.0], [3.0, 4.0, 0.0], [0.0, 1.0, 7.0]])
+    checkpoint = torch.load(tmp_path / "model.pt", weights_only=True)
+    model = build_model(code)
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+    pre = checkpoint["preprocessing"]
+    with torch.no_grad():
+        x = (new - torch.tensor(pre["mean"])) / torch.tensor(pre["std"])
+        expected = ["label", *(str(v) for v in model(x).argmax(dim=1).tolist())]
+
+    # Columns found by name (in another order, with the target and an extra column) …
+    lines = ["id,c,label,b,a"] + [
+        f"{i},{c:g},0,{b:g},{a:g}" for i, (a, b, c) in enumerate(new.tolist())
+    ]
+    (tmp_path / "by_name.csv").write_text("\n".join(lines) + "\n")
+    result = run_script(code, tmp_path, "--predict", "by_name.csv")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == expected
+    # … or the first columns of a file without a header line.
+    lines = [",".join(f"{v:g}" for v in row) for row in new.tolist()]
+    (tmp_path / "plain.csv").write_text("\n".join(lines) + "\n")
+    result = run_script(code, tmp_path, "--predict", "plain.csv")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == expected
+
+    (tmp_path / "missing.csv").write_text("a,b,label\n1,2,0\n")
+    result = run_script(code, tmp_path, "--predict", "missing.csv")
+    assert result.returncode != 0 and "missing.csv lacks the columns c." in result.stderr
 
 
 # --------------------------------------------------------------------------- #

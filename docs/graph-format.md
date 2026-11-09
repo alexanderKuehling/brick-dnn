@@ -83,4 +83,11 @@ Recurrent layers and `TransformerEncoder` expect `(sequence, features)` and use
   (`include_main`, default `true`),
 - for models with one flat `float` input and one flat output, a CSV training loop
   (`include_training`, default `true`): classification with `CrossEntropyLoss` if the output
-  has more than one unit, regression with `MSELoss` otherwise.
+  has more than one unit, regression with `MSELoss` otherwise. `--csv data.csv` trains on a
+  random 80 % of the rows (fixed by `--seed`, default 0, which also fixes the initial weights)
+  and validates on the rest; the features are standardised with the mean and standard
+  deviation of the training rows. `--save model.pt` (the default) stores a checkpoint
+  `{"state_dict": ..., "preprocessing": {"columns", "target", "mean", "std", "task",
+  "num_classes"}}`, and `--predict new.csv` loads it, prepares the rows of another CSV file
+  the same way (columns by name if both files have a header line, otherwise the first
+  columns) and prints one prediction per row.

@@ -23,7 +23,7 @@ export interface SettingsValues {
   device: string;
   /** Percent (5–50), sent as a fraction. */
   val_split: NumberField;
-  /** Hold out a test set (built-in datasets: their official test images). */
+  /** Hold out a test set (built-in datasets always test on their official test images). */
   test_enabled: boolean;
   /** Percent (5–50) of the data for the test set, sent as a fraction. */
   test_split: NumberField;
@@ -32,6 +32,10 @@ export interface SettingsValues {
   max_samples: NumberField;
   /** Empty: a random seed. */
   seed: NumberField;
+  /** Early stopping: epochs without improvement of the validation loss. Empty: off. */
+  patience: NumberField;
+  /** Keep the weights of the epoch with the lowest validation loss (not the last one). */
+  restore_best: boolean;
 
   /** Hyperparameter search instead of a single training. */
   search: boolean;
@@ -61,6 +65,7 @@ const NUMBER_FIELDS = [
   'weight_decay',
   'max_samples',
   'seed',
+  'patience',
   'search_trials',
   'lr_min',
   'lr_max',
@@ -68,6 +73,7 @@ const NUMBER_FIELDS = [
 
 const BOOLEAN_FIELDS = [
   'test_enabled',
+  'restore_best',
   'search',
   'tune_learning_rate',
   'tune_batch_size',
@@ -92,6 +98,8 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   weight_decay: 0,
   max_samples: '',
   seed: '',
+  patience: '',
+  restore_best: true,
   search: false,
   search_method: 'random',
   search_trials: 10,
@@ -119,12 +127,10 @@ export const LIMITS = {
   held_out: { max: 80 },
   max_samples: { min: 10, max: 1_000_000_000 },
   seed: { min: 0, max: 2 ** 31 - 1 },
+  patience: { min: 1, max: 1000 },
   /** Same limits as backend/brickdnn/training/tuning.py. */
   search_trials: { min: 1, max: 100 },
 } as const;
-
-/** Built-in datasets only switch their official test images on; the share is not used. */
-const BUILTIN_TEST_SPLIT = 0.2;
 
 export const OPTIMIZERS: { value: Optimizer; label: string }[] = [
   { value: 'adam', label: 'Adam' },
@@ -273,6 +279,7 @@ export function validateSettings(values: SettingsValues): SettingsErrors {
   }
   set('max_samples', wholeNumber(values.max_samples, LIMITS.max_samples, false));
   set('seed', wholeNumber(values.seed, LIMITS.seed, false));
+  set('patience', wholeNumber(values.patience, LIMITS.patience, false));
 
   if (values.search) {
     const grid = values.search_method === 'grid';
@@ -318,8 +325,9 @@ export function validateSettings(values: SettingsValues): SettingsErrors {
 const fraction = (percent: number) => Number((percent / 100).toFixed(4));
 
 /**
- * The training settings for the API. Built-in datasets only switch their official test
- * images on (`builtin`). Settings varied by a search are left out; the search sets them.
+ * The training settings for the API. Built-in datasets (`builtin`) always test on their
+ * official test images, so they need no test split. Settings varied by a search are left
+ * out; the search sets them.
  */
 export function toConfig(
   values: SettingsValues,
@@ -332,10 +340,7 @@ export function toConfig(
   const tuned = tunedSettings(values);
   const split = number(values.val_split);
   const testSplit = number(values.test_split);
-  let test = 0;
-  if (values.test_enabled) {
-    test = builtin ? BUILTIN_TEST_SPLIT : testSplit === null ? 0 : fraction(testSplit);
-  }
+  const test = values.test_enabled && !builtin && testSplit !== null ? fraction(testSplit) : 0;
   return {
     epochs: number(values.epochs) ?? undefined,
     batch_size: tuned.batch_size ? undefined : (number(values.batch_size) ?? undefined),
@@ -347,6 +352,8 @@ export function toConfig(
     device: values.device,
     max_samples: number(values.max_samples),
     seed: number(values.seed),
+    patience: number(values.patience),
+    restore_best: values.restore_best,
   };
 }
 

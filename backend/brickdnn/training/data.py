@@ -1,7 +1,8 @@
 """Turn a dataset into tensors the way the :class:`TrainingPlan` says.
 
 Every dataset becomes two or three *sources*: training, validation and, if the settings
-ask for one, a test set that is only used once after training. A source knows its length
+ask for one, a test set that is only used once after training (built-in datasets always
+have one: their official test split). A source knows its length
 and returns ready-to-use batches for a tensor of sample indices; images are kept as
 ``uint8`` and only converted to normalised floats batch by batch, which keeps memory low
 (CIFAR-10 as float32 would need about 600 MB).
@@ -49,11 +50,10 @@ PRELOAD_BYTES = 2 * 1024**3
 # converted in chunks of about this size (float32).
 STATS_SAMPLES = 10_000
 STATS_CHUNK_BYTES = 64 * 1024**2
-# Built-in datasets come with an official test split. Without a test set it is used for
-# validation (and val_split is ignored); with a test set it is the test set and validation
-# data is taken from the training split. With max_samples, the official split is shrunk as
-# if it were 20 % of all samples.
-BUILTIN_VAL_SPLIT = 0.2
+# Built-in datasets come with an official test split, which always is the test set
+# (test_split is not used); validation data is taken from the training split (val_split).
+# With max_samples, the official test split is shrunk as if it were 20 % of all samples.
+BUILTIN_TEST_SHARE = 0.2
 # CSV files are parsed in blocks of this many rows.
 CSV_BLOCK_ROWS = 4096
 # Rows per chunk when computing statistics of tabular data.
@@ -645,18 +645,14 @@ def builtin_data(
     official_images = _as_nchw(official_set.data)
     official_labels = torch.as_tensor(official_set.targets, dtype=torch.long)
 
-    # With a test set, validation samples come from the training split (as views, without
-    # copying the images); without one, the official test split is used for validation.
-    train_rows = val_rows = None
-    if config.has_test:
-        train_rows, val_rows, _ = split_indices(
-            len(train_images), config.val_split, config.max_samples, generator
-        )
-    elif config.max_samples is not None and config.max_samples < len(train_images):
-        keep = torch.randperm(len(train_images), generator=generator)[: config.max_samples]
-        train_images, train_labels = train_images[keep], train_labels[keep]
+    # Validation samples come from the training split (as views, without copying the
+    # images): they choose the kept epoch and the best trial, so the official test split
+    # stays unseen until the kept weights are measured on it once (the test set).
+    train_rows, val_rows, _ = split_indices(
+        len(train_images), config.val_split, config.max_samples, generator
+    )
     if config.max_samples is not None:
-        n_official = val_size_for(config.max_samples, BUILTIN_VAL_SPLIT)
+        n_official = val_size_for(config.max_samples, BUILTIN_TEST_SHARE)
         if n_official < len(official_images):
             keep = torch.randperm(len(official_images), generator=generator)[:n_official]
             official_images, official_labels = official_images[keep], official_labels[keep]
@@ -676,8 +672,6 @@ def builtin_data(
     preprocessing["dataset"] = spec.id
     training = TensorSource([train_images], [train_labels], [transform])
     official = TensorSource([official_images], [official_labels], [transform])
-    if train_rows is None or val_rows is None:
-        return PreparedData(training, official, preprocessing)
     return PreparedData(
         Subset(training, train_rows), Subset(training, val_rows), preprocessing, test=official
     )

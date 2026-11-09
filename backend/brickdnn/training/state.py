@@ -6,6 +6,8 @@ Every run lives in its own directory::
     state.json    live progress, replaced atomically              (written by the runner)
     STOP          created to ask the runner to stop after the current batch
     weights.pt    model.state_dict() after training or stopping   (written by the runner)
+    weights.preprocessing.json   ``preprocessing`` of the state, saved with the weights
+                  (not for demo data): what new inputs need to be prepared the same way
     output.log    stdout/stderr of the runner process             (for debugging)
 
 ``state.json`` looks like this::
@@ -19,10 +21,10 @@ Every run lives in its own directory::
       "device": "mps", "device_label": "Apple GPU (MPS)",
       "task": "classification",      # classification | regression | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
-      "train_size": 60000, "val_size": 10000,
-      "test_size": null,             # null without a test set
+      "train_size": 48000, "val_size": 12000,
+      "test_size": 10000,            # null without a test set
       "epochs": 10,                  # planned number of epochs (per trial in a search)
-      "steps_per_epoch": 938,
+      "steps_per_epoch": 750,
       "total_params": 101770,
       "history": [                   # one entry per finished epoch
         {"epoch": 1, "train_loss": 0.31, "val_loss": 0.15,
@@ -32,10 +34,20 @@ Every run lives in its own directory::
       "progress": {"epoch": 2, "step": 120, "steps": 938, "loss": 0.21,
                    "samples_per_second": 5400.0},          # null outside of an epoch
       "best": {"epoch": 1, "val_loss": 0.15, "val_accuracy": 0.95},  # lowest val_loss
-      "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null},  # final model on the test
+      "weights_epoch": 1,            # the epoch whose weights are tested and saved: the
+                                     # best one (restore_best) or the last one; null until
+                                     # the epochs are over, and if the saved weights are not
+                                     # those of a finished epoch (stopped without restore_best)
+      "stopped_early": false,        # true if early stopping (patience) ended the training
+      "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null},  # kept weights on the test
                                      # set; null without a test set or before the end
       "weights": false,              # true once weights.pt exists
-      "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights
+      "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights:
+                                     # {"kind": "image", channels, height, width, layout,
+                                     #  mean, std, class_names}, {"kind": "tabular", columns,
+                                     #  target, mean, std, target_mean, target_std,
+                                     #  class_names} (statistics of the training part only)
+                                     # or {"kind": "demo"}
       "log": ["Downloading MNIST …", "..."],               # last 200 lines
 
       # Hyperparameter search only (null / empty for normal runs):
@@ -46,15 +58,18 @@ Every run lives in its own directory::
       "trials": [                    # one entry per started trial
         {"trial": 1, "params": {"learning_rate": 0.00312}, "status": "completed",
          "message": "", "epochs_done": 10, "train_loss": 0.2, "val_loss": 0.15,
-         "val_accuracy": 0.95, "val_rmse": null, "seconds": 120.5}
+         "val_accuracy": 0.95, "val_rmse": null, "weights_epoch": 8,
+         "stopped_early": false, "seconds": 120.5}
       ],                             # status: running | completed | failed | stopped;
-                                     # the metrics are those of the trial's last epoch
-      "best_trial": 1                # lowest final val_loss so far
+                                     # the metrics are those of the epoch whose weights the
+                                     # trial keeps (weights_epoch); while it runs and for
+                                     # failed or stopped trials, those of its last epoch
+      "best_trial": 1                # lowest val_loss of the kept weights so far
     }
 
 In a search, ``history``, ``best`` and ``progress`` belong to the running trial. When the
 search ends (or is stopped), they are replaced by those of the best trial, whose weights
-are saved.
+are saved; ``weights_epoch`` and ``stopped_early`` then describe the best trial.
 """
 
 from __future__ import annotations
@@ -82,6 +97,13 @@ HEARTBEAT_SECONDS = 5
 # A run whose state has not been updated for this long is considered dead.
 STALE_SECONDS = 60
 MAX_LOG_LINES = 200
+
+
+def preprocessing_path(weights_path: str | Path) -> Path:
+    """Where the preprocessing is saved next to the weights: ``x.pt`` ->
+    ``x.preprocessing.json``."""
+    path = Path(weights_path)
+    return path.with_name(f"{path.stem}.preprocessing.json")
 
 
 def write_json_atomic(path: str | Path, data: Any) -> None:
@@ -131,6 +153,8 @@ def initial_state(epochs: int = 0) -> dict[str, Any]:
         "history": [],
         "progress": None,
         "best": None,
+        "weights_epoch": None,
+        "stopped_early": False,
         "test": None,
         "weights": False,
         "preprocessing": None,

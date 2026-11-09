@@ -97,7 +97,7 @@ elif mode == "until_stop":
     finish("stopped", "Stopped after 0 epochs.")
 elif mode == "search":  # a finished hyperparameter search with a test set
     trial = {"status": "completed", "message": "", "epochs_done": 1, "train_loss": 0.5,
-             "val_rmse": None, "seconds": 0.1}
+             "val_rmse": None, "weights_epoch": 1, "stopped_early": False, "seconds": 0.1}
     state["tuning"] = job["tuning"]
     state["trials_total"] = 2
     state["trials"] = [
@@ -107,7 +107,7 @@ elif mode == "search":  # a finished hyperparameter search with a test set
          "val_accuracy": 0.95},
         {**trial, "trial": 3, "params": {"learning_rate": 9.0}, "status": "failed",
          "message": "The loss became NaN in epoch 1. Try a lower learning rate.",
-         "val_loss": None, "val_accuracy": None, "epochs_done": 0},
+         "val_loss": None, "val_accuracy": None, "epochs_done": 0, "weights_epoch": None},
     ]
     state["best_trial"] = 2
     state["history"].append(
@@ -117,7 +117,18 @@ elif mode == "search":  # a finished hyperparameter search with a test set
     state["best"] = {"epoch": 1, "val_loss": 0.3, "val_accuracy": 0.95}
     state["test_size"] = 13
     state["test"] = {"loss": 0.35, "accuracy": 0.92, "rmse": None}
+    state["weights_epoch"] = 1
     finish("completed", "Finished 3 trials (1 failed).")
+elif mode == "early":  # stopped early after epoch 3, keeps the weights of epoch 1
+    for epoch, loss in ((1, 0.3), (2, 0.4), (3, 0.5)):
+        state["history"].append(
+            {"epoch": epoch, "train_loss": 0.6 - epoch / 10, "val_loss": loss,
+             "train_accuracy": 0.8, "val_accuracy": 1 - loss, "seconds": 0.1}
+        )
+    state["best"] = {"epoch": 1, "val_loss": 0.3, "val_accuracy": 0.7}
+    state.update(weights_epoch=1, stopped_early=True)
+    state["test"] = {"loss": 0.32, "accuracy": 0.69, "rmse": None}
+    finish("completed", "Stopped early after epoch 3: no improvement for 2 epochs.")
 elif mode == "crash":  # exits without a final status
     print("RuntimeError: something broke", file=sys.stderr)
     sys.exit(1)
@@ -764,6 +775,7 @@ def test_hyperparameter_search_run(auth_client, training_dir, settings):
         "val_loss": 0.3,
         "val_accuracy": 0.95,
         "val_rmse": None,
+        "weights_epoch": 1,
     }
     assert data["metrics"]["val_accuracy"] == 0.95
     assert data["metrics"]["test_loss"] == 0.35
@@ -773,6 +785,28 @@ def test_hyperparameter_search_run(auth_client, training_dir, settings):
     assert [t["trial"] for t in data["state"]["trials"]] == [1, 2, 3]
     listing = auth_client.get("/api/training/runs/").data
     assert listing[0]["tuning"] == normalised and listing[0]["best_trial"]["trial"] == 2
+
+
+def test_metrics_are_those_of_the_kept_weights(auth_client, training_dir, settings):
+    use_runner(settings, "early")
+    config = {**QUICK, "epochs": 5, "patience": 2, "restore_best": True}
+    response = start(auth_client, config=config)
+    assert response.status_code == 201, response.data
+    assert response.data["config"]["patience"] == 2
+    assert response.data["config"]["restore_best"] is True
+    data = wait_for(auth_client, response.data["id"])
+    assert data["status"] == "completed"
+    assert data["epochs_done"] == 3
+    assert data["metrics"] == {
+        "train_loss": 0.5,
+        "val_loss": 0.3,
+        "val_accuracy": 0.7,
+        "val_rmse": None,
+        "test_loss": 0.32,
+        "test_accuracy": 0.69,
+        "test_rmse": None,
+    }
+    assert data["state"]["weights_epoch"] == 1 and data["state"]["stopped_early"] is True
 
 
 def test_runs_are_listed_newest_first(auth_client, training_dir, settings):
@@ -934,6 +968,7 @@ def test_run_rejects_incompatible_networks(auth_client, training_dir):
         ({"config": {"optimizer": "rmsprop"}}, "Optimizer must be one of"),
         ({"config": "fast"}, "The training settings must be an object."),
         ({"config": {"test_split": 0.7}}, "Test split must be at least 0 and at most 0.5."),
+        ({"config": {"patience": 0}}, "Patience must be between 1 and 1,000."),
         (
             {"config": {"val_split": 0.5, "test_split": 0.5}},
             "Validation and test split together can be at most 80%.",

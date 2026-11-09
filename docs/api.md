@@ -27,14 +27,17 @@ Body: `{"graph": {...}}` (or the bare graph). Always answers `200`:
     "input": { "type": "Input", "output_shape": [100], "dtype": "float", "num_params": 0, "params": { "shape": [100], "dtype": "float" } },
     "fc1": { "type": "Linear", "output_shape": null, "dtype": null, "num_params": null, "params": { "in_features": 50, "out_features": 64, "bias": true } }
   },
-  "inputs": [],
-  "outputs": [],
+  "inputs": ["input"],
+  "outputs": ["fc1"],
   "total_params": null
 }
 ```
 
 `node` is `null` for errors about the whole graph. `params` contains the resolved values,
-including inferred `auto` parameters.
+including inferred `auto` parameters; parameters that have no effect with the other settings
+(the UI hides them, e.g. `padding_size` unless `padding` is `custom`) are left out. `inputs`
+and `outputs` list the Input layers and the layers without outgoing connections, also when
+the graph has errors.
 
 ### `POST /api/generate/`
 
@@ -138,7 +141,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets, limits    |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits |
 | GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
@@ -146,15 +149,20 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
 | POST   | `/api/training/runs/`                  | Start a run `{name, graph, dataset, config, tuning?}` |
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
-| POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (weights are kept)     |
+| POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept) |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`)           |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
 (`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
-`val_split`, `test_split` (0 = no test set; validation and test together at most 0.8),
-`device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples` and `seed`; missing values use the
+`val_split`, `test_split` (0 = no test set; validation and test together at most 0.8; built-in
+datasets take `val_split` of their training images and always test on their official test
+images, `test_split` is not used for them),
+`device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
+stop when the validation loss has not improved for this many epochs, 1–1000; `null`, the
+default, trains every epoch) and `restore_best` (default `true`: test and save the weights of
+the epoch with the lowest validation loss instead of the last one); missing values use the
 defaults.
 
 `tuning` (optional) turns the run into a hyperparameter search, see
@@ -194,15 +202,17 @@ explanations, e.g. `400 {"detail": "...", "errors": ["The network outputs 5 valu
 A run's `status` is `starting`, `preparing` (loading or downloading data), `running`,
 `completed`, `stopped` or `failed`. `GET /api/training/runs/<id>/` includes `state` with the
 per-epoch `history` (`train_loss`, `val_loss`, `train_accuracy`, `val_accuracy`, `val_rmse`),
-the current `progress`, the `best` epoch, the `test` result, `preprocessing` and the last log
-lines. Poll it about once per second while a run is active.
+the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weights are tested
+and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
+and the last log lines. Poll it about once per second while a run is active.
 
-Every run also has `metrics` (the last epoch plus `test_loss`, `test_accuracy`, `test_rmse`),
-`tuning` (the normalised search settings or `null`), `trials_done` and `best_trial`
-(`{trial, params, val_loss, val_accuracy, val_rmse}`). In a search, `state.trials` lists every
-trial with its `params`, `status` and final metrics; `history`, `best` and `metrics` belong to
-the running trial and, at the end, to the best one. The file format is documented in
-`backend/brickdnn/training/state.py`.
+Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
+`test_loss`, `test_accuracy`, `test_rmse`), `tuning` (the normalised search settings or
+`null`), `trials_done` and `best_trial` (`{trial, params, val_loss, val_accuracy, val_rmse,
+weights_epoch}`). In a search, `state.trials` lists every trial with its `params`, `status`,
+the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
+`metrics` belong to the running trial and, at the end, to the best one. The file format is
+documented in `backend/brickdnn/training/state.py`.
 
 ## Data preparation (login required)
 

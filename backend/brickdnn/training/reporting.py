@@ -34,9 +34,11 @@ class Reporter:
 
     Call order: ``status``/``log`` while preparing, ``setup`` once data and model are
     ready, then per epoch ``status`` + ``progress`` (about twice per second) +
-    ``epoch_end``, ``test_end`` if there is a test set, and exactly one ``finish`` at the
-    end. A hyperparameter search wraps the epochs of every trial in ``trial_start`` and
-    ``trial_end`` and calls ``search_end`` before testing the best trial.
+    ``epoch_end``, ``weights_kept`` once the epochs are over (or the run was stopped),
+    ``test_end`` if there is a test set, and exactly one ``finish`` at the end. A
+    hyperparameter search wraps the epochs of every trial in ``trial_start`` and
+    ``trial_end`` and calls ``search_end`` before ``weights_kept`` and testing the best
+    trial.
     """
 
     def status(self, status: str, message: str) -> None:
@@ -69,8 +71,14 @@ class Reporter:
         """Hyperparameter search: the winner ``{"best_trial", "params", "history", "best"}``.
         Its weights are the ones that are tested and saved."""
 
+    def weights_kept(self, result: dict[str, Any]) -> None:
+        """Which weights are tested and saved: ``{"weights_epoch": 7, "stopped_early": True}``.
+        ``weights_epoch`` is the epoch with the lowest validation loss (``restore_best``) or
+        the last one; None if the weights are not those of a finished epoch. In a search,
+        both describe the best trial."""
+
     def test_end(self, result: dict[str, Any]) -> None:
-        """``{"loss", "accuracy", "rmse"}`` of the final model on the test set."""
+        """``{"loss", "accuracy", "rmse"}`` of the kept weights on the test set."""
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         """Terminal status (completed | stopped | failed) and the result for the user."""

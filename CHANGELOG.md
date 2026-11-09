@@ -8,6 +8,42 @@
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
+- **The preprocessing is saved with the weights.** A run's weights come with
+  `weights.preprocessing.json` (normalisation statistics of the training data, image size or
+  CSV columns, class names), the run view offers it as *Preprocessing (.json)* next to the
+  weights, and `brickdnn train` writes `<name>.preprocessing.json` next to `<name>.pt`.
+- **Predictions with the generated CSV script**: `python model.py --predict new.csv` loads the
+  saved model and prints a prediction for every row, prepared like the training data.
+- **Early stopping**: `patience` (in the editor under *Advanced settings*, `--patience` on the
+  command line) ends a training when the validation loss has not improved for that many
+  epochs. Off by default.
+
+### Changed
+- **Built-in datasets validate on their training images.** Without a test set, MNIST,
+  Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
+  `val_split`, so the images that chose the best epoch were also the reported result. Now
+  `val_split` of the training images is always the validation data, and the official test
+  images are always the test set, measured once after training; `test_split` is not used for
+  them. `GET /api/training/` names the number of official test images `test_size` (was
+  `val_size`).
+- **Training keeps the weights of the best epoch.** The weights with the lowest validation
+  loss are now tested and saved (`weights.pt`) instead of those of the last epoch, also when a
+  run is stopped; `restore_best: false` (`--no-restore-best`) keeps the last epoch as before.
+  The run state names the epoch (`weights_epoch`) and whether the run `stopped_early`, the
+  run's `metrics` are those of that epoch once it has ended, and the result message says so,
+  e.g. *"Stopped early after epoch 12: no improvement for 5 epochs; kept the weights of epoch
+  7."* A hyperparameter search does the same per trial and ranks the trials by the validation
+  loss of their kept weights instead of their last epoch.
+- **Generated CSV training scripts** standardise the features with the mean and standard
+  deviation of the training rows (they used all rows, including the validation rows), split
+  the rows with a seed (`--seed`, default 0, also for the initial weights) and save a
+  checkpoint with the weights and the preprocessing: `torch.load("model.pt")` now returns
+  `{"state_dict": ..., "preprocessing": ...}` instead of the bare `state_dict`.
+
+### Fixed
+- The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have
+  no effect with the other settings, such as `padding_size` when `padding` is `same` or
+  `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
 
 ### Changed
 - An e-mail address is required to create an account, and each address can be used by one

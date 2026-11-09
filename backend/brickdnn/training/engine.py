@@ -6,6 +6,9 @@ The model is built from exactly the code that the export produces, so the saved
     model = NeuralNetwork()
     model.load_state_dict(torch.load("weights.pt"))
 
+How the inputs were prepared (normalisation, image size, CSV columns, class names) is saved
+next to it, in ``weights.preprocessing.json`` (see :func:`.state.preprocessing_path`).
+
 Use :func:`train` with a :class:`TrainingJob` and a :class:`Reporter`; the web runner
 (:mod:`.runner`) and the command line (:mod:`.cli`) only differ in their reporter.
 A job with ``tuning`` settings runs a hyperparameter search (see :mod:`.tuning`).
@@ -33,6 +36,7 @@ from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT, DatasetInfo, builtin_info, random_info
 from .devices import available_devices, default_device, device_label, select_device
 from .reporting import DivergedError, Reporter, StopTraining, TrainingError, short_error
+from .state import finite, preprocessing_path, write_json_atomic
 from .tuning import TuningConfig, describe_params, trial_config
 
 # Progress callbacks per second (at most).
@@ -134,6 +138,10 @@ class TrainingResult:
     # Hyperparameter search: every trial (see state.py) and the number of the best one
     trials: list[dict[str, Any]] = field(default_factory=list)
     best_trial: int | None = None
+    # The epoch whose weights were tested and saved (None: not the end of an epoch)
+    weights_epoch: int | None = None
+    # True if early stopping ended the training (in a search: the best trial)
+    stopped_early: bool = False
 
 
 def train(
@@ -142,7 +150,9 @@ def train(
     """Run one training job to the end. Never raises (except ``KeyboardInterrupt``).
 
     Weights are saved to ``weights_path`` when the run completes or is stopped after at
-    least one optimizer step (a search saves the best trial). The outcome is reported with
+    least one optimizer step: those of the epoch with the lowest validation loss (or of the
+    last epoch without ``restore_best``); a search saves those of the best trial. The test
+    set, if any, is measured with the same weights. The outcome is reported with
     ``reporter.finish`` and returned.
     """
     if job.tuning is not None:
@@ -173,6 +183,10 @@ def _free_memory(device: torch.device) -> None:
             empty()
 
 
+def _capitalized(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def _metrics_text(name: str, loss: float, accuracy: float | None, rmse: float | None) -> str:
     """``"validation accuracy 97.1%"`` or ``"test loss 0.123, RMSE 4.5"``."""
     if accuracy is not None:
@@ -200,6 +214,10 @@ class _Run:
         self.best_trial: dict[str, Any] | None = None
         self.seed = 0
         self._last_stop_check = 0.0
+        # Copy of the weights after the best epoch so far (restore_best), on the CPU
+        self.best_weights: dict[str, torch.Tensor] | None = None
+        self.weights_epoch: int | None = None  # the epoch whose weights are kept
+        self.stopped_early = False
 
     # -- outcome ---------------------------------------------------------- #
 
@@ -209,6 +227,7 @@ class _Run:
                 self._execute()
             except StopTraining:
                 self._on_stopped()
+                self._report_kept()
                 weights = self._save_weights()
                 return self._end("stopped", self._stopped_message(), weights)
             return self._end("completed", self._summary(), self._save_weights())
@@ -221,15 +240,24 @@ class _Run:
     def _execute(self) -> None:
         self._prepare()
         self._fit()
+        self._keep_best()
+        self._report_kept()
         self._test()
 
     def _on_stopped(self) -> None:
-        """Called when the user stopped the run, before the weights are saved."""
+        """Called when the user stopped the run, before the weights are saved: keeps the
+        weights of the best epoch so far (restore_best), not those of the unfinished one."""
+        if self.weights_epoch is None and self.history:
+            self._keep_best(finished=False)
 
     def _stopped_message(self) -> str:
         if self.steps == 0:
             return "Stopped before the training started."
-        return f"Stopped after {len(self.history)} of {self.config.epochs} epochs."
+        text = f"Stopped after {len(self.history)} of {self.config.epochs} epochs."
+        if self.weights_epoch is not None:
+            text += f" Kept the weights of epoch {self.weights_epoch}"
+            text += " (lowest validation loss)." if self.config.restore_best else "."
+        return text
 
     def _explain(self, exc: Exception) -> str:
         if _is_out_of_memory(exc):
@@ -255,13 +283,23 @@ class _Run:
             self.test_result,
             self.trials,
             best_trial,
+            self.weights_epoch if weights else None,
+            self.stopped_early,
         )
 
+    def _kept_entry(self) -> dict[str, Any] | None:
+        """The history entry of the kept weights (the last epoch if not chosen yet)."""
+        for entry in self.history:
+            if entry["epoch"] == self.weights_epoch:
+                return entry
+        return self.history[-1] if self.history else None
+
     def _result_text(self) -> str:
-        """Validation (and test) result of the final model."""
-        last = self.history[-1]
+        """Validation (and test) result of the kept weights."""
+        kept = self._kept_entry()
+        assert kept is not None
         text = _metrics_text(
-            "validation", last["val_loss"], last["val_accuracy"], last.get("val_rmse")
+            "validation", kept["val_loss"], kept["val_accuracy"], kept.get("val_rmse")
         )
         if self.test_result is not None:
             test = self.test_result
@@ -269,15 +307,45 @@ class _Run:
         return text
 
     def _summary(self) -> str:
-        return f"Finished: {self._result_text()}"
+        result = self._result_text()
+        last = self.history[-1]["epoch"]
+        kept = self.weights_epoch
+        if self.stopped_early:
+            text = (
+                f"Stopped early after epoch {last}: no improvement for "
+                f"{self.config.patience} epochs"
+            )
+            if kept is not None and kept != last:
+                text += f"; kept the weights of epoch {kept}"
+            return f"{text}. {_capitalized(result)}."
+        if kept is not None and kept != last:
+            return (
+                f"Finished {last} epochs; kept the weights of epoch {kept} (lowest validation "
+                f"loss). {_capitalized(result)}."
+            )
+        return f"Finished: {result}"
+
+    def _report_kept(self) -> None:
+        self.reporter.weights_kept(
+            {"weights_epoch": self.weights_epoch, "stopped_early": self.stopped_early}
+        )
 
     def _save_weights(self) -> bool:
-        if self.weights_path is None or self.model is None or self.steps == 0:
+        if self.model is None or self.steps == 0:
             return False
-        state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
+        return self._write_weights(self._weights_copy())
+
+    def _write_weights(self, state: dict[str, torch.Tensor]) -> bool:
+        """Save ``state`` and, next to it, how the inputs were prepared: the statistics and
+        settings that new data needs to be prepared the same way (not for demo data)."""
+        if self.weights_path is None:
+            return False
         tmp = self.weights_path.with_name(f".{self.weights_path.name}.tmp")
         torch.save(state, tmp)
         os.replace(tmp, self.weights_path)
+        preprocessing = self.data.preprocessing
+        if preprocessing.get("kind") != "demo":
+            write_json_atomic(preprocessing_path(self.weights_path), finite(preprocessing))
         return True
 
     def _check_stop(self) -> None:
@@ -340,6 +408,9 @@ class _Run:
         self.config = config
         self.history = []
         self.best = None
+        self.best_weights = None
+        self.weights_epoch = None
+        self.stopped_early = False
         self.steps = 0
         self.shuffle = torch.Generator().manual_seed(self.seed + 1)
         torch.manual_seed(self.seed)
@@ -471,8 +542,14 @@ class _Run:
     def _epoch_message(self, epoch: int) -> str:
         return f"Epoch {epoch} of {self.config.epochs}"
 
+    def _weights_copy(self) -> dict[str, torch.Tensor]:
+        assert self.model is not None
+        return {k: v.detach().to("cpu", copy=True) for k, v in self.model.state_dict().items()}
+
     def _fit(self) -> None:
-        epochs = self.config.epochs
+        """Train for the planned epochs, or fewer if early stopping (``patience``) ends the
+        training. With ``restore_best``, the weights of the best epoch are copied aside."""
+        epochs, patience = self.config.epochs, self.config.patience
         for epoch in range(1, epochs + 1):
             self.reporter.status("running", self._epoch_message(epoch))
             started = time.perf_counter()
@@ -491,7 +568,28 @@ class _Run:
             self.history.append(entry)
             if self.best is None or val_loss < self.best["val_loss"]:
                 self.best = {"epoch": epoch, "val_loss": val_loss, "val_accuracy": val_acc}
+                if self.config.restore_best:
+                    self.best_weights = self._weights_copy()
             self.reporter.epoch_end(dict(entry), dict(self.best))
+            if patience is not None and epoch < epochs and epoch - self.best["epoch"] >= patience:
+                self.stopped_early = True
+                self.reporter.log(
+                    f"Stopping early after epoch {epoch}: the validation loss has not improved "
+                    f"for {patience} epochs (best: epoch {self.best['epoch']})."
+                )
+                break
+
+    def _keep_best(self, finished: bool = True) -> None:
+        """Choose the weights that are tested and saved and put them into the model: those
+        of the best epoch with ``restore_best``, otherwise those of the last epoch (or, for
+        an unfinished run, the current ones). Sets ``weights_epoch``."""
+        if self.config.restore_best and self.best is not None and self.best_weights is not None:
+            assert self.model is not None
+            self.model.load_state_dict(self.best_weights)
+            self.weights_epoch = self.best["epoch"]
+        elif finished and self.history:
+            self.weights_epoch = self.history[-1]["epoch"]
+        self.best_weights = None
 
     def _train_epoch(self, epoch: int) -> tuple[float, float | None]:
         assert self.model is not None
@@ -565,7 +663,7 @@ class _Run:
         return loss, (correct / seen if self.accuracy else None), rmse
 
     def _test(self) -> None:
-        """Measure the final model once on the test set (if there is one)."""
+        """Measure the kept weights once on the test set (if there is one)."""
         if self.data.test is None:
             return
         self.reporter.status("running", "Testing the final model …")
@@ -579,8 +677,9 @@ class _Search(_Run):
 
     The data is prepared once. Every trial starts from the same initial weights and batch
     order; a trial whose loss explodes or that does not fit into memory fails on its own
-    and the search goes on. The best trial (lowest validation loss after its last epoch)
-    is kept in memory, tested and saved at the end.
+    and the search goes on. Each trial keeps the weights of its best epoch (restore_best,
+    otherwise of its last one) and is ranked by their validation loss; the best trial is
+    kept in memory, tested and saved at the end.
     """
 
     def __init__(self, job: TrainingJob, reporter: Reporter, weights_path: str | Path | None):
@@ -608,6 +707,7 @@ class _Search(_Run):
                 f"All {self.total} trials failed. Trial {first['trial']}: {first['message']}"
             )
         self._use_best()
+        self._report_kept()
         self._test()
 
     def _epoch_message(self, epoch: int) -> str:
@@ -638,6 +738,8 @@ class _Search(_Run):
             "val_loss": None,
             "val_accuracy": None,
             "val_rmse": None,
+            "weights_epoch": None,
+            "stopped_early": False,
             "seconds": None,
         }
         self.trials.append(entry)
@@ -648,6 +750,7 @@ class _Search(_Run):
             self.device_checked = True
             self.optimizer = self._optimizer()
             self._fit()
+            self._keep_best()
         except StopTraining:
             self._trial_done(entry, "stopped", "Stopped.", started)
             raise
@@ -668,11 +771,8 @@ class _Search(_Run):
             return
 
         best = self.best_trial
-        if best is None or entry_score(self.history) < best["val_loss"]:
-            assert self.model is not None
-            self.best_state = {
-                k: v.detach().to("cpu", copy=True) for k, v in self.model.state_dict().items()
-            }
+        if best is None or entry_score(self.history, self.weights_epoch) < best["val_loss"]:
+            self.best_state = self._weights_copy()
             self.best_history = list(self.history)
             self.best_epoch = dict(self.best) if self.best else None
             self._trial_done(entry, "completed", "", started, new_best=True)
@@ -687,15 +787,17 @@ class _Search(_Run):
         started: float,
         new_best: bool = False,
     ) -> None:
-        last = self.history[-1] if self.history else {}
+        kept = self._kept_entry() or {}  # completed: the kept epoch, otherwise the last
         entry.update(
             status=status,
             message=message,
             epochs_done=len(self.history),
-            train_loss=last.get("train_loss"),
-            val_loss=last.get("val_loss"),
-            val_accuracy=last.get("val_accuracy"),
-            val_rmse=last.get("val_rmse"),
+            train_loss=kept.get("train_loss"),
+            val_loss=kept.get("val_loss"),
+            val_accuracy=kept.get("val_accuracy"),
+            val_rmse=kept.get("val_rmse"),
+            weights_epoch=self.weights_epoch,
+            stopped_early=self.stopped_early,
             seconds=round(time.perf_counter() - started, 3),
         )
         if new_best:
@@ -713,6 +815,8 @@ class _Search(_Run):
         self.model.to(self.device)
         self.history = list(self.best_history)
         self.best = self.best_epoch
+        self.weights_epoch = best["weights_epoch"]
+        self.stopped_early = best["stopped_early"]
         self.trial = 0
         self.reporter.search_end(
             {
@@ -724,10 +828,15 @@ class _Search(_Run):
         )
 
     def _on_stopped(self) -> None:
-        if self.best_trial is not None and self.best_state is not None:
+        """Keep the best finished trial, or the best epoch so far of the first trial."""
+        if self.best_trial is None or self.best_state is None:
+            super()._on_stopped()
+        else:
             best = self.best_trial
             self.history = list(self.best_history)
             self.best = self.best_epoch
+            self.weights_epoch = best["weights_epoch"]
+            self.stopped_early = best["stopped_early"]
             self.reporter.search_end(
                 {
                     "best_trial": best["trial"],
@@ -759,24 +868,27 @@ class _Search(_Run):
         head = f"Finished {self.total} trial{'s' if self.total != 1 else ''}"
         if failed:
             head += f" ({failed} failed)"
+        kept = ""
+        if self.stopped_early:
+            kept = f"stopped early, weights of epoch {self.weights_epoch}: "
+        elif self.history and self.weights_epoch != self.history[-1]["epoch"]:
+            kept = f"weights of epoch {self.weights_epoch}: "
         return (
             f"{head}. Best: trial {best['trial']} ({describe_params(best['params'])}), "
-            f"{self._result_text()}"
+            f"{kept}{self._result_text()}"
         )
 
     def _save_weights(self) -> bool:
         """The weights of the best trial, or of the first trial if it was stopped early."""
-        state = self.best_state
-        if state is None and self.model is not None and self.steps > 0:
-            state = {k: v.detach().cpu() for k, v in self.model.state_dict().items()}
-        if self.weights_path is None or state is None:
-            return False
-        tmp = self.weights_path.with_name(f".{self.weights_path.name}.tmp")
-        torch.save(state, tmp)
-        os.replace(tmp, self.weights_path)
-        return True
+        if self.best_state is not None:
+            return self._write_weights(self.best_state)
+        return super()._save_weights()
 
 
-def entry_score(history: list[dict[str, Any]]) -> float:
-    """What a trial is ranked by: the validation loss after its last epoch."""
+def entry_score(history: list[dict[str, Any]], weights_epoch: int | None = None) -> float:
+    """What a trial is ranked by: the validation loss of the kept weights (those of
+    ``weights_epoch``, by default the last epoch)."""
+    for entry in history:
+        if entry["epoch"] == weights_epoch:
+            return float(entry["val_loss"])
     return float(history[-1]["val_loss"]) if history else math.inf

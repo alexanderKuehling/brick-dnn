@@ -84,8 +84,11 @@ SCRIPT_NAMES = {
     "TensorDataset",
     "random_split",
     "count_parameters",
+    "read_csv",
     "load_csv",
     "train",
+    "save_model",
+    "predict",
     "main",
     "NUM_FEATURES",
     "NUM_CLASSES",
@@ -239,9 +242,10 @@ class _Generator:
             lines += [
                 "",
                 "Train it on a CSV file (every column but the last is a feature,",
-                "the last column is the target):",
+                "the last column is the target), then predict new rows with the saved model:",
                 "",
                 "    python this_file.py --csv data.csv --epochs 20",
+                "    python this_file.py --predict new_data.csv",
             ]
         lines.append('"""')
         return "\n".join(lines)
@@ -252,7 +256,7 @@ class _Generator:
             lines += ["import argparse", "import csv", ""]
         lines += ["import torch", "import torch.nn as nn"]
         if training:
-            lines.append("from torch.utils.data import DataLoader, TensorDataset, random_split")
+            lines.append("from torch.utils.data import DataLoader, TensorDataset")
         return "\n".join(lines)
 
     def _model_class(self) -> str:
@@ -329,15 +333,27 @@ class _Generator:
             lines += [
                 f'    parser = argparse.ArgumentParser(description="{name} generated with Brick DNN")',
                 '    parser.add_argument("--csv", help="train on this CSV file (last column = target)")',
+                '    parser.add_argument("--predict", metavar="CSV", help="predict the rows of this file")',
                 '    parser.add_argument("--epochs", type=int, default=10)',
                 '    parser.add_argument("--batch-size", type=int, default=32)',
                 '    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")',
-                '    parser.add_argument("--save", default="model.pt", help="where to store the weights")',
+                '    parser.add_argument("--seed", type=int, default=0, help="for a repeatable run")',
+                "    parser.add_argument(",
+                '        "--save", default="model.pt", help="the trained model (--csv writes it, '
+                '--predict reads it)"',
+                "    )",
                 "    args = parser.parse_args()",
+                "    torch.manual_seed(args.seed)  # the same initial weights for the same seed",
                 "",
             ]
+        lines.append(f"    model = {name}()")
+        if training:
+            lines += [
+                "    if args.predict:",
+                "        predict(model, args.save, args.predict)",
+                "        return",
+            ]
         lines += [
-            f"    model = {name}()",
             "    print(model)",
             '    print(f"Trainable parameters: {count_parameters(model):,}")',
             "",
@@ -345,9 +361,11 @@ class _Generator:
         if training:
             lines += [
                 "    if args.csv:",
-                "        train(model, load_csv(args.csv), args.epochs, args.batch_size, args.lr)",
-                "        torch.save(model.state_dict(), args.save)",
-                '        print(f"Saved weights to {args.save}")',
+                "        header, features, target = load_csv(args.csv)",
+                "        mean, std = train(",
+                "            model, features, target, args.epochs, args.batch_size, args.lr, args.seed",
+                "        )",
+                "        save_model(model, args.save, header, mean, std)",
                 "        return",
                 "",
             ]
@@ -381,35 +399,41 @@ class _Generator:
                 f"NUM_CLASSES = {n_outputs}  # classification: the target column holds the class "
                 f"index 0..{n_outputs - 1}"
             )
-            make_targets = (
+            targets = (
                 "    if target.min() < 0 or target.max() >= NUM_CLASSES:\n"
                 '        raise SystemExit(f"Targets must be class indices 0..{NUM_CLASSES - 1}.")\n'
-                "    return TensorDataset(features, target.long())"
+                "    return header, features, target.long()"
             )
+            task = '        "task": "classification",\n        "num_classes": NUM_CLASSES,'
             loss = "nn.CrossEntropyLoss()"
             metric_init = "        val_loss, correct = 0.0, 0\n"
             metric_update = (
                 "                correct += (outputs.argmax(dim=1) == targets).sum().item()\n"
             )
             metric_print = "  val acc {correct / len(val_set):.1%}"
+            predictions = "outputs.argmax(dim=1).tolist()"
         else:
             header = (
                 f"NUM_FEATURES = {n_features}\n"
                 "# regression: the model has a single output, the target column is a number"
             )
-            make_targets = "    return TensorDataset(features, target.unsqueeze(1))"
+            targets = "    return header, features, target.unsqueeze(1)"
+            task = '        "task": "regression",'
             loss = "nn.MSELoss()"
             metric_init = "        val_loss = 0.0\n"
             metric_update = ""
             metric_print = ""
+            predictions = "outputs[:, 0].tolist()"
 
         return (
             _TRAINING_TEMPLATE.replace("[[HEADER]]", header)
-            .replace("[[MAKE_TARGETS]]", make_targets)
+            .replace("[[TARGETS]]", targets)
+            .replace("[[TASK]]", task)
             .replace("[[LOSS]]", loss)
             .replace("[[METRIC_INIT]]", metric_init)
             .replace("[[METRIC_UPDATE]]", metric_update)
             .replace("[[METRIC_PRINT]]", metric_print)
+            .replace("[[PREDICTIONS]]", predictions)
         )
 
 
@@ -420,48 +444,84 @@ def count_parameters(model: nn.Module) -> int:
 
 _TRAINING_TEMPLATE = '''\
 # --------------------------------------------------------------------------- #
-# Training on a CSV file
+# Training on a CSV file, and predictions for new rows
 # --------------------------------------------------------------------------- #
 
 [[HEADER]]
 
 
-def load_csv(path: str) -> TensorDataset:
-    """Read a CSV file: every column but the last is a feature, the last one is the target."""
+def read_csv(path: str) -> tuple[list[str], torch.Tensor]:
+    """Read a CSV file of numbers: the column names of its header line (an empty list if it
+    has none) and the values."""
     with open(path, newline="") as f:
         rows = [row for row in csv.reader(f) if row]
-    try:
-        [float(value) for value in rows[0]]
-    except ValueError:
-        rows = rows[1:]  # skip the header line
-    data = torch.tensor([[float(value) for value in row] for row in rows], dtype=torch.float32)
+    header: list[str] = []
+    if rows:
+        try:
+            [float(value) for value in rows[0]]
+        except ValueError:
+            header, rows = [name.strip() for name in rows[0]], rows[1:]
+    if not rows:
+        raise SystemExit(f"{path} contains no data rows.")
+    values = [[float(value) for value in row] for row in rows]
+    return header, torch.tensor(values, dtype=torch.float32)
+
+
+def load_csv(path: str) -> tuple[list[str], torch.Tensor, torch.Tensor]:
+    """Training data: every column but the last is a feature, the last one is the target."""
+    header, data = read_csv(path)
     features, target = data[:, :-1], data[:, -1]
     if features.shape[1] != NUM_FEATURES:
         raise SystemExit(f"Expected {NUM_FEATURES} feature columns, found {features.shape[1]}.")
-    features = (features - features.mean(dim=0)) / (features.std(dim=0) + 1e-8)  # standardise
-[[MAKE_TARGETS]]
+[[TARGETS]]
 
 
 def train(
-    model: nn.Module, dataset: TensorDataset, epochs: int, batch_size: int, lr: float
-) -> None:
+    model: nn.Module,
+    features: torch.Tensor,
+    target: torch.Tensor,
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    seed: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Train on a random 80 % of the rows and validate on the rest (the split depends only
+    on ``seed``).
+
+    Returns the mean and standard deviation that standardise the features. They come from
+    the training rows only, and new data has to be standardised with them as well.
+    """
+    if len(features) < 4:
+        raise SystemExit("The CSV file needs at least 4 rows (training + validation).")
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(len(features), generator=generator)
+    n_val = max(1, len(features) // 5)
+    val_rows, train_rows = order[:n_val], order[n_val:]
+
+    mean = features[train_rows].mean(dim=0)
+    std = features[train_rows].std(dim=0)
+    std[std < 1e-8] = 1.0  # constant columns are left as they are
+    features = (features - mean) / std
+
+    train_set = TensorDataset(features[train_rows], target[train_rows])
+    val_set = TensorDataset(features[val_rows], target[val_rows])
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=len(train_set) > batch_size,
+        generator=generator,
+    )
+    val_loader = DataLoader(val_set, batch_size=batch_size)
+
     if torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_available():
         device = "mps"
     else:
         device = "cpu"
-    print(f"Training on {device}")
+    print(f"Training on {device}: {len(train_set)} rows, {len(val_set)} for validation")
     model.to(device)
-
-    if len(dataset) < 4:
-        raise SystemExit("The CSV file needs at least 4 rows (training + validation).")
-    n_val = max(1, len(dataset) // 5)
-    train_set, val_set = random_split(dataset, [len(dataset) - n_val, n_val])
-    train_loader = DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, drop_last=len(train_set) > batch_size
-    )
-    val_loader = DataLoader(val_set, batch_size=batch_size)
 
     loss_fn = [[LOSS]]
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -488,4 +548,50 @@ def train(
             f"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}"
             f"  val loss {val_loss / len(val_set):.4f}[[METRIC_PRINT]]"
         )
-    model.cpu()'''
+    model.cpu()
+    return mean, std
+
+
+def save_model(
+    model: nn.Module, path: str, header: list[str], mean: torch.Tensor, std: torch.Tensor
+) -> None:
+    """Save the weights together with what predict() needs to prepare new rows."""
+    preprocessing = {
+        "columns": header[:-1],  # the feature columns by name (empty: no header line)
+        "target": header[-1] if header else "target",
+        "mean": mean.tolist(),  # every feature is standardised: (value - mean) / std
+        "std": std.tolist(),
+[[TASK]]
+    }
+    torch.save({"state_dict": model.state_dict(), "preprocessing": preprocessing}, path)
+    print(f"Saved the weights and the preprocessing to {path}")
+
+
+def predict(model: nn.Module, path: str, csv_path: str) -> None:
+    """Print a prediction for every row of a CSV file, prepared like the training data.
+
+    If both files have a header line, the feature columns are found by their names;
+    otherwise they have to come first. Other columns (such as the target) are ignored.
+    """
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+    preprocessing = checkpoint["preprocessing"]
+    columns = preprocessing["columns"]
+    header, data = read_csv(csv_path)
+    if columns and header:
+        missing = [name for name in columns if name not in header]
+        if missing:
+            raise SystemExit(f"{csv_path} lacks the columns {', '.join(missing)}.")
+        features = data[:, [header.index(name) for name in columns]]
+    elif data.shape[1] >= NUM_FEATURES:
+        features = data[:, :NUM_FEATURES]
+    else:
+        raise SystemExit(f"Expected {NUM_FEATURES} feature columns, found {data.shape[1]}.")
+    mean = torch.tensor(preprocessing["mean"])
+    std = torch.tensor(preprocessing["std"])
+    with torch.no_grad():
+        outputs = model((features - mean) / std)
+    print(preprocessing["target"])
+    for value in [[PREDICTIONS]]:
+        print(value)'''
