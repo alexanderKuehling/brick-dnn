@@ -12,10 +12,21 @@ It prints one line of JSON: the raw outputs of the network, one nested list per 
 
     {"outputs": [[[0.1, 2.3, -1.0], [1.2, -0.3, 0.4]]]}
     {"error": "The trained weights do not fit the network of this run: ..."}
+
+Classical models (scikit-learn) load ``RUN_DIR/model.joblib`` instead and need NumPy and
+scikit-learn, not PyTorch. Their request also says how the inputs were prepared
+(``"kind": "tabular"``: standardised like the training data, so the pipeline's scaler is
+skipped; otherwise they are used as they are). Classifiers answer with class
+probabilities (one column per class of the training plan), a Gaussian process regressor
+adds its predictive standard deviation::
+
+    {"outputs": [[[0.9, 0.1, 0.0], [0.2, 0.7, 0.1]]], "probabilities": true}
+    {"outputs": [[[3.2], [2.9]]], "std": [0.4, 0.5]}
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -24,9 +35,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from .job import graph_family
 from .reporting import short_error
 from .runner import lower_priority
-from .state import WEIGHTS_FILE, finite, read_job
+from .state import CLASSICAL_WEIGHTS_FILE, WEIGHTS_FILE, finite, read_job
 
 # Outputs larger than this (numbers of all samples together) are not returned.
 MAX_OUTPUT_VALUES = 250_000
@@ -56,6 +68,11 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
     Raises :class:`PredictionError`.
     """
     run_dir = Path(run_dir)
+    job = read_job(run_dir)
+    if job is None or not isinstance(job.get("graph"), dict):
+        raise PredictionError("The network of this run is missing.")
+    if graph_family(job["graph"]) == "classical":
+        return _predict_classical(run_dir, request)
     try:
         import torch
 
@@ -66,9 +83,6 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
         ) from exc
     torch.set_num_threads(max(1, min(THREADS, os.cpu_count() or 1)))
 
-    job = read_job(run_dir)
-    if job is None or not isinstance(job.get("graph"), dict):
-        raise PredictionError("The network of this run is missing.")
     weights = run_dir / WEIGHTS_FILE
     if not weights.is_file():
         raise PredictionError("This run has no trained weights.")
@@ -103,6 +117,69 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
             "Predict fewer samples at a time."
         )
     return {"outputs": [finite(o.detach().float().cpu().tolist()) for o in outputs]}
+
+
+def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
+    """Predict with the fitted scikit-learn pipeline of a classical model."""
+    try:
+        import joblib
+        import numpy as np
+    except ImportError as exc:
+        raise PredictionError(
+            "scikit-learn is not installed on the server. Install it with: pip install scikit-learn"
+        ) from exc
+    path = run_dir / CLASSICAL_WEIGHTS_FILE
+    if not path.is_file():
+        raise PredictionError("This run has no fitted model.")
+    try:
+        bundle = joblib.load(path)  # written by the training of this run
+        pipeline = bundle["model"]
+    except Exception as exc:
+        raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
+
+    specs = request.get("inputs") if isinstance(request, dict) else None
+    if not isinstance(specs, list) or len(specs) != 1 or not isinstance(specs[0], dict):
+        raise PredictionError("A classical model takes exactly one input.")
+    shape, values = specs[0].get("shape"), specs[0].get("values")
+    if not isinstance(shape, list) or not isinstance(values, list) or len(shape) != 2:
+        raise PredictionError("The inputs are invalid.")
+    if math.prod(shape) != len(values):
+        raise PredictionError("The inputs do not have the shape they claim.")
+    x = np.asarray(values, dtype=np.float64).reshape(shape)
+    # Standardised inputs skip the pipeline's StandardScaler, which would do the same.
+    model = pipeline[1:] if request.get("kind") == "tabular" else pipeline
+    try:
+        with _thread_limit():
+            if bundle.get("task") == "classification":
+                proba = model.predict_proba(x)
+                indices = bundle.get("class_indices") or list(range(proba.shape[1]))
+                full = np.zeros((len(x), int(bundle.get("num_classes") or proba.shape[1])))
+                full[:, indices] = proba
+                return {"outputs": [finite(full.tolist())], "probabilities": True}
+            if type(pipeline[-1]).__name__ == "GaussianProcessRegressor":
+                mean, std = model.predict(x, return_std=True)
+                return {
+                    "outputs": [finite(np.asarray(mean).reshape(-1, 1).tolist())],
+                    "std": finite(np.asarray(std).reshape(-1).tolist()),
+                }
+            predicted = model.predict(x)
+    except Exception as exc:
+        raise PredictionError(
+            f"The model could not process the inputs: {short_error(exc)}"
+        ) from exc
+    return {"outputs": [finite(np.asarray(predicted).reshape(-1, 1).tolist())]}
+
+
+@contextlib.contextmanager
+def _thread_limit():
+    """At most THREADS threads for NumPy's linear algebra (like for PyTorch)."""
+    try:
+        from threadpoolctl import threadpool_limits
+    except ImportError:  # pragma: no cover - comes with scikit-learn
+        yield
+        return
+    with threadpool_limits(limits=max(1, min(THREADS, os.cpu_count() or 1))):
+        yield
 
 
 def main(argv: list[str] | None = None) -> int:

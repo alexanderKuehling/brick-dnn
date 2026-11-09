@@ -1,9 +1,11 @@
 """Run one training job in its own process: ``python -m brickdnn.training.runner RUN_DIR``.
 
 Reads ``RUN_DIR/job.json``, keeps ``RUN_DIR/state.json`` up to date (see state.py) and
-saves ``RUN_DIR/weights.pt``. A ``STOP`` file, SIGTERM or SIGINT stop the run after the
-current batch. The process always ends with a terminal status in ``state.json``. It runs
-with a lower priority than the web server that started it (see :func:`lower_priority`).
+saves ``RUN_DIR/weights.pt`` (classical models: ``RUN_DIR/model.joblib``). A ``STOP`` file,
+SIGTERM or SIGINT stop the run after the current batch; a classical model that is being
+fitted cannot be interrupted, so the process then ends right away without saving it. The
+process always ends with a terminal status in ``state.json``. It runs with a lower
+priority than the web server that started it (see :func:`lower_priority`).
 """
 
 from __future__ import annotations
@@ -19,15 +21,21 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from .job import TrainingJob, graph_family
 from .reporting import Reporter, TrainingError
 from .state import (
     HEARTBEAT_SECONDS,
     MAX_LOG_LINES,
-    WEIGHTS_FILE,
     initial_state,
     read_job,
     stop_requested,
+    weights_file,
     write_state,
+)
+
+NO_SKLEARN_MESSAGE = (
+    "scikit-learn is not installed on the server, which classical models need. Install it "
+    "with: pip install scikit-learn"
 )
 
 # state.json is written at most this often for progress updates (seconds).
@@ -45,9 +53,15 @@ class StateReporter(Reporter):
     ``updated_at`` (and flushes throttled changes) while the run is alive.
     """
 
-    def __init__(self, run_dir: str | Path, epochs: int = 0, heartbeat: float = 1.0):
+    def __init__(
+        self,
+        run_dir: str | Path,
+        epochs: int = 0,
+        heartbeat: float = 1.0,
+        family: str = "neural",
+    ):
         self.run_dir = Path(run_dir)
-        self.state: dict[str, Any] = initial_state(epochs)
+        self.state: dict[str, Any] = initial_state(epochs, family)
         self.stop_signal = False
         self._lock = threading.Lock()
         self._last_write = 0.0
@@ -220,16 +234,24 @@ def _install_signal_handlers(reporter: StateReporter) -> None:
 
 
 def run(run_dir: str | Path) -> dict[str, Any]:
-    """Run the job in ``run_dir`` and return the final state."""
+    """Run the job in ``run_dir`` and return the final state.
+
+    Neural networks are trained with PyTorch (:mod:`.engine`, saved as ``weights.pt``),
+    classical models with scikit-learn (:mod:`.classical_engine`, ``model.joblib``).
+    """
     run_dir = Path(run_dir)
     job_data = read_job(run_dir)
-    epochs = 0
-    if job_data and isinstance(job_data.get("config"), dict):
+    family = graph_family(job_data.get("graph")) if job_data else "neural"
+    epochs = 1 if family == "classical" else 0
+    if family == "neural" and job_data and isinstance(job_data.get("config"), dict):
         value = job_data["config"].get("epochs")
         epochs = value if isinstance(value, int) else 0
-    reporter = StateReporter(run_dir, epochs)
+    reporter = StateReporter(run_dir, epochs, family=family)
     _install_signal_handlers(reporter)
     try:
+        if family == "classical":
+            _run_classical(run_dir, job_data, reporter)
+            return reporter.snapshot()
         os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
         try:
             from . import engine
@@ -244,8 +266,8 @@ def run(run_dir: str | Path) -> dict[str, Any]:
             return reporter.snapshot()
         if job_data is None:
             raise TrainingError("The training job is missing or invalid.")
-        job = engine.TrainingJob.from_dict(job_data)
-        engine.train(job, reporter, run_dir / WEIGHTS_FILE)
+        job = TrainingJob.from_dict(job_data)
+        engine.train(job, reporter, run_dir / weights_file(family))
     except TrainingError as exc:
         if not reporter.finished:
             reporter.finish("failed", str(exc), False)
@@ -254,6 +276,21 @@ def run(run_dir: str | Path) -> dict[str, Any]:
         if not reporter.finished:
             reporter.finish("failed", f"Training failed: {type(exc).__name__}: {exc}"[:400], False)
     return reporter.snapshot()
+
+
+def _run_classical(run_dir: Path, job_data: Any, reporter: StateReporter) -> None:
+    """Fit a classical model with scikit-learn (PyTorch is not needed)."""
+    try:
+        from . import classical_engine
+    except ImportError:
+        traceback.print_exc()
+        reporter.finish("failed", NO_SKLEARN_MESSAGE, False)
+        return
+    if job_data is None:
+        raise TrainingError("The training job is missing or invalid.")
+    job = TrainingJob.from_dict(job_data)
+    # A stop request during the fit ends this process (scikit-learn cannot be interrupted).
+    classical_engine.train(job, reporter, run_dir / weights_file("classical"), hard_stop=True)
 
 
 def lower_priority() -> None:

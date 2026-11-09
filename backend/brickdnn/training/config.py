@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -10,6 +11,23 @@ OPTIMIZERS = ("adam", "adamw", "sgd")
 DEVICES = ("auto", "cpu", "cuda", "mps")
 # Validation and test data together: at most this share of all samples.
 MAX_HELD_OUT = 0.8
+# Classical models fit on at most this many training rows; larger training sets are
+# subsampled. Gaussian processes need O(n²) memory and O(n³) time, support vector machines
+# O(n²) memory (kernel cache) and between O(n²) and O(n³) time. {scale: (variable, default)}
+CLASSICAL_MAX_ROWS = {
+    "gaussian_process": ("BRICKDNN_GP_MAX_ROWS", 5_000),
+    "svm": ("BRICKDNN_SVM_MAX_ROWS", 50_000),
+}
+
+
+def classical_max_rows(scale: str) -> int:
+    """The row limit for ``scale`` (``gaussian_process`` or ``svm``) on this machine."""
+    variable, default = CLASSICAL_MAX_ROWS[scale]
+    try:
+        value = int(os.environ.get(variable, "").strip())
+    except ValueError:
+        return default
+    return value if value >= 10 else default
 
 
 class ConfigError(ValueError):

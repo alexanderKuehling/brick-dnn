@@ -6,8 +6,11 @@ Every run lives in its own directory::
     state.json    live progress, replaced atomically              (written by the runner)
     STOP          created to ask the runner to stop after the current batch
     weights.pt    model.state_dict() after training or stopping   (written by the runner)
+    model.joblib  instead of weights.pt for classical models (scikit-learn): the fitted
+                  pipeline saved with joblib, see brickdnn.classical for its format
     weights.preprocessing.json   ``preprocessing`` of the state, saved with the weights
                   (not for demo data): what new inputs need to be prepared the same way
+                  (classical models: model.preprocessing.json)
     output.log    stdout/stderr of the runner process             (for debugging)
 
 ``state.json`` looks like this::
@@ -19,6 +22,7 @@ Every run lives in its own directory::
       "started_at": 1730000000.0,
       "finished_at": null,
       "device": "mps", "device_label": "Apple GPU (MPS)",
+      "family": "neural",            # neural (PyTorch) | classical (scikit-learn)
       "task": "classification",      # classification | regression | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
       "train_size": 48000, "val_size": 12000,
@@ -51,6 +55,9 @@ Every run lives in its own directory::
       "log": ["Downloading MNIST …", "..."],               # last 200 lines
 
       # Hyperparameter search only (null / empty for normal runs):
+      # Classical models only (null for neural networks), see below
+      "classical": {...},
+
       "tuning": {"method": "random", "trials": 10,        # see tuning.py
                  "space": {"learning_rate": {"min": 0.0001, "max": 0.01}}},
       "trials_total": 10,
@@ -70,6 +77,28 @@ Every run lives in its own directory::
 In a search, ``history``, ``best`` and ``progress`` belong to the running trial. When the
 search ends (or is stopped), they are replaced by those of the best trial, whose weights
 are saved; ``weights_epoch`` and ``stopped_early`` then describe the best trial.
+
+Classical models (``family`` "classical") are fitted once: ``epochs`` and
+``steps_per_epoch`` are 1, ``progress`` stays null, and when the fit is done ``history``
+gets a single entry (epoch 1, the metrics of the fitted model; regression adds
+"val_r2"), ``weights_epoch`` is 1 and ``test`` adds "r2". ``device`` is "cpu".
+``train_size`` counts the rows the model is fitted on (after the row limit). The losses
+are the cross-entropy of the predicted class probabilities and, for regression, the mean
+squared error of the standardised target (like those of a neural network), so runs of
+both families can be compared. The details are in ``classical``::
+
+      "classical": {
+        "estimator": "GaussianProcessRegressor", "label": "Gaussian process regression",
+        "max_rows": 5000,              # the row limit of this server
+        "rows": 4000,                  # training rows the model is fitted on
+        "subsampled_from": null,       # training rows before the row limit, if it applied
+        "fit_seconds": 12.3,           # null until fitted
+        "initial_kernel": "...",       # Gaussian processes: the kernel of the bricks
+        "kernel": "...",               # ... and the fitted one (null until fitted)
+        "log_marginal_likelihood": 12.5,     # Gaussian processes, null until fitted
+        "support_vectors": null,       # support vector machines: their number once fitted
+        "train": {"loss": 0.1, "accuracy": null, "rmse": 0.3, "r2": 0.97}  # training rows
+      }
 """
 
 from __future__ import annotations
@@ -87,6 +116,7 @@ JOB_FILE = "job.json"
 STATE_FILE = "state.json"
 STOP_FILE = "STOP"
 WEIGHTS_FILE = "weights.pt"
+CLASSICAL_WEIGHTS_FILE = "model.joblib"
 LOG_FILE = "output.log"
 
 ACTIVE_STATUSES = ("starting", "preparing", "running")
@@ -97,6 +127,12 @@ HEARTBEAT_SECONDS = 5
 # A run whose state has not been updated for this long is considered dead.
 STALE_SECONDS = 60
 MAX_LOG_LINES = 200
+
+
+def weights_file(family: str | None) -> str:
+    """Name of the weights file of a run: ``model.joblib`` for classical models (the fitted
+    scikit-learn pipeline), ``weights.pt`` for neural networks."""
+    return CLASSICAL_WEIGHTS_FILE if family == "classical" else WEIGHTS_FILE
 
 
 def preprocessing_path(weights_path: str | Path) -> Path:
@@ -131,7 +167,7 @@ def read_json(path: str | Path) -> Any | None:
         return None
 
 
-def initial_state(epochs: int = 0) -> dict[str, Any]:
+def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
     now = time.time()
     return {
         "status": "starting",
@@ -141,6 +177,7 @@ def initial_state(epochs: int = 0) -> dict[str, Any]:
         "finished_at": None,
         "device": None,
         "device_label": None,
+        "family": family,
         "task": None,
         "num_classes": None,
         "class_names": None,
@@ -164,6 +201,7 @@ def initial_state(epochs: int = 0) -> dict[str, Any]:
         "trial": None,
         "trials": [],
         "best_trial": None,
+        "classical": None,
     }
 
 

@@ -22,7 +22,6 @@ import os
 import random
 import time
 import traceback
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +30,11 @@ import torch.nn as nn
 
 from ..codegen import generate_code
 from .compat import TrainingPlan, check_compatibility
-from .config import ConfigError, TrainingConfig
+from .config import TrainingConfig
 from .data import PreparedData, Source, iterate_batches, prepare_data
-from .datasets import DEFAULT_DATA_ROOT, DatasetInfo, builtin_info, random_info
+from .datasets import DEFAULT_DATA_ROOT
 from .devices import available_devices, default_device, device_label, select_device
+from .job import TrainingJob, TrainingResult
 from .reporting import DivergedError, Reporter, StopTraining, TrainingError, short_error
 from .state import finite, preprocessing_path, write_json_atomic
 from .tuning import TuningConfig, describe_params, trial_config
@@ -72,78 +72,6 @@ def build_model(graph: Any) -> nn.Module:
     return namespace["NeuralNetwork"]()
 
 
-@dataclass
-class TrainingJob:
-    """Everything needed for one run (the content of ``job.json``)."""
-
-    graph: dict[str, Any]
-    dataset: DatasetInfo
-    config: TrainingConfig = field(default_factory=TrainingConfig)
-    path: str | None = None  # CSV file or image folder
-    data_root: str | None = None  # where torchvision datasets are downloaded
-    name: str = ""
-    tuning: TuningConfig | None = None  # set for a hyperparameter search
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> TrainingJob:
-        """Read a job (see the contract / state.py). Raises :class:`TrainingError`."""
-        if not isinstance(data, dict):
-            raise TrainingError("The training job is invalid.")
-        graph = data.get("graph")
-        if not isinstance(graph, dict):
-            raise TrainingError("The training job contains no network.")
-        dataset = data.get("dataset") or {}
-        if not isinstance(dataset, dict):
-            raise TrainingError("The training job describes no valid dataset.")
-        info = dataset.get("info")
-        try:
-            if isinstance(info, dict):
-                dataset_info = DatasetInfo.from_dict(info)
-            elif dataset.get("kind") == "builtin":
-                dataset_info = builtin_info(str(dataset.get("id")))
-            elif dataset.get("kind", "random") == "random":
-                dataset_info = random_info()
-            else:
-                raise TrainingError("The training job describes no valid dataset.")
-        except (TypeError, ValueError) as exc:
-            raise TrainingError("The training job describes no valid dataset.") from exc
-        try:
-            config = TrainingConfig.from_dict(data.get("config"))
-            tuning = data.get("tuning")
-            tuning = TuningConfig.from_dict(tuning) if tuning is not None else None
-        except ConfigError as exc:
-            raise TrainingError(str(exc)) from exc
-        path = dataset.get("path")
-        data_root = data.get("data_root")
-        return cls(
-            graph=graph,
-            dataset=dataset_info,
-            config=config,
-            path=str(path) if path else None,
-            data_root=str(data_root) if data_root else None,
-            name=str(data.get("name") or ""),
-            tuning=tuning,
-        )
-
-
-@dataclass
-class TrainingResult:
-    status: str  # completed | stopped | failed
-    message: str
-    weights: bool = False
-    history: list[dict[str, Any]] = field(default_factory=list)
-    best: dict[str, Any] | None = None
-    # {"loss", "accuracy", "rmse"} of the final model on the test set
-    test: dict[str, Any] | None = None
-    # Hyperparameter search: every trial (see state.py) and the number of the best one
-    trials: list[dict[str, Any]] = field(default_factory=list)
-    best_trial: int | None = None
-    # The epoch whose weights were tested and saved (None: not the end of an epoch)
-    weights_epoch: int | None = None
-    # True if early stopping ended the training (in a search: the best trial)
-    stopped_early: bool = False
-
-
 def train(
     job: TrainingJob, reporter: Reporter, weights_path: str | Path | None = None
 ) -> TrainingResult:
@@ -154,7 +82,14 @@ def train(
     last epoch without ``restore_best``); a search saves those of the best trial. The test
     set, if any, is measured with the same weights. The outcome is reported with
     ``reporter.finish`` and returned.
+
+    Classical models (scikit-learn) are handed to :mod:`.classical_engine`, which saves
+    the fitted model with joblib instead.
     """
+    if job.family == "classical":
+        from . import classical_engine
+
+        return classical_engine.train(job, reporter, weights_path)
     if job.tuning is not None:
         return _Search(job, reporter, weights_path).run()
     return _Run(job, reporter, weights_path).run()
