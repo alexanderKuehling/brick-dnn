@@ -9,6 +9,11 @@
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
 
+### Fixed
+- The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have
+  no effect with the other settings, such as `padding_size` when `padding` is `same` or
+  `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
+
 ## 1.1.0 (2026-11-09)
 
 Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in

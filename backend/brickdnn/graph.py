@@ -57,7 +57,11 @@ class NodeInfo:
     def to_dict(self) -> dict[str, Any]:
         params = None
         if self.layer is not None:
-            params = {k: list(v) if isinstance(v, tuple) else v for k, v in self.layer.p.items()}
+            params = {
+                k: list(v) if isinstance(v, tuple) else v
+                for k, v in self.layer.p.items()
+                if self.layer.param_visible(k)
+            }
         return {
             "type": self.type,
             "output_shape": list(self.shape) if self.shape is not None else None,
@@ -78,13 +82,19 @@ class Analysis:
     def valid(self) -> bool:
         return not self.errors
 
+    def _ordered(self) -> list[str]:
+        """Topological order; document order if parsing failed before the graph was sorted."""
+        if self.order:
+            return self.order
+        return sorted(self.nodes, key=lambda nid: self.nodes[nid].index)
+
     @property
     def inputs(self) -> list[str]:
-        return [nid for nid in self.order if self.nodes[nid].type == "Input"]
+        return [nid for nid in self._ordered() if self.nodes[nid].type == "Input"]
 
     @property
     def outputs(self) -> list[str]:
-        return [nid for nid in self.order if not self.nodes[nid].outputs]
+        return [nid for nid in self._ordered() if not self.nodes[nid].outputs]
 
     @property
     def total_params(self) -> int | None:
@@ -105,8 +115,9 @@ class Analysis:
             "errors": [e.to_dict() for e in self.errors],
             "warnings": [w.to_dict() for w in self.warnings],
             "nodes": {nid: info.to_dict() for nid, info in self.nodes.items()},
-            "inputs": self.inputs if self.valid else [],
-            "outputs": self.outputs if self.valid else [],
+            # Also for invalid graphs: whatever could be resolved.
+            "inputs": self.inputs,
+            "outputs": self.outputs,
             "total_params": self.total_params if self.valid else None,
         }
 

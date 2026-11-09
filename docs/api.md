@@ -27,14 +27,17 @@ Body: `{"graph": {...}}` (or the bare graph). Always answers `200`:
     "input": { "type": "Input", "output_shape": [100], "dtype": "float", "num_params": 0, "params": { "shape": [100], "dtype": "float" } },
     "fc1": { "type": "Linear", "output_shape": null, "dtype": null, "num_params": null, "params": { "in_features": 50, "out_features": 64, "bias": true } }
   },
-  "inputs": [],
-  "outputs": [],
+  "inputs": ["input"],
+  "outputs": ["fc1"],
   "total_params": null
 }
 ```
 
 `node` is `null` for errors about the whole graph. `params` contains the resolved values,
-including inferred `auto` parameters.
+including inferred `auto` parameters; parameters that have no effect with the other settings
+(the UI hides them, e.g. `padding_size` unless `padding` is `custom`) are left out. `inputs`
+and `outputs` list the Input layers and the layers without outgoing connections, also when
+the graph has errors.
 
 ### `POST /api/generate/`
 

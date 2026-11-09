@@ -78,6 +78,7 @@ def test_analyze_invalid(client):
     assert response.status_code == 200
     assert response.data["valid"] is False
     assert response.data["errors"][0]["node"] == "n1"
+    assert response.data["inputs"] == ["n0"] and response.data["outputs"] == ["n1"]
 
 
 def test_generate_json(client):
