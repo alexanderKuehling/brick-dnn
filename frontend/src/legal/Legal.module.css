@@ -1,0 +1,73 @@
+/* Markdown of the legal pages (markdown.tsx). */
+.markdown {
+  line-height: 1.6;
+  /* Long addresses and URLs wrap instead of making the page scroll sideways on phones. */
+  overflow-wrap: anywhere;
+
+  & p,
+  & ul,
+  & ol,
+  & blockquote {
+    margin: 0 0 var(--mantine-spacing-sm);
+  }
+
+  & ul,
+  & ol {
+    padding-left: 1.5em;
+  }
+
+  & li > ul,
+  & li > ol {
+    margin: 4px 0 0;
+  }
+
+  & li + li {
+    margin-top: 4px;
+  }
+
+  & blockquote {
+    padding: 2px 0 2px var(--mantine-spacing-md);
+    border-left: 3px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+    color: var(--mantine-color-dimmed);
+  }
+
+  & hr {
+    margin: var(--mantine-spacing-lg) 0;
+    border: 0;
+    border-top: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  }
+
+  & code {
+    padding: 1px 4px;
+    font-family: var(--mantine-font-family-monospace);
+    font-size: 0.9em;
+    background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+    border-radius: var(--mantine-radius-sm);
+  }
+}
+
+.heading {
+  margin: var(--mantine-spacing-lg) 0 var(--mantine-spacing-xs);
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+/* "Imprint · Privacy · Terms" */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+
+  & li + li::before {
+    content: '·';
+    margin-right: 6px;
+  }
+}

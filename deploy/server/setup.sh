@@ -8,8 +8,9 @@
 # The first argument is the public key GitHub Actions deploys with. Without DOMAIN the site
 # gets <IP>.sslip.io (works without an own domain). The script installs Docker, a firewall
 # (SSH, HTTP, HTTPS), automatic security updates and swap, clones the repository to
-# /opt/brick-dnn, writes /opt/brick-dnn/.env (if missing) and creates the user "deploy",
-# whose key can only deploy commits of main (deploy.sh). Running it again is safe.
+# /opt/brick-dnn, writes /opt/brick-dnn/.env (if missing), creates /srv/brick-dnn/legal for the
+# legal pages and the user "deploy", whose key can only deploy commits of main (deploy.sh).
+# Running it again is safe.
 set -euo pipefail
 
 DEPLOY_KEY="${1:?usage: setup.sh 'DEPLOY_PUBLIC_KEY' [DOMAIN]}"
@@ -70,6 +71,9 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 echo "== Code in $APP"
 [ -d "$APP/.git" ] || git clone --quiet "$REPO" "$APP"
 chown -R deploy:deploy "$APP"
+
+echo "== Folder for the imprint, privacy policy and terms of use (deploy/legal/)"
+install -d -m 755 -o deploy -g deploy /srv/brick-dnn/legal
 
 echo "== Settings in $APP/.env"
 if [ ! -f "$APP/.env" ]; then

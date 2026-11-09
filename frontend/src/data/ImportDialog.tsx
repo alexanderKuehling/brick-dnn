@@ -25,6 +25,7 @@ import {
   ThemeIcon,
 } from '@mantine/core';
 import { api, type DataSource, type ImportOptions, type ImportReport } from '@/api';
+import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import { useUploadProgress } from '@/components/useUploadProgress';
 import { formatBytes } from '@/training/format';
@@ -322,6 +323,7 @@ export function ImportDialog({
                 )}
               </FileButton>
             </div>
+            <UploadNotice />
 
             <TextInput
               label="Name"

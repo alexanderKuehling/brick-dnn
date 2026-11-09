@@ -25,6 +25,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Dataset, TrainingStatus } from '@/api';
+import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import type { UploadBytes } from '@/components/useUploadProgress';
 import { isOwnDataset } from './access';
@@ -174,6 +175,7 @@ function Uploads({
         </FileButton>
       </Group>
 
+      <UploadNotice />
       <DataTabHint />
 
       {uploading && uploadProgress && (

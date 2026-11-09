@@ -71,7 +71,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
   tabular regression, multi-input model.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
-  Networks can also be saved and opened as JSON files.
+  Networks can also be saved and opened as JSON files. Users download all their data or delete
+  their account themselves; servers can show an imprint, privacy policy and terms of use and
+  delete unused data automatically ([docs/privacy.md](docs/privacy.md)).
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
 - Dark mode, keyboard shortcuts, works on tablets and phones.
@@ -289,8 +291,11 @@ brick-dnn/
 │       ├── data/            Data tab: pipeline editor, data table, analysis views
 │       ├── api/             typed API client
 │       ├── auth/            login state
+│       ├── account/         account page: e-mail, password, data export, deletion
+│       ├── legal/           imprint, privacy policy, terms of use (safe Markdown)
 │       └── pages/           login, sign-up, saved networks
-├── docs/                    graph format, REST API, training, data, database, contributors
+├── deploy/                  server setup (Docker Compose, Caddy), legal templates, demo
+├── docs/                    graph format, REST API, training, data, database, privacy
 └── docker-compose.yml
 ```
 
@@ -316,11 +321,19 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
+| `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …) |
+| `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |
+| `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` | `0` (off)        | Delete accounts unused for this many days, with everything they own |
+| `BRICKDNN_EXPORT_MAX_FILES_MB` | `200`                      | Uploaded files included in a user's data export      |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
 [docs/mcp.md](docs/mcp.md), the database setup (SQLite,
-PostgreSQL, Supabase) in [docs/database.md](docs/database.md).
+PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server for other
+people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
+legal pages (imprint, privacy policy, terms of use; templates in
+[deploy/legal/](deploy/legal/README.md)), the account page where users export their data or
+delete their account, and the optional automatic deletion of old data.
 
 ## Tests
 
