@@ -1,9 +1,10 @@
-"""Data preparation (the Data tab): imported CSV files, preparations, previews, exports.
+"""Data preparation (the Data tab): imported files, preparations, previews, exports.
 
 The work is done by :mod:`brickdnn.data` (pandas); this module stores files, checks who may
 use what and turns preparations into training datasets. Files::
 
-    DATA_PREP_DIR/sources/<id>/original.csv   the uploaded file, unchanged
+    DATA_PREP_DIR/sources/<id>/original.csv   the uploaded or downloaded file, unchanged
+                                              (original.xlsx, original.json.gz ... for others)
     DATA_PREP_DIR/sources/<id>/table/         the typed table (brickdnn.data.store)
 
 pandas is only imported by the functions that need it, so the server starts (and code
@@ -23,6 +24,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
 from django.db import transaction
@@ -30,10 +32,17 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.text import slugify
 
-from brickdnn.data import MISSING_DEPENDENCIES, dependencies_installed
+from brickdnn.data import (
+    COMPRESSED_SUFFIXES,
+    FORMAT_SUFFIXES,
+    MISSING_DEPENDENCIES,
+    dependencies_installed,
+    file_types,
+)
 from brickdnn.training import DatasetError, DatasetInfo, inspect_csv
 
 from . import training_service as training
+from . import url_import
 from .models import DataPrep, Dataset, DataSource
 from .retention import touch
 
@@ -42,14 +51,18 @@ if TYPE_CHECKING:
     from brickdnn.data.table import Table
 
 DISABLED_REASON = "Data preparation is disabled on this server."
-WRONG_FILE_MESSAGE = "Upload a CSV file (.csv, .tsv or .txt)."
+WRONG_FILE_MESSAGE = (
+    "Upload a CSV, Excel, OpenDocument, JSON, Parquet or Feather file (.csv, .tsv, .txt, "
+    ".xlsx, .xls, .ods, .json, .jsonl, .parquet, .feather), also packed as .gz, .bz2, .xz "
+    "or .zip."
+)
+URL_DISABLED_MESSAGE = "Importing from links is switched off on this server."
 MISSING_FILES_MESSAGE = "The imported data of this source is missing. Import the file again."
 GONE_MESSAGE = "This table does not exist (any more)."
-SUFFIXES = (".csv", ".tsv", ".txt")
 ORIGINAL_FILE = "original.csv"
 TABLE_DIR = "table"
 # Form fields of an import, see brickdnn.data.io.ImportOptions.
-OPTION_FIELDS = ("delimiter", "decimal", "header", "encoding", "missing_values")
+OPTION_FIELDS = ("delimiter", "decimal", "header", "encoding", "missing_values", "sheet")
 MIN_SAMPLE_ROWS = 10
 DOWNLOAD_FORMATS = ("csv", "recipe", "python")
 
@@ -60,9 +73,16 @@ class DataInputError(ValueError):
     ``issues`` are the readiness issues when data is not ready for training.
     """
 
-    def __init__(self, message: str, issues: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        message: str,
+        issues: list[dict[str, Any]] | None = None,
+        sheets: list[str] | None = None,
+    ):
         super().__init__(message)
         self.issues = issues
+        # The sheets of a workbook whose (chosen) sheet could not be imported.
+        self.sheets = sheets
 
 
 @contextlib.contextmanager
@@ -73,7 +93,7 @@ def _user_errors() -> Iterator[None]:
     try:
         yield
     except (DataError, DatasetError) as exc:
-        raise DataInputError(str(exc)) from None
+        raise DataInputError(str(exc), sheets=getattr(exc, "sheets", None)) from None
 
 
 # --------------------------------------------------------------------------- #
@@ -103,6 +123,9 @@ def status() -> dict[str, Any]:
         "default_sample_rows": settings.DATA_SAMPLE_ROWS,
         "max_sample_rows": settings.DATA_MAX_SAMPLE_ROWS,
         "login_required": True,
+        # File name endings the import reads (formats whose library is missing left out).
+        "file_types": file_types(),
+        "url_import": bool(settings.DATA_URL_IMPORT_ENABLED),
     }
 
 
@@ -130,16 +153,92 @@ def max_upload_bytes() -> int:
 
 
 def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
-    """Store and read an uploaded CSV file. ``fields`` are the form fields (``name`` and the
+    """Store and read an uploaded data file. ``fields`` are the form fields (``name`` and the
     import options). Raises :class:`DataInputError`."""
-    from brickdnn.data.io import ImportOptions, read_csv
+    filename = Path(upload.name or "").name
+
+    def save(work: Path) -> tuple[Path, str]:
+        if not _known_suffix(filename):
+            raise DataInputError(WRONG_FILE_MESSAGE)
+        original = work / _original_name(filename)
+        with original.open("wb") as out:
+            for chunk in upload.chunks():
+                out.write(chunk)
+        return original, filename
+
+    return _import(user, save, fields)
+
+
+def import_url(user, url: Any, fields: dict[str, Any]) -> DataSource:
+    """Download the file at ``url`` (see :mod:`url_import` for the safety checks) and read it
+    like an upload. Raises :class:`DataInputError`."""
+    if not settings.DATA_URL_IMPORT_ENABLED:
+        raise DataInputError(URL_DISABLED_MESSAGE)
+    try:
+        given = url_import.check_url(url)
+    except url_import.LinkError as exc:
+        raise DataInputError(str(exc)) from None
+
+    def save(work: Path) -> tuple[Path, str]:
+        try:
+            download = url_import.fetch(
+                given,
+                work,
+                max_bytes=max_upload_bytes(),
+                allow_private=bool(settings.DATA_URL_ALLOW_PRIVATE),
+            )
+        except url_import.LinkError as exc:
+            raise DataInputError(str(exc)) from None
+        original = work / _original_name(download.filename)
+        os.replace(download.path, original)
+        return original, download.filename
+
+    return _import(user, save, fields, url=given)
+
+
+def _shown_url(url: str) -> str:
+    """The link as stored and shown, e.g. to people a preparation is shared with: without
+    its query and fragment, which can hold secrets (signed links, access tokens)."""
+    parts = urlsplit(url)
+    hidden = "?…" if parts.query else ""
+    return urlunsplit(parts._replace(query="", fragment="")) + hidden
+
+
+def _known_suffix(filename: str) -> bool:
+    return Path(filename).suffix.lower() in {*FORMAT_SUFFIXES, *COMPRESSED_SUFFIXES}
+
+
+def original_file(source_id: int) -> Path | None:
+    """The stored original of a source (``original.csv``, ``original.xlsx`` ...), if any."""
+    directory = source_dir(source_id)
+    if not directory.is_dir():
+        return None
+    found = sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and (path.name == "original" or path.name.startswith("original."))
+    )
+    return found[0] if found else None
+
+
+def _original_name(filename: str) -> str:
+    """``original`` plus the known endings of ``filename`` (``original.csv.gz``)."""
+    suffixes = [s.lower() for s in Path(filename).suffixes[-2:]]
+    if suffixes and suffixes[-1] in COMPRESSED_SUFFIXES:
+        packed = suffixes[-1]
+        inner = suffixes[-2] if len(suffixes) == 2 and suffixes[-2] in FORMAT_SUFFIXES else ""
+        return f"original{inner}{packed}"
+    if suffixes and suffixes[-1] in FORMAT_SUFFIXES:
+        return f"original{suffixes[-1]}"
+    return "original"
+
+
+def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataSource:
+    """Store the file ``save(work_folder)`` writes, read it and create the source."""
+    from brickdnn.data.io import ImportOptions
+    from brickdnn.data.readers import read_file
     from brickdnn.data.store import save_table
 
-    filename = Path(upload.name or "").name
-    if Path(filename).suffix.lower() not in SUFFIXES:
-        raise DataInputError(WRONG_FILE_MESSAGE)
-    name = fields.get("name")
-    name = (str(name or "").strip() or Path(filename).stem.strip() or "Data")[:120]
     requested = {key: fields[key] for key in OPTION_FIELDS if fields.get(key) not in (None, "")}
     with _user_errors():
         options = ImportOptions.from_dict(requested)
@@ -152,16 +251,17 @@ def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
     work.mkdir()
     source = None
     try:
-        original = work / ORIGINAL_FILE
-        with original.open("wb") as out:
-            for chunk in upload.chunks():
-                out.write(chunk)
+        original, filename = save(work)
+        name = fields.get("name")
+        name = (str(name or "").strip() or _stem(filename) or "Data")[:120]
         with _user_errors():
-            table, report = read_csv(
+            table, report = read_file(
                 original,
                 options,
+                filename=filename,
                 max_rows=settings.DATA_MAX_ROWS,
                 max_columns=settings.DATA_MAX_COLUMNS,
+                max_bytes=max_upload_bytes(),
             )
             save_table(table, work / TABLE_DIR)
         missing = table.df.isna().sum()
@@ -170,6 +270,9 @@ def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
             for column in table.columns
         ]
         stored_options = {key: options.to_dict().get(key) for key in OPTION_FIELDS}
+        stored_report = report.to_dict()
+        if url:
+            stored_report["url"] = _shown_url(url)
         source = DataSource.objects.create(
             owner=user,
             name=name,
@@ -179,7 +282,7 @@ def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
             n_columns=len(columns),
             columns=columns,
             import_options=stored_options,
-            report=report.to_dict(),
+            report=stored_report,
         )
         final = source_dir(source.pk)
         shutil.rmtree(final, ignore_errors=True)  # left over from an earlier database
@@ -190,6 +293,14 @@ def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
             source.delete()
         raise
     return source
+
+
+def _stem(filename: str) -> str:
+    """The file name without its known endings: ``sales`` for ``sales.csv.gz``."""
+    path = Path(filename)
+    while path.suffix.lower() in {*FORMAT_SUFFIXES, *COMPRESSED_SUFFIXES}:
+        path = path.with_suffix("")
+    return path.name.strip()
 
 
 def _remove_abandoned(folder: Path, pattern: str) -> None:
@@ -219,25 +330,35 @@ def _load_table(source: DataSource) -> Table:
 def source_info(source: DataSource) -> dict[str, Any]:
     """How to read the file of ``source`` again (``SourceInfo`` in brickdnn.data.export)."""
     from brickdnn.data.io import DEFAULT_MISSING
+    from brickdnn.data.readers import SPREADSHEET_ERRORS, WORKBOOK_FORMATS
 
     report = source.report if isinstance(source.report, dict) else {}
     options = source.import_options if isinstance(source.import_options, dict) else {}
     missing = options.get("missing_values")
-    return {
+    missing = list(missing) if isinstance(missing, list) else list(DEFAULT_MISSING)
+    fmt = report.get("format") or "csv"
+    if fmt in WORKBOOK_FORMATS:
+        missing += [token for token in SPREADSHEET_ERRORS if token not in missing]
+    info = {
         "id": source.pk,
         "name": source.name,
         "filename": source.filename,
+        "format": fmt,
         "delimiter": report.get("delimiter", ","),
         "decimal": report.get("decimal", "."),
         "header": bool(report.get("header", True)),
         "encoding": report.get("encoding", "utf-8"),
-        "missing_values": list(missing) if isinstance(missing, list) else list(DEFAULT_MISSING),
+        "missing_values": missing,
         "columns": [
             {"name": c.get("name"), "kind": c.get("kind")}
             for c in (source.columns or [])
             if isinstance(c, dict)
         ],
     }
+    for key in ("sheet", "json_path", "compression", "member", "url"):
+        if report.get(key):
+            info[key] = report[key]
+    return info
 
 
 def preps_using(source: DataSource) -> list[DataPrep]:

@@ -23,8 +23,16 @@ classifiers = [
 [project.optional-dependencies]
 # `pip install "brickdnn[train]"` enables `brickdnn train` (local training with PyTorch).
 train = ["torch>=2.1", "torchvision>=0.16"]
-# `pip install "brickdnn[data]"` enables data preparation (brickdnn.data).
-data = ["numpy>=1.24", "pandas>=2.2,<3"]
+# `pip install "brickdnn[data]"` enables data preparation (brickdnn.data), including the
+# imports of Excel, Parquet and Feather files.
+data = [
+    "numpy>=1.24",
+    "pandas>=2.2,<3",
+    "openpyxl>=3.1,<4",
+    "xlrd>=2.0,<3",
+    "pyarrow>=14",
+    "defusedxml>=0.7",
+]
 
 [project.urls]
 Homepage = "https://github.com/alexanderKuehling/brick-dnn"

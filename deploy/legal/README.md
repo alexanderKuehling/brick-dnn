@@ -70,9 +70,12 @@ streichen.
       Registrierung, letzter Login, letzte Nutzung, Annahme der Nutzungsbedingungen mit
       Fassung. Art. 6 Abs. 1 lit. b.
 - [ ] **Inhalte:** Netze mit Versionsverlauf, Kommentare, Freigaben (eingeladene Personen,
-      Freigabe-Links), hochgeladene CSV-/ZIP-Dateien, Aufbereitungen, Trainings mit
-      Kennzahlen, Protokollen und Gewichten – alles auf dem Server; Bitte, keine
-      personenbezogenen Daten hochzuladen.
+      Freigabe-Links), hochgeladene Dateien (CSV, Excel, JSON, Parquet, ZIP …),
+      Aufbereitungen, Trainings mit Kennzahlen, Protokollen und Gewichten – alles auf dem
+      Server; Bitte, keine personenbezogenen Daten hochzuladen.
+- [ ] **Import über Links:** der Server ruft die Datei beim Anbieter des Links ab (dieser
+      sieht die Server-IP); gespeichert wird der Link ohne Query-Teil.
+      `BRICKDNN_DATA_URL_IMPORT=false` schaltet das ab.
 - [ ] **Echtzeit-Bearbeitung** (WebSockets, Redis nur im Arbeitsspeicher): andere Mitglieder
       sehen Benutzername und Auswahl; nichts davon wird gespeichert.
 - [ ] **Keine Cookies, kein Tracking:** localStorage für Login-Token (Login höchstens 7 Tage

@@ -101,7 +101,7 @@ export function StepParamField(props: StepParamFieldProps) {
           label={param.label}
           description={
             others.length === 0
-              ? 'Import another CSV file to combine it with this one.'
+              ? 'Import another table (a file or a link) to combine it with this one.'
               : description
           }
           placeholder={others.length === 0 ? 'No other tables' : 'Choose a table'}

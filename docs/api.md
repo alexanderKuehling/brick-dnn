@@ -361,7 +361,8 @@ prediction itself fails or takes too long, `429` above the rate limit.
 
 ## Data preparation (login required)
 
-The Data tab imports CSV files, combines and cleans them step by step and turns the result into
+The Data tab imports data files (CSV, Excel, OpenDocument, JSON, JSON Lines, Parquet, Feather,
+also packed, or downloaded from a link), combines and cleans them step by step and turns the result into
 a training dataset. The work is done on the server with pandas (`pip install "brickdnn[data]"`),
 see `backend/brickdnn/data/`. `GET /api/data/` and `GET /api/data/steps/` are public; all JSON
 shapes are documented in `frontend/src/api/types.ts` (section "Data preparation").
@@ -370,8 +371,8 @@ shapes are documented in `frontend/src/api/types.ts` (section "Data preparation"
 | ------ | -------------------------------------- | --------------------------------------------------- |
 | GET    | `/api/data/`                           | Availability and limits (`DataStatus`)              |
 | GET    | `/api/data/steps/`                     | All step types with their settings (`StepCatalog`)  |
-| GET    | `/api/data/sources/`                   | Your imported CSV files, newest first               |
-| POST   | `/api/data/sources/`                   | Import `file` (`.csv`, `.tsv`, `.txt`) with import options (multipart) |
+| GET    | `/api/data/sources/`                   | Your imported tables, newest first                  |
+| POST   | `/api/data/sources/`                   | Import a `file` with import options (multipart), or the file at a link: `{url, name?, ...options}` (JSON) |
 | GET / PATCH / DELETE | `/api/data/sources/<id>/` | One source / rename it (`{name}`) / delete it with its files |
 | GET    | `/api/data/preps/`                     | Your preparations, last changed first               |
 | POST   | `/api/data/preps/`                     | `{source, name?, steps?, settings?}`                |
@@ -380,21 +381,58 @@ shapes are documented in `frontend/src/api/types.ts` (section "Data preparation"
 | POST   | `/api/data/preps/<id>/export/`         | Create a training dataset from the saved preparation `{name?}` |
 | GET    | `/api/data/preps/<id>/download/?format=…` | `csv` (prepared data), `recipe` (JSON) or `python` (pandas script) |
 
-**Import.** Besides `file`, the form may contain `name`, `delimiter` (`auto`, `,`, `;`, a tab,
-`|`), `decimal` (`auto`, `.`, `,`), `header` (`auto`, `yes`, `no`), `encoding` (`auto`, `utf-8`,
-`cp1252`, `latin-1`) and `missing_values` (a JSON list of cell values that mean "missing", e.g.
+**Import.** `file` may be CSV / TSV / text (`.csv`, `.tsv`, `.tab`, `.psv`, `.txt`), Excel
+(`.xlsx`, `.xlsm`, `.xls`), OpenDocument (`.ods`), JSON (`.json`), JSON Lines (`.jsonl`,
+`.ndjson`), Parquet (`.parquet`) or Feather / Arrow (`.feather`, `.arrow`), also packed as
+`.gz`, `.bz2`, `.xz` or `.zip` (with one data file); `GET /api/data/` lists the endings this
+server reads in `file_types`. Besides `file`, the form may contain `name`, `delimiter`
+(`auto`, `,`, `;`, a tab, `|`), `decimal` (`auto`, `.`, `,`), `encoding` (`auto`, `utf-8`,
+`cp1252`, `latin-1`) — these three for text files only —, `header` (`auto`, `yes`, `no`; text
+files and workbooks), `sheet` (the name of a sheet of a workbook; default: the first sheet
+with values) and `missing_values` (a JSON list of cell values that mean "missing", e.g.
 `["-999", "n/a"]`). Left out means "detect". The answer (`201`) is the source with its typed
 `columns` (`{name, kind, missing}`), the requested `import_options` and the `report` of what was
-detected (`delimiter`, `decimal`, `header`, `encoding`, `rows`, `columns`, `warnings`). Files
-larger than `BRICKDNN_DATA_MAX_UPLOAD_MB` (default 200) are refused (`413`), files with more than `BRICKDNN_DATA_MAX_ROWS`
-rows (or more than `BRICKDNN_DATA_MAX_COLUMNS` columns, if set) are refused (`400`). A source that a preparation
-uses as its main source cannot be deleted (`409 {"detail": "Used by the preparation “Churn”;
-delete it first."}`).
+detected: `format` (`csv`, `xlsx`, `xls`, `ods`, `json`, `jsonl`, `parquet` or `feather`),
+`delimiter` and `encoding` (`null` for other formats than CSV), `decimal`, `header`, `rows`,
+`columns`, `warnings`, and where they apply `compression` / `member` (packed files),
+`sheet` / `sheets` (the imported sheet and all sheets of a workbook), `json_path` (the keys
+leading to the records, e.g. `["data"]`) and `url`. Files larger than
+`BRICKDNN_DATA_MAX_UPLOAD_MB` (default 200) are refused (`413`), files with more than
+`BRICKDNN_DATA_MAX_ROWS` rows (or more than `BRICKDNN_DATA_MAX_COLUMNS` columns, if set), packed
+files that unpack to more than the size limit and tables with too many cells are refused
+(`400`). When a sheet cannot be imported (missing, empty, too large …), the `400` answer
+lists the sheets of the workbook: `{"detail": "The workbook has no sheet “Q3”.", "sheets":
+["Q1", "Q2"]}`. A source that a preparation uses as its main source cannot be deleted
+(`409 {"detail": "Used by the preparation “Churn”; delete it first."}`).
 
 ```bash
 curl -X POST http://localhost:8080/api/data/sources/ -H "Authorization: Bearer $TOKEN" \
   -F file=@customers.csv -F delimiter=";" -F decimal="," -F 'missing_values=["-999"]'
+curl -X POST http://localhost:8080/api/data/sources/ -H "Authorization: Bearer $TOKEN" \
+  -F file=@sales.xlsx -F sheet=Orders
 ```
+
+**Import from a link.** Send JSON instead of a form: `{"url": "https://…", "name"?, ...the
+options above}`. The server downloads the file (http/https, up to
+`BRICKDNN_DATA_MAX_UPLOAD_MB`) and imports it like an upload; the file name comes from the
+answer's `Content-Disposition` or the link. Share links of Google Sheets (the tab of the
+link's `gid` as CSV), Google Drive, GitHub (`blob` pages), Hugging Face (`blob` pages) and
+Dropbox are turned into download links. Links with a user name or password and links to
+addresses that are not public (private networks, loopback, link-local such as cloud metadata,
+also after a redirect) are refused (`400` with the reason), as are web pages (HTML), missing
+files (`404` of the other server) and files that are too large. `403` when link imports are
+switched off (`BRICKDNN_DATA_URL_IMPORT=false`, `url_import: false` in `GET /api/data/`);
+`BRICKDNN_DATA_URL_ALLOW_PRIVATE=true` allows private addresses for installations in a trusted
+network. Link imports count against the same rate limit as uploads. Details:
+[data preparation](data-preparation.md#security-of-link-imports).
+
+```bash
+curl -X POST http://localhost:8080/api/data/sources/ -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://docs.google.com/spreadsheets/d/<id>/edit#gid=0", "name": "Survey"}'
+```
+
+Database connections (PostgreSQL, MySQL …) are not supported yet.
 
 **Preparations.** A preparation is a main `source`, a list of `steps`
 (`{"id": "s1", "type": "impute", "enabled": true, "params": {...}}`, types from
@@ -448,7 +486,7 @@ All data endpoints except `GET /api/data/` answer `503` when data preparation is
 ## Rate limits
 
 Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and registration:
-20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
+20/minute, starting training runs: 120/hour, dataset uploads, data imports (files and links) and exports of
 preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
 1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
 120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour. Adjust

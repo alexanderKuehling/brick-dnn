@@ -359,7 +359,7 @@ const serverApi = {
         request<DataSource[]>('/api/data/sources/', { auth: true, signal }),
       get: (id: number, signal?: AbortSignal) =>
         request<DataSource>(`/api/data/sources/${id}/`, { auth: true, signal }),
-      /** Import a CSV file; options left out are detected. `upload` can cancel and follow it. */
+      /** Import a data file; options left out are detected. `upload` can cancel and follow it. */
       upload: (
         file: File,
         options: Partial<ImportOptions> & { name?: string } = {},
@@ -380,6 +380,18 @@ const serverApi = {
           ...upload,
         });
       },
+      /** Let the server download and import the file at `url` (http/https). */
+      importUrl: (
+        url: string,
+        options: Partial<ImportOptions> & { name?: string } = {},
+        signal?: AbortSignal
+      ) =>
+        request<DataSource>('/api/data/sources/', {
+          method: 'POST',
+          body: { url, ...options },
+          auth: true,
+          signal,
+        }),
       rename: (id: number, name: string) =>
         request<DataSource>(`/api/data/sources/${id}/`, {
           method: 'PATCH',

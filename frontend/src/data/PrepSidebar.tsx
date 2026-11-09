@@ -66,7 +66,7 @@ export function PrepSidebar(props: PrepSidebarProps) {
     <>
       <Group p="sm" pb={4} wrap="nowrap">
         <Button fullWidth leftSection={<IconFileImport size={16} />} onClick={props.onImport}>
-          Import CSV file
+          Import data
         </Button>
       </Group>
       <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
@@ -273,7 +273,7 @@ function NewPrepMenu({
         ))}
         <Menu.Divider />
         <Menu.Item leftSection={<IconFileImport size={14} />} onClick={onImport}>
-          A new CSV file…
+          A new file or link…
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>

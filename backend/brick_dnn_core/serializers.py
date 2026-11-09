@@ -238,7 +238,7 @@ class RunDetailSerializer(RunSummarySerializer):
 
 
 class DataSourceSerializer(serializers.ModelSerializer):
-    """An imported CSV file. Only the name can be changed."""
+    """An imported data file. Only the name can be changed."""
 
     name = serializers.CharField(max_length=120)
 
