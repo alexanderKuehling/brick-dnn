@@ -1084,8 +1084,18 @@ export interface DataSample {
 }
 
 export interface ReadinessIssue {
-  severity: 'error' | 'warning';
+  /**
+   * The check, e.g. missing_values, categorical_features, numbers_as_text, leakage,
+   * split_overlap, duplicate_rows, rare_classes, near_constant, redundant, skewed, scales,
+   * few_rows (see backend/brickdnn/data/checks.py); step_failed for a failed step.
+   */
+  code: string;
+  /** error: blocks the export; warning: likely hurts the network or its scores; info: a hint. */
+  severity: 'error' | 'warning' | 'info';
+  /** The first affected column; null for rows or the whole table. */
   column: string | null;
+  /** All affected columns (empty for rows or the whole table). */
+  columns: string[];
   message: string;
   fix: DataFix | null;
 }
