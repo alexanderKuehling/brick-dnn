@@ -1,13 +1,18 @@
 import type { Dataset } from '@/api/types';
-import { detail, summary, TUNING } from './fixtures';
+import { GP_ANALYSIS } from '@/builder/classicalFixtures';
+import { canStartTraining, classicalMaxRows, isClassicalRun, unavailableReason } from './classical';
+import { CLASSICAL_STATUS, detail, gpDetail, STATUS, summary, svcDetail, TUNING } from './fixtures';
 import {
+  classicalSnippet,
   datasetDetails,
   describeParams,
   formatBytes,
   formatBytesOf,
   formatDuration,
+  formatFitTime,
   formatMetric,
   formatPercent,
+  formatR2,
   formatSetting,
   headlineMetric,
   preprocessingJson,
@@ -405,5 +410,94 @@ describe('training settings', () => {
       lr_values: [0.01, 0.001, 0.0001],
       tune_optimizer: true,
     });
+  });
+});
+
+describe('classical models', () => {
+  it('can train without PyTorch', () => {
+    expect(canStartTraining(CLASSICAL_STATUS, 'classical')).toBe(true);
+    expect(canStartTraining(CLASSICAL_STATUS, 'neural')).toBe(false);
+    expect(unavailableReason(CLASSICAL_STATUS, 'neural')).toBe(
+      'PyTorch is not installed on the server.'
+    );
+    // Older servers do not know classical models.
+    expect(canStartTraining(STATUS, 'classical')).toBe(false);
+    expect(canStartTraining({ ...CLASSICAL_STATUS, enabled: false }, 'classical')).toBe(false);
+  });
+
+  it('know the row limit of the model', () => {
+    expect(classicalMaxRows(CLASSICAL_STATUS, GP_ANALYSIS)).toBe(5000);
+    expect(classicalMaxRows(CLASSICAL_STATUS, { ...GP_ANALYSIS, family: 'neural' })).toBeNull();
+    expect(classicalMaxRows(STATUS, GP_ANALYSIS)).toBeNull();
+  });
+
+  it('are recognised by their family', () => {
+    expect(isClassicalRun(gpDetail())).toBe(true);
+    expect(isClassicalRun(detail())).toBe(false);
+    // Runs of older servers say it in their state only.
+    expect(isClassicalRun({ ...gpDetail(), family: undefined })).toBe(true);
+  });
+
+  it('format fit times and R²', () => {
+    expect(formatFitTime(0.838)).toBe('0.8 s');
+    expect(formatFitTime(0.01)).toBe('< 0.1 s');
+    expect(formatFitTime(75)).toBe('1 min 15 s');
+    expect(formatFitTime(null)).toBe('–');
+    expect(formatR2(0.96496)).toBe('0.965');
+    expect(formatR2(null)).toBe('–');
+  });
+
+  it('report R² and say that they are fitting', () => {
+    expect(headlineMetric(gpDetail().metrics)).toEqual(['0.951', 'test R²']);
+    expect(
+      headlineMetric({ ...gpDetail().metrics!, test_r2: null, test_rmse: null, test_loss: null })
+    ).toEqual(['0.965', 'validation R²']);
+    expect(resultText(svcDetail())).toBe('validation accuracy 93.0%');
+    expect(progressLabel(summary({ status: 'running', family: 'classical', epochs: 1 }))).toBe(
+      'Fitting'
+    );
+    expect(weightsNote(gpDetail())).toBeNull();
+  });
+
+  it('write a joblib snippet for the fitted model', () => {
+    const gp = weightsSnippet(gpDetail(), 'house_gp.py', 'house_gp.joblib');
+    expect(gp).toBe(
+      [
+        'import joblib',
+        '',
+        'bundle = joblib.load("house_gp.joblib")  # a pickle: only load files you trust',
+        'model = bundle["model"]  # scikit-learn Pipeline: StandardScaler, then GaussianProcessRegressor',
+        '',
+        '# Features in this order: rooms, area, age, x4, x5, x6, x7, x8',
+        'rows = [[3.2, 120.5, 30, 0, 0, 0, 0, 0]]  # one list of 8 values per sample, as in the CSV',
+        'mean, std = model.predict(rows, return_std=True)',
+        'print(mean.tolist(), std.tolist())  # predicted price and its uncertainty',
+        '',
+      ].join('\n')
+    );
+    const svc = classicalSnippet(svcDetail(), 'svm.joblib');
+    expect(svc).toContain('# Trained on random demo data: the predictions mean nothing.');
+    expect(svc).toContain('rows = [[0, 0, 0, 0, 0, 0, 0, 0]]');
+    expect(svc).toContain('probabilities = model.predict_proba(rows)');
+    expect(svc).not.toContain('torch');
+  });
+
+  it('only send the settings that apply', () => {
+    const values = { ...DEFAULT_SETTINGS, max_samples: 3000, seed: 1, test_enabled: true };
+    expect(toConfig(values, { classical: true })).toEqual({
+      val_split: 0.2,
+      test_split: 0.2,
+      max_samples: 3000,
+      seed: 1,
+    });
+    // Epochs and the search are not checked; Max. samples against the row limit.
+    const broken = { ...values, epochs: 0, search: true, tune_learning_rate: false };
+    expect(validateSettings(broken, { classical: { maxRows: 5000 } })).toEqual({});
+    expect(
+      validateSettings({ ...values, max_samples: 6000 }, { classical: { maxRows: 5000 } })
+    ).toEqual({ max_samples: 'At most 5,000 on this server' });
+    expect(
+      validateSettings({ ...values, max_samples: 5 }, { classical: { maxRows: 5000 } })
+    ).toEqual({ max_samples: 'Between 10 and 5,000' });
   });
 });

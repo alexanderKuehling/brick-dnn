@@ -11,6 +11,7 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
+import { isClassicalRun } from './classical';
 
 export const ACTIVE_STATUSES: readonly RunStatus[] = ['starting', 'preparing', 'running'];
 
@@ -77,6 +78,19 @@ export function formatBytesOf(sent: number, total: number): string {
   const format = (bytes: number) =>
     `${unit === 0 ? bytes : (bytes / scale).toFixed(1)} ${units[unit]}`;
   return `${format(sent)} of ${format(total)}`;
+}
+
+/** R² (coefficient of determination): 0.91234 → "0.912". */
+export function formatR2(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : '–';
+}
+
+/** A fit time: 0.42 → "0.4 s", 7.25 → "7.3 s", longer ones like formatDuration. */
+export function formatFitTime(seconds: number | null | undefined): string {
+  if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0 && seconds < 10) {
+    return `${seconds < 0.05 ? '< 0.1' : seconds.toFixed(1)} s`;
+  }
+  return formatDuration(seconds);
 }
 
 /** 42 → "42 s", 192 → "3 min 12 s", 3900 → "1 h 5 min". */
@@ -202,8 +216,14 @@ export function searchLabel(tuning: TuningConfig): string {
   return `${method} · ${tuning.trials} ${tuning.trials === 1 ? 'trial' : 'trials'}`;
 }
 
-/** Short progress text for the toolbar, e.g. "Epoch 3/10", "Trial 2/10" or "Preparing". */
+/**
+ * Short progress text for the toolbar, e.g. "Epoch 3/10", "Trial 2/10", "Preparing" or
+ * "Fitting" (classical models have no epochs).
+ */
 export function progressLabel(run: RunSummary): string {
+  if (run.status === 'running' && isClassicalRun(run)) {
+    return 'Fitting';
+  }
   if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
     const total = run.tuning.trials;
     return `Trial ${Math.min(run.trials_done + 1, total)}/${total}`;
@@ -248,6 +268,10 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   if (typeof metrics.test_accuracy === 'number') {
     return [formatPercent(metrics.test_accuracy), 'test accuracy'];
   }
+  // Classical regression: R² says more than an RMSE in the units of the target.
+  if (typeof metrics.test_r2 === 'number') {
+    return [formatR2(metrics.test_r2), 'test R²'];
+  }
   if (typeof metrics.test_rmse === 'number') {
     return [formatMetric(metrics.test_rmse), 'test RMSE'];
   }
@@ -256,6 +280,9 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   }
   if (typeof metrics.val_accuracy === 'number') {
     return [formatPercent(metrics.val_accuracy), 'validation accuracy'];
+  }
+  if (typeof metrics.val_r2 === 'number') {
+    return [formatR2(metrics.val_r2), 'validation R²'];
   }
   if (typeof metrics.val_rmse === 'number') {
     return [formatMetric(metrics.val_rmse), 'validation RMSE'];
@@ -284,6 +311,9 @@ export function resultText(run: RunSummary): string | null {
  * stopped early after epoch 12". Null while the epochs are not over and for older runs.
  */
 export function weightsNote(run: RunDetail): string | null {
+  if (isClassicalRun(run)) {
+    return null; // Fitted once: there is only one model.
+  }
   const state = run.state;
   const epoch = state?.weights_epoch;
   if (typeof epoch !== 'number') {
@@ -341,6 +371,9 @@ function pyStrings(values: string[], max = 20): string {
  * target_mean, target_std, class_names}`` or ``{"kind": "demo"}``.
  */
 export function weightsSnippet(run: RunDetail, scriptName: string, weightsName: string): string {
+  if (isClassicalRun(run)) {
+    return classicalSnippet(run, weightsName);
+  }
   const pre = run.state?.preprocessing ?? {};
   const plan: Partial<TrainingPlan> = run.plan ?? {};
   const module = scriptName.replace(/\.py$/, '');
@@ -429,6 +462,58 @@ export function weightsSnippet(run: RunDetail, scriptName: string, weightsName: 
     );
   } else {
     lines.push('print(output)');
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Python code that loads a fitted classical model (the scikit-learn pipeline saved with
+ * joblib) and predicts one row, like `inference.usage_snippet` on the server. The pipeline
+ * standardises the features itself; `state.preprocessing` gives their order.
+ */
+export function classicalSnippet(run: RunDetail, modelName: string): string {
+  const pre = run.state?.preprocessing ?? {};
+  const classical = run.plan?.classical ?? null;
+  const estimator = classical?.estimator ?? run.state?.classical?.estimator ?? 'the model';
+  const four = (values: number[]) => `[${values.map((v) => Number(v.toPrecision(4))).join(', ')}]`;
+  const columns = stringList(pre.columns);
+  const mean = numberList(pre.mean);
+  const lines = [
+    'import joblib',
+    '',
+    `bundle = joblib.load("${modelName}")  # a pickle: only load files you trust`,
+    `model = bundle["model"]  # scikit-learn Pipeline: StandardScaler, then ${estimator}`,
+    '',
+  ];
+  if (pre.kind === 'tabular' && columns && mean) {
+    lines.push(
+      `# Features in this order: ${columns.join(', ')}`,
+      `rows = [${four(mean)}]  # one list of ${columns.length} values per sample, as in the CSV`
+    );
+  } else {
+    const n = run.plan?.inputs?.[0]?.shape?.[0] ?? 1;
+    lines.push(
+      '# Trained on random demo data: the predictions mean nothing.',
+      `rows = [${four(Array<number>(n).fill(0))}]  # one list of ${n} values per sample`
+    );
+  }
+  const target = typeof pre.target === 'string' ? pre.target : 'target';
+  const classification =
+    run.task === 'classification' ||
+    classical?.task === 'classification' ||
+    (stringList(pre.class_names)?.length ?? 0) > 0;
+  if (classification) {
+    lines.push(
+      "probabilities = model.predict_proba(rows)  # one column per bundle['class_names']",
+      'print([bundle["class_names"][i] for i in probabilities.argmax(axis=1)])'
+    );
+  } else if ((classical?.type ?? estimator) === 'GaussianProcessRegressor') {
+    lines.push(
+      'mean, std = model.predict(rows, return_std=True)',
+      `print(mean.tolist(), std.tolist())  # predicted ${target} and its uncertainty`
+    );
+  } else {
+    lines.push(`print(model.predict(rows).tolist())  # predicted ${target}`);
   }
   return `${lines.join('\n')}\n`;
 }

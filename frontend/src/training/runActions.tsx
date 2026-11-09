@@ -2,6 +2,7 @@ import { Badge, Loader, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunStatus, type RunSummary } from '@/api';
+import { isClassicalRun } from './classical';
 import { isActive, STATUS_COLORS, STATUS_LABELS } from './format';
 
 export function StatusBadge({ status }: { status: RunStatus }) {
@@ -29,7 +30,9 @@ export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => v
     title: 'Stop the training?',
     children: (
       <Text size="sm">
-        “{run.name}” stops after the current batch. The weights trained so far are kept.
+        {isClassicalRun(run)
+          ? `scikit-learn cannot pause a fit: “${run.name}” stops at once and nothing is saved.`
+          : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
       </Text>
     ),
     labels: { confirm: 'Stop training', cancel: 'Keep training' },

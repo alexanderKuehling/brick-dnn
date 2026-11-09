@@ -18,6 +18,7 @@ import {
   Badge,
   Box,
   Button,
+  Code,
   Collapse,
   Group,
   Loader,
@@ -35,6 +36,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
   api,
+  type ClassicalMetrics,
   type GraphDocument,
   type HistoryEntry,
   type RunDetail,
@@ -46,6 +48,7 @@ import { CodeView } from '@/builder/CodeView';
 import { downloadBlob, downloadText } from '@/builder/download';
 import { formatCount } from '@/builder/format';
 import { semanticKey, slugify } from '@/builder/graph';
+import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import {
@@ -56,13 +59,16 @@ import {
   otherStarter,
   type TrainingScope,
 } from './access';
+import { isClassicalRun } from './classical';
 import {
   describeParams,
   formatCompact,
   formatDate,
   formatDuration,
+  formatFitTime,
   formatMetric,
   formatPercent,
+  formatR2,
   formatSetting,
   isActive,
   isClassification,
@@ -147,6 +153,9 @@ export function RunView({
   const logViewport = useRef<HTMLDivElement>(null);
 
   const base = scriptBase(run.name);
+  // A classical model (scikit-learn) is fitted once and saved as a joblib file.
+  const classicalRun = isClassicalRun(run);
+  const modelFile = `${base}.${classicalRun ? 'joblib' : 'pt'}`;
   const by = otherStarter(run, scope);
   const sameNetwork = useMemo(() => semanticKey(run.graph) === semanticKey(doc), [run.graph, doc]);
 
@@ -211,7 +220,7 @@ export function RunView({
     try {
       const file = await api.training.runs.downloadWeights(run.id);
       // Same base name as the script, so the snippet below works as it is.
-      downloadBlob(`${base}.pt`, file.blob);
+      downloadBlob(modelFile, file.blob);
     } catch (error) {
       notifications.show({
         color: 'red',
@@ -290,113 +299,129 @@ export function RunView({
         </Text>
       </div>
 
-      <RunProgress run={run} headline={headline} overall={overall} stepShare={stepShare} />
+      <RunProgress
+        run={run}
+        headline={headline}
+        overall={overall}
+        stepShare={stepShare}
+        classical={classicalRun}
+      />
 
-      <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
-        <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
-        <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
-        {classification ? (
-          <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
-        ) : (
-          <Tile label="Validation RMSE" value={formatMetric(metrics?.val_rmse)} />
-        )}
-        {tuning ? (
-          <Tile
-            label={active ? 'Best trial so far' : 'Best trial'}
-            value={bestTrial ? String(bestTrial.trial) : '–'}
-            hint={
-              bestTrial
-                ? typeof bestTrial.val_accuracy === 'number'
-                  ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
-                  : `loss ${formatMetric(bestTrial.val_loss)}`
-                : undefined
-            }
-          />
-        ) : (
-          <Tile
-            label="Best epoch"
-            value={best ? String(best.epoch) : '–'}
-            hint={
-              best
-                ? typeof best.val_accuracy === 'number'
-                  ? `accuracy ${formatPercent(best.val_accuracy)}`
-                  : `loss ${formatMetric(best.val_loss)}`
-                : undefined
-            }
-          />
-        )}
-        {active && progress?.samples_per_second ? (
-          <Tile
-            label="Speed"
-            value={`${formatCompact(progress.samples_per_second)}/s`}
-            hint="samples"
-          />
-        ) : (
-          <Tile label="Time per epoch" value={formatDuration(meanEpoch)} />
-        )}
-        <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
-      </SimpleGrid>
-
-      <TestResultCard run={run} classification={classification} active={active} />
-
-      {tuning && (
-        <TrialsTable
-          tuning={tuning}
-          trials={trials}
-          total={trialsTotal}
-          epochs={epochs}
-          best={bestTrialNumber}
-          active={active}
-          classification={classification}
-        />
-      )}
-
-      {history.length > 0 ? (
-        <Stack gap="lg">
-          {tuning && (
-            <Text size="xs" c="dimmed" mb={-8}>
-              {runningTrial !== null
-                ? `Curves of trial ${runningTrial} (running)`
-                : bestTrialNumber !== null
-                  ? `Curves of the best trial (${bestTrialNumber})`
-                  : null}
-            </Text>
-          )}
-          <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />
-          {classification ? (
-            <LineChart
-              title="Accuracy"
-              x={charts.x}
-              series={charts.accuracy}
-              yBounds={[0, 1]}
-              formatYTick={formatPercentTick}
-              formatValue={(value) => formatPercent(value)}
-            />
-          ) : (
-            charts.rmse.length > 0 && (
-              <LineChart
-                title="Validation RMSE"
-                x={charts.x}
-                series={charts.rmse}
-                yBounds={[0, Infinity]}
+      {classicalRun ? (
+        <ClassicalResults run={run} classification={classification} active={active} />
+      ) : (
+        <>
+          <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
+            <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
+            <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
+            {classification ? (
+              <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
+            ) : (
+              <Tile label="Validation RMSE" value={formatMetric(metrics?.val_rmse)} />
+            )}
+            {tuning ? (
+              <Tile
+                label={active ? 'Best trial so far' : 'Best trial'}
+                value={bestTrial ? String(bestTrial.trial) : '–'}
+                hint={
+                  bestTrial
+                    ? typeof bestTrial.val_accuracy === 'number'
+                      ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
+                      : `loss ${formatMetric(bestTrial.val_loss)}`
+                    : undefined
+                }
               />
+            ) : (
+              <Tile
+                label="Best epoch"
+                value={best ? String(best.epoch) : '–'}
+                hint={
+                  best
+                    ? typeof best.val_accuracy === 'number'
+                      ? `accuracy ${formatPercent(best.val_accuracy)}`
+                      : `loss ${formatMetric(best.val_loss)}`
+                    : undefined
+                }
+              />
+            )}
+            {active && progress?.samples_per_second ? (
+              <Tile
+                label="Speed"
+                value={`${formatCompact(progress.samples_per_second)}/s`}
+                hint="samples"
+              />
+            ) : (
+              <Tile label="Time per epoch" value={formatDuration(meanEpoch)} />
+            )}
+            <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
+          </SimpleGrid>
+
+          <TestResultCard run={run} classification={classification} active={active} />
+
+          {tuning && (
+            <TrialsTable
+              tuning={tuning}
+              trials={trials}
+              total={trialsTotal}
+              epochs={epochs}
+              best={bestTrialNumber}
+              active={active}
+              classification={classification}
+            />
+          )}
+
+          {history.length > 0 ? (
+            <Stack gap="lg">
+              {tuning && (
+                <Text size="xs" c="dimmed" mb={-8}>
+                  {runningTrial !== null
+                    ? `Curves of trial ${runningTrial} (running)`
+                    : bestTrialNumber !== null
+                      ? `Curves of the best trial (${bestTrialNumber})`
+                      : null}
+                </Text>
+              )}
+              <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />
+              {classification ? (
+                <LineChart
+                  title="Accuracy"
+                  x={charts.x}
+                  series={charts.accuracy}
+                  yBounds={[0, 1]}
+                  formatYTick={formatPercentTick}
+                  formatValue={(value) => formatPercent(value)}
+                />
+              ) : (
+                charts.rmse.length > 0 && (
+                  <LineChart
+                    title="Validation RMSE"
+                    x={charts.x}
+                    series={charts.rmse}
+                    yBounds={[0, Infinity]}
+                  />
+                )
+              )}
+              <div>
+                <ToggleButton opened={tableOpened} onClick={table.toggle}>
+                  Values per epoch
+                </ToggleButton>
+                <Collapse expanded={tableOpened}>
+                  <HistoryTable
+                    history={history}
+                    classification={classification}
+                    kept={keptEpoch}
+                  />
+                </Collapse>
+              </div>
+            </Stack>
+          ) : (
+            active && (
+              <Text size="sm" c="dimmed">
+                The charts appear when the first epoch is done.
+              </Text>
             )
           )}
-          <div>
-            <ToggleButton opened={tableOpened} onClick={table.toggle}>
-              Values per epoch
-            </ToggleButton>
-            <Collapse expanded={tableOpened}>
-              <HistoryTable history={history} classification={classification} kept={keptEpoch} />
-            </Collapse>
-          </div>
-        </Stack>
-      ) : (
-        active && (
-          <Text size="sm" c="dimmed">
-            The charts appear when the first epoch is done.
-          </Text>
-        )
+        </>
       )}
 
       {logLines.length > 0 && (
@@ -430,7 +455,7 @@ export function RunView({
             loading={downloading === 'weights'}
             onClick={() => void downloadWeights()}
           >
-            Weights (.pt)
+            {classicalRun ? 'Model (.joblib)' : 'Weights (.pt)'}
           </Button>
         )}
         {preprocessing && (
@@ -481,17 +506,28 @@ export function RunView({
       {run.has_weights && (
         <div>
           <ToggleButton opened={usageOpened} onClick={usage.toggle}>
-            How to use the weights
+            {classicalRun ? 'How to use the model' : 'How to use the weights'}
           </ToggleButton>
           <Collapse expanded={usageOpened}>
-            <Text size="sm" c="dimmed" mb="xs">
-              Download the weights and the script, put both in one folder and load them in Python
-              {preprocessing
-                ? '. New inputs need the same preprocessing as the training data; its values are also in the preprocessing download (.json).'
-                : ':'}
-            </Text>
+            {classicalRun ? (
+              <Text size="sm" c="dimmed" mb="xs">
+                Download the model and load it in Python with joblib (it needs scikit-learn). It is
+                the whole pipeline: it standardises the features itself. The script predicts with it
+                too:{' '}
+                <Code>
+                  python {base}.py --predict new.csv --save {modelFile}
+                </Code>
+              </Text>
+            ) : (
+              <Text size="sm" c="dimmed" mb="xs">
+                Download the weights and the script, put both in one folder and load them in Python
+                {preprocessing
+                  ? '. New inputs need the same preprocessing as the training data; its values are also in the preprocessing download (.json).'
+                  : ':'}
+              </Text>
+            )}
             <ScrollArea type="auto">
-              <CodeView code={weightsSnippet(run, `${base}.py`, `${base}.pt`)} />
+              <CodeView code={weightsSnippet(run, `${base}.py`, modelFile)} />
             </ScrollArea>
           </Collapse>
         </div>
@@ -529,12 +565,15 @@ function RunProgress({
   headline,
   overall,
   stepShare,
+  classical = false,
 }: {
   run: RunDetail;
   /** E.g. "Epoch 3 of 10" or "Trial 2 of 10 · Epoch 3 of 5". */
   headline: string;
   overall: number;
   stepShare: number;
+  /** A classical model: fitted once, without progress. */
+  classical?: boolean;
 }) {
   const state = run.state;
   // The API keeps run.message in sync with state.json while the process runs, and sets it
@@ -548,6 +587,23 @@ function RunProgress({
         <Loader size="sm" />
         <Text size="sm">{message || 'Preparing the data …'}</Text>
       </Group>
+    );
+  }
+  if (run.status === 'running' && classical) {
+    return (
+      <Box>
+        <Group gap="xs" wrap="nowrap">
+          <Loader size="sm" />
+          <Text size="sm" fw={600}>
+            {message || 'Fitting the model …'}
+          </Text>
+        </Group>
+        <Text size="xs" c="dimmed" mt={4}>
+          {run.stop_requested
+            ? 'Stopping …'
+            : 'scikit-learn fits the model in one go, without progress in between. Stopping ends the fit at once; nothing is saved then.'}
+        </Text>
+      </Box>
     );
   }
   if (run.status === 'running') {
@@ -608,6 +664,201 @@ function RunProgress({
         </Text>
       )}
     </Alert>
+  );
+}
+
+/**
+ * The results of a classical model, fitted once: how long the fit took and on how many
+ * rows, what it found (the kernel and log marginal likelihood of a Gaussian process, the
+ * support vectors of an SVM) and its scores on the training, validation and test rows.
+ */
+function ClassicalResults({
+  run,
+  classification,
+  active,
+}: {
+  run: RunDetail;
+  classification: boolean;
+  active: boolean;
+}) {
+  const state = run.state;
+  const fit = state?.classical ?? null;
+  const entry = state?.history[0] ?? null;
+  const metrics = run.metrics;
+  const validation: ClassicalMetrics | null = entry
+    ? {
+        loss: entry.val_loss,
+        accuracy: entry.val_accuracy ?? null,
+        rmse: entry.val_rmse ?? null,
+        r2: entry.val_r2 ?? null,
+      }
+    : metrics && (metrics.val_loss !== null || metrics.val_accuracy !== null)
+      ? {
+          loss: metrics.val_loss,
+          accuracy: metrics.val_accuracy,
+          rmse: metrics.val_rmse,
+          r2: metrics.val_r2 ?? null,
+        }
+      : null;
+  const test: ClassicalMetrics | null = state?.test
+    ? {
+        loss: state.test.loss,
+        accuracy: state.test.accuracy,
+        rmse: state.test.rmse,
+        r2: state.test.r2 ?? null,
+      }
+    : metrics &&
+        [metrics.test_loss, metrics.test_accuracy, metrics.test_rmse].some(
+          (v) => typeof v === 'number'
+        )
+      ? {
+          loss: metrics.test_loss ?? null,
+          accuracy: metrics.test_accuracy ?? null,
+          rmse: metrics.test_rmse ?? null,
+          r2: metrics.test_r2 ?? null,
+        }
+      : null;
+  const testSize = state?.test_size ?? null;
+  const gaussianProcess = Boolean(
+    fit && (fit.initial_kernel !== null || fit.kernel !== null || fit.estimator.startsWith('Gauss'))
+  );
+  const rows = fit?.rows ?? state?.train_size ?? null;
+  const sizeText = (size: number | null | undefined) =>
+    typeof size === 'number' ? size.toLocaleString('en-US') : '–';
+
+  const splits: { label: string; metrics: ClassicalMetrics | null; size: number | null }[] = [
+    { label: 'Training', metrics: fit?.train ?? null, size: rows },
+    { label: 'Validation', metrics: validation, size: state?.val_size ?? null },
+  ];
+  if (test || testSize !== null) {
+    splits.push({ label: 'Test', metrics: test, size: testSize });
+  }
+  const supportShare = fit?.support_vectors != null && rows ? fit.support_vectors / rows : null;
+
+  return (
+    <Stack gap="sm">
+      <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
+        <Tile label="Fit time" value={formatFitTime(fit?.fit_seconds)} />
+        <Tile
+          label="Rows fitted on"
+          value={sizeText(rows)}
+          hint={
+            fit?.subsampled_from
+              ? `subsampled from ${sizeText(fit.subsampled_from)} (limit ${sizeText(fit.max_rows)})`
+              : fit
+                ? `at most ${sizeText(fit.max_rows)} on this server`
+                : undefined
+          }
+        />
+        {gaussianProcess ? (
+          <Tile
+            label="Log marginal likelihood"
+            value={formatMetric(fit?.log_marginal_likelihood)}
+            hint="of the fitted kernel; higher fits better"
+          />
+        ) : (
+          <Tile
+            label="Support vectors"
+            value={fit?.support_vectors != null ? sizeText(fit.support_vectors) : '–'}
+            hint={
+              supportShare !== null ? `${formatPercent(supportShare, 0)} of the rows` : undefined
+            }
+          />
+        )}
+      </SimpleGrid>
+
+      {entry || test ? (
+        <Table fz="sm" aria-label="Results of the fitted model" style={{ whiteSpace: 'nowrap' }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Rows</Table.Th>
+              {classification ? (
+                <>
+                  <Table.Th>Accuracy</Table.Th>
+                  <Table.Th>Loss</Table.Th>
+                </>
+              ) : (
+                <>
+                  <Table.Th>RMSE</Table.Th>
+                  <Table.Th>R²</Table.Th>
+                </>
+              )}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {splits.map(({ label, metrics: values, size }) => (
+              <Table.Tr key={label}>
+                <Table.Td>
+                  {label}
+                  <Text span size="xs" c="dimmed">
+                    {' '}
+                    · {sizeText(size)}
+                  </Text>
+                </Table.Td>
+                {classification ? (
+                  <>
+                    <Table.Td fw={600}>{formatPercent(values?.accuracy)}</Table.Td>
+                    <Table.Td>{formatMetric(values?.loss)}</Table.Td>
+                  </>
+                ) : (
+                  <>
+                    <Table.Td fw={600}>{formatMetric(values?.rmse)}</Table.Td>
+                    <Table.Td fw={600}>{formatR2(values?.r2)}</Table.Td>
+                  </>
+                )}
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      ) : (
+        active && (
+          <Text size="sm" c="dimmed">
+            The results appear when the fit is done.
+          </Text>
+        )
+      )}
+      {(entry || test) && (
+        <Text size="xs" c="dimmed" mt={-6}>
+          {classification
+            ? 'Loss: cross-entropy of the predicted class probabilities.'
+            : 'RMSE in the units of the target; R² = 1 is a perfect fit, 0 is no better than the mean.'}
+          {test ? ' The test rows were measured once, after the fit.' : ''}
+        </Text>
+      )}
+
+      {gaussianProcess && fit?.kernel && <KernelBlock label="Fitted kernel" code={fit.kernel} />}
+      {gaussianProcess && fit?.initial_kernel && (
+        <KernelBlock label="Starting kernel" code={fit.initial_kernel} dimmed />
+      )}
+    </Stack>
+  );
+}
+
+/** A kernel as scikit-learn writes it: one line per class (classifiers) and per term. */
+function KernelBlock({
+  label,
+  code,
+  dimmed = false,
+}: {
+  label: string;
+  code: string;
+  dimmed?: boolean;
+}) {
+  const lines = kernelLines(code).flatMap((line) => kernelTerms(line));
+  return (
+    <div>
+      <Text size="xs" c="dimmed" mb={4}>
+        {label}
+      </Text>
+      <Code
+        block
+        aria-label={label}
+        c={dimmed ? 'dimmed' : undefined}
+        style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+      >
+        {lines.join('\n')}
+      </Code>
+    </div>
   );
 }
 
