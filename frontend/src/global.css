@@ -65,6 +65,11 @@ body {
 
 /* ---- phones and touch screens ------------------------------------------ */
 
+/* No zoom on a quick double tap (e.g. on buttons or the layer list); pinch-zoom still works. */
+html {
+  touch-action: manipulation;
+}
+
 /*
  * iOS Safari zooms into a focused form field whose text is smaller than 16px, and the page
  * stays zoomed afterwards. So touch screens get 16px text in all fields (Mantine sets the

@@ -10,6 +10,18 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
+    <script>
+      // iOS zooms the page in by itself (when a field gets focus, on a double tap) and stays
+      // zoomed. maximum-scale=1 stops these automatic zooms; pinching still zooms, because
+      // iOS ignores the limit for the user's own gestures. Only on iOS: elsewhere it would
+      // block pinch-zoom. (iPads with iPadOS report themselves as a Mac with touch.)
+      if (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      ) {
+        document.querySelector('meta[name="viewport"]').content += ', maximum-scale=1';
+      }
+    </script>
     <meta
       name="description"
       content="Build neural networks with drag and drop and export clean, runnable PyTorch code."
