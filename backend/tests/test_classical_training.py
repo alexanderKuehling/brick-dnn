@@ -9,6 +9,7 @@ import math
 import subprocess
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import pytest
@@ -445,11 +446,32 @@ def test_stop_during_the_fit_saves_nothing(tmp_path, monkeypatch):
     assert not (tmp_path / "model.joblib").exists() and not rec.history
 
 
-def test_fit_warnings_are_logged(tmp_path):
+def test_fit_warnings_are_logged(tmp_path, monkeypatch):
+    # Whether scikit-learn warns depends on tiny numerical differences between machines,
+    # so the fit raises the warnings itself: each different one is logged once.
+    from sklearn.exceptions import ConvergenceWarning
+
+    real = classical_engine.build_pipeline
+
+    def warning_pipeline(graph):
+        pipeline = real(graph)
+
+        def warning_fit(*args, **kwargs):
+            for _ in range(2):
+                warnings.warn("k1__sigma_0 is close to the bound.", ConvergenceWarning)
+            warnings.warn("Another one.", UserWarning)
+            del pipeline.fit  # the real fit again, so the model can be saved (pickled)
+            return pipeline.fit(*args, **kwargs)
+
+        pipeline.fit = warning_fit
+        return pipeline
+
+    monkeypatch.setattr(classical_engine, "build_pipeline", warning_pipeline)
     graph = model_graph("GaussianProcessRegressor", 3, kernel="DotProduct")
-    result, rec = run_job(graph, random_info(), tmp_path)  # a linear kernel for a curve
+    result, rec = run_job(graph, random_info(), tmp_path)
     assert result.status == "completed", result.message
-    assert any(line.startswith("ConvergenceWarning: ") for line in rec.logs), rec.logs
+    assert rec.logs.count("ConvergenceWarning: k1__sigma_0 is close to the bound.") == 1
+    assert "UserWarning: Another one." in rec.logs
 
 
 def test_build_pipeline_is_the_exported_make_model():
