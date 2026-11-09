@@ -1,11 +1,21 @@
 name: Release
 
-# Pushing a version tag (e.g. v1.1.0) creates the GitHub release, with the section of that
-# version in CHANGELOG.md as release notes:
+# Creates the GitHub release, with the section of that version in CHANGELOG.md as release
+# notes. Either push a version tag:
 #   git tag v1.1.0 && git push origin v1.1.0
+# or start this workflow on GitHub (Actions → Release → Run workflow) with the version and,
+# optionally, the commit to tag (default: the latest commit of main); it creates the tag.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.1.0"
+        required: true
+      commit:
+        description: "Commit to tag (default: the latest commit of main)"
+        required: false
 
 permissions:
   contents: write
@@ -16,21 +26,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit || github.ref }}
+      - name: Version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION#v}"
+            # The commit must be the release itself: its package version is the one released.
+            actual="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' backend/brickdnn/__init__.py)"
+            if [ "$actual" != "$version" ]; then
+              echo "This commit is version $actual, not $version. Choose the release commit." >&2
+              exit 1
+            fi
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Release notes from CHANGELOG.md
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
+          awk -v v="$VERSION" '
             index($0, "## " v " ") == 1 { found = 1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > notes.md
           if ! grep -q '[^[:space:]]' notes.md; then
-            echo "CHANGELOG.md has no section '## $version (…)'." >&2
+            echo "CHANGELOG.md has no section '## $VERSION (…)'." >&2
             exit 1
           fi
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag \
-            --title "Brick DNN ${GITHUB_REF_NAME#v}" --notes-file notes.md
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # Creates the tag v<version> on the checked-out commit.
+            gh release create "v$VERSION" --target "$(git rev-parse HEAD)" \
+              --title "Brick DNN $VERSION" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "Brick DNN $VERSION" --notes-file notes.md
+          fi
