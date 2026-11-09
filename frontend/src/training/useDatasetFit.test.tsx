@@ -148,9 +148,11 @@ function Harness({
     datasetsError: null,
     reloadDatasets: vi.fn(),
     uploading: null,
+    uploadProgress: null,
     uploadError: null,
     dismissUploadError: vi.fn(),
     upload: vi.fn(),
+    cancelUpload: vi.fn(),
     remove: vi.fn(),
   } as DataController;
   const training = {
