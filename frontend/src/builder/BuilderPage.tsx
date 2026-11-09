@@ -684,7 +684,7 @@ function Builder() {
         (fromSource ? toHandle : fromHandle).id
       );
       if (problem) {
-        notifications.show({ id: 'connection', color: 'yellow', message: problem });
+        notifications.show({ id: `connection:${problem}`, color: 'yellow', message: problem });
       }
     },
     [specs, typeOf]

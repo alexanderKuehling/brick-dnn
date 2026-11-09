@@ -211,7 +211,9 @@ describe('Inspector of classical bricks', () => {
   it('summarises a classical network', () => {
     renderBrick(null);
     expect(screen.getByText('Gaussian process regression')).toBeInTheDocument();
-    expect(screen.getByText('2 hyperparameters')).toBeInTheDocument();
+    expect(screen.getByText('Hyperparameters the fit optimises').nextSibling).toHaveTextContent(
+      '2'
+    );
     expect(screen.getByLabelText('Kernel of the model')).toHaveTextContent('WhiteKernel');
     expect(screen.queryByText('Trainable parameters')).not.toBeInTheDocument();
     expect(screen.getByText(/Kernels flow along the dashed/)).toBeInTheDocument();

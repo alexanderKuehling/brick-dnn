@@ -30,7 +30,7 @@ import type { Analysis, LayerSpec, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
 import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
-import { formatOutput, formatShape, networkSize } from './format';
+import { formatOutput, formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
 import { isClassicalSpec, isKernelNode, kernelTerms, networkFamily } from './kinds';
 import { ParamField } from './ParamField';
@@ -340,7 +340,7 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
                     value={
                       analysis.total_params === null
                         ? 'support vectors, after the fit'
-                        : networkSize(analysis)
+                        : analysis.total_params.toLocaleString('en-US')
                     }
                   />
                 </>
