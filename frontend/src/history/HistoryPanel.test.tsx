@@ -27,8 +27,15 @@ vi.mock('@/api', async (importOriginal) => {
 vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }));
 // The canvas itself is tested with the builder; here it only shows what it would draw.
 vi.mock('@/builder/NetworkViewer', () => ({
-  NetworkViewer: ({ doc }: { doc: { nodes: unknown[] } }) => (
-    <div data-testid="viewer">{doc.nodes.length} layers on the canvas</div>
+  NetworkViewer: ({ doc, tips }: { doc: { nodes: unknown[] }; tips?: string[] }) => (
+    <div data-testid="viewer">
+      <p>{doc.nodes.length} layers on the canvas</p>
+      <ul aria-label="Tips">
+        {tips?.map((tip) => (
+          <li key={tip}>{tip}</li>
+        ))}
+      </ul>
+    </div>
   ),
 }));
 
@@ -188,6 +195,15 @@ describe('HistoryPanel', () => {
     const dialog = await screen.findByRole('dialog');
     expect(api.projects.versions.get).toHaveBeenCalledWith(5, 10, expect.any(AbortSignal));
     expect(await within(dialog).findByTestId('viewer')).toHaveTextContent('1 layers on the canvas');
+    // The tips of the canvas fit the preview (not those of a shared network).
+    const tips = within(within(dialog).getByRole('list', { name: 'Tips' })).getAllByRole(
+      'listitem'
+    );
+    expect(tips.map((tip) => tip.textContent)).toEqual([
+      'This is an earlier version of the network, read only.',
+      'Click a layer to see its settings here.',
+      'Restore this version to continue from it. The current state stays in the history.',
+    ]);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Restore this version' }));
     expect(within(dialog).getByText('Restore “Baseline”?')).toBeInTheDocument();
     expect(within(dialog).getByText(/the current state stays in the history/)).toBeInTheDocument();
@@ -246,7 +262,10 @@ describe('HistoryPanel', () => {
     expect(
       within(dialog).queryByRole('button', { name: 'Restore this version' })
     ).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/The owner and editors can restore/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/The owner and editors can restore earlier versions/)
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('The owner and editors can restore it.')).toBeInTheDocument();
   });
 
   it('loads the history again on live messages', async () => {

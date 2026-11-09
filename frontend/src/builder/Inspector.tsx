@@ -42,8 +42,15 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function Inspector({ node, nodes }: { node: LayerFlowNode | null; nodes: LayerFlowNode[] }) {
-  return node ? <LayerInspector node={node} /> : <ModelSummary nodes={nodes} />;
+interface InspectorProps {
+  node: LayerFlowNode | null;
+  nodes: LayerFlowNode[];
+  /** Tips below the model summary instead of the ones for the builder or a shared network. */
+  tips?: React.ReactNode[];
+}
+
+export function Inspector({ node, nodes, tips }: InspectorProps) {
+  return node ? <LayerInspector node={node} /> : <ModelSummary nodes={nodes} tips={tips} />;
 }
 
 function LayerInspector({ node }: { node: LayerFlowNode }) {
@@ -179,7 +186,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
   );
 }
 
-function ModelSummary({ nodes }: { nodes: LayerFlowNode[] }) {
+function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.ReactNode[] }) {
   const { analysis, specs, readOnly, focusNode } = useBuilder();
   const labelOf = (id: string | null) => {
     const node = nodes.find((n) => n.id === id);
@@ -263,7 +270,13 @@ function ModelSummary({ nodes }: { nodes: LayerFlowNode[] }) {
       )}
 
       <Divider label="Tips" labelPosition="left" mt="sm" />
-      {readOnly ? (
+      {tips ? (
+        <List size="sm" spacing={4} c="dimmed">
+          {tips.map((tip, index) => (
+            <List.Item key={index}>{tip}</List.Item>
+          ))}
+        </List>
+      ) : readOnly ? (
         <List size="sm" spacing={4} c="dimmed">
           <List.Item>You can view this network, but not change it.</List.Item>
           <List.Item>Click a layer to see its settings here.</List.Item>

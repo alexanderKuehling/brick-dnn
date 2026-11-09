@@ -177,7 +177,20 @@ export function VersionPreview({
       <Box className={classes.previewCanvas}>
         {detail ? (
           <WithoutCollab>
-            <NetworkViewer doc={detail.graph} />
+            <NetworkViewer
+              doc={detail.graph}
+              tips={[
+                current
+                  ? 'This is the current state of the network, read only here.'
+                  : 'This is an earlier version of the network, read only.',
+                'Click a layer to see its settings here.',
+                current
+                  ? 'Close the preview to continue working on it.'
+                  : canRestore
+                    ? 'Restore this version to continue from it. The current state stays in the history.'
+                    : 'The owner and editors can restore it.',
+              ]}
+            />
           </WithoutCollab>
         ) : error ? (
           <Center style={{ flex: 1 }} p="md">

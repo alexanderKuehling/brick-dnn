@@ -231,6 +231,25 @@ describe('Inspector', () => {
     expect(screen.getByRole('textbox', { name: 'Output features' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Delete layer' })).toBeInTheDocument();
   });
+
+  it('shows the tips it is given instead of the ones for shared networks', () => {
+    render(
+      <BuilderContext.Provider value={context(true)}>
+        <Inspector node={null} nodes={[node]} tips={['An earlier version, read only.']} />
+      </BuilderContext.Provider>
+    );
+    expect(screen.getByText('An earlier version, read only.')).toBeInTheDocument();
+    expect(screen.queryByText(/makes a copy that you can change/)).not.toBeInTheDocument();
+  });
+
+  it('tells viewers of shared networks how to get their own copy', () => {
+    render(
+      <BuilderContext.Provider value={context(true)}>
+        <Inspector node={null} nodes={[node]} />
+      </BuilderContext.Provider>
+    );
+    expect(screen.getByText(/makes a copy that you can change/)).toBeInTheDocument();
+  });
 });
 
 describe('Saving a shared network', () => {
