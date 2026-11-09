@@ -247,6 +247,14 @@ and `KernelProduct`). Their hyperparameters are starting values that the fit opt
 examples *Gaussian process regression (RBF + noise)*, *SVM classifier* and *Periodic Gaussian
 process* are good starting points.
 
+In the editor, the bricks are in the *Classical · scikit-learn* part of the palette. A Gaussian
+process has two inputs, *features* (from the Input) and *kernel*; kernel connections are
+dashed, and the editor refuses a kernel into a data input and data into a kernel input.
+Selecting a Gaussian process or a kernel sum and clicking a kernel in the palette connects
+the kernel to it. The inspector shows the kernel of the selected brick as scikit-learn code
+(for a Gaussian process without kernel bricks, its default kernel), and the toolbar counts
+the hyperparameters the fit optimises instead of trainable parameters.
+
 They are trained with scikit-learn by the same runner process, with the same run view,
 history and API, but **fitted once instead of epoch by epoch**:
 
@@ -275,6 +283,12 @@ history and API, but **fitted once instead of epoch by epoch**:
   SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`). Larger training
   sets are subsampled like with *Max. samples* (validation and test shrink in proportion),
   which the check warns about and the log says; a larger *Max. samples* is refused.
+- **In the training panel** only the settings above are shown; *Max. samples* says how many rows
+  the model is fitted on at most on this server and refuses more. Classical models train even
+  when PyTorch is not installed. After the fit, the run shows the fit time, the rows it was
+  fitted on, the fitted and the starting kernel with the log marginal likelihood (Gaussian
+  processes) or the number of support vectors (SVMs), and the accuracy and loss or the RMSE
+  and R² on the training, validation and test rows, instead of loss curves.
 - **What is reported**: the status says what happens ("Fitting the Gaussian process on 4,000
   rows …"); there is no progress during the fit. Afterwards the run has one history entry
   (epoch 1): the training and validation loss (cross-entropy of the predicted probabilities,

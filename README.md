@@ -179,6 +179,13 @@ successful CI run on `main` (it needs the repository secret `HF_TOKEN`).
 5. Or press **Train**: choose the data and settings and train the network right away. When it is
    done, download the weights (`.pt`) and the script that loads them.
 
+For a **classical model**, connect the Input straight to a model from the *Classical ·
+scikit-learn* part of the palette (Gaussian process, SVR, SVC). Kernels flow along dashed
+connections into a *Kernel sum*, a *Kernel product* or the kernel input of a Gaussian
+process; select the Gaussian process or a kernel sum and click a kernel to plug it in. The
+inspector shows the resulting kernel as scikit-learn code. Training fits the model once and
+gives you the fitted model as a `.joblib` file.
+
 The exported file runs as is:
 
 ```bash
