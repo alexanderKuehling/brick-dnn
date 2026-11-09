@@ -86,8 +86,8 @@ Details:
 | Learning rate | 0.001 | If the loss becomes NaN, lower it |
 | Optimizer | Adam | Adam, AdamW or SGD (momentum 0.9) |
 | Weight decay | 0 | L2 regularisation |
-| Validation split | 0.2 | Not used for built-in datasets without a test set |
-| Test split | 0 (none) | Share held out as test set; built-in datasets: their official test images |
+| Validation split | 0.2 | Share of the data used for validation (built-in datasets: of the training images) |
+| Test split | 0 (none) | Share held out as test set; not used for built-in datasets, which always test on their official test images |
 | Device | Automatic | CUDA → Apple GPU (Apple Silicon) → CPU |
 | Max. samples | all | Train on a subset for quick experiments; validation shrinks in proportion |
 | Seed | random | Fix it for reproducible runs |
@@ -105,14 +105,19 @@ The data is split randomly (with the seed) into up to three parts:
 - **Validation data** is measured after every epoch (the curves). It also chooses the kept
   weights (the best epoch) and, in a search, the best trial, so the validation result is
   slightly optimistic.
-- **Test data** (optional, *Test split* > 0) is not touched until training is over. Then the
-  kept weights are measured on it once. This is the number to report. Stopped runs are not
-  tested.
+- **Test data** (optional, *Test split* > 0; built-in datasets: always their official test
+  images) is not touched until training is over. Then the kept weights are measured on it
+  once. This is the number to report. Stopped runs are not tested.
 
-| Data | Without test set | With test set |
-| ---- | ---------------- | ------------- |
-| CSV file, image folder, demo data | `val_split` for validation, the rest for training | `val_split` for validation, `test_split` for testing, the rest (at least 20 %) for training |
-| MNIST, Fashion-MNIST, CIFAR-10 | the official test images for validation | the official test images for testing; `val_split` of the training images for validation |
+| Data | Validation | Test |
+| ---- | ---------- | ---- |
+| CSV file, image folder, demo data | `val_split` of the data | `test_split` of the data (none if 0); the rest, at least 20 %, is for training |
+| MNIST, Fashion-MNIST, CIFAR-10 | `val_split` of the training images | always the official test images (10,000); `test_split` is not used |
+| Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |
+
+The official test images of the built-in datasets are never used to choose an epoch or a trial,
+so their test result is not optimistic. With 20 % validation, MNIST trains on 48,000 images,
+validates on 12,000 and tests on the 10,000 official test images.
 
 Normalisation statistics (CSV features and targets, converted images) are computed from the
 training part only. With *Max. samples*, validation and test data shrink in proportion.
@@ -190,7 +195,7 @@ brickdnn train my_network.json --data mnist --epochs 5          # built-in datas
 brickdnn train --example tabular_regression --data houses.csv   # CSV file
 brickdnn train my_cnn.json --data ./pets/ --epochs 20           # image folder (or a .zip)
 brickdnn train --example lstm_sentiment --data demo             # demo data
-brickdnn train my_cnn.json --data mnist --test-split 0.2        # test on the official test images
+brickdnn train my_cnn.json --data houses.csv --test-split 0.2   # hold out 20 % as a test set
 ```
 
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,

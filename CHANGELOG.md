@@ -13,6 +13,13 @@
   epochs. Off by default.
 
 ### Changed
+- **Built-in datasets validate on their training images.** Without a test set, MNIST,
+  Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
+  `val_split`, so the images that chose the best epoch were also the reported result. Now
+  `val_split` of the training images is always the validation data, and the official test
+  images are always the test set, measured once after training; `test_split` is not used for
+  them. `GET /api/training/` names the number of official test images `test_size` (was
+  `val_size`).
 - **Training keeps the weights of the best epoch.** The weights with the lowest validation
   loss are now tested and saved (`weights.pt`) instead of those of the last epoch, also when a
   run is stopped; `restore_best: false` (`--no-restore-best`) keeps the last epoch as before.

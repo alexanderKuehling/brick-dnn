@@ -264,7 +264,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--test-split",
         type=float,
         help="share of the data held out as a test set and only used after training "
-        "(default 0: none; built-in datasets use their official test images)",
+        "(default 0: none; not used for built-in datasets, they are always tested on their "
+        "official test images)",
     )
     parser.add_argument("--device", choices=DEVICES, help="default auto")
     parser.add_argument("--max-samples", type=int, help="train on at most this many samples")

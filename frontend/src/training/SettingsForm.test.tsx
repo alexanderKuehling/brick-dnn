@@ -81,26 +81,32 @@ describe('SettingsForm', () => {
     expect(toConfig(latest).test_split).toBe(0.1);
   });
 
-  it('offers the official test images of built-in datasets', async () => {
+  it('always tests built-in datasets on their official test images', () => {
     render(<Harness builtin />);
-    // Without a test set, built-in datasets validate on their test images.
-    expect(screen.queryByLabelText('Validation split')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('switch', { name: /official test images/ }));
-    expect(screen.getByLabelText('Validation split')).toBeInTheDocument();
+    // Validation data is a share of the training images, the official test images are the
+    // test set: the switch is on and cannot be changed, and there is no test share.
+    expect(screen.getByLabelText('Validation split')).toHaveAccessibleDescription(
+      'Of the training images'
+    );
+    const test = screen.getByRole('switch', { name: /official test images/ });
+    expect(test).toBeChecked();
+    expect(test).toBeDisabled();
     expect(screen.queryByLabelText('Test split')).not.toBeInTheDocument();
-    expect(toConfig(latest, { builtin: true }).test_split).toBe(0.2);
+    expect(toConfig(latest, { builtin: true }).test_split).toBe(0);
   });
 
   it('offers early stopping and the choice of the kept weights', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
-    const patience = screen.getByLabelText('Early stopping');
+    const patience = await screen.findByLabelText('Early stopping');
     expect(patience).toHaveAttribute('placeholder', 'Off');
     expect(toConfig(latest)).toMatchObject({ patience: null, restore_best: true });
     await userEvent.type(patience, '5');
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Keep the weights of the best epoch' })
-    );
+    expect(patience).toHaveValue('5');
+    const keepBest = screen.getByRole('checkbox', { name: 'Keep the weights of the best epoch' });
+    expect(keepBest).toBeChecked();
+    await userEvent.click(keepBest);
+    expect(keepBest).not.toBeChecked();
     expect(toConfig(latest)).toMatchObject({ patience: 5, restore_best: false });
   });
 

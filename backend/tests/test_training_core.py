@@ -577,6 +577,7 @@ def test_builtin_datasets():
     assert set(BUILTIN_DATASETS) == {"mnist", "fashion_mnist", "cifar10"}
     data = BUILTIN_DATASETS["mnist"].to_dict()
     assert data["download_mb"] == 12 and data["train_size"] == 60_000
+    assert data["test_size"] == 10_000 and "val_size" not in data
     with pytest.raises(DatasetError, match="Unknown dataset 'imagenet'"):
         builtin_info("imagenet")
 
@@ -626,6 +627,14 @@ def test_image_examples_train_on_mnist(example_id, layout):
     assert result.plan.image["layout"] == layout
     assert result.plan.class_names == [str(i) for i in range(10)]
     assert any("downloaded on first use (about 12 MB)" in n for n in result.plan.notes)
+    assert result.plan.summary == (
+        "Classification into 10 classes (MNIST, 60,000 training and 10,000 test images)."
+    )
+    assert (
+        "Validation data is taken from the 60,000 training images (validation split). The "
+        "10,000 official test images are the test set: the kept weights are measured on them "
+        "once, after training." in result.plan.notes
+    )
 
 
 def test_mnist_into_rgb_network_is_resized_and_copied():

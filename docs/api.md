@@ -140,7 +140,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets, limits    |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits |
 | GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
@@ -155,7 +155,9 @@ Training runs on the server in a separate process per run, see [training.md](tra
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
 (`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
-`val_split`, `test_split` (0 = no test set; validation and test together at most 0.8),
+`val_split`, `test_split` (0 = no test set; validation and test together at most 0.8; built-in
+datasets take `val_split` of their training images and always test on their official test
+images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
 stop when the validation loss has not improved for this many epochs, 1–1000; `null`, the
 default, trains every epoch) and `restore_best` (default `true`: test and save the weights of

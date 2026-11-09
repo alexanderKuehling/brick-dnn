@@ -111,12 +111,8 @@ export function SetupView({
   const builtinSource = choice.tab === 'builtin';
   const errors = validateSettings(settings);
   if (builtinSource) {
-    // Built-in datasets have official test images: the test share is not used, and without
-    // a test set they validate on those images instead of a share of the training data.
+    // Built-in datasets always test on their official test images: the test share is not used.
     delete errors.test_split;
-    if (!settings.test_enabled) {
-      delete errors.val_split;
-    }
   }
   // Datasets made in the Data tab bring their own split; the share fields are not used.
   const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;

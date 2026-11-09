@@ -19,10 +19,10 @@ Every run lives in its own directory::
       "device": "mps", "device_label": "Apple GPU (MPS)",
       "task": "classification",      # classification | regression | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
-      "train_size": 60000, "val_size": 10000,
-      "test_size": null,             # null without a test set
+      "train_size": 48000, "val_size": 12000,
+      "test_size": 10000,            # null without a test set
       "epochs": 10,                  # planned number of epochs (per trial in a search)
-      "steps_per_epoch": 938,
+      "steps_per_epoch": 750,
       "total_params": 101770,
       "history": [                   # one entry per finished epoch
         {"epoch": 1, "train_loss": 0.31, "val_loss": 0.15,

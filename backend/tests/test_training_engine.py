@@ -729,7 +729,10 @@ def test_builtin_mnist(tmp_path, fake_torchvision):
         EXAMPLES["cnn_mnist"]["graph"], builtin_info("mnist"), tmp_path, data_root=tmp_path
     )
     assert result.status == "completed", result.message
-    assert rec.info["train_size"] == 40 and rec.info["val_size"] == 20
+    # 20 % of the 40 training images validate, the 20 official test images are the test set.
+    sizes = (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"])
+    assert sizes == (32, 8, 20)
+    assert rec.test is not None and "; test accuracy " in result.message
     assert rec.info["class_names"] == [str(i) for i in range(10)]
     pre = rec.info["preprocessing"]
     assert pre["dataset"] == "mnist"
@@ -753,7 +756,8 @@ def test_builtin_download_is_logged(tmp_path, monkeypatch):
     assert ("preparing", "Downloading Fashion-MNIST …") in rec.statuses
     assert ("fashion_mnist", True, True) in fake.calls
     assert rec.info["train_size"] == 16
-    assert rec.info["val_size"] == 4  # the test split shrinks with max_samples (20 %)
+    assert rec.info["val_size"] == 4  # 20 % validation from the training images
+    assert rec.info["test_size"] == 4  # the official test split shrinks with max_samples
 
 
 def test_builtin_offline(tmp_path, monkeypatch):
@@ -984,22 +988,43 @@ def test_image_folder_with_a_test_set(tmp_path, monkeypatch, lazy):
         assert ("preparing", "Loading images 20 / 20") in rec.statuses
 
 
-def test_builtin_with_a_test_set_validates_on_training_images(tmp_path, fake_torchvision):
+@pytest.mark.parametrize("test_split", [0.0, 0.1])
+def test_builtin_datasets_validate_on_training_images(tmp_path, fake_torchvision, test_split):
+    """The official test images are always the test set (test_split is not used) and never
+    choose the kept epoch; validation data is a share of the training images."""
     graph = EXAMPLES["cnn_mnist"]["graph"]
-    result, rec = run_job(
-        graph, builtin_info("mnist"), tmp_path, data_root=tmp_path, val_split=0.25, test_split=0.1
-    )
-    assert result.status == "completed", result.message
-    # 40 training images: 30 for training, 10 for validation; 20 official test images
-    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (30, 10, 20)
-    assert rec.test is not None
     result, rec = run_job(
         graph,
         builtin_info("mnist"),
         tmp_path,
         data_root=tmp_path,
         val_split=0.25,
-        test_split=0.1,
+        test_split=test_split,
+    )
+    assert result.status == "completed", result.message
+    # 40 training images: 30 for training, 10 for validation; 20 official test images
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (30, 10, 20)
+    assert rec.test is not None and result.weights_epoch == 1
+    # The test result is that of the saved weights on the official test images.
+    plan = check_compatibility(graph, builtin_info("mnist")).plan
+    prepared = data.builtin_data(
+        plan,
+        builtin_info("mnist"),
+        tmp_path,
+        config(val_split=0.25),
+        Recorder(),
+        torch.Generator().manual_seed(0),
+    )
+    assert len(prepared.test) == 20 and len(prepared.val) == 10
+    loss = evaluate_saved_weights(graph, tmp_path, prepared.test)
+    assert loss == pytest.approx(rec.test["loss"], rel=1e-4)
+    result, rec = run_job(
+        graph,
+        builtin_info("mnist"),
+        tmp_path,
+        data_root=tmp_path,
+        val_split=0.25,
+        test_split=test_split,
         max_samples=12,
     )
     assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (12, 4, 3)
@@ -1007,9 +1032,7 @@ def test_builtin_with_a_test_set_validates_on_training_images(tmp_path, fake_tor
 
 def test_builtin_conversion_statistics_use_only_training_images(tmp_path, fake_torchvision):
     graph = EXAMPLES["resnet_block"]["graph"]  # 3×32×32: MNIST images are converted
-    result, rec = run_job(
-        graph, builtin_info("mnist"), tmp_path, data_root=tmp_path, test_split=0.2
-    )
+    result, rec = run_job(graph, builtin_info("mnist"), tmp_path, data_root=tmp_path)
     assert result.status == "completed", result.message
     assert len(rec.info["preprocessing"]["mean"]) == 3
     assert rec.info["test_size"] == 20

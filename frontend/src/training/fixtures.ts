@@ -30,7 +30,7 @@ export const STATUS: TrainingStatus = {
       num_classes: 10,
       class_names: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
       train_size: 60000,
-      val_size: 10000,
+      test_size: 10000,
       download_mb: 12,
       available: true,
     },

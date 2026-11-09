@@ -246,8 +246,8 @@ describe('training settings', () => {
     expect(early).toMatchObject({ patience: 5, restore_best: false });
     const test = { ...DEFAULT_SETTINGS, test_enabled: true, test_split: 12.5 };
     expect(toConfig(test).test_split).toBe(0.125);
-    // Built-in datasets only switch their official test images on.
-    expect(toConfig(test, { builtin: true }).test_split).toBe(0.2);
+    // Built-in datasets always test on their official test images: they need no test share.
+    expect(toConfig(test, { builtin: true }).test_split).toBe(0);
     expect(toConfig({ ...test, test_enabled: false }, { builtin: true }).test_split).toBe(0);
   });
 

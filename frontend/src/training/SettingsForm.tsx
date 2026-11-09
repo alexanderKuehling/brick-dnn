@@ -43,8 +43,8 @@ interface SettingsFormProps {
   devices: TrainingDevice[];
   defaultDevice: string | null;
   /**
-   * Built-in datasets come with official test images: without a test set they validate on
-   * them, with one they are the test set and validation data comes from the training images.
+   * Built-in datasets come with official test images. They are always the test set;
+   * validation data comes from the training images.
    */
   builtin: boolean;
   /**
@@ -89,8 +89,7 @@ export function SettingsForm({
     : 'auto';
   const fixed = predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit : null;
   const fixedPercents = fixed ? splitPercents(fixed) : null;
-  const showValSplit = fixed !== null || !builtin || values.test_enabled;
-  const testEnabled = fixed ? fixed[2] > 0 : values.test_enabled;
+  const testEnabled = fixed ? fixed[2] > 0 : builtin || values.test_enabled;
 
   return (
     <Stack gap="sm">
@@ -155,21 +154,20 @@ export function SettingsForm({
           onChange={(value) => value && set('device')(value)}
           allowDeselect={false}
         />
-        {showValSplit && (
-          <NumberInput
-            label="Validation split"
-            value={fixedPercents ? fixedPercents[1] : values.val_split}
-            disabled={fixed !== null}
-            onChange={setNumber('val_split')}
-            min={LIMITS.val_split.min}
-            max={LIMITS.val_split.max}
-            step={5}
-            suffix="%"
-            allowNegative={false}
-            decimalScale={1}
-            error={fixed ? undefined : errors.val_split}
-          />
-        )}
+        <NumberInput
+          label="Validation split"
+          description={builtin && !fixed ? 'Of the training images' : undefined}
+          value={fixedPercents ? fixedPercents[1] : values.val_split}
+          disabled={fixed !== null}
+          onChange={setNumber('val_split')}
+          min={LIMITS.val_split.min}
+          max={LIMITS.val_split.max}
+          step={5}
+          suffix="%"
+          allowNegative={false}
+          decimalScale={1}
+          error={fixed ? undefined : errors.val_split}
+        />
       </SimpleGrid>
 
       <div>
@@ -179,11 +177,11 @@ export function SettingsForm({
             fixed
               ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
               : builtin
-                ? 'The final model is measured once on the official test images. Validation data then comes from the training images.'
+                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights. The kept weights are measured on them once, after training. Validation data is a share of the training images.'
                 : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
           }
           checked={testEnabled}
-          disabled={fixed !== null}
+          disabled={fixed !== null || builtin}
           onChange={(event) => set('test_enabled')(event.currentTarget.checked)}
         />
         {testEnabled && (fixed !== null || !builtin) && (

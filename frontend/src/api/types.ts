@@ -268,7 +268,8 @@ export interface BuiltinDataset {
   num_classes: number;
   class_names: string[];
   train_size: number;
-  val_size: number;
+  /** The official test images: always the test set. */
+  test_size: number;
   download_mb: number;
   /** False when torchvision is missing on the server. */
   available: boolean;
@@ -300,8 +301,9 @@ export interface DatasetInfo {
   num_samples: number | null;
   builtin: string | null;
   sample_shape: number[] | null;
+  /** Built-in datasets: training and official test images. */
   train_size: number | null;
-  val_size: number | null;
+  test_size?: number | null;
   num_features: number | null;
   /** Feature columns followed by the target column. */
   columns: string[];
@@ -368,15 +370,12 @@ export interface TrainingConfig {
   learning_rate: number;
   optimizer: Optimizer;
   weight_decay: number;
-  /**
-   * Share of the data held out for validation. Built-in datasets without a test set validate
-   * on their official test images and ignore it.
-   */
+  /** Share of the data held out for validation (built-in datasets: of the training images). */
   val_split: number;
   /**
-   * Share of the data held out as a test set, measured once after training (0: none).
-   * Built-in datasets use their official test images when it is above 0. Missing in runs
-   * from before test sets existed.
+   * Share of the data held out as a test set, measured once after training (0: none). Not
+   * used for built-in datasets: they are always tested on their official test images.
+   * Missing in runs from before test sets existed.
    */
   test_split?: number;
   device: string;
