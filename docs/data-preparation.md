@@ -23,7 +23,9 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
    a random sample of the rows, and **Analysis** shows charts and statistics. *Preview after
    this step* shows the data at any point of the pipeline.
 4. The **Readiness** view lists what still prevents training (missing values, categorical or
-   text features, a missing target …), each with a button that adds the fitting step.
+   text features, a missing target …), each with a button that adds the fitting step, and
+   the [sanity checks](#readiness-and-sanity-checks) that point out target leakage,
+   duplicates, rare classes and more.
 5. **Create training dataset** (or **Train with this data**, which also opens the training
    panel in the builder). The dataset appears under *Your data* in the training panel, marked
    *Prepared*.
@@ -88,6 +90,61 @@ charts that show single rows from a random sample, which is always labelled):
   association with the target (|r| for numbers, correlation ratio η, Cramér's V for
   categories).
 - **Compare**: a column before and after the preparation.
+
+## Readiness and sanity checks
+
+The **Readiness** view sorts what it finds into three lists. Each entry names the affected
+columns and, where a step solves it, has a button that adds that step (*Fix all* adds the
+fixes of all problems at once). The checks look at the prepared data, so a fix shows its
+effect with the next preview. Statistics come from the **training rows** (a random sample
+of 100,000 of them on large tables, fewer for very wide ones), like the steps learn from
+them; duplicates compare all rows (up to a million).
+
+**Must be fixed** – the training dataset cannot be created before:
+
+| Check | Fix |
+| ----- | --- |
+| No target, missing target values, a date target, a non-numeric target for regression, fewer than 2 or more than 1,000 classes | *Drop rows with missing values* in the target · *Change type* to numbers |
+| No feature columns, fewer than 4 rows, no training or validation rows, infinite values | – |
+| Only numbers as column names | *Rename columns* |
+| Missing values in features | *Fill missing values* (median) |
+| Categorical features | *One-hot encode* |
+| … holding numbers as text, also with units, currency signs or thousands separators (`$1,200`, `12 kg`, `45 %`; codes such as `Z12345`, `01067` or `12A` are left alone) | *Change type* to numbers (with *Ignore units*) |
+| … holding dates as text (`2024-01-31`, `31.01.2024` …) | *Change type* to dates, then *Date parts* |
+| … with a different value in (almost) every row (names, IDs) | *Drop columns* |
+| … whose values differ only in upper/lower case or spaces (`Yes`, `yes`, `YES `) | *Replace values* with the most frequent spelling |
+| … with more than 50 categories in the training rows (one-hot would keep the 30 most frequent) | *Encode* by target mean (regression) or frequency |
+| Free text features | *Drop columns* |
+| Date features | *Date parts* (year, month, weekday) |
+
+**Worth a look** – training works, but the network or its scores probably suffer:
+
+| Check | When | Fix |
+| ----- | ---- | --- |
+| Target leakage | A feature equals the target in ≥ 99 % of the rows, correlates with a numeric target with \|r\| ≥ 0.98, or predicts the class with ≤ 1 % errors (and ≤ 10 % of the errors of always guessing the largest class) – by its values (values with ≥ 5 training rows covering ≥ 80 % of them), by a single threshold (two classes) or by being almost constant within each class (correlation ratio ≥ 0.99); or its name is the target's with `_id`, `_label`, `_code`, `is_` … | *Drop columns* |
+| Validation/test rows that copy training rows | ≥ 1 % of the validation and test rows (fewer: a suggestion) | *Remove duplicates* |
+| Rare classes | Fewer than 5 training rows | *Filter rows*: remove their rows (if at least 2 classes remain) |
+| Classes missing from the validation or test rows | A class with ≥ 5 training rows has none there | Turn on *stratified* split |
+| Spellings of a class that differ only in case or spaces | | *Replace values* |
+| ID columns | Whole numbers, different in (almost) every row, named like an ID (`id`, `customer_id`, `userId` …) or numbering the rows 0/1 … n | *Drop columns* |
+| Too few training rows | Fewer than 50, or fewer than 5 per feature | – |
+| Imbalanced classes | More than 3 : 1 | *Balance classes* |
+| Duplicate rows | ≥ 5 % of the rows (fewer: a suggestion) | *Remove duplicates* |
+| Constant features | One value in all rows | *Drop columns* |
+| More than 1,000 features | | – |
+
+**Suggestions** – worth considering:
+
+| Check | When | Fix |
+| ----- | ---- | --- |
+| Conflicting labels | ≥ 1 % of the rows have the same features as another row but a different class | – |
+| Near-constant features | One value in ≥ 99 % of at least 100 training rows | *Drop columns* |
+| Redundant features | Two numeric features with \|r\| ≥ 0.98; the one less associated with the target is dropped | *Drop columns* |
+| Skewed features or a skewed numeric target | \|skewness\| > 2 with at least 10 different values, if log(1 + x) halves it (values ≥ 0) or for negative values | *Transform* log1p or Yeo-Johnson |
+| Very different scales | The largest standard deviation of the numeric features is ≥ 1,000 times the smallest. Training in Brick DNN standardises the features anyway; this matters for the exported files | *Scale* (standard) |
+
+After *Balance classes* (oversampling), duplicate rows are expected and not reported, and the
+*Remove duplicates* fix is not offered, as it would undo the oversampling.
 
 ## Export
 
