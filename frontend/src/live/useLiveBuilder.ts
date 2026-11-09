@@ -268,7 +268,6 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       patchProject({ version: next.version, name: message.project.name });
       const own = message.by.id === latest.current.user?.id;
       notifications.show({
-        id: 'live-replaced',
         title: own ? 'The network was replaced' : `${message.by.username} replaced the network`,
         message: own
           ? 'You saved it from another window or app. The new version is shown here.'
@@ -290,12 +289,11 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
         getClient()?.dropPending();
         getClient()?.resync();
         notifications.show({
-          id: 'live-access',
           title: `You can only view “${name}” now`,
           message: 'You still see the changes of the others as they happen.',
         });
       } else {
-        notifications.show({ id: 'live-access', message: `You can edit “${name}” now.` });
+        notifications.show({ message: `You can edit “${name}” now.` });
       }
     },
     [getClient, patchProject]
