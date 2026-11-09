@@ -10,6 +10,7 @@ import { Notifications } from '@mantine/notifications';
 import { AccountPage } from './account/AccountPage';
 import { AgentActivityPage } from './activity/AgentActivityPage';
 import { AuthProvider } from './auth/AuthContext';
+import { PricingPage } from './billing/PricingPage';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
 import { RequireAuth } from './components/RequireAuth';
@@ -81,6 +82,8 @@ export default function App() {
                           </RequireAuth>
                         }
                       />
+                      {/* Plans and prices, on a server that sells some (docs/billing.md). */}
+                      <Route path="/pricing" element={<PricingPage />} />
                       {/* Markdown files the operator puts on the server (docs/privacy.md). */}
                       <Route path="/imprint" element={<LegalPage page="imprint" />} />
                       <Route path="/privacy" element={<LegalPage page="privacy" />} />

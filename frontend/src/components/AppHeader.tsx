@@ -13,6 +13,7 @@ import {
   IconMenu2,
   IconShieldLock,
   IconTable,
+  IconTag,
   IconTopologyStar3,
   IconUserCircle,
 } from '@tabler/icons-react';
@@ -30,6 +31,7 @@ import {
 } from '@mantine/core';
 import { api, type LegalPageName } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { useBillingInfo } from '@/billing/useBillingInfo';
 import { relativeTime } from '@/collab/time';
 import { DEMO } from '@/demo';
 import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
@@ -50,6 +52,8 @@ export function AppHeader() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const legal = legalPages(useLegalInfo());
+  // Only a server that sells plans has a pricing page.
+  const pricing = Boolean(useBillingInfo());
   const navVariant = (path: string) =>
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
   // When an agent last did something: asked for when the account menu opens.
@@ -98,12 +102,24 @@ export function AppHeader() {
               My networks
             </Button>
           )}
+          {pricing && (
+            <Button
+              component={Link}
+              to="/pricing"
+              variant={navVariant('/pricing')}
+              size="compact-md"
+              color="gray"
+            >
+              Pricing
+            </Button>
+          )}
         </Group>
       </Group>
 
       <Group gap="xs" wrap="nowrap">
         <PhoneMenu
           loggedIn={Boolean(user)}
+          pricing={pricing}
           legal={legal}
           isActive={(path) => navVariant(path) === 'light'}
         />
@@ -258,10 +274,12 @@ function RecentActivity({ at }: { at: string | null }) {
 /** Below `sm` the page links and the GitHub and support links move into a menu. */
 function PhoneMenu({
   loggedIn,
+  pricing,
   legal,
   isActive,
 }: {
   loggedIn: boolean;
+  pricing: boolean;
   legal: LegalPageName[];
   isActive: (path: string) => boolean;
 }) {
@@ -290,6 +308,7 @@ function PhoneMenu({
           {item('/', 'Builder', <IconTopologyStar3 size={16} />)}
           {item('/data', 'Data', <IconTable size={16} />)}
           {loggedIn && item('/projects', 'My networks', <IconFolder size={16} />)}
+          {pricing && item('/pricing', 'Pricing', <IconTag size={16} />)}
           <Menu.Divider />
           <Menu.Item
             component="a"

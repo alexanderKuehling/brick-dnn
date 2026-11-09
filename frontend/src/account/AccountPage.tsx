@@ -20,6 +20,8 @@ import {
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, setTokens, type Account } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { PlanSection } from '@/billing/PlanSection';
+import { useBillingInfo } from '@/billing/useBillingInfo';
 import { downloadBlob } from '@/builder/download';
 import { LegalLinks } from '@/legal/LegalLinks';
 import { useLegalInfo } from '@/legal/useLegalInfo';
@@ -347,6 +349,7 @@ function DeleteDialog({
 /** /account: the own account, its data, and deleting it. */
 export function AccountPage() {
   const legal = useLegalInfo();
+  const billing = useBillingInfo();
   const [account, setAccount] = useState<Account | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -413,6 +416,12 @@ export function AccountPage() {
         <Section title="Password">
           <PasswordForm />
         </Section>
+
+        {billing && (
+          <Section title="Plan & billing">
+            <PlanSection info={billing} />
+          </Section>
+        )}
 
         <Section title="Usage & budget">
           <UsageSection />
