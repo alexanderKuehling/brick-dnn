@@ -1,9 +1,11 @@
 import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, type ProjectMember, type ProjectMembers } from '@/api';
+import { api, ApiError, type ProjectData, type ProjectMember, type ProjectMembers } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
-import { ShareDialog, type ShareTarget } from './ShareDialog';
+import { PREP } from '@/data/fixtures';
+import { dataset } from '@/training/fixtures';
+import { ShareDialog, type ShareTab, type ShareTarget } from './ShareDialog';
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
@@ -12,8 +14,11 @@ vi.mock('@/api', async (importOriginal) => {
     api: {
       projects: {
         members: { list: vi.fn(), add: vi.fn(), update: vi.fn(), remove: vi.fn() },
+        data: { list: vi.fn(), add: vi.fn(), remove: vi.fn() },
         setLink: vi.fn(),
       },
+      training: { datasets: { list: vi.fn() } },
+      data: { preps: { list: vi.fn() } },
     },
   };
 });
@@ -51,11 +56,19 @@ function loginAs(user: typeof ALEX) {
   });
 }
 
-function renderDialog(project: ShareTarget = PROJECT) {
+function renderDialog(project: ShareTarget = PROJECT, initialTab?: ShareTab) {
   const onClose = vi.fn();
   const onChange = vi.fn();
   const onLeave = vi.fn();
-  render(<ShareDialog project={project} onClose={onClose} onChange={onChange} onLeave={onLeave} />);
+  render(
+    <ShareDialog
+      project={project}
+      onClose={onClose}
+      onChange={onChange}
+      onLeave={onLeave}
+      initialTab={initialTab}
+    />
+  );
   return { onClose, onChange, onLeave };
 }
 
@@ -253,5 +266,115 @@ describe('ShareDialog for members', () => {
     expect(api.projects.members.remove).toHaveBeenCalledWith(5, 31);
     await waitFor(() => expect(onLeave).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('ShareDialog, data of the network', () => {
+  const SHARED_DATA: ProjectData = {
+    datasets: [
+      {
+        id: 42,
+        name: 'Churn v1',
+        owner: 'maria',
+        created_at: '2026-11-01T10:00:00Z',
+        kind: 'csv',
+        size_bytes: 51_200,
+      },
+    ],
+    preps: [{ id: 10, name: 'Churn', owner: 'alex', created_at: '2026-11-01T10:00:00Z' }],
+  };
+  const dataList = (name: string) => screen.getByRole('list', { name });
+
+  beforeEach(() => {
+    vi.mocked(api.projects.data.list).mockResolvedValue(SHARED_DATA);
+    vi.mocked(api.training.datasets.list).mockResolvedValue([
+      dataset({ id: 7, name: 'Iris' }),
+      dataset({ id: 42, name: 'Churn v1', mine: false, owner: 'maria' }),
+    ]);
+    vi.mocked(api.data.preps.list).mockResolvedValue([
+      { ...PREP, name: 'Churn' },
+      { ...PREP, id: 11, name: 'Fraud', owner: 'maria', role: 'editor' },
+      { ...PREP, id: 12, name: 'Leads' },
+    ]);
+  });
+
+  it('lists what is shared there and lets the owner share more or remove it', async () => {
+    renderDialog();
+    await userEvent.click(screen.getByRole('tab', { name: 'Data' }));
+    const datasets = await screen.findByRole('list', { name: 'Training datasets' });
+    expect(api.projects.data.list).toHaveBeenCalledWith(5, expect.any(AbortSignal));
+    expect(within(datasets).getByRole('listitem', { name: 'Churn v1' })).toHaveTextContent(
+      'by maria · CSV · 50 KB'
+    );
+    expect(dataList('Data preparations')).toHaveTextContent('Churnby you');
+
+    // Only own items that are not shared there yet are offered.
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Dataset or preparation to share' })
+    );
+    expect(await screen.findByRole('option', { name: 'Iris' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Leads' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Churn' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Churn v1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Fraud' })).not.toBeInTheDocument();
+
+    vi.mocked(api.projects.data.add).mockResolvedValue({
+      ...SHARED_DATA,
+      preps: [...SHARED_DATA.preps, { id: 12, name: 'Leads', owner: 'alex', created_at: '' }],
+    });
+    await userEvent.click(screen.getByRole('option', { name: 'Leads' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    expect(api.projects.data.add).toHaveBeenCalledWith(5, 'prep', 12);
+    expect(await within(dataList('Data preparations')).findByText('Leads')).toBeInTheDocument();
+
+    // The owner of the network removes anything.
+    vi.mocked(api.projects.data.remove).mockResolvedValue(undefined);
+    await userEvent.click(screen.getByRole('button', { name: 'Stop sharing Churn v1' }));
+    expect(api.projects.data.remove).toHaveBeenCalledWith(5, 'dataset', 42);
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: 'Training datasets' })).not.toBeInTheDocument()
+    );
+  });
+
+  it('lets editors share their own data and remove only that', async () => {
+    renderDialog({ ...PROJECT, role: 'editor' }, 'data');
+    const datasets = await screen.findByRole('list', { name: 'Training datasets' });
+    expect(
+      screen.getByRole('combobox', { name: 'Dataset or preparation to share' })
+    ).toBeInTheDocument();
+    expect(within(datasets).queryByRole('button')).not.toBeInTheDocument(); // maria's
+    expect(
+      within(dataList('Data preparations')).getByRole('button', { name: 'Stop sharing Churn' })
+    ).toBeInTheDocument();
+  });
+
+  it('shows viewers what is shared, read only', async () => {
+    vi.mocked(api.projects.data.list).mockResolvedValue({ datasets: [], preps: [] });
+    renderDialog({ ...PROJECT, role: 'viewer' }, 'data');
+    expect(await screen.findByText(/Nothing is shared here yet/)).toHaveTextContent(
+      'The owner and the editors of the network can share their data here.'
+    );
+    expect(
+      screen.queryByRole('combobox', { name: 'Dataset or preparation to share' })
+    ).not.toBeInTheDocument();
+    expect(api.training.datasets.list).not.toHaveBeenCalled();
+  });
+
+  it('reports what could not be shared', async () => {
+    vi.mocked(api.projects.data.add).mockRejectedValue(
+      new ApiError(400, null, 'Choose one of your own datasets or data preparations.')
+    );
+    renderDialog(PROJECT, 'data');
+    await screen.findByRole('list', { name: 'Training datasets' });
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Dataset or preparation to share' })
+    );
+    await userEvent.click(await screen.findByRole('option', { name: 'Iris' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Could not share it' })
+      )
+    );
   });
 });

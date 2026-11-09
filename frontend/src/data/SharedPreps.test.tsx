@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type DataPrep, type User } from '@/api';
+import { api, type DataPrep, type Project, type User } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { DataPage } from './DataPage';
 import { CATALOG, DATA_STATUS, OTHER_SOURCE, PREP, PREVIEW, SOURCE } from './fixtures';
@@ -18,6 +18,7 @@ vi.mock('@/api', async (importOriginal) => {
   return {
     ...actual,
     api: {
+      projects: { list: vi.fn(), data: { list: vi.fn(), add: vi.fn(), remove: vi.fn() } },
       data: {
         status: vi.fn(),
         steps: vi.fn(),
@@ -84,6 +85,26 @@ const SHARED: DataPrep = {
   shared_in: [NETWORK],
 };
 const EDITABLE: DataPrep = { ...SHARED, id: 21, name: 'Team churn', role: 'editor' };
+
+function project(overrides: Partial<Project>): Project {
+  return {
+    id: 5,
+    name: 'Churn net',
+    description: '',
+    graph: { version: 1, nodes: [], edges: [] },
+    num_layers: 0,
+    created_at: '2026-11-01T10:00:00Z',
+    updated_at: '2026-11-01T10:00:00Z',
+    owner: { id: 1, username: 'ada' },
+    role: 'owner',
+    version: 1,
+    updated_by: 'ada',
+    shared: true,
+    link_access: 'none',
+    share_token: null,
+    ...overrides,
+  };
+}
 
 function LocationProbe() {
   return <output data-testid="location">{useLocation().pathname}</output>;
@@ -169,6 +190,7 @@ describe('Shared preparations in the Data tab', () => {
     expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Share in network…' })).not.toBeInTheDocument();
   });
 
   it('opens an own preparation first', async () => {
@@ -227,5 +249,37 @@ describe('Shared preparations in the Data tab', () => {
     );
     // The source is never sent: editors cannot change it.
     expect(vi.mocked(api.data.preps.update).mock.calls[0][1]).not.toHaveProperty('source');
+  });
+
+  it('shares an own preparation in a network, with its training datasets', async () => {
+    const exported = { ...PREP, datasets: [{ id: 42, name: 'Churn v1', created_at: '' }] };
+    vi.mocked(api.data.preps.list).mockResolvedValue([exported]);
+    vi.mocked(api.data.preps.get).mockResolvedValue(exported);
+    vi.mocked(api.projects.list).mockResolvedValue([
+      project({}),
+      project({ id: 6, name: 'Their net', role: 'editor', owner: { id: 2, username: 'bob' } }),
+      project({ id: 7, name: 'Watched net', role: 'viewer', owner: { id: 2, username: 'bob' } }),
+    ]);
+    vi.mocked(api.projects.data.add).mockResolvedValue({ datasets: [], preps: [] });
+    renderPage('/data/10');
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Actions for Churn model data' })
+    );
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Share in network…' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /in a network/ });
+    const networks = await within(dialog).findByRole('list', { name: 'Networks' });
+    expect(within(networks).getAllByRole('switch')).toHaveLength(2); // Not where it can only view.
+    expect(within(networks).getByText('bob’s network · Can edit')).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('checkbox', { name: /Also share the training dataset “Churn v1”/ })
+    ).toBeChecked();
+
+    await userEvent.click(within(networks).getByRole('switch', { name: /Churn net/ }));
+    await waitFor(() => expect(api.projects.data.add).toHaveBeenCalledWith(5, 'dataset', 42));
+    expect(api.projects.data.add).toHaveBeenCalledWith(5, 'prep', 10);
+    expect(within(networks).getByRole('switch', { name: /Churn net/ })).toBeChecked();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('link', { name: /Churn model data/ })).toHaveTextContent('shared');
   });
 });

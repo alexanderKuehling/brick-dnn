@@ -19,6 +19,7 @@ vi.mock('@/api', async (importOriginal) => {
         remove: vi.fn(),
         duplicate: vi.fn(),
         members: { list: vi.fn(), remove: vi.fn() },
+        data: { list: vi.fn() },
       },
     },
   };
@@ -201,5 +202,23 @@ describe('ProjectsPage', () => {
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Share…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Share “Tabular regression”' });
     expect(await within(dialog).findByText(/Only you can open this network/)).toBeInTheDocument();
+  });
+
+  it('shows the data shared in a network from the menu', async () => {
+    vi.mocked(api.projects.data.list).mockResolvedValue({
+      datasets: [],
+      preps: [{ id: 10, name: 'Churn', owner: 'jonas', created_at: '2026-11-01T10:00:00Z' }],
+    });
+    renderPage('/projects?tab=shared');
+    const menu = await openMenu('LSTM classifier');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Shared data…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Share “LSTM classifier”' });
+    expect(within(dialog).getByRole('tab', { name: 'Data' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    const preps = await within(dialog).findByRole('list', { name: 'Data preparations' });
+    expect(within(preps).getByRole('link', { name: 'Churn' })).toHaveAttribute('href', '/data/10');
+    expect(api.projects.data.list).toHaveBeenCalledWith(4, expect.any(AbortSignal));
   });
 });

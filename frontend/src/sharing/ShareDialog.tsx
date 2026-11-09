@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { IconCheck, IconCopy, IconLogout, IconRefresh, IconX } from '@tabler/icons-react';
+import {
+  IconCheck,
+  IconCopy,
+  IconDatabase,
+  IconLogout,
+  IconRefresh,
+  IconUsers,
+  IconX,
+} from '@tabler/icons-react';
 import {
   ActionIcon,
   Alert,
@@ -13,6 +21,7 @@ import {
   Modal,
   Select,
   Switch,
+  Tabs,
   Text,
   TextInput,
   Tooltip,
@@ -29,6 +38,7 @@ import {
   type UserRef,
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { ProjectDataPanel } from './ProjectDataPanel';
 import { MEMBER_ROLE_OPTIONS, ROLE_LABELS, shareUrl } from './roles';
 import classes from './Sharing.module.css';
 
@@ -48,7 +58,11 @@ interface ShareDialogProps {
   onChange?: (state: SharingState) => void;
   /** The current user left the project (and lost access). */
   onLeave?: () => void;
+  /** people: members and the link · data: datasets and preparations shared in the project. */
+  initialTab?: ShareTab;
 }
+
+export type ShareTab = 'people' | 'data';
 
 /** The message of a rejected invitation, shown below the field. */
 function inviteError(error: ApiError): string {
@@ -66,8 +80,15 @@ function inviteError(error: ApiError): string {
 }
 
 /** Who has access, inviting people (owner) and the view link. Mount it while it is open. */
-export function ShareDialog({ project, onClose, onChange, onLeave }: ShareDialogProps) {
+export function ShareDialog({
+  project,
+  onClose,
+  onChange,
+  onLeave,
+  initialTab = 'people',
+}: ShareDialogProps) {
   const { user } = useAuth();
+  const [tab, setTab] = useState<ShareTab>(initialTab);
   const isOwner = project.role === 'owner';
   const [members, setMembers] = useState<ProjectMembers | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -201,217 +222,236 @@ export function ShareDialog({ project, onClose, onChange, onLeave }: ShareDialog
 
   return (
     <Modal opened onClose={onClose} title={`Share “${project.name}”`} size="lg">
-      {isOwner && (
-        <form
-          className={classes.invite}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void invite();
-          }}
-        >
-          <TextInput
-            className={classes.inviteUser}
-            aria-label="Username or e-mail"
-            placeholder="Username or e-mail"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={invitee}
-            error={inviteMessage}
-            onChange={(event) => {
-              setInvitee(event.currentTarget.value);
-              setInviteMessage(null);
-            }}
-          />
-          <div className={classes.inviteControls}>
-            <Select
-              aria-label="Role of the invited person"
-              data={MEMBER_ROLE_OPTIONS}
-              value={inviteRole}
-              onChange={(value) => value && setInviteRole(value as MemberRole)}
-              allowDeselect={false}
-              comboboxProps={{ withinPortal: true }}
-              w={130}
-            />
-            <Button type="submit" loading={inviting}>
-              Invite
-            </Button>
-          </div>
-        </form>
-      )}
-
-      <Text fw={600} size="sm" mt={isOwner ? 'lg' : 0} mb={4} id="share-people">
-        People with access
-      </Text>
-      {loadError && <Alert color="red">{loadError}</Alert>}
-      {!members && !loadError && (
-        <Center h={80}>
-          <Loader size="sm" />
-        </Center>
-      )}
-      {members && (
-        <ul className={classes.people} aria-labelledby="share-people">
-          <Person user={members.owner} you={members.owner.id === user?.id}>
-            <Text size="sm" c="dimmed">
-              {ROLE_LABELS.owner}
-            </Text>
-          </Person>
-          {members.members.map((member) => {
-            const name = member.user.username;
-            const you = member.user.id === user?.id;
-            return (
-              <Person key={member.id} user={member.user} you={you}>
-                {isOwner ? (
-                  <>
-                    <Select
-                      aria-label={`Role of ${name}`}
-                      data={MEMBER_ROLE_OPTIONS}
-                      value={member.role}
-                      onChange={(value) =>
-                        value &&
-                        value !== member.role &&
-                        void changeRole(member, value as MemberRole)
-                      }
-                      allowDeselect={false}
-                      disabled={busyMember === member.id}
-                      comboboxProps={{ withinPortal: true }}
-                      size="xs"
-                      w={110}
-                    />
-                    <Tooltip label={`Remove ${name}`}>
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => void remove(member)}
-                        disabled={busyMember === member.id}
-                        aria-label={`Remove ${name}`}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </>
-                ) : (
-                  <>
-                    <Text size="sm" c="dimmed">
-                      {ROLE_LABELS[member.role]}
-                    </Text>
-                    {you && (
-                      <Button
-                        size="compact-sm"
-                        variant="light"
-                        color="red"
-                        leftSection={<IconLogout size={14} />}
-                        onClick={() => setConfirming('leave')}
-                      >
-                        Leave
-                      </Button>
-                    )}
-                  </>
-                )}
-              </Person>
-            );
-          })}
-        </ul>
-      )}
-      {members && isOwner && members.members.length === 0 && (
-        <Text size="sm" c="dimmed" mt={4}>
-          Only you can open this network. Invite people by their username or e-mail address.
-        </Text>
-      )}
-      {confirming === 'leave' && (
-        <div className={classes.confirm}>
-          <Text size="sm">
-            Leave “{project.name}”? You lose access to it; only the owner can invite you again.
-          </Text>
-          <Group justify="flex-end" gap="xs" mt="sm">
-            <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              size="xs"
-              loading={busyMember !== null && busyMember === own?.id}
-              onClick={() => void leave()}
+      <Tabs
+        value={tab}
+        onChange={(value) => value && setTab(value as ShareTab)}
+        keepMounted={false}
+      >
+        <Tabs.List mb="md">
+          <Tabs.Tab value="people" leftSection={<IconUsers size={14} />}>
+            People
+          </Tabs.Tab>
+          <Tabs.Tab value="data" leftSection={<IconDatabase size={14} />}>
+            Data
+          </Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="people">
+          {isOwner && (
+            <form
+              className={classes.invite}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void invite();
+              }}
             >
-              Leave
-            </Button>
-          </Group>
-        </div>
-      )}
-
-      <Divider my="lg" />
-      {isOwner ? (
-        <>
-          <Switch
-            label="Anyone with the link can view"
-            description="No account needed. They can see the network and its code, not change it."
-            checked={linkOn}
-            disabled={linkBusy}
-            onChange={(event) => void changeLink(event.currentTarget.checked)}
-          />
-          {linkOn && url && (
-            <>
-              <div className={classes.link}>
-                <TextInput
-                  className={classes.linkUrl}
-                  aria-label="Share link"
-                  value={url}
-                  readOnly
-                  onFocus={(event) => event.currentTarget.select()}
+              <TextInput
+                className={classes.inviteUser}
+                aria-label="Username or e-mail"
+                placeholder="Username or e-mail"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={invitee}
+                error={inviteMessage}
+                onChange={(event) => {
+                  setInvitee(event.currentTarget.value);
+                  setInviteMessage(null);
+                }}
+              />
+              <div className={classes.inviteControls}>
+                <Select
+                  aria-label="Role of the invited person"
+                  data={MEMBER_ROLE_OPTIONS}
+                  value={inviteRole}
+                  onChange={(value) => value && setInviteRole(value as MemberRole)}
+                  allowDeselect={false}
+                  comboboxProps={{ withinPortal: true }}
+                  w={130}
                 />
-                <CopyButton value={url} timeout={2000}>
-                  {({ copied, copy }) => (
-                    <Button
-                      onClick={copy}
-                      color={copied ? 'teal' : undefined}
-                      leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                    >
-                      {copied ? 'Copied' : 'Copy link'}
-                    </Button>
-                  )}
-                </CopyButton>
+                <Button type="submit" loading={inviting}>
+                  Invite
+                </Button>
               </div>
-              <Button
-                variant="subtle"
-                size="compact-sm"
-                mt="xs"
-                leftSection={<IconRefresh size={14} />}
-                onClick={() => setConfirming('regenerate')}
+            </form>
+          )}
+
+          <Text fw={600} size="sm" mt={isOwner ? 'lg' : 0} mb={4} id="share-people">
+            People with access
+          </Text>
+          {loadError && <Alert color="red">{loadError}</Alert>}
+          {!members && !loadError && (
+            <Center h={80}>
+              <Loader size="sm" />
+            </Center>
+          )}
+          {members && (
+            <ul className={classes.people} aria-labelledby="share-people">
+              <Person user={members.owner} you={members.owner.id === user?.id}>
+                <Text size="sm" c="dimmed">
+                  {ROLE_LABELS.owner}
+                </Text>
+              </Person>
+              {members.members.map((member) => {
+                const name = member.user.username;
+                const you = member.user.id === user?.id;
+                return (
+                  <Person key={member.id} user={member.user} you={you}>
+                    {isOwner ? (
+                      <>
+                        <Select
+                          aria-label={`Role of ${name}`}
+                          data={MEMBER_ROLE_OPTIONS}
+                          value={member.role}
+                          onChange={(value) =>
+                            value &&
+                            value !== member.role &&
+                            void changeRole(member, value as MemberRole)
+                          }
+                          allowDeselect={false}
+                          disabled={busyMember === member.id}
+                          comboboxProps={{ withinPortal: true }}
+                          size="xs"
+                          w={110}
+                        />
+                        <Tooltip label={`Remove ${name}`}>
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => void remove(member)}
+                            disabled={busyMember === member.id}
+                            aria-label={`Remove ${name}`}
+                          >
+                            <IconX size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      <>
+                        <Text size="sm" c="dimmed">
+                          {ROLE_LABELS[member.role]}
+                        </Text>
+                        {you && (
+                          <Button
+                            size="compact-sm"
+                            variant="light"
+                            color="red"
+                            leftSection={<IconLogout size={14} />}
+                            onClick={() => setConfirming('leave')}
+                          >
+                            Leave
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </Person>
+                );
+              })}
+            </ul>
+          )}
+          {members && isOwner && members.members.length === 0 && (
+            <Text size="sm" c="dimmed" mt={4}>
+              Only you can open this network. Invite people by their username or e-mail address.
+            </Text>
+          )}
+          {confirming === 'leave' && (
+            <div className={classes.confirm}>
+              <Text size="sm">
+                Leave “{project.name}”? You lose access to it; only the owner can invite you again.
+              </Text>
+              <Group justify="flex-end" gap="xs" mt="sm">
+                <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  color="red"
+                  size="xs"
+                  loading={busyMember !== null && busyMember === own?.id}
+                  onClick={() => void leave()}
+                >
+                  Leave
+                </Button>
+              </Group>
+            </div>
+          )}
+
+          <Divider my="lg" />
+          {isOwner ? (
+            <>
+              <Switch
+                label="Anyone with the link can view"
+                description="No account needed. They can see the network and its code, not change it."
+                checked={linkOn}
                 disabled={linkBusy}
-              >
-                Create new link
-              </Button>
-              {confirming === 'regenerate' && (
-                <div className={classes.confirm}>
-                  <Text size="sm">
-                    Create a new link? The current link stops working: people who have it can no
-                    longer open the network.
-                  </Text>
-                  <Group justify="flex-end" gap="xs" mt="sm">
-                    <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
-                      Cancel
-                    </Button>
-                    <Button
-                      size="xs"
-                      loading={linkBusy}
-                      onClick={() => void changeLink(true, true)}
-                    >
-                      Create new link
-                    </Button>
-                  </Group>
-                </div>
+                onChange={(event) => void changeLink(event.currentTarget.checked)}
+              />
+              {linkOn && url && (
+                <>
+                  <div className={classes.link}>
+                    <TextInput
+                      className={classes.linkUrl}
+                      aria-label="Share link"
+                      value={url}
+                      readOnly
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <CopyButton value={url} timeout={2000}>
+                      {({ copied, copy }) => (
+                        <Button
+                          onClick={copy}
+                          color={copied ? 'teal' : undefined}
+                          leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                        >
+                          {copied ? 'Copied' : 'Copy link'}
+                        </Button>
+                      )}
+                    </CopyButton>
+                  </div>
+                  <Button
+                    variant="subtle"
+                    size="compact-sm"
+                    mt="xs"
+                    leftSection={<IconRefresh size={14} />}
+                    onClick={() => setConfirming('regenerate')}
+                    disabled={linkBusy}
+                  >
+                    Create new link
+                  </Button>
+                  {confirming === 'regenerate' && (
+                    <div className={classes.confirm}>
+                      <Text size="sm">
+                        Create a new link? The current link stops working: people who have it can no
+                        longer open the network.
+                      </Text>
+                      <Group justify="flex-end" gap="xs" mt="sm">
+                        <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="xs"
+                          loading={linkBusy}
+                          onClick={() => void changeLink(true, true)}
+                        >
+                          Create new link
+                        </Button>
+                      </Group>
+                    </div>
+                  )}
+                </>
               )}
             </>
+          ) : (
+            <Text size="sm" c="dimmed">
+              {linkOn
+                ? 'Anyone with the link can view this network.'
+                : 'Only the people above can open this network.'}{' '}
+              Only the owner can change who has access.
+            </Text>
           )}
-        </>
-      ) : (
-        <Text size="sm" c="dimmed">
-          {linkOn
-            ? 'Anyone with the link can view this network.'
-            : 'Only the people above can open this network.'}{' '}
-          Only the owner can change who has access.
-        </Text>
-      )}
+        </Tabs.Panel>
+        <Tabs.Panel value="data">
+          <ProjectDataPanel project={project} />
+        </Tabs.Panel>
+      </Tabs>
 
       <Group justify="flex-end" mt="xl">
         <Button variant="default" onClick={onClose}>

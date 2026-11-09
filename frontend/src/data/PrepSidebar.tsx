@@ -8,6 +8,7 @@ import {
   IconPlus,
   IconTable,
   IconTrash,
+  IconUsersPlus,
 } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import {
@@ -44,6 +45,8 @@ interface PrepSidebarProps {
   onRenamePrep: (prep: DataPrep) => void;
   onDuplicatePrep: (prep: DataPrep) => void;
   onDeletePrep: (prep: DataPrep) => void;
+  /** Share one of the user's preparations in their networks. */
+  onSharePrep?: (prep: DataPrep) => void;
   onSourceRenamed: (source: DataSource) => void;
   onSourceDeleted: (id: number) => void;
 }
@@ -197,6 +200,14 @@ function PrepList({
                       >
                         Duplicate
                       </Menu.Item>
+                      {props.onSharePrep && (
+                        <Menu.Item
+                          leftSection={<IconUsersPlus size={14} />}
+                          onClick={() => props.onSharePrep?.(prep)}
+                        >
+                          Share in network…
+                        </Menu.Item>
+                      )}
                       <Menu.Item
                         color="red"
                         leftSection={<IconTrash size={14} />}

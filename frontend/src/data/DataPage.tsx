@@ -50,6 +50,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { downloadBlob } from '@/builder/download';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
+import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
 import { describeReport, ImportDialog, tableSize } from './ImportDialog';
@@ -326,6 +327,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
   }, []);
 
   const loaded = prep.prep;
+  const [sharingPrep, setSharingPrep] = useState<DataPrep | null>(null);
   // The source of a preparation shared with the user is not in their own list.
   const sourceId = loaded?.source ?? null;
   const listedSource = useMemo(
@@ -767,6 +769,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
       onRenamePrep={renamePrep}
       onDuplicatePrep={duplicatePrep}
       onDeletePrep={deletePrep}
+      onSharePrep={setSharingPrep}
       onSourceRenamed={sourceRenamed}
       onSourceDeleted={dropSource}
     />
@@ -899,6 +902,18 @@ function Workspace({ resources, status }: WorkspaceProps) {
           maxUploadMb={status.max_upload_mb}
           currentPrepName={loaded ? prep.name : null}
           onImported={onImported}
+        />
+      )}
+      {sharingPrep && (
+        <ShareInNetworkDialog
+          kind="prep"
+          item={sharingPrep}
+          datasets={sharingPrep.datasets}
+          onClose={() => setSharingPrep(null)}
+          onChange={(sharedIn) => {
+            const listed = preps?.find((p) => p.id === sharingPrep.id) ?? sharingPrep;
+            putPrep({ ...listed, shared_in: sharedIn });
+          }}
         />
       )}
       {dragging && (
