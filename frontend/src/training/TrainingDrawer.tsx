@@ -28,6 +28,7 @@ import { canTrain, otherStarter, trainingProject, type RunFilter } from './acces
 import { HistoryView } from './HistoryView';
 import { RunView } from './RunView';
 import { SetupView } from './SetupView';
+import type { DatasetFitController } from './useDatasetFit';
 import type { TrainingController } from './useTraining';
 
 export interface TrainingDrawerProps {
@@ -39,6 +40,8 @@ export interface TrainingDrawerProps {
   onLogin: () => void;
   onShowProblems: () => void;
   onLoadNetwork: (graph: GraphDocument, name: string) => void;
+  /** The builder's check against the chosen dataset and the "Adapt network" action. */
+  fit?: DatasetFitController | null;
 }
 
 export default function TrainingDrawer(props: TrainingDrawerProps) {
@@ -76,6 +79,7 @@ function DrawerContent({
   onLogin,
   onShowProblems,
   onLoadNetwork,
+  fit = null,
   filter,
   onFilterChange,
 }: TrainingDrawerProps & { filter: RunFilter; onFilterChange: (filter: RunFilter) => void }) {
@@ -164,6 +168,7 @@ function DrawerContent({
             onStarted={training.applyRun}
             onOpenRun={training.openRun}
             onShowProblems={onShowProblems}
+            fit={fit}
             onRefresh={() => {
               training.reloadStatus();
               training.refreshRuns();

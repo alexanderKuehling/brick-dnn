@@ -50,6 +50,7 @@ import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
+import { useDatasetFit } from '@/training/useDatasetFit';
 import { useTraining } from '@/training/useTraining';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { ConflictDialog, type ConflictChoice } from './ConflictDialog';
@@ -534,6 +535,35 @@ function Builder() {
     [nodes, setNodes]
   );
 
+  /** Put a network on the (empty) canvas without leaving the open project. */
+  const startNetwork = useCallback(
+    (graph: GraphDocument) => {
+      const loaded = fromDocument(graph);
+      setNodes(loaded.nodes);
+      setEdges(withEdgeStyle(loaded.edges));
+      setFitRequest((n) => n + 1);
+    },
+    [setNodes, setEdges]
+  );
+
+  // The Input layer follows the dataset chosen for training (not for viewers).
+  const datasetFit = useDatasetFit({
+    training,
+    loggedIn: Boolean(user),
+    readOnly,
+    doc,
+    nodes,
+    analysis,
+    analyzing,
+    specs,
+    // On a first visit an example is placed on the canvas once the catalogue is loaded.
+    canvasReady: Boolean(catalog) && seeded.current,
+    selectedInput: selected?.data.type === 'Input' ? selected.id : null,
+    updateNode,
+    deleteNode,
+    startNetwork,
+  });
+
   const focusNode = useCallback(
     (id: string) => {
       const node = nodes.find((n) => n.id === id);
@@ -857,8 +887,19 @@ function Builder() {
       duplicateNode,
       focusNode,
       presence,
+      inputFit: datasetFit.inputFit,
     }),
-    [specs, analysis, readOnly, updateNode, deleteNode, duplicateNode, focusNode, presence]
+    [
+      specs,
+      analysis,
+      readOnly,
+      updateNode,
+      deleteNode,
+      duplicateNode,
+      focusNode,
+      presence,
+      datasetFit.inputFit,
+    ]
   );
 
   if (!catalog) {
@@ -1092,6 +1133,7 @@ function Builder() {
             onLogin={loginToTrain}
             onShowProblems={showProblemsFromTraining}
             onLoadNetwork={loadTrainedNetwork}
+            fit={datasetFit.controller}
           />
         </Suspense>
       )}

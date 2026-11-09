@@ -7,7 +7,13 @@ import { loadSource, saveSource, type SourceChoice } from './settings';
 export interface DataController {
   /** The chosen data source (remembered per browser). */
   source: SourceChoice;
+  /**
+   * Choose a data source. Every call counts as a selection (see `selection`): picking a
+   * dataset, a finished upload, "Train with this data" in the Data tab.
+   */
   setSource: (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) => void;
+  /** Counts the selections, so the builder can adapt the network once per selection. */
+  selection: number;
   /** The user's uploaded datasets, newest first; null until loaded. */
   datasets: Dataset[] | null;
   datasetsError: string | null;
@@ -32,6 +38,7 @@ export function useDatasets(
   setupVisible: () => boolean
 ): DataController {
   const [source, setSourceState] = useState<SourceChoice>(loadSource);
+  const [selection, setSelection] = useState(0);
   const [datasets, setDatasets] = useState<Dataset[] | null>(null);
   const [datasetsError, setDatasetsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -55,8 +62,10 @@ export function useDatasets(
   }, [active]);
 
   const setSource = useCallback(
-    (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) =>
-      setSourceState((current) => (typeof update === 'function' ? update(current) : update)),
+    (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) => {
+      setSourceState((current) => (typeof update === 'function' ? update(current) : update));
+      setSelection((n) => n + 1);
+    },
     []
   );
   useEffect(() => saveSource(source), [source]);
@@ -146,6 +155,7 @@ export function useDatasets(
   return {
     source,
     setSource,
+    selection,
     datasets,
     datasetsError,
     reloadDatasets,

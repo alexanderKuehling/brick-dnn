@@ -5,8 +5,9 @@ import {
   IconInfoCircle,
   IconPlayerPlay,
   IconUsers,
+  IconWand,
 } from '@tabler/icons-react';
-import { Alert, Button, Divider, Group, List, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Button, Divider, Group, List, Loader, Paper, Stack, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -19,10 +20,10 @@ import {
   type RunSummary,
   type TrainingStatus,
 } from '@/api';
-import { isOwnDataset, type TrainingProject } from './access';
+import type { TrainingProject } from './access';
 import { DataSourcePicker } from './DataSourcePicker';
 import {
-  datasetRef,
+  effectiveSource,
   loadSettings,
   saveSettings,
   toConfig,
@@ -32,7 +33,8 @@ import {
   type SourceChoice,
 } from './settings';
 import { SettingsForm } from './SettingsForm';
-import { useCompatibility } from './useCompatibility';
+import { useCompatibility, type CompatibilityState } from './useCompatibility';
+import type { DatasetFitController } from './useDatasetFit';
 import type { DataController } from './useDatasets';
 
 interface SetupViewProps {
@@ -52,6 +54,11 @@ interface SetupViewProps {
   onShowProblems: () => void;
   /** Called when the server says training is unavailable (503) or busy (409). */
   onRefresh: () => void;
+  /**
+   * The builder's check of the network against the chosen dataset, with the action that adapts
+   * the network to it (see useDatasetFit). Without it, the view checks the network itself.
+   */
+  fit?: DatasetFitController | null;
 }
 
 // Mantine's list items do not wrap next to the bullet on narrow screens without this.
@@ -79,6 +86,7 @@ export function SetupView({
   onOpenRun,
   onShowProblems,
   onRefresh,
+  fit = null,
 }: SetupViewProps) {
   const [settings, setSettings] = useState<SettingsValues>(loadSettings);
   const [runName, setRunName] = useState('');
@@ -98,26 +106,17 @@ export function SetupView({
     saveSettings(next);
   };
 
-  // A remembered upload may have been deleted, a built-in dataset may be unavailable.
-  // Without a (valid) choice, the first built-in dataset and the newest own upload are used.
-  const availableBuiltins = status.builtin_datasets.filter((d) => d.available);
-  const builtin =
-    availableBuiltins.find((d) => d.id === choice.builtin) ?? availableBuiltins[0] ?? null;
-  const upload =
-    datasets?.find((d) => d.id === choice.upload) ??
-    datasets?.find(isOwnDataset) ??
-    datasets?.[0] ??
-    null;
-  const effective: SourceChoice = {
-    ...choice,
-    builtin: builtin ? builtin.id : null,
-    upload: upload ? upload.id : null,
-  };
-  const ref = datasetRef(effective);
+  const {
+    choice: effective,
+    ref,
+    upload,
+    name: datasetName,
+  } = effectiveSource(status, choice, datasets);
 
   const empty = doc.nodes.length === 0;
   const networkValid = !empty && analysis?.valid === true;
-  const compatibility = useCompatibility(doc, ref, networkValid);
+  const ownCheck = useCompatibility(doc, ref, networkValid && !fit);
+  const compatibility = fit ? fit.compatibility : ownCheck;
   const check = compatibility.result;
 
   const builtinSource = choice.tab === 'builtin';
@@ -250,7 +249,14 @@ export function SetupView({
         onDelete={deleteDataset}
       />
 
-      {networkValid && ref && <CheckResult {...compatibility} />}
+      {networkValid && ref && (
+        <CheckResult
+          {...compatibility}
+          datasetName={datasetName}
+          canAdapt={fit !== null}
+          onAdapt={fit?.adapt ?? null}
+        />
+      )}
 
       <Divider label="Settings" labelPosition="left" />
       <SettingsForm
@@ -316,7 +322,15 @@ export function SetupView({
   );
 }
 
-function CheckResult({ result, loading, error }: ReturnType<typeof useCompatibility>) {
+interface CheckResultProps extends CompatibilityState {
+  datasetName: string | null;
+  /** The network can be adapted here (the fixes of the result are offered). */
+  canAdapt: boolean;
+  /** Applies the suggested fixes; null while they are not known for the current network. */
+  onAdapt: (() => void) | null;
+}
+
+function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }: CheckResultProps) {
   if (error) {
     return (
       <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot check the data">
@@ -362,6 +376,32 @@ function CheckResult({ result, loading, error }: ReturnType<typeof useCompatibil
           {message}
         </Alert>
       ))}
+      {canAdapt && result.fixes && result.fixes.length > 0 && (
+        <Paper withBorder p="sm" radius="md">
+          <Stack gap={6}>
+            <Text size="sm">
+              {result.ok
+                ? `To fit “${datasetName ?? 'the data'}” exactly, change:`
+                : `To fit “${datasetName ?? 'the data'}”, change:`}
+            </Text>
+            <List styles={WRAPPING_LIST} size="sm" spacing={2}>
+              {result.fixes.map((fix) => (
+                <List.Item key={fix.node}>{fix.summary}</List.Item>
+              ))}
+            </List>
+            <Button
+              size="sm"
+              variant={result.ok ? 'light' : 'filled'}
+              leftSection={<IconWand size={16} />}
+              onClick={onAdapt ?? undefined}
+              disabled={loading || !onAdapt}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Adapt network to “{datasetName ?? 'the data'}”
+            </Button>
+          </Stack>
+        </Paper>
+      )}
     </Stack>
   );
 }
