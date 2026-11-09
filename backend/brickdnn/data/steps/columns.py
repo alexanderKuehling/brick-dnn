@@ -473,6 +473,36 @@ def exact_numbers(text: pd.Series) -> pd.Series:
     return exact.replace([np.inf, -np.inf], np.nan)
 
 
+# The number in a value with text around it ("$1,234.50", "12 kg", "45 %", "ca. 3"): text
+# without digits before and after it, digits with "." "," "'" separators, an exponent.
+NUMBER_PATTERN = r"[+-]?(?:\d[\d.,']*\d|\d|[.,]\d+)(?:[eE][+-]?\d+)?"
+UNIT_NUMBER = rf"^[^\d+\-]*?({NUMBER_PATTERN})\D*$"
+
+
+def number_text(text: pd.Series, decimal_comma: bool, strip_units: bool) -> pd.Series:
+    """Stripped strings as ``exact_numbers`` reads them: with ``strip_units`` only the number
+    in the value (see ``UNIT_NUMBER``) without thousands separators; with ``decimal_comma``
+    "1.234,5" becomes "1234.5". Keep in sync with ``_number_text_code``."""
+    if strip_units:
+        text = text.str.extract(UNIT_NUMBER, expand=False).str.replace("'", "", regex=False)
+        if not decimal_comma:
+            text = text.str.replace(",", "", regex=False)
+    if decimal_comma:
+        text = text.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+    return text
+
+
+def _number_text_code(text: str, decimal_comma: bool, strip_units: bool) -> str:
+    if strip_units:
+        text += f".str.extract({UNIT_NUMBER!r}, expand=False)"
+        text += ".str.replace(\"'\", '', regex=False)"
+        if not decimal_comma:
+            text += ".str.replace(',', '', regex=False)"
+    if decimal_comma:
+        text += '.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)'
+    return text
+
+
 def _cast(
     series: pd.Series, source: str, to: str, params: dict[str, Any], column: str
 ) -> tuple[pd.Series, str | None]:
@@ -485,9 +515,9 @@ def _cast(
         if source == "datetime":
             seconds = (series - pd.Timestamp("1970-01-01")).dt.total_seconds()
             return seconds.astype(float), None
-        text = series.str.strip()
-        if params["decimal_comma"]:
-            text = text.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+        text = number_text(
+            series.str.strip(), params["decimal_comma"], bool(params.get("strip_units"))
+        )
         return exact_numbers(text), None
     if to == "boolean":
         if source == "datetime":
@@ -515,9 +545,9 @@ def _cast_code(column: str, source: str, to: str, params: dict[str, Any], fmt: s
     if to == "numeric":
         if source == "datetime":
             return f"{ref} = ({ref} - pd.Timestamp('1970-01-01')).dt.total_seconds().astype(float)"
-        text = f"{ref}.str.strip()"
-        if params["decimal_comma"]:
-            text += '.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)'
+        text = _number_text_code(
+            f"{ref}.str.strip()", params["decimal_comma"], bool(params.get("strip_units"))
+        )
         return f"_text = {text}\n{ref} = {EXACT_NUMBERS_CODE.format(text='_text')}"
     if to == "boolean":
         if source == "numeric":
@@ -565,6 +595,15 @@ class Cast(Step):
             "Decimal comma (1.234,5)",
             default=False,
             visible_if={"param": "to", "values": ["numeric"]},
+        ),
+        Param(
+            "strip_units",
+            "bool",
+            "Ignore units and thousands separators",
+            default=False,
+            visible_if={"param": "to", "values": ["numeric"]},
+            help="Reads the number in values like '$1,200', '12 kg' or '45 %' (1200, 12 and "
+            "45): text before and after the number and thousands separators are ignored.",
         ),
         Param(
             "datetime_format",

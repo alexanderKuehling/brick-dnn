@@ -408,12 +408,20 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         # The data shown is the data before that step; it cannot be exported like this.
         ready["ready"] = False
         ready["issues"] = [
-            {"severity": "error", "column": None, "message": failed, "fix": None},
+            {
+                "code": "step_failed",
+                "severity": "error",
+                "column": None,
+                "columns": [],
+                "message": failed,
+                "fix": None,
+            },
             *ready.get("issues", []),
         ]
     if _oversampled(result.reports):
         # Oversampling copies rows on purpose; removing duplicates would undo it.
         profile["warnings"] = [w for w in profile["warnings"] if w.get("code") != "duplicates"]
+        ready["issues"] = _without_duplicate_fixes(ready.get("issues", []))
     return {
         "steps": result.reports,
         "task": result.task,
@@ -424,6 +432,24 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         "warnings": list(result.warnings),
         "duration_ms": round((time.perf_counter() - started) * 1000, 1),
     }
+
+
+def _without_duplicate_fixes(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Readiness issues after oversampling: no note about duplicate rows (they are the
+    copies), and no "Remove duplicates" fix for validation/test rows that copy training rows
+    (added at the end, it would undo the oversampling)."""
+    result = []
+    for issue in issues:
+        if issue.get("code") == "duplicate_rows":
+            continue
+        if issue.get("code") == "split_overlap" and issue.get("fix"):
+            issue = {
+                **issue,
+                "message": issue["message"] + " Remove duplicates before balancing the classes.",
+                "fix": None,
+            }
+        result.append(issue)
+    return result
 
 
 def _oversampled(reports: list[dict[str, Any]]) -> bool:
@@ -464,7 +490,7 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         raise DataInputError(f"{failed} Fix it before creating a training dataset.")
     result = run.result
     with _user_errors():
-        ready = readiness(result.table, run.settings, result.task)
+        ready = readiness(result.table, run.settings, result.task, checks=False)
     if not ready.get("ready"):
         issues = ready.get("issues") or []
         errors = [i for i in issues if i.get("severity") == "error"]

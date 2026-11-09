@@ -3,6 +3,22 @@
 ## Unreleased
 
 ### Added
+- **Sanity checks in the Data tab's Readiness view.** Besides what blocks the export, the
+  view now finds what makes a network poor or its scores misleading, each with the affected
+  columns and, where a step solves it, a one-click fix: possible target leakage (a feature
+  that is a copy of the target, correlates almost perfectly with it, determines the class by
+  its values or by one threshold, or is named like `<target>_label`), validation/test rows
+  that are copies of training rows, duplicate rows, rows with the same features but
+  different classes, ID columns, near-constant and redundant features, strongly skewed
+  features and targets, very different scales, rare classes and classes missing from the
+  validation or test rows, and too few training rows for the number of features. Category
+  columns get a more precise error: numbers or dates stored as text (convert them),
+  spellings that differ only in case or spaces (unify them), a value per row (drop) or many
+  categories (frequency or target mean encoding instead of one-hot). The checks learn from
+  the training rows (a sample on large tables) and are grouped into problems, warnings and
+  suggestions.
+- Data tab: *Change type* to numbers can ignore units, currency signs and thousands
+  separators (`$1,200`, `12 kg`, `45 %`).
 - Data tab: the target column setting points out how to get a target from another table and
   adds a *Join another table* step in one click (with a single other table, it is chosen and a
   key column both tables share, such as `id`, is set).
