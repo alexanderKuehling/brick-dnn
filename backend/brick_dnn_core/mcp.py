@@ -9,6 +9,7 @@ only gets the tools that change nothing.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
 from rest_framework import permissions, serializers
 from rest_framework.exceptions import ParseError
@@ -28,12 +30,13 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
-from brickdnn.training import ACTIVE_STATUSES
+from brickdnn.training import ACTIVE_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
+from . import downloads, history
 from . import training_service as training
 from .api_tokens import uses_api_token
-from .models import ApiToken, Dataset, Project, TrainingRun
+from .models import ApiToken, Project, TrainingRun
 from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
 from .projects import (
@@ -41,13 +44,22 @@ from .projects import (
     can_edit,
     project_data,
     projects_for,
+    role_of,
     update_project,
 )
+from .projects import delete_project as remove_project
 from .serializers import (
     DatasetSerializer,
     ProjectSerializer,
     RunDetailSerializer,
     RunSummarySerializer,
+)
+from .shared_data import (
+    can_delete_run,
+    can_stop_run,
+    editable_projects,
+    visible_datasets,
+    visible_runs,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +77,9 @@ shape has no batch dimension; nodes without outgoing edges are the outputs.
 Typical workflow: look up layer types with list_layer_types (or start from list_examples),
 build the graph, call analyze_network until it is valid (it infers shapes and parameter
 counts and explains errors), then generate_pytorch_code, save_project, or train it on a
-dataset (get_training_options, check_training, start_training, get_training_run).
+dataset (get_training_options, upload_dataset for a small CSV file, check_training,
+start_training, get_training_run). A finished run can predict new samples (predict) and
+its weights can be downloaded with a short-lived link (get_weights_download).
 Saved networks also appear in the user's Brick DNN web app."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
@@ -165,9 +179,9 @@ def _project(request: Request, args: dict[str, Any]) -> Project:
     return project
 
 
-def _run(request: Request, args: dict[str, Any]) -> TrainingRun:
+def _run(request: Request, args: dict[str, Any], key: str = "id") -> TrainingRun:
     try:
-        run = TrainingRun.objects.filter(owner=request.user, pk=args.get("id")).first()
+        run = visible_runs(request.user).filter(pk=args.get(key)).first()
     except (ValidationError, ValueError):
         run = None
     if run is None:
@@ -233,6 +247,7 @@ def save_project(request: Request, args: dict[str, Any]) -> Any:
         if not serializer.is_valid():
             raise ToolError(json.dumps(serializer.errors))
         project = serializer.save(owner=request.user, updated_by=request.user)
+        history.record(project, request.user)
         return _summary(project, request.user)
 
     project = _project(request, args)
@@ -250,6 +265,21 @@ def save_project(request: Request, args: dict[str, Any]) -> Any:
     return _summary(project, request.user)
 
 
+def delete_project(request: Request, args: dict[str, Any]) -> Any:
+    project = _project(request, args)
+    role = role_of(request.user, project)
+    if role != "owner":
+        raise ToolError(
+            f"Only its owner ({project.owner.get_username()}) can delete “{project.name}”; "
+            f"the user is {'an editor' if role == 'editor' else 'a viewer'} of it. To remove it "
+            "from their list, they can leave it in the Brick DNN web app (My networks → ⋯ → "
+            "Leave)."
+        )
+    deleted = {"deleted": True, "id": project.pk, "name": project.name}
+    remove_project(project)  # the same as in the web app: also closes it for live editors
+    return {**deleted, "note": "Training runs started in it are kept for who started them."}
+
+
 def get_training_options(request: Request, args: dict[str, Any]) -> Any:
     capabilities = training.capabilities()
     return {
@@ -257,13 +287,77 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "reason": capabilities["reason"],
         "devices": capabilities["devices"],
         "builtin_datasets": capabilities["builtin_datasets"],
+        # Your own datasets and the ones shared in your projects (see "owner" and "mine").
         "your_datasets": DatasetSerializer(
-            Dataset.objects.filter(owner=request.user), many=True
+            visible_datasets(request.user).select_related("owner", "prepared_from"),
+            many=True,
+            context={"user": request.user},
         ).data,
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
+        "upload_dataset_max_mb": _megabytes(upload_limit()),
+    }
+
+
+def upload_limit() -> int:
+    """Largest CSV text for upload_dataset, in bytes."""
+    limit = int(float(settings.MCP_UPLOAD_MAX_MB) * 1024 * 1024)
+    return max(0, min(limit, training.max_upload_bytes()))
+
+
+def _megabytes(size: int) -> float:
+    return round(size / 1024**2, 2)
+
+
+class _UploadScope:
+    """Uploads over MCP count against the same rate limit as in the web app."""
+
+    throttle_scope = "uploads"
+
+
+def upload_dataset(request: Request, args: dict[str, Any]) -> Any:
+    _require_training()
+    name, text = args["name"], args["csv"]
+    if not isinstance(name, str) or not name.strip():
+        raise ToolError("'name' must be a short text, e.g. 'Iris flowers'.")
+    if len(name.strip()) > 120:
+        raise ToolError("The name can be at most 120 characters long.")
+    if not isinstance(text, str) or not text.strip():
+        raise ToolError("'csv' must be the content of the CSV file as text.")
+    data = text.encode("utf-8")
+    limit = upload_limit()
+    if len(data) > limit:
+        raise ToolError(
+            f"The CSV text has {_megabytes(len(data))} MB, but upload_dataset takes at most "
+            f"{_megabytes(limit)} MB. Upload larger files in the Brick DNN web app instead."
+        )
+    project = None
+    if args.get("project_id") is not None:
+        project_id = args["project_id"]
+        if isinstance(project_id, bool) or not isinstance(project_id, int):
+            raise ToolError("'project_id' must be the number of a project.")
+        project = editable_projects(request.user).filter(pk=project_id).first()
+        if project is None:
+            raise ToolError(
+                "Datasets can only be shared in projects the user owns or edits; "
+                "list_projects shows the user's role in each project."
+            )
+    if not ScopedRateThrottle().allow_request(request, _UploadScope()):
+        raise ToolError("Too many datasets were uploaded recently. Try again later.")
+    # The same path as an upload in the web app: stored, inspected and listed the same way.
+    upload = SimpleUploadedFile("dataset.csv", data, content_type="text/csv")
+    try:
+        dataset = training.save_upload(request.user, upload, name)
+    except DatasetError as exc:
+        raise ToolError(f"The CSV file cannot be used: {exc}") from None
+    if project is not None:
+        dataset.projects.add(project)
+    return {
+        "dataset": DatasetSerializer(dataset, context={"user": request.user}).data,
+        "reference": {"kind": "upload", "id": dataset.pk},
+        "next": "Pass the reference as dataset to check_training and start_training.",
     }
 
 
@@ -295,6 +389,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
             args["dataset"],
             args.get("config"),
             args.get("tuning"),
+            args.get("project_id"),
         )
     except training.IncompatibleNetwork as exc:
         raise ToolError(json.dumps({"detail": str(exc), **exc.compatibility.to_dict()})) from None
@@ -308,7 +403,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
 
 
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
-    runs = TrainingRun.objects.filter(owner=request.user)
+    runs = visible_runs(request.user).select_related("owner")
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
     return RunSummarySerializer(runs, many=True).data
 
@@ -318,7 +413,76 @@ def get_training_run(request: Request, args: dict[str, Any]) -> Any:
 
 
 def stop_training(request: Request, args: dict[str, Any]) -> Any:
-    return RunSummarySerializer(training.stop_run(_run(request, args))).data
+    run = _run(request, args)
+    if not can_stop_run(request.user, run):
+        raise ToolError("Only who started it and the project's editors can stop it.")
+    return RunSummarySerializer(training.stop_run(run)).data
+
+
+def get_weights_download(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args)
+    if training.weights_path(run) is None:
+        raise ToolError(training.no_weights_reason(run))
+    return downloads.weights_info(request, run, request.user)
+
+
+class _PredictScope:
+    """Predictions over MCP count against the same rate limit as in the web app."""
+
+    throttle_scope = "predict"
+
+
+def predict(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args, "run_id")
+    try:
+        prediction = training.prepare_prediction(
+            run, args["inputs"], args.get("input_scale"), args.get("top_k")
+        )
+    except training.TrainingInputError as exc:
+        expected = training.describe_inputs(run)
+        raise ToolError(f"{exc}\nExpected inputs: {expected}" if expected else str(exc)) from None
+    except (training.TrainingUnavailable, training.PredictionUnavailable) as exc:
+        raise ToolError(str(exc)) from None
+    # Only calls that start a process count against the rate limit.
+    if not ScopedRateThrottle().allow_request(request, _PredictScope()):
+        raise ToolError("Too many predictions were made recently. Try again later.")
+    try:
+        return training.run_prediction(prediction)
+    except (training.TrainingBusy, training.PredictionFailed) as exc:
+        raise ToolError(str(exc)) from None
+
+
+def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args)
+    if not can_delete_run(request.user, run):
+        raise ToolError(
+            f"Only who started this run ({run.owner.get_username()}) and the owner of its "
+            "project can delete it."
+        )
+    deleted = {"deleted": True, "id": str(run.pk), "name": run.name}
+    was_active = run.status in ACTIVE_STATUSES
+    training.delete_run(run)
+    return {**deleted, "killed_running_training": was_active}
+
+
+def delete_dataset(request: Request, args: dict[str, Any]) -> Any:
+    dataset_id = _int_id(args, "a dataset")
+    dataset = visible_datasets(request.user).select_related("owner").filter(pk=dataset_id).first()
+    if dataset is None:
+        raise ToolError("No such dataset. get_training_options lists the user's datasets.")
+    if dataset.owner_id != request.user.pk:
+        raise ToolError(
+            f"Only its owner ({dataset.owner.get_username()}) can delete this dataset; it is "
+            "shared with the user in a project."
+        )
+    deleted = {"deleted": True, "id": dataset.pk, "name": dataset.name}
+    try:
+        training.delete_dataset(dataset)
+    except training.DatasetInUse as exc:
+        raise ToolError(
+            f"{exc} list_training_runs shows the running trainings; stop_training stops one."
+        ) from None
+    return deleted
 
 
 TOOLS: dict[str, Tool] = {
@@ -401,6 +565,18 @@ TOOLS: dict[str, Tool] = {
             destructive=True,
         ),
         Tool(
+            "delete_project",
+            "Delete a saved network",
+            "Delete a saved network for good, with its history and comments (only its owner "
+            "can; members are told how to leave it instead). Anyone editing it live in the web "
+            "app is disconnected; training runs started in it are kept. Ask the user first.",
+            delete_project,
+            {"id": {"type": "integer", "description": "Project id from list_projects"}},
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
             "get_training_options",
             "Show training options",
             "Whether training is available on this server, the built-in datasets and the "
@@ -408,6 +584,28 @@ TOOLS: dict[str, Tool] = {
             "(config) and the hyperparameter search options (tuning).",
             get_training_options,
             {},
+        ),
+        Tool(
+            "upload_dataset",
+            "Upload a CSV dataset",
+            "Store a small CSV file as one of the user's training datasets (the text of the "
+            "file; get_training_options shows the size limit). Comma-, semicolon- or "
+            "tab-separated, optionally with a header row; every column except the last is a "
+            "numeric feature, the last column is the target: numbers for regression, class "
+            "labels or class indices for classification. At least 4 rows. It is checked like "
+            'an upload in the web app; train on it with {"kind": "upload", "id": <id>}.',
+            upload_dataset,
+            {
+                "name": {"type": "string", "maxLength": 120, "description": "Dataset name"},
+                "csv": {"type": "string", "description": "Content of the CSV file"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "Also share it in this project (owner or editor), so that "
+                    "its members can train on it",
+                },
+            },
+            ("name", "csv"),
+            writes=True,
         ),
         Tool(
             "check_training",
@@ -432,6 +630,10 @@ TOOLS: dict[str, Tool] = {
                 "name": {"type": "string", "maxLength": 120},
                 "config": {"type": "object"},
                 "tuning": {"type": "object"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "Shared project to train in: its members see the run",
+                },
             },
             ("graph", "dataset"),
             writes=True,
@@ -459,6 +661,80 @@ TOOLS: dict[str, Tool] = {
             {"id": {"type": "string"}},
             ("id",),
             writes=True,
+        ),
+        Tool(
+            "get_weights_download",
+            "Get the trained weights",
+            "A download link for the trained weights of a finished or stopped run (a PyTorch "
+            "state_dict, .pt), valid for 15 minutes and usable without logging in: give it to "
+            "the user or fetch it with a tool that can download files. Also returns the "
+            "matching model code (class NeuralNetwork), how inputs were prepared during "
+            "training (feature order, normalisation, image size, class names) and a Python "
+            "snippet that loads the weights and predicts.",
+            get_weights_download,
+            {"id": {"type": "string", "description": "Run id from list_training_runs"}},
+            ("id",),
+        ),
+        Tool(
+            "predict",
+            "Predict with a trained network",
+            "Run the trained network of a finished or stopped run on up to "
+            f"{inference.MAX_SAMPLES} samples on the server. Classification: the most likely "
+            "class with its probability and the top_k classes; regression: the predicted "
+            "value in the units of the target column. Inputs of a network trained on a CSV "
+            "file: one row per sample, as an object {column: value} or a list of the feature "
+            "values in column order, raw as in the CSV file (they are standardised like in "
+            "training). Inputs of an image network: one image per sample as a nested array of "
+            "channels×height×width (grayscale also height×width) or in the shape of its Input "
+            "layer, with input_scale 'raw' (pixels 0–255), 'unit' (0–1) or 'normalized' "
+            "(already normalised like in training). Runs trained on demo data take arrays of "
+            "the Input shape as they are. get_weights_download describes a run's inputs.",
+            predict,
+            {
+                "run_id": {"type": "string", "description": "Run id from list_training_runs"},
+                "inputs": {
+                    "type": "array",
+                    "description": f"The samples, at most {inference.MAX_SAMPLES}",
+                },
+                "input_scale": {
+                    "type": "string",
+                    "enum": list(inference.INPUT_SCALES),
+                    "description": "How the values are given (required for image networks): "
+                    "'raw' as in the CSV file or image file (pixels 0–255), 'unit' for "
+                    "pixels in 0–1, 'normalized' if already prepared like in training",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": inference.MAX_TOP_K,
+                    "description": f"Classes listed per sample (default {inference.DEFAULT_TOP_K})",
+                },
+            },
+            ("run_id", "inputs"),
+        ),
+        Tool(
+            "delete_training_run",
+            "Delete a training run",
+            "Delete a training run with its trained weights and log for good; a training that "
+            "is still running is killed first. Only who started it and the owner of its "
+            "project can. Ask the user first.",
+            delete_training_run,
+            {"id": {"type": "string", "description": "Run id from list_training_runs"}},
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
+            "delete_dataset",
+            "Delete a dataset",
+            "Delete one of the user's own training datasets with its files for good. Not "
+            "possible while a training uses it, nor for datasets that others shared with the "
+            "user. Runs trained on it are kept. Ask the user first.",
+            delete_dataset,
+            {"id": {"type": "integer", "description": "Dataset id from get_training_options"}},
+            ("id",),
+            writes=True,
+            destructive=True,
         ),
     ]
 }
@@ -595,6 +871,10 @@ class McpView(APIView):
         version = request.headers.get("MCP-Protocol-Version")
         if version and version not in PROTOCOL_VERSIONS:
             return _json(_error(None, -32600, f"Unsupported protocol version: {version}"), 400)
+        limit = _body_limit()
+        if not _read_body(request, limit):
+            message = f"Request too large: MCP requests can have at most {_megabytes(limit)} MB."
+            return _json(_error(None, -32600, message), status=413)
         try:
             payload = request.data
         except ParseError as exc:
@@ -607,6 +887,39 @@ class McpView(APIView):
             return _json(answers) if answers else HttpResponse(status=202)
         answer = handle_message(request, payload)
         return _json(answer) if answer is not None else HttpResponse(status=202)
+
+
+def _body_limit() -> int | None:
+    """Largest MCP request in bytes: upload_dataset carries a CSV file as JSON text, which
+    escapes quotes and line breaks, so the usual limit for JSON requests is not enough."""
+    default = settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+    if default is None:
+        return None
+    return max(default, 2 * upload_limit() + 64 * 1024)
+
+
+def _read_body(request: Request, limit: int | None) -> bool:
+    """Read the body with the MCP limit instead of DATA_UPLOAD_MAX_MEMORY_SIZE. Called after
+    authentication, so only logged-in users can send large requests. False: too large.
+
+    Django checks DATA_UPLOAD_MAX_MEMORY_SIZE when ``request.body`` is first read; a body
+    that is already loaded is used as it is (by DRF's parsers too).
+    """
+    django_request = request._request
+    if limit is None or hasattr(django_request, "_body") or django_request._read_started:
+        return True
+    try:
+        length = int(django_request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > limit:
+        return False
+    body = django_request.read(limit + 1)
+    if len(body) > limit:
+        return False
+    django_request._body = body
+    django_request._stream = io.BytesIO(body)
+    return True
 
 
 def _origin_allowed(request: Request) -> bool:

@@ -210,9 +210,12 @@
   gap: 4px;
 }
 
+/* A fieldset (it disables the fields of read-only views): without the browser's frame. */
 .form {
+  min-inline-size: 0;
   margin: var(--mantine-spacing-sm) 0 var(--mantine-spacing-xs) 22px;
-  padding-top: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm) 0 0;
+  border: 0;
   border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
 }
 

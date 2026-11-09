@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   IconCopyPlus,
+  IconDatabase,
   IconDots,
   IconEdit,
   IconEye,
@@ -38,7 +39,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { projectDraft } from '@/builder/draft';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
 import { leaveProject, ROLE_LABELS } from '@/sharing/roles';
-import { ShareDialog } from '@/sharing/ShareDialog';
+import { ShareDialog, type ShareTab } from '@/sharing/ShareDialog';
 
 type Tab = 'mine' | 'shared';
 
@@ -53,7 +54,7 @@ export function ProjectsPage() {
   const tab: Tab = searchParams.get('tab') === 'shared' ? 'shared' : 'mine';
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sharing, setSharing] = useState<Project | null>(null);
+  const [sharing, setSharing] = useState<{ project: Project; tab: ShareTab } | null>(null);
 
   const load = useCallback(() => {
     api.projects
@@ -194,7 +195,8 @@ export function ProjectsPage() {
               project={project}
               username={user?.username ?? null}
               onOpen={() => open(project)}
-              onShare={() => setSharing(project)}
+              onShare={() => setSharing({ project, tab: 'people' })}
+              onShowData={() => setSharing({ project, tab: 'data' })}
               onRename={() => rename(project)}
               onDuplicate={() => void duplicate(project)}
               onDelete={() => remove(project)}
@@ -259,12 +261,13 @@ export function ProjectsPage() {
 
       {sharing && (
         <ShareDialog
-          project={sharing}
+          project={sharing.project}
+          initialTab={sharing.tab}
           onClose={() => setSharing(null)}
           onChange={({ shared, link_access, share_token }) =>
-            replaceProject({ id: sharing.id, shared, link_access, share_token })
+            replaceProject({ id: sharing.project.id, shared, link_access, share_token })
           }
-          onLeave={() => dropProject(sharing.id)}
+          onLeave={() => dropProject(sharing.project.id)}
         />
       )}
     </Container>
@@ -277,6 +280,8 @@ interface ProjectCardProps {
   username: string | null;
   onOpen: () => void;
   onShare: () => void;
+  /** Datasets and preparations shared in the network. */
+  onShowData: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -304,6 +309,9 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
             </Menu.Item>
             <Menu.Item leftSection={<IconUsersPlus size={14} />} onClick={actions.onShare}>
               Share…
+            </Menu.Item>
+            <Menu.Item leftSection={<IconDatabase size={14} />} onClick={actions.onShowData}>
+              Shared data…
             </Menu.Item>
             {project.role !== 'viewer' && (
               <Menu.Item leftSection={<IconPencil size={14} />} onClick={actions.onRename}>

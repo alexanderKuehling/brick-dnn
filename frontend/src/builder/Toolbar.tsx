@@ -30,10 +30,13 @@ import {
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
 import { DEMO } from '@/demo';
+import { LiveBadge } from '@/live/LiveBadge';
+import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
 import sharingClasses from '@/sharing/Sharing.module.css';
 import { progressLabel } from '@/training/format';
 import { formatCount } from './format';
+import classes from './Toolbar.module.css';
 
 interface ToolbarProps {
   name: string;
@@ -51,6 +54,10 @@ interface ToolbarProps {
   owner?: string | null;
   /** Everyone with access to a shared network, the owner first; null if it is not shared. */
   people?: string[] | null;
+  /** Live editing: who has the network open right now (usernames). */
+  here?: string[] | null;
+  /** Live editing: the network is saved as it changes, so a status replaces the save button. */
+  live?: LiveIndicator | null;
   onLoadExample: (example: Example) => void;
   onNew: () => void;
   onImport: () => void;
@@ -131,7 +138,8 @@ function Status({
 
 export function Toolbar(props: ToolbarProps) {
   const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
-  const { onShare, onDuplicate } = props;
+  const { onShare, onDuplicate, here = null, live = null } = props;
+  const canSave = !DEMO && !readOnly && !live;
 
   return (
     <Group
@@ -190,7 +198,7 @@ export function Toolbar(props: ToolbarProps) {
         {/* Phones show who has access next to the name; the share button is in the menu. */}
         {people && onShare && !readOnly && (
           <Box hiddenFrom="sm" className={sharingClasses.phoneAvatars}>
-            <PeopleAvatars names={people} max={2} onClick={onShare} />
+            <PeopleAvatars names={people} here={here} max={2} onClick={onShare} />
           </Box>
         )}
       </Group>
@@ -198,7 +206,7 @@ export function Toolbar(props: ToolbarProps) {
       <Group gap="xs" wrap="nowrap" ml="auto">
         {people && onShare && (
           <Box visibleFrom="sm">
-            <PeopleAvatars names={people} onClick={onShare} />
+            <PeopleAvatars names={people} here={here} max={here ? 5 : 3} onClick={onShare} />
           </Box>
         )}
         {onShare && (
@@ -234,7 +242,7 @@ export function Toolbar(props: ToolbarProps) {
                 Tidy up layout
               </Menu.Item>
             )}
-            {!DEMO && !readOnly && (
+            {canSave && (
               <Menu.Item
                 hiddenFrom="sm"
                 leftSection={<IconDeviceFloppy size={16} />}
@@ -285,7 +293,8 @@ export function Toolbar(props: ToolbarProps) {
           </Menu.Dropdown>
         </Menu>
 
-        {!DEMO && !readOnly && (
+        {live && <LiveBadge indicator={live} />}
+        {canSave && (
           <Tooltip label={isSaved ? 'Saved to your account' : 'Save to your account (Ctrl+S)'}>
             <ActionIcon
               variant="default"
@@ -334,9 +343,23 @@ export function Toolbar(props: ToolbarProps) {
         </Button>
         {!readOnly && <TrainButton run={props.trainingRun} onClick={props.onTrain} />}
         <Tooltip label="Download the PyTorch script (Ctrl+E)">
-          <Button leftSection={<IconDownload size={16} />} onClick={props.onExportPython}>
+          <Button
+            leftSection={<IconDownload size={16} />}
+            onClick={props.onExportPython}
+            className={classes.exportLabelled}
+          >
             Export .py
           </Button>
+        </Tooltip>
+        <Tooltip label="Export .py: download the PyTorch script">
+          <ActionIcon
+            size="lg"
+            onClick={props.onExportPython}
+            className={classes.exportIcon}
+            aria-label="Download the PyTorch script"
+          >
+            <IconDownload size={18} />
+          </ActionIcon>
         </Tooltip>
         <Tooltip label="Properties">
           <ActionIcon

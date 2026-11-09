@@ -1,10 +1,11 @@
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import {
   IconFileSpreadsheet,
   IconPhoto,
   IconTableShortcut,
   IconTrash,
   IconUpload,
+  IconUsers,
 } from '@tabler/icons-react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import {
@@ -24,6 +25,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Dataset, TrainingStatus } from '@/api';
+import { isOwnDataset } from './access';
 import { datasetDetails, formatSplit } from './format';
 import type { SourceChoice, SourceTab } from './settings';
 import classes from './Training.module.css';
@@ -40,6 +42,7 @@ interface DataSourcePickerProps {
   uploadError: string | null;
   onDismissUploadError: () => void;
   onUpload: (file: File) => void;
+  /** Only offered for the user's own datasets. */
   onDelete: (dataset: Dataset) => void;
 }
 
@@ -194,79 +197,143 @@ function Uploads({
 
       {datasets && datasets.length > 0 && (
         <Radio.Group
-          label="Your datasets"
+          aria-label="Datasets"
           value={choice.upload !== null ? String(choice.upload) : null}
           onChange={(id) => onChange({ ...choice, upload: Number(id) })}
         >
-          <Stack gap="xs" mt="xs">
-            {datasets.map((dataset) => (
-              <Group key={dataset.id} wrap="nowrap" gap="xs">
-                <Radio.Card
-                  value={String(dataset.id)}
-                  className={classes.card}
-                  withBorder
-                  style={{ flex: 1, minWidth: 0 }}
-                >
-                  <Group wrap="nowrap" gap="sm">
-                    <Radio.Indicator />
-                    <ThemeIcon
-                      variant="light"
-                      color={dataset.kind === 'csv' ? 'teal' : 'violet'}
-                      aria-hidden
-                    >
-                      {dataset.kind === 'csv' ? (
-                        <IconFileSpreadsheet size={16} />
-                      ) : (
-                        <IconPhoto size={16} />
-                      )}
-                    </ThemeIcon>
-                    <div style={{ minWidth: 0 }}>
-                      <Group gap={6} wrap="nowrap">
-                        <Text size="sm" fw={600} truncate>
-                          {dataset.name}
-                        </Text>
-                        {isPrepared(dataset) && (
-                          <Tooltip
-                            label={
-                              dataset.prepared_from
-                                ? `Made in the Data tab from “${dataset.prepared_from.name}”`
-                                : 'Made in the Data tab'
-                            }
-                          >
-                            <Badge size="xs" variant="light" color="teal" style={{ flexShrink: 0 }}>
-                              Prepared
-                            </Badge>
-                          </Tooltip>
-                        )}
-                      </Group>
-                      <Text size="xs" c="dimmed">
-                        {dataset.kind === 'csv' ? 'CSV' : 'Images'} · {datasetDetails(dataset)}
-                      </Text>
-                      {dataset.info.predefined_split && (
-                        <Text size="xs" c="dimmed">
-                          Split {formatSplit(dataset.info.predefined_split)} (training / validation
-                          / test)
-                        </Text>
-                      )}
-                    </div>
-                  </Group>
-                </Radio.Card>
-                <Tooltip label="Delete">
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    onClick={() => onDelete(dataset)}
-                    aria-label={`Delete ${dataset.name}`}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            ))}
-          </Stack>
+          <DatasetGroups datasets={datasets} onDelete={onDelete} />
         </Radio.Group>
       )}
     </>
+  );
+}
+
+/** The user's own datasets, then the ones others shared in the user's networks. */
+function DatasetGroups({
+  datasets,
+  onDelete,
+}: {
+  datasets: Dataset[];
+  onDelete: (dataset: Dataset) => void;
+}) {
+  const own = datasets.filter(isOwnDataset);
+  const shared = datasets.filter((dataset) => !isOwnDataset(dataset));
+  const ownHeading = useId();
+  const sharedHeading = useId();
+  return (
+    <Stack gap="xs">
+      <Text size="sm" fw={500} id={ownHeading}>
+        Your datasets
+      </Text>
+      {own.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          You have not uploaded any data yet.
+        </Text>
+      ) : (
+        <Stack gap="xs" role="group" aria-labelledby={ownHeading}>
+          {own.map((dataset) => (
+            <DatasetCard key={dataset.id} dataset={dataset} onDelete={onDelete} />
+          ))}
+        </Stack>
+      )}
+      {shared.length > 0 && (
+        <>
+          <Group gap={6} wrap="nowrap" mt="xs">
+            <IconUsers size={16} color="var(--mantine-color-dimmed)" aria-hidden />
+            <Text size="sm" fw={500} id={sharedHeading}>
+              Shared with you
+            </Text>
+          </Group>
+          <Stack gap="xs" role="group" aria-labelledby={sharedHeading}>
+            {shared.map((dataset) => (
+              <DatasetCard key={dataset.id} dataset={dataset} />
+            ))}
+          </Stack>
+        </>
+      )}
+    </Stack>
+  );
+}
+
+/** "by alice · shared in Churn" for a dataset of someone else. */
+function sharedByLine(dataset: Dataset): string {
+  const networks = dataset.shared_in.map((project) => `“${project.name}”`).join(', ');
+  return [`by ${dataset.owner}`, networks && `shared in ${networks}`].filter(Boolean).join(' · ');
+}
+
+function DatasetCard({
+  dataset,
+  onDelete,
+}: {
+  dataset: Dataset;
+  /** Without it, the dataset cannot be deleted here (it belongs to someone else). */
+  onDelete?: (dataset: Dataset) => void;
+}) {
+  const own = isOwnDataset(dataset);
+  return (
+    <Group wrap="nowrap" gap="xs">
+      <Radio.Card
+        value={String(dataset.id)}
+        className={classes.card}
+        withBorder
+        style={{ flex: 1, minWidth: 0 }}
+        aria-label={own ? dataset.name : `${dataset.name}, ${sharedByLine(dataset)}`}
+      >
+        <Group wrap="nowrap" gap="sm">
+          <Radio.Indicator />
+          <ThemeIcon variant="light" color={dataset.kind === 'csv' ? 'teal' : 'violet'} aria-hidden>
+            {dataset.kind === 'csv' ? <IconFileSpreadsheet size={16} /> : <IconPhoto size={16} />}
+          </ThemeIcon>
+          <div style={{ minWidth: 0 }}>
+            <Group gap={6} wrap="nowrap">
+              <Text size="sm" fw={600} truncate>
+                {dataset.name}
+              </Text>
+              {isPrepared(dataset) && (
+                <Tooltip
+                  label={
+                    dataset.prepared_from
+                      ? `Made in the Data tab from “${dataset.prepared_from.name}”`
+                      : 'Made in the Data tab'
+                  }
+                >
+                  <Badge size="xs" variant="light" color="teal" style={{ flexShrink: 0 }}>
+                    Prepared
+                  </Badge>
+                </Tooltip>
+              )}
+            </Group>
+            {!own && (
+              <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                {sharedByLine(dataset)}
+              </Text>
+            )}
+            <Text size="xs" c="dimmed">
+              {dataset.kind === 'csv' ? 'CSV' : 'Images'} · {datasetDetails(dataset)}
+            </Text>
+            {dataset.info.predefined_split && (
+              <Text size="xs" c="dimmed">
+                Split {formatSplit(dataset.info.predefined_split)} (training / validation / test)
+              </Text>
+            )}
+          </div>
+        </Group>
+      </Radio.Card>
+      {onDelete && own ? (
+        <Tooltip label="Delete">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={() => onDelete(dataset)}
+            aria-label={`Delete ${dataset.name}`}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Tooltip>
+      ) : (
+        <span className={classes.actionSpace} aria-hidden />
+      )}
+    </Group>
   );
 }
 

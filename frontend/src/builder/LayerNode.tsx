@@ -2,6 +2,8 @@ import { memo } from 'react';
 import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Text, Tooltip } from '@mantine/core';
+import { CommentMarker } from '@/comments/CommentMarker';
+import { useRemoteSelection } from '@/live/presence';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
 import { formatCount, formatShape, summarize } from './format';
@@ -9,16 +11,19 @@ import type { LayerFlowNode } from './graph';
 import classes from './LayerNode.module.css';
 
 function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
-  const { specs, analysis, errorsByNode, warningsByNode } = useBuilder();
+  const { specs, analysis, errorsByNode, warningsByNode, presence } = useBuilder();
   const spec = specs[data.type];
   const info = analysis?.nodes[id];
   const errors = errorsByNode[id] ?? [];
   const warnings = warningsByNode[id] ?? [];
   const color = categoryColor(spec?.category);
   const params = info?.params ?? data.params;
+  // Live editing: others who have this layer selected (outline and name tag in their colour).
+  const remote = useRemoteSelection(presence ?? null, id);
 
   const style = {
     '--node-color': `var(--mantine-color-${color}-6)`,
+    ...(remote.length > 0 ? { '--remote-color': `var(--mantine-color-${remote[0].color}-6)` } : {}),
   } as React.CSSProperties;
 
   return (
@@ -27,8 +32,15 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
       style={style}
       data-selected={selected || undefined}
       data-error={errors.length > 0 || undefined}
+      data-remote={remote.length > 0 || undefined}
       data-testid={`layer-${data.type}`}
     >
+      {remote.length > 0 && (
+        <span className={classes.remoteTag} title={remote.map((p) => p.username).join(', ')}>
+          {remote[0].username}
+          {remote.length > 1 && ` +${remote.length - 1}`}
+        </span>
+      )}
       {spec?.max_inputs !== 0 && (
         <Handle type="target" position={Position.Left} className={classes.handle} />
       )}
@@ -50,6 +62,7 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
             <IconInfoCircle size={16} color="var(--mantine-color-yellow-7)" aria-label="Warning" />
           </Tooltip>
         )}
+        <CommentMarker nodeId={id} />
       </div>
       <div className={classes.body}>
         <Text size="sm" c="dimmed" truncate="end">

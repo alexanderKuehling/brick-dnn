@@ -2,10 +2,9 @@ import json
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
-from django.utils.text import slugify
 from rest_framework import mixins, permissions, renderers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -18,6 +17,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
+from . import downloads, shared_data
 from . import training_service as training
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .models import ApiToken, Dataset, TrainingRun
@@ -223,7 +223,15 @@ class DatasetViewSet(
     throttle_scope = "uploads"
 
     def get_queryset(self):
-        return Dataset.objects.filter(owner=self.request.user).select_related("prepared_from")
+        # Your own datasets and the ones shared in your projects; only your own can be
+        # deleted.
+        user = self.request.user
+        datasets = (
+            Dataset.objects.filter(owner=user)
+            if self.action == "destroy"
+            else shared_data.visible_datasets(user)
+        )
+        return datasets.select_related("prepared_from", "owner")
 
     def get_throttles(self):
         throttles = super().get_throttles()
@@ -263,14 +271,16 @@ class DatasetViewSet(
             )
         except DatasetError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(DatasetSerializer(dataset).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DatasetSerializer(dataset, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     def perform_destroy(self, instance: Dataset) -> None:
-        if training.dataset_in_use(instance):
-            raise Conflict(
-                "This dataset is used by a training that is still running. Stop it first."
-            )
-        instance.delete()  # the files are removed by a post_delete signal
+        try:
+            training.delete_dataset(instance)
+        except training.DatasetInUse as exc:
+            raise Conflict(str(exc)) from None
 
 
 class TrainingRunViewSet(
@@ -279,13 +289,18 @@ class TrainingRunViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Training runs of the logged-in user. Training happens in a separate process."""
+    """Training runs of the logged-in user and of their shared projects (``?project=<id>``).
+    Training happens in a separate process."""
 
     permission_classes = [permissions.IsAuthenticated]
     throttle_scope = "training"
 
     def get_queryset(self):
-        return TrainingRun.objects.filter(owner=self.request.user)
+        runs = shared_data.visible_runs(self.request.user).select_related("owner")
+        project = self.request.query_params.get("project")
+        if project is not None and project.isdigit():
+            runs = runs.filter(project_id=int(project))
+        return runs
 
     def get_serializer_class(self):
         return RunSummarySerializer if self.action == "list" else RunDetailSerializer
@@ -304,7 +319,9 @@ class TrainingRunViewSet(
         return super().list(request, *args, **kwargs)
 
     def create(self, request: Request) -> Response:
-        """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?}``."""
+        """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?, "project"?}``.
+
+        With ``project`` (a project you own or edit), the run belongs to that project too."""
         data = request.data if isinstance(request.data, dict) else {}
         try:
             run = training.start_run(
@@ -314,6 +331,7 @@ class TrainingRunViewSet(
                 data.get("dataset"),
                 data.get("config"),
                 data.get("tuning"),
+                data.get("project"),
             )
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -330,36 +348,88 @@ class TrainingRunViewSet(
         return Response(RunDetailSerializer(run).data, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance: TrainingRun) -> None:
-        training.terminate_run(instance)
-        instance.delete()  # the run directory is removed by a post_delete signal
+        if not shared_data.can_delete_run(self.request.user, instance):
+            raise PermissionDenied("Only who started it and the project's owner can delete it.")
+        training.delete_run(instance)
 
     @action(detail=True, methods=["post"])
     def stop(self, request: Request, pk=None) -> Response:
         """Stop after the current batch; the weights trained so far are kept."""
-        run = training.stop_run(self.get_object())
+        run = self.get_object()
+        if not shared_data.can_stop_run(request.user, run):
+            raise PermissionDenied("Only who started it and the project's editors can stop it.")
+        run = training.stop_run(run)
         return Response(RunDetailSerializer(run).data)
+
+    @action(detail=True, methods=["post"], throttle_scope="predict")
+    def predict(self, request: Request, pk=None) -> Response:
+        """Run the trained network on a few inputs: ``{"inputs", "input_scale"?, "top_k"?}``
+        (see brickdnn.training.inference). Everyone who can see the run may."""
+        run = self.get_object()
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            prediction = training.prepare_prediction(
+                run, data.get("inputs"), data.get("input_scale"), data.get("top_k")
+            )
+        except training.TrainingUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except training.TrainingInputError as exc:
+            return Response(
+                {"detail": str(exc), "inputs": training.describe_inputs(run)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except training.PredictionUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        # Only requests that start a process count against the rate limit.
+        throttle = ScopedRateThrottle()
+        if not throttle.allow_request(request, self):
+            self.throttled(request, throttle.wait())
+        try:
+            return Response(training.run_prediction(prediction))
+        except training.TrainingBusy as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "5"},
+            )
+        except training.PredictionFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(
         detail=True,
         methods=["get"],
         renderer_classes=[renderers.JSONRenderer, BinaryRenderer],
+        permission_classes=[permissions.AllowAny],  # checked below: login or signed link
     )
     def weights(self, request: Request, pk=None) -> Response | FileResponse:
-        """The trained weights (``model.state_dict()``) as a ``.pt`` file."""
-        run = self.get_object()
+        """The trained weights (``model.state_dict()``) as a ``.pt`` file.
+
+        Logged in, or with ``?sig=`` from a download link (see downloads.py), which works
+        without logging in until it expires.
+        """
+        signature = request.query_params.get("sig")
+        if signature is not None:
+            run = downloads.run_for_link(signature, pk)
+        elif not request.user.is_authenticated:
+            raise NotAuthenticated()
+        else:
+            run = self.get_object()
         path = training.weights_path(run)
         if path is None:
             return Response(
                 {"detail": "No weights available for this run."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        filename = (slugify(run.name) or "weights") + ".pt"
-        return FileResponse(
+        response = FileResponse(
             path.open("rb"),
             as_attachment=True,
-            filename=filename,
+            filename=training.weights_filename(run),
             content_type="application/octet-stream",
         )
+        if signature is not None:
+            response["Cache-Control"] = "private, no-store"
+            response["Referrer-Policy"] = "no-referrer"
+        return response
 
 
 class ApiRoot(APIView):

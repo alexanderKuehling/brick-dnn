@@ -11,3 +11,7 @@ psycopg[binary]>=3.2,<4
 # Data preparation (the Data tab): reading, cleaning and analysing CSV files.
 numpy>=1.24
 pandas>=2.2,<3
+# Live editing over WebSockets (Django Channels; Redis connects the server processes).
+channels>=4.2,<5
+channels-redis>=4.2,<5
+daphne>=4.1,<5

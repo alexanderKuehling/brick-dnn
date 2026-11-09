@@ -986,6 +986,9 @@ export const PREP: DataPrep = {
   datasets: [],
   created_at: '2026-11-07T10:00:00Z',
   updated_at: '2026-11-07T10:05:00Z',
+  owner: 'ada',
+  role: 'owner',
+  shared_in: [],
 };
 
 export const PREVIEW: PreviewResult = {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { IconAlertTriangle, IconCheck, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react';
 import { Anchor, Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { DataWarning, NewStep } from '@/api/types';
+import { usePrepAccess } from '../prepAccess';
 
 export interface WarningListProps {
   warnings: DataWarning[];
@@ -23,6 +24,8 @@ export function WarningList({
   onShowColumn,
   emptyText,
 }: WarningListProps) {
+  // Viewers of a shared preparation see the warnings without their fixes.
+  const { readOnly } = usePrepAccess();
   const [added, setAdded] = useState<{ resetKey: unknown; keys: Set<string> }>({
     resetKey,
     keys: new Set(),
@@ -83,7 +86,7 @@ export function WarningList({
                   </Group>
                 </Stack>
               </Group>
-              {warning.fix && (
+              {warning.fix && !readOnly && (
                 <Button
                   size="compact-sm"
                   variant="light"

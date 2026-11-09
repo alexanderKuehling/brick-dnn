@@ -1,0 +1,41 @@
+/* Below the app header; on wide screens exactly over the inspector column. */
+.drawerInner {
+  top: var(--collab-top, 0);
+}
+
+/* The tabs and the close button stay on top while the panel scrolls. */
+.panelHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 4px 8px 0 4px;
+  background: var(--mantine-color-body);
+}
+
+.tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.close {
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+
+  & > button {
+    padding-inline: 10px;
+    box-shadow: var(--mantine-shadow-xs);
+  }
+}
+
+.buttonLabel {
+  margin-left: 6px;
+}

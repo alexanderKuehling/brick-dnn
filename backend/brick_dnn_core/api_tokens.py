@@ -28,7 +28,13 @@ LAST_USED_INTERVAL = timedelta(minutes=1)
 # POST endpoints that change nothing: read-only tokens may use them.
 MCP_URL_NAMES = {"mcp", "mcp-no-slash"}
 # The MCP server itself only offers read-only tokens the tools that change nothing.
-READ_ONLY_POSTS = {"analyze", "generate", "training-check", *MCP_URL_NAMES}
+READ_ONLY_POSTS = {
+    "analyze",
+    "generate",
+    "training-check",
+    "training-run-predict",
+    *MCP_URL_NAMES,
+}
 
 
 def hash_key(key: str) -> str:

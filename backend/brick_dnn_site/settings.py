@@ -62,6 +62,8 @@ CORS_ALLOWED_ORIGINS = env_list(
 )
 
 INSTALLED_APPS = [
+    # First: `manage.py runserver` then also serves WebSockets (live editing).
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -137,6 +139,21 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # A file cache is shared by all gunicorn workers, so rate limits are counted correctly.
+# Live editing (brick_dnn_core.live). Several server processes need Redis to reach each other;
+# without REDIS_URL, messages stay inside one process (fine for `manage.py runserver`).
+ASGI_APPLICATION = "brick_dnn_site.asgi.application"
+REDIS_URL = os.environ.get("REDIS_URL", "")
+CHANNEL_LAYERS = {
+    "default": (
+        {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL], "capacity": 500, "expiry": 30},
+        }
+        if REDIS_URL
+        else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    )
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
@@ -159,6 +176,15 @@ TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.
 # None means [sys.executable, "-m", "brickdnn.training.runner"] (tests use a fake runner).
 TRAINING_RUNNER_COMMAND: list[str] | None = None
+# Predictions with trained weights run in a separate process too, at most this many at the
+# same time (counted across all users). The command gets the run directory as its last
+# argument; None means [sys.executable, "-m", "brickdnn.training.predict"].
+TRAINING_MAX_PREDICTIONS = int(os.environ.get("BRICKDNN_MAX_PREDICTIONS", "1"))
+TRAINING_PREDICT_COMMAND: list[str] | None = None
+# Largest CSV text that AI assistants can upload with the MCP tool upload_dataset, in MB (at
+# most BRICKDNN_MAX_UPLOAD_MB). The MCP endpoint accepts requests of about twice this size
+# (JSON escapes the text), unlike other JSON requests (DATA_UPLOAD_MAX_MEMORY_SIZE).
+MCP_UPLOAD_MAX_MB = float(os.environ.get("BRICKDNN_MCP_UPLOAD_MB", "5"))
 
 # Data preparation (the Data tab, needs pandas): imported CSV files and their tables live in
 # DATA_PREP_DIR. Uploads are limited by DATA_MAX_UPLOAD_MB.
@@ -199,6 +225,8 @@ REST_FRAMEWORK = {
         "auth": os.environ.get("BRICKDNN_AUTH_RATE", "20/minute"),
         "training": os.environ.get("BRICKDNN_TRAINING_RATE", "120/hour"),
         "uploads": os.environ.get("BRICKDNN_UPLOAD_RATE", "60/hour"),
+        # Predictions with trained weights (each one starts a process that loads PyTorch).
+        "predict": os.environ.get("BRICKDNN_PREDICT_RATE", "120/hour"),
         # Previews of data preparations (one per change in the Data tab).
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
         # Requests to the MCP server (one per tool call of an AI assistant).

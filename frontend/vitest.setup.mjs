@@ -26,3 +26,10 @@ class ResizeObserver {
 }
 
 window.ResizeObserver = ResizeObserver;
+
+// Textareas that grow with their text listen for loaded fonts.
+if (!document.fonts) {
+  Object.defineProperty(document, 'fonts', {
+    value: { addEventListener() {}, removeEventListener() {} },
+  });
+}

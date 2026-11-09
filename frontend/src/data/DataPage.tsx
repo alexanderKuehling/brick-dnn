@@ -50,12 +50,14 @@ import { useAuth } from '@/auth/AuthContext';
 import { downloadBlob } from '@/builder/download';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
+import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
 import { describeReport, ImportDialog, tableSize } from './ImportDialog';
 import { PipelineEditor } from './pipeline/PipelineEditor';
+import { accessOf, PrepAccessContext, prepRole } from './prepAccess';
 import { PrepSidebar } from './PrepSidebar';
-import { PrepToolbar, type ToolbarAction } from './PrepToolbar';
+import { PrepToolbar, type SharedPrep, type ToolbarAction } from './PrepToolbar';
 import { ReadinessPanel } from './readiness/ReadinessPanel';
 import { firstFailedStep, stepSpec } from './steps';
 import { DataTable } from './table/DataTable';
@@ -325,10 +327,36 @@ function Workspace({ resources, status }: WorkspaceProps) {
   }, []);
 
   const loaded = prep.prep;
-  const source = useMemo(
-    () => sources?.find((s) => s.id === loaded?.source) ?? null,
-    [sources, loaded?.source]
+  const [sharingPrep, setSharingPrep] = useState<DataPrep | null>(null);
+  // The source of a preparation shared with the user is not in their own list.
+  const sourceId = loaded?.source ?? null;
+  const listedSource = useMemo(
+    () => sources?.find((s) => s.id === sourceId) ?? null,
+    [sources, sourceId]
   );
+  const foreign = loaded !== null && prepRole(loaded) !== 'owner';
+  const [foreignSource, setForeignSource] = useState<DataSource | null>(null);
+  useEffect(() => {
+    if (!foreign || sourceId === null || listedSource) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    api.data.sources
+      .get(sourceId, controller.signal)
+      .then((result) => !controller.signal.aborted && setForeignSource(result))
+      .catch(() => undefined); // The table details (rows, columns) are missing then.
+    return () => controller.abort();
+  }, [foreign, sourceId, listedSource]);
+  const source = listedSource ?? (foreignSource?.id === sourceId ? foreignSource : null);
+  const access = useMemo(() => accessOf(loaded), [loaded?.role, loaded?.owner]);
+  const shared: SharedPrep | null =
+    loaded && prepRole(loaded) !== 'owner'
+      ? {
+          owner: loaded.owner,
+          role: prepRole(loaded) === 'editor' ? 'editor' : 'viewer',
+          projects: loaded.shared_in,
+        }
+      : null;
 
   // ---------------------------------------------------------------- navigation state
   useEffect(() => {
@@ -651,7 +679,10 @@ function Workspace({ resources, status }: WorkspaceProps) {
         message: (
           <>
             <Text size="sm">
-              “{dataset.name}” is listed under “Your data” in the training panel.
+              “{dataset.name}” is listed under “Your data” in the training panel
+              {dataset.mine === false &&
+                ` (shared with you: it belongs to ${dataset.owner}, like the preparation)`}
+              .
             </Text>
             <Button
               size="compact-xs"
@@ -738,6 +769,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
       onRenamePrep={renamePrep}
       onDuplicatePrep={duplicatePrep}
       onDeletePrep={deletePrep}
+      onSharePrep={setSharingPrep}
       onSourceRenamed={sourceRenamed}
       onSourceDeleted={dropSource}
     />
@@ -768,7 +800,8 @@ function Workspace({ resources, status }: WorkspaceProps) {
       );
     } else if (preps.length > 0) {
       const last = readLastPrep();
-      const target = preps.find((p) => p.id === last) ?? preps[0];
+      const target =
+        preps.find((p) => p.id === last) ?? preps.find((p) => prepRole(p) === 'owner') ?? preps[0];
       main = <Navigate replace to={`/data/${target.id}`} />;
     } else {
       main = (
@@ -801,8 +834,9 @@ function Workspace({ resources, status }: WorkspaceProps) {
     );
   } else {
     main = (
-      <>
+      <PrepAccessContext.Provider value={access}>
         <PrepToolbar
+          shared={shared}
           name={prep.name}
           onNameChange={prep.setName}
           source={source}
@@ -821,6 +855,8 @@ function Workspace({ resources, status }: WorkspaceProps) {
           prep={prep}
           resources={resources}
           source={source}
+          // Combine steps read the owner's tables: others only see the main one.
+          editorSources={foreign ? (source ? [source] : []) : (sources ?? [])}
           split={split}
           view={view}
           visited={visited}
@@ -833,7 +869,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
           onExport={() => void exportDataset('notify')}
           exporting={busy === 'export'}
         />
-      </>
+      </PrepAccessContext.Provider>
     );
   }
 
@@ -866,6 +902,18 @@ function Workspace({ resources, status }: WorkspaceProps) {
           maxUploadMb={status.max_upload_mb}
           currentPrepName={loaded ? prep.name : null}
           onImported={onImported}
+        />
+      )}
+      {sharingPrep && (
+        <ShareInNetworkDialog
+          kind="prep"
+          item={sharingPrep}
+          datasets={sharingPrep.datasets}
+          onClose={() => setSharingPrep(null)}
+          onChange={(sharedIn) => {
+            const listed = preps?.find((p) => p.id === sharingPrep.id) ?? sharingPrep;
+            putPrep({ ...listed, shared_in: sharedIn });
+          }}
         />
       )}
       {dragging && (
@@ -957,6 +1005,8 @@ interface PrepContentProps {
   prep: DataPrepController;
   resources: DataResources;
   source: DataSource | null;
+  /** The tables combine steps can choose from. */
+  editorSources: DataSource[];
   /** Editor and results side by side (otherwise as tabs). */
   split: boolean;
   view: View;
@@ -1002,7 +1052,7 @@ function PrepContent(props: PrepContentProps) {
       onSettingsChange={prep.setSettings}
       reports={prep.reports}
       sourceColumns={sourceColumns}
-      sources={resources.sources ?? []}
+      sources={props.editorSources}
       currentSourceId={prep.prep!.source}
       upto={prep.upto}
       onUptoChange={prep.setUpto}

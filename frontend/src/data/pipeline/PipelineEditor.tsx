@@ -10,6 +10,7 @@ import type {
   StepReport,
   StepSpec,
 } from '@/api/types';
+import { usePrepAccess } from '../prepAccess';
 import { columnsBefore, finalColumns, insertStep, stepSpec } from '../steps';
 import { AddStepMenu } from './AddStepMenu';
 import { StepCard } from './StepCard';
@@ -60,6 +61,8 @@ export function PipelineEditor({
   splitCounts,
 }: PipelineEditorProps) {
   const headingId = useId();
+  // Viewers of a shared preparation look at the steps; others only use the main table.
+  const { readOnly, sharedBy } = usePrepAccess();
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [added, setAdded] = useState<string | null>(null);
   const [deleted, setDeleted] = useState<{ step: PipelineStep; index: number } | null>(null);
@@ -135,7 +138,11 @@ export function PipelineEditor({
       catalog={catalog}
       onAdd={addStep}
       combineDisabled={
-        hasOtherSources ? null : 'Import another table first to combine it with this one.'
+        sharedBy
+          ? `Combining tables needs other tables of ${sharedBy}: only they can add these steps.`
+          : hasOtherSources
+            ? null
+            : 'Import another table first to combine it with this one.'
       }
       disabled={limit}
       buttonProps={
@@ -152,6 +159,7 @@ export function PipelineEditor({
         columns={finalColumns(steps, reports, sourceColumns)}
         task={task}
         splitCounts={splitCounts}
+        readOnly={readOnly}
       />
 
       <section aria-labelledby={headingId} aria-busy={previewing}>
@@ -174,7 +182,7 @@ export function PipelineEditor({
               )}
             </span>
           </Group>
-          {addMenu(false)}
+          {!readOnly && addMenu(false)}
         </Group>
 
         {uptoIndex >= 0 && (
@@ -217,11 +225,13 @@ export function PipelineEditor({
             <Text size="sm" fw={500}>
               No steps yet
             </Text>
-            <Text size="sm" c="dimmed" mt={4}>
-              Add steps to clean and transform the data, e.g. fill missing values, clip outliers or
-              encode categories. The column menus of the data table and the Readiness tab suggest
-              steps, too.
-            </Text>
+            {!readOnly && (
+              <Text size="sm" c="dimmed" mt={4}>
+                Add steps to clean and transform the data, e.g. fill missing values, clip outliers
+                or encode categories. The column menus of the data table and the Readiness tab
+                suggest steps, too.
+              </Text>
+            )}
           </Paper>
         ) : (
           <ol className={classes.stepList}>
@@ -248,12 +258,13 @@ export function PipelineEditor({
                 onPreviewToggle={() => onUptoChange(upto === step.id ? null : step.id)}
                 previewing={previewing}
                 scrollIntoView={added === step.id}
+                readOnly={readOnly}
               />
             ))}
           </ol>
         )}
 
-        {steps.length >= 3 && <div className={classes.addBottom}>{addMenu(true)}</div>}
+        {steps.length >= 3 && !readOnly && <div className={classes.addBottom}>{addMenu(true)}</div>}
       </section>
     </Stack>
   );

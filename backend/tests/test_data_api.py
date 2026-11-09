@@ -56,6 +56,10 @@ PREP_KEYS = {
     "datasets",
     "created_at",
     "updated_at",
+    # Sharing in projects (see shared_data.py).
+    "owner",
+    "role",
+    "shared_in",
 }
 
 

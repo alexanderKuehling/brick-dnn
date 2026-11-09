@@ -238,6 +238,33 @@ export interface ShareLink {
   share_token: string | null;
 }
 
+/** A project as other objects refer to it. */
+export interface ProjectRef {
+  id: number;
+  name: string;
+}
+
+export type ProjectDataKind = 'dataset' | 'prep';
+
+/** A training dataset or data preparation shared in a project. */
+export interface ProjectDataItem {
+  id: number;
+  name: string;
+  /** Username of the owner. */
+  owner: string;
+  created_at: string;
+  /** Datasets only. */
+  kind?: 'csv' | 'images';
+  /** Datasets only. */
+  size_bytes?: number;
+}
+
+/** GET /api/projects/<id>/data/: what is shared in a project, by name. */
+export interface ProjectData {
+  datasets: ProjectDataItem[];
+  preps: ProjectDataItem[];
+}
+
 /** A network opened through its share link (no login needed). */
 export interface SharedNetwork {
   name: string;
@@ -246,6 +273,65 @@ export interface SharedNetwork {
   /** Username of the owner. */
   owner: string;
   updated_at: string;
+}
+
+// --------------------------------------------------------------------------
+// History and comments of saved networks
+// --------------------------------------------------------------------------
+
+/**
+ * auto: kept after a change (changes by the same person within ten minutes update the same
+ * entry) · named: named by someone, kept for good · restore: an older version made current.
+ */
+export type VersionKind = 'auto' | 'named' | 'restore';
+
+/** An entry in the history of a project (GET /api/projects/<id>/versions/, newest first). */
+export interface ProjectVersion {
+  id: number;
+  /** The project's `version` this entry holds. */
+  version: number;
+  kind: VersionKind;
+  /** The name of named versions; "Restored …" for restores; empty for automatic entries. */
+  label: string;
+  /** The network's name at that time. */
+  name: string;
+  num_layers: number;
+  /** Username of who made the change (or named it); null if the account was deleted. */
+  created_by: string | null;
+  created_at: string;
+  /** The last change merged into this entry. */
+  updated_at: string;
+}
+
+/** One version with its content (GET /api/projects/<id>/versions/<vid>/). */
+export interface ProjectVersionDetail extends ProjectVersion {
+  description: string;
+  graph: GraphDocument;
+}
+
+/** A comment on a project or on one of its layers; replies have a `parent` (one level). */
+export interface ProjectComment {
+  id: number;
+  /** The first comment of the thread; null for the first comment itself. */
+  parent: number | null;
+  /** The layer the thread is about; empty for comments on the whole network. */
+  node_id: string;
+  text: string;
+  author: UserRef;
+  /** Set on the first comment of a thread. */
+  resolved: boolean;
+  /** Username of who resolved the thread. */
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentInput {
+  text: string;
+  /** The layer to comment on (new threads only; replies belong to the layer of their thread). */
+  node_id?: string;
+  /** Reply to this thread. */
+  parent?: number;
 }
 
 // --------------------------------------------------------------------------
@@ -332,6 +418,12 @@ export interface Dataset {
   info: DatasetInfo;
   /** The data preparation (Data tab) this dataset was created from, if any. */
   prepared_from?: { id: number; name: string } | null;
+  /** Username of the owner: datasets shared in the user's projects belong to others. */
+  owner: string;
+  /** Owned by the current user (only they can delete it and share it further). */
+  mine: boolean;
+  /** Projects it is shared in (those the current user can see), by name. */
+  shared_in: ProjectRef[];
 }
 
 export type DatasetRef =
@@ -539,6 +631,10 @@ export interface RunSummary {
   total_params: number | null;
   created_at: string;
   finished_at: string | null;
+  /** The project (saved network) it was started in; its members see it. */
+  project: number | null;
+  /** Username of who started it. */
+  started_by: string;
 }
 
 /** One finished epoch. Accuracies are null for regression, which reports val_rmse instead. */
@@ -618,6 +714,8 @@ export interface RunInput {
   config: Partial<TrainingConfig>;
   /** A hyperparameter search instead of a single training. */
   tuning?: TuningInput;
+  /** Train in this project (owner or editor of it): its members see the run. */
+  project?: number;
 }
 
 // --------------------------------------------------------------------------
@@ -812,6 +910,15 @@ export interface DataPrep {
   datasets: { id: number; name: string; created_at: string }[];
   created_at: string;
   updated_at: string;
+  /** Username of the owner. */
+  owner: string;
+  /**
+   * owner: may do everything · editor (shared in a project the user edits): may change the
+   * steps and settings (not the source) and export · viewer: may look, preview and download.
+   */
+  role: ProjectRole;
+  /** Projects it is shared in (those the current user can see), by name. */
+  shared_in: ProjectRef[];
 }
 
 export type DataPrepInput = Pick<DataPrep, 'name' | 'source'> &

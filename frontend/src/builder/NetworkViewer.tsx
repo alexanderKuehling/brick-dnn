@@ -32,21 +32,27 @@ import { Inspector } from './Inspector';
 import { useAnalysis } from './useAnalysis';
 import { useCatalog } from './useCatalog';
 
+interface NetworkViewerProps {
+  doc: GraphDocument;
+  /** Tips in the inspector while no layer is selected (default: those for shared networks). */
+  tips?: React.ReactNode[];
+}
+
 /**
  * A network on the canvas, read only: layers can be selected to see their settings, but not
  * moved or changed. Draws layers like the builder (same nodes, analysis and inspector).
  */
-export function NetworkViewer({ doc }: { doc: GraphDocument }) {
+export function NetworkViewer({ doc, tips }: NetworkViewerProps) {
   return (
     <ReactFlowProvider>
-      <Viewer doc={doc} />
+      <Viewer doc={doc} tips={tips} />
     </ReactFlowProvider>
   );
 }
 
 const noop = () => undefined;
 
-function Viewer({ doc }: { doc: GraphDocument }) {
+function Viewer({ doc, tips }: NetworkViewerProps) {
   const { catalog, error, reload } = useCatalog();
   const { analysis } = useAnalysis(doc);
   const flow = useReactFlow<LayerFlowNode, Edge>();
@@ -131,7 +137,7 @@ function Viewer({ doc }: { doc: GraphDocument }) {
     );
   }
 
-  const inspectorView = <Inspector node={selected} nodes={nodes} />;
+  const inspectorView = <Inspector node={selected} nodes={nodes} tips={tips} />;
 
   return (
     <BuilderContext.Provider value={context}>

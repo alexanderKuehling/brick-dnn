@@ -1,0 +1,15 @@
+/*
+ * "Export .py" with its label, and as an icon on the narrowest phones (below 384px), where
+ * the buttons next to it (File, live status, Train, Properties) take the rest of the row.
+ */
+.exportLabelled {
+  @media (max-width: 23.99em) {
+    display: none;
+  }
+}
+
+.exportIcon {
+  @media (min-width: 24em) {
+    display: none;
+  }
+}

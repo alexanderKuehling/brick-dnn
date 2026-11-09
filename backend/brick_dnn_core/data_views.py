@@ -8,11 +8,11 @@ preparation is switched off or pandas is not installed.
 from __future__ import annotations
 
 from django.conf import settings
-from django.db.models import Prefetch, RestrictedError
+from django.db.models import Prefetch, Q, RestrictedError
 from django.http import FileResponse, HttpResponse
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
@@ -125,7 +125,14 @@ class DataSourceViewSet(
     parser_classes = [SafeJSONParser, MultiPartParser]
 
     def get_queryset(self):
-        return DataSource.objects.filter(owner=self.request.user)
+        user = self.request.user
+        if self.action == "retrieve":
+            # Also the sources of preparations shared with you (read only).
+            from .shared_data import visible_preps
+
+            used = visible_preps(user).values("source")
+            return DataSource.objects.filter(Q(owner=user) | Q(pk__in=used))
+        return DataSource.objects.filter(owner=user)
 
     def get_throttles(self):
         if self.action == "create":
@@ -185,12 +192,16 @@ class DataPrepViewSet(
     serializer_class = DataPrepSerializer
 
     def get_queryset(self):
-        return (
-            DataPrep.objects.filter(owner=self.request.user)
-            .select_related("source")
-            .prefetch_related(
-                Prefetch("datasets", queryset=Dataset.objects.order_by("-created_at", "-id"))
-            )
+        from .shared_data import visible_preps
+
+        user = self.request.user
+        # Your own preparations and the ones shared in your projects; only your own can be
+        # deleted.
+        preps = (
+            DataPrep.objects.filter(owner=user) if self.action == "destroy" else visible_preps(user)
+        )
+        return preps.select_related("source", "owner").prefetch_related(
+            Prefetch("datasets", queryset=Dataset.objects.order_by("-created_at", "-id"))
         )
 
     def get_throttles(self):
@@ -202,6 +213,16 @@ class DataPrepViewSet(
 
     def perform_create(self, serializer) -> None:
         serializer.save(owner=self.request.user)
+
+    def get_object(self) -> DataPrep:
+        from .shared_data import can_edit_prep
+
+        prep = super().get_object()
+        if self.action in ("update", "partial_update", "export") and not can_edit_prep(
+            self.request.user, prep
+        ):
+            raise PermissionDenied("This data preparation was shared with you read-only.")
+        return prep
 
     @action(detail=True, methods=["post"])
     def preview(self, request: Request, pk=None) -> Response:
@@ -225,7 +246,10 @@ class DataPrepViewSet(
             dataset = data.export_dataset(prep, body.get("name"))
         except data.DataInputError as exc:
             return _bad_request(exc)
-        return Response(DatasetSerializer(dataset).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DatasetSerializer(dataset, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get"], content_negotiation_class=IgnoreFormatParam)
     def download(self, request: Request, pk=None) -> Response | HttpResponse:

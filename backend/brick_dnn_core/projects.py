@@ -21,7 +21,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Project, ProjectMember
+from . import history, live, shared_data
+from .models import Comment, Project, ProjectMember
 from .serializers import ProjectSerializer
 
 User = get_user_model()
@@ -71,7 +72,12 @@ class VersionConflict(Exception):
 
 
 def update_project(
-    project: Project, user, data: dict[str, Any], expected_version: Any = None
+    project: Project,
+    user,
+    data: dict[str, Any],
+    expected_version: Any = None,
+    history_kind: str = "auto",
+    history_label: str = "",
 ) -> Project:
     """Change name, description or graph. Raises :class:`VersionConflict` and
     ``serializers.ValidationError``. The caller checks that ``user`` may edit."""
@@ -82,21 +88,34 @@ def update_project(
         serializer = ProjectSerializer(current, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated = serializer.save(version=current.version + 1, updated_by=user)
+        history.record(updated, user, history_kind, history_label)
+        # People editing it live get the new state (after the commit, so they can load it).
+        transaction.on_commit(lambda: live.notify_replaced(updated, user))
     for attr in ("member_role", "has_members"):
         if hasattr(project, attr):
             setattr(updated, attr, getattr(project, attr))
     return updated
 
 
+def delete_project(project: Project) -> None:
+    """Delete a project and close it for everyone editing it live. The caller checks that
+    the user is its owner. Training runs started in it are kept (for who started them)."""
+    project_id = project.pk
+    project.delete()
+    live.notify_deleted(project_id)
+
+
 def copy_project(project: Project, user) -> Project:
     name = project.name if project.name.endswith("(copy)") else f"{project.name} (copy)"
-    return Project.objects.create(
+    copy = Project.objects.create(
         owner=user,
         name=name[:120],
         description=project.description,
         graph=project.graph,
         updated_by=user,
     )
+    history.record(copy, user)
+    return copy
 
 
 class ProjectAccess(permissions.IsAuthenticated):
@@ -188,6 +207,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer = ProjectSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         project = serializer.save(owner=request.user, updated_by=request.user)
+        history.record(project, request.user)
         return Response(project_data(project, request.user), status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk=None, partial: bool = False) -> Response:
@@ -213,6 +233,9 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request: Request, pk=None) -> Response:
         return self.update(request, pk, partial=True)
+
+    def perform_destroy(self, instance: Project) -> None:
+        delete_project(instance)
 
     @action(detail=True, methods=["post"])
     def duplicate(self, request: Request, pk=None) -> Response:
@@ -271,6 +294,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             member.delete()
+            live.notify_access(project.pk, member.user_id, None)
             return Response(status=status.HTTP_204_NO_CONTENT)
         if not is_owner:
             return Response(
@@ -281,6 +305,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return Response({"role": ["Choose 'editor' or 'viewer'."]}, status=400)
         member.role = role
         member.save(update_fields=["role"])
+        live.notify_access(project.pk, member.user_id, role)
         return Response(MemberSerializer(member).data)
 
     @action(detail=True, methods=["post"])
@@ -298,6 +323,134 @@ class ProjectViewSet(viewsets.ModelViewSet):
             project.share_token = None
         project.save(update_fields=["link_access", "share_token"])
         return Response({"link_access": project.link_access, "share_token": project.share_token})
+
+    # Data of the project ----------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def data(self, request: Request, pk=None) -> Response:
+        """``GET``: datasets and data preparations shared in this project.
+        ``POST {kind: "dataset" | "prep", id}``: add one of your own (owner and editors)."""
+        project = self.get_object()
+        if request.method == "GET":
+            return Response(shared_data.project_data_items(project))
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        body = request.data if isinstance(request.data, dict) else {}
+        item = shared_data.find_item(body.get("kind"), body.get("id"))
+        if item is None or item.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Choose one of your own datasets or data preparations."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item.projects.add(project)
+        return Response(shared_data.project_data_items(project), status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"data/(?P<kind>dataset|prep)/(?P<item_id>\d+)",
+    )
+    def data_item(self, request: Request, pk=None, kind=None, item_id=None) -> Response:
+        """Stop sharing an item in this project (its owner or the project's owner)."""
+        project = self.get_object()
+        item = shared_data.find_item(kind, int(item_id))
+        if item is None or not item.projects.filter(pk=project.pk).exists():
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.owner_id != request.user.pk and project.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Only its owner or the project's owner can remove it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        item.projects.remove(project)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # History ----------------------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def versions(self, request: Request, pk=None) -> Response:
+        """``GET``: the history, newest first. ``POST {label}``: name the current state."""
+        project = self.get_object()
+        if request.method == "GET":
+            entries = project.history.select_related("created_by")
+            return Response([history.version_data(entry) for entry in entries])
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        data = request.data if isinstance(request.data, dict) else {}
+        label = history.clean_label(data.get("label"))
+        entry = history.record(project, request.user, "named", label)
+        return Response(history.version_data(entry), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "patch"], url_path=r"versions/(?P<version_id>\d+)")
+    def version_detail(self, request: Request, pk=None, version_id=None) -> Response:
+        project = self.get_object()
+        entry = project.history.select_related("created_by").filter(pk=version_id).first()
+        if entry is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == "GET":
+            return Response(history.version_data(entry, with_graph=True))
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        data = request.data if isinstance(request.data, dict) else {}
+        entry.label = history.clean_label(data.get("label"))
+        entry.kind = "named"  # named versions are kept
+        entry.save(update_fields=["label", "kind"])
+        live.notify_history(project.pk)
+        return Response(history.version_data(entry))
+
+    @action(detail=True, methods=["post"], url_path=r"versions/(?P<version_id>\d+)/restore")
+    def restore(self, request: Request, pk=None, version_id=None) -> Response:
+        """Make an old version the current state (itself a new entry in the history)."""
+        project = self.get_object()
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        entry = project.history.filter(pk=version_id).first()
+        if entry is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        when = entry.label or f"version {entry.version}"
+        project = update_project(
+            project,
+            request.user,
+            {"name": entry.name, "description": entry.description, "graph": entry.graph},
+            history_kind="restore",
+            history_label=f"Restored {when}"[:120],
+        )
+        return Response(project_data(project, request.user))
+
+    # Comments ---------------------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def comments(self, request: Request, pk=None) -> Response:
+        """``GET``: all comments, oldest first (``?node=<id>`` for one layer).
+        ``POST {text, node_id?, parent?}``: comment (every role, viewers too)."""
+        project = self.get_object()
+        if request.method == "GET":
+            comments = project.comments.select_related("author", "resolved_by")
+            node = request.query_params.get("node")
+            if node is not None:
+                comments = comments.filter(node_id=node)
+            return Response([history.comment_data(c) for c in comments])
+        data = request.data if isinstance(request.data, dict) else {}
+        comment = history.create_comment(project, request.user, data)
+        return Response(history.comment_data(comment), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"comments/(?P<comment_id>\d+)")
+    def comment(self, request: Request, pk=None, comment_id=None) -> Response:
+        project = self.get_object()
+        comment: Comment | None = (
+            project.comments.select_related("author", "resolved_by").filter(pk=comment_id).first()
+        )
+        if comment is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        role = role_of(request.user, project)
+        try:
+            if request.method == "DELETE":
+                history.delete_comment(comment, request.user, role)
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            data = request.data if isinstance(request.data, dict) else {}
+            comment = history.update_comment(comment, request.user, role, data)
+        except PermissionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return Response(history.comment_data(comment))
 
 
 def _find_user(identifier: Any):
