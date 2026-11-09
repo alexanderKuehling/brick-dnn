@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from . import live
 from .models import Project, ProjectMember
 from .serializers import ProjectSerializer
 
@@ -82,6 +83,8 @@ def update_project(
         serializer = ProjectSerializer(current, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated = serializer.save(version=current.version + 1, updated_by=user)
+        # People editing it live get the new state (after the commit, so they can load it).
+        transaction.on_commit(lambda: live.notify_replaced(updated, user))
     for attr in ("member_role", "has_members"):
         if hasattr(project, attr):
             setattr(updated, attr, getattr(project, attr))
@@ -214,6 +217,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def partial_update(self, request: Request, pk=None) -> Response:
         return self.update(request, pk, partial=True)
 
+    def perform_destroy(self, instance: Project) -> None:
+        project_id = instance.pk
+        instance.delete()
+        live.notify_deleted(project_id)
+
     @action(detail=True, methods=["post"])
     def duplicate(self, request: Request, pk=None) -> Response:
         copy = copy_project(self.get_object(), request.user)
@@ -271,6 +279,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             member.delete()
+            live.notify_access(project.pk, member.user_id, None)
             return Response(status=status.HTTP_204_NO_CONTENT)
         if not is_owner:
             return Response(
@@ -281,6 +290,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return Response({"role": ["Choose 'editor' or 'viewer'."]}, status=400)
         member.role = role
         member.save(update_fields=["role"])
+        live.notify_access(project.pk, member.user_id, role)
         return Response(MemberSerializer(member).data)
 
     @action(detail=True, methods=["post"])

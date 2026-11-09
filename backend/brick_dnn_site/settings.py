@@ -62,6 +62,8 @@ CORS_ALLOWED_ORIGINS = env_list(
 )
 
 INSTALLED_APPS = [
+    # First: `manage.py runserver` then also serves WebSockets (live editing).
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -137,6 +139,21 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # A file cache is shared by all gunicorn workers, so rate limits are counted correctly.
+# Live editing (brick_dnn_core.live). Several server processes need Redis to reach each other;
+# without REDIS_URL, messages stay inside one process (fine for `manage.py runserver`).
+ASGI_APPLICATION = "brick_dnn_site.asgi.application"
+REDIS_URL = os.environ.get("REDIS_URL", "")
+CHANNEL_LAYERS = {
+    "default": (
+        {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL], "capacity": 500, "expiry": 30},
+        }
+        if REDIS_URL
+        else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    )
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",

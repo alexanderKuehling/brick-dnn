@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
+        // Live editing (WebSockets); `manage.py runserver` serves them too.
+        '/api/ws': { ...backend, ws: true },
         '/api': backend,
         '/admin': backend,
         '/static': backend,
