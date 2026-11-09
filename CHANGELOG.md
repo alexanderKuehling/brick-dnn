@@ -8,7 +8,8 @@
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
   - *Legal pages:* an imprint, privacy policy and terms of use are Markdown files the
     operator puts into `BRICKDNN_LEGAL_DIR` (on the server `/srv/brick-dnn/legal`, or in the
-    repository as `deploy/sites/<domain>/legal/`, deployed with the code), shown at
+    repository as `deploy/sites/<domain>/legal/`, deployed with the code; settings of the
+    domain such as the deletion periods in `deploy/sites/<domain>/settings.env`), shown at
     `/imprint`, `/privacy` and `/terms` with a safe Markdown subset (no HTML) and linked from
     the header, the phone menu and the login and sign-up pages when they exist. German
     templates and a checklist of what the privacy policy must cover are in `deploy/legal/`.

@@ -8,11 +8,11 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
-# Automatic deletion of old data (docs/privacy.md); 0 keeps everything. The backend shows the
-# periods to users, the cleanup service deletes.
+# Automatic deletion of old data (docs/privacy.md); unset or 0 keeps everything. The backend
+# shows the periods to users, the cleanup service deletes.
 x-retention: &retention
-  BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS: ${BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS:-0}
-  BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS: ${BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS:-0}
+  BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS: ${BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS:-}
+  BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS: ${BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS:-}
 
 services:
   backend:

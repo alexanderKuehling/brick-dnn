@@ -22,6 +22,8 @@ services:
       # /srv/brick-dnn/legal on the server (setup.sh creates the folder), else the ones of this
       # domain in the repository, deploy/sites/<BRICKDNN_DOMAIN>/legal/ (deployed with the code).
       BRICKDNN_LEGAL_DIR: /legal:/sites/${BRICKDNN_DOMAIN:-none}/legal
+      # Settings of this domain kept in the repository (deploy/sites/README.md); .env wins.
+      BRICKDNN_SITE_ENV: /sites/${BRICKDNN_DOMAIN:-none}/settings.env
     volumes:
       - /srv/brick-dnn/legal:/legal:ro
       - ./deploy/sites:/sites:ro
@@ -46,6 +48,10 @@ services:
 
   # Deletes old data once a day (docs/privacy.md); sleeps in between.
   cleanup:
+    environment:
+      BRICKDNN_SITE_ENV: /sites/${BRICKDNN_DOMAIN:-none}/settings.env
+    volumes:
+      - ./deploy/sites:/sites:ro
     cpus: "0.5"
     mem_limit: 256m
     memswap_limit: 256m
