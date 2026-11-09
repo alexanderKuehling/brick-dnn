@@ -1,0 +1,107 @@
+/* The day above its entries. */
+.day {
+  margin: var(--mantine-spacing-xs) 0 4px;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An entry: icon, title and details (opens the preview), and its menu. */
+.entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: var(--mantine-radius-md);
+
+  &:hover,
+  &:focus-within {
+    background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+
+  &[data-current] {
+    background: light-dark(
+      var(--mantine-color-blue-0),
+      color-mix(in srgb, var(--mantine-color-blue-9) 25%, transparent)
+    );
+  }
+}
+
+.entryMain {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-xs);
+  min-width: 0;
+  padding: 6px 4px 6px 8px;
+  border-radius: var(--mantine-radius-md);
+}
+
+.entryText {
+  flex: 1;
+  min-width: 0;
+}
+
+.entryTitle {
+  overflow-wrap: anywhere;
+}
+
+.entryMenu {
+  flex: none;
+  margin: 6px 6px 0 0;
+}
+
+/* Renaming an entry in place. */
+.rename {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+/* Preview of a version: a canvas below a bar with what it is and "Restore". */
+.previewHeader {
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.previewBody {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 4.5rem);
+  padding: 0;
+
+  @media (min-width: $mantine-breakpoint-sm) {
+    height: min(80dvh, 60rem);
+  }
+}
+
+.previewBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.previewHint {
+  flex: 1 1 14rem;
+}
+
+.confirm {
+  flex: 1 1 100%;
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.previewCanvas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
