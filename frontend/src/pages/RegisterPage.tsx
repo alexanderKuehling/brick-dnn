@@ -4,12 +4,13 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Anchor, Button, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useAuth } from '@/auth/AuthContext';
 import { AuthLayout } from './AuthLayout';
+import type { ReturnTo } from './LoginPage';
 
 export function RegisterPage() {
   const { user, register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
+  const { from = '/', returnState } = (location.state as ReturnTo | null) ?? {};
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,7 +18,7 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false);
 
   if (user) {
-    return <Navigate to={from} replace />;
+    return <Navigate to={from} replace state={returnState} />;
   }
 
   const onSubmit = async (event: React.FormEvent) => {
@@ -26,7 +27,7 @@ export function RegisterPage() {
     setError(null);
     try {
       await register(username.trim(), email.trim(), password);
-      navigate(from, { replace: true });
+      navigate(from, { replace: true, state: returnState });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed.');
     } finally {
@@ -40,7 +41,7 @@ export function RegisterPage() {
       subtitle={
         <>
           Already registered?{' '}
-          <Anchor component={Link} to="/login" state={{ from }} size="sm">
+          <Anchor component={Link} to="/login" state={{ from, returnState }} size="sm">
             Log in
           </Anchor>
         </>

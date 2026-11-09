@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
-from rest_framework import permissions
+from rest_framework import permissions, serializers
 from rest_framework.exceptions import ParseError
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
@@ -36,6 +36,13 @@ from .api_tokens import uses_api_token
 from .models import ApiToken, Dataset, Project, TrainingRun
 from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
+from .projects import (
+    VersionConflict,
+    can_edit,
+    project_data,
+    projects_for,
+    update_project,
+)
 from .serializers import (
     DatasetSerializer,
     ProjectSerializer,
@@ -152,7 +159,7 @@ def _int_id(args: dict[str, Any], what: str) -> int:
 
 
 def _project(request: Request, args: dict[str, Any]) -> Project:
-    project = Project.objects.filter(owner=request.user, pk=_int_id(args, "a project")).first()
+    project = projects_for(request.user).filter(pk=_int_id(args, "a project")).first()
     if project is None:
         raise ToolError("No such project. list_projects shows the user's projects.")
     return project
@@ -199,13 +206,22 @@ def generate_pytorch_code(request: Request, args: dict[str, Any]) -> Any:
     return payload["code"]
 
 
+def _summary(project: Project, user) -> dict[str, Any]:
+    data = project_data(project, user)
+    data.pop("graph")
+    data.pop("share_token")
+    return data
+
+
 def list_projects(request: Request, args: dict[str, Any]) -> Any:
-    data = ProjectSerializer(Project.objects.filter(owner=request.user), many=True).data
-    return [{key: value for key, value in item.items() if key != "graph"} for item in data]
+    projects = projects_for(request.user).order_by("-updated_at")
+    return [_summary(project, request.user) for project in projects]
 
 
 def get_project(request: Request, args: dict[str, Any]) -> Any:
-    return ProjectSerializer(_project(request, args)).data
+    data = project_data(_project(request, args), request.user)
+    data.pop("share_token")
+    return data
 
 
 def save_project(request: Request, args: dict[str, Any]) -> Any:
@@ -214,12 +230,24 @@ def save_project(request: Request, args: dict[str, Any]) -> Any:
         if "name" not in data or "graph" not in data:
             raise ToolError("A new project needs a name and a graph.")
         serializer = ProjectSerializer(data=data)
-    else:
-        serializer = ProjectSerializer(_project(request, args), data=data, partial=True)
-    if not serializer.is_valid():
-        raise ToolError(json.dumps(serializer.errors))
-    project = serializer.save(owner=request.user)
-    return {key: value for key, value in ProjectSerializer(project).data.items() if key != "graph"}
+        if not serializer.is_valid():
+            raise ToolError(json.dumps(serializer.errors))
+        project = serializer.save(owner=request.user, updated_by=request.user)
+        return _summary(project, request.user)
+
+    project = _project(request, args)
+    if not can_edit(request.user, project):
+        raise ToolError("You can only view this network: its owner shared it read-only.")
+    try:
+        project = update_project(project, request.user, data, args.get("version"))
+    except VersionConflict as exc:
+        raise ToolError(
+            f"Someone else changed this project (now version {exc.project.version}). "
+            "Load it again with get_project and apply your changes to that state."
+        ) from None
+    except serializers.ValidationError as exc:
+        raise ToolError(json.dumps(exc.detail)) from None
+    return _summary(project, request.user)
 
 
 def get_training_options(request: Request, args: dict[str, Any]) -> Any:
@@ -356,10 +384,15 @@ TOOLS: dict[str, Tool] = {
             "Save a network",
             "Save a network in the user's account (it appears in the web app). Without id a "
             "new project is created (name and graph required); with id the given fields of "
-            "that project are replaced.",
+            "that project are replaced (owner or editor only). Pass the version you loaded: "
+            "if someone changed the project since, nothing is saved and you get an error.",
             save_project,
             {
                 "id": {"type": "integer", "description": "Project to update; omit to create"},
+                "version": {
+                    "type": "integer",
+                    "description": "Version from get_project/list_projects (recommended)",
+                },
                 "name": {"type": "string", "maxLength": 120},
                 "description": {"type": "string", "maxLength": 2000},
                 "graph": GRAPH_SCHEMA,

@@ -9,6 +9,7 @@ import {
   ActionIcon,
   Alert,
   Divider,
+  Fieldset,
   Group,
   Kbd,
   List,
@@ -45,8 +46,16 @@ export function Inspector({ node, nodes }: { node: LayerFlowNode | null; nodes: 
 }
 
 function LayerInspector({ node }: { node: LayerFlowNode }) {
-  const { specs, analysis, errorsByNode, warningsByNode, updateNode, deleteNode, duplicateNode } =
-    useBuilder();
+  const {
+    specs,
+    analysis,
+    errorsByNode,
+    warningsByNode,
+    readOnly,
+    updateNode,
+    deleteNode,
+    duplicateNode,
+  } = useBuilder();
   const spec = specs[node.data.type];
   const info = analysis?.nodes[node.id];
   const errors = errorsByNode[node.id] ?? [];
@@ -76,28 +85,30 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
           />
           <Title order={4}>{spec.label}</Title>
         </Group>
-        <Group gap={4}>
-          <Tooltip label="Duplicate">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => duplicateNode(node.id)}
-              aria-label="Duplicate layer"
-            >
-              <IconCopy size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Delete (Del)">
-            <ActionIcon
-              variant="subtle"
-              color="red"
-              onClick={() => deleteNode(node.id)}
-              aria-label="Delete layer"
-            >
-              <IconTrash size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
+        {!readOnly && (
+          <Group gap={4}>
+            <Tooltip label="Duplicate">
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => duplicateNode(node.id)}
+                aria-label="Duplicate layer"
+              >
+                <IconCopy size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Delete (Del)">
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                onClick={() => deleteNode(node.id)}
+                aria-label="Delete layer"
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        )}
       </Group>
       <Text size="sm" c="dimmed">
         {spec.description}
@@ -119,47 +130,54 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         <Stat label="Parameters" value={info?.num_params?.toLocaleString('en-US') ?? '–'} />
       </SimpleGrid>
 
-      {spec.params.length > 0 && <Divider label="Settings" labelPosition="left" />}
-      {spec.params
-        .filter((param) => isParamVisible(param, node.data.params))
-        .map((param) => (
-          <ParamField
-            key={`${node.id}:${param.name}`}
-            param={param}
-            value={
-              // Missing (not cleared) values show the default the backend will use.
-              node.data.params[param.name] === undefined
-                ? param.auto
-                  ? null
-                  : param.default
-                : node.data.params[param.name]
-            }
-            inferred={info?.params?.[param.name]}
-            onChange={(value) =>
-              updateNode(node.id, { params: { ...node.data.params, [param.name]: value } })
+      {/* View only: the settings are shown, but every field is disabled. */}
+      <Fieldset variant="unstyled" disabled={readOnly} p={0} m={0}>
+        <Stack gap="sm">
+          {spec.params.length > 0 && <Divider label="Settings" labelPosition="left" />}
+          {spec.params
+            .filter((param) => isParamVisible(param, node.data.params))
+            .map((param) => (
+              <ParamField
+                key={`${node.id}:${param.name}`}
+                param={param}
+                value={
+                  // Missing (not cleared) values show the default the backend will use.
+                  node.data.params[param.name] === undefined
+                    ? param.auto
+                      ? null
+                      : param.default
+                    : node.data.params[param.name]
+                }
+                inferred={info?.params?.[param.name]}
+                onChange={(value) =>
+                  updateNode(node.id, { params: { ...node.data.params, [param.name]: value } })
+                }
+              />
+            ))}
+          {spec.params.length === 0 && (
+            <Text size="sm" c="dimmed">
+              This layer has no settings.
+            </Text>
+          )}
+
+          <Divider label="Code" labelPosition="left" />
+          <TextInput
+            label="Name in code"
+            description="Optional variable name, e.g. classifier"
+            placeholder="automatic"
+            value={node.data.name ?? ''}
+            onChange={(event) =>
+              updateNode(node.id, { name: event.currentTarget.value || undefined })
             }
           />
-        ))}
-      {spec.params.length === 0 && (
-        <Text size="sm" c="dimmed">
-          This layer has no settings.
-        </Text>
-      )}
-
-      <Divider label="Code" labelPosition="left" />
-      <TextInput
-        label="Name in code"
-        description="Optional variable name, e.g. classifier"
-        placeholder="automatic"
-        value={node.data.name ?? ''}
-        onChange={(event) => updateNode(node.id, { name: event.currentTarget.value || undefined })}
-      />
+        </Stack>
+      </Fieldset>
     </Stack>
   );
 }
 
 function ModelSummary({ nodes }: { nodes: LayerFlowNode[] }) {
-  const { analysis, specs, focusNode } = useBuilder();
+  const { analysis, specs, readOnly, focusNode } = useBuilder();
   const labelOf = (id: string | null) => {
     const node = nodes.find((n) => n.id === id);
     if (!node) {
@@ -242,22 +260,32 @@ function ModelSummary({ nodes }: { nodes: LayerFlowNode[] }) {
       )}
 
       <Divider label="Tips" labelPosition="left" mt="sm" />
-      <List size="sm" spacing={4} c="dimmed">
-        <List.Item>Click a layer to edit its settings here.</List.Item>
-        <List.Item>
-          Drag from the right dot of a layer to the left dot of another to connect them.
-        </List.Item>
-        <List.Item>
-          Fields marked <i>auto</i> are inferred from the incoming tensor.
-        </List.Item>
-        <List.Item>
-          Use <b>Add</b> or <b>Concat</b> to merge branches (skip connections, multiple inputs).
-        </List.Item>
-        <List.Item>
-          <Kbd>Del</Kbd> deletes the selection, <Kbd>Ctrl</Kbd> + <Kbd>S</Kbd> saves,{' '}
-          <Kbd>Ctrl</Kbd> + <Kbd>E</Kbd> exports.
-        </List.Item>
-      </List>
+      {readOnly ? (
+        <List size="sm" spacing={4} c="dimmed">
+          <List.Item>You can view this network, but not change it.</List.Item>
+          <List.Item>Click a layer to see its settings here.</List.Item>
+          <List.Item>
+            <b>Duplicate to my networks</b> makes a copy that you can change.
+          </List.Item>
+        </List>
+      ) : (
+        <List size="sm" spacing={4} c="dimmed">
+          <List.Item>Click a layer to edit its settings here.</List.Item>
+          <List.Item>
+            Drag from the right dot of a layer to the left dot of another to connect them.
+          </List.Item>
+          <List.Item>
+            Fields marked <i>auto</i> are inferred from the incoming tensor.
+          </List.Item>
+          <List.Item>
+            Use <b>Add</b> or <b>Concat</b> to merge branches (skip connections, multiple inputs).
+          </List.Item>
+          <List.Item>
+            <Kbd>Del</Kbd> deletes the selection, <Kbd>Ctrl</Kbd> + <Kbd>S</Kbd> saves,{' '}
+            <Kbd>Ctrl</Kbd> + <Kbd>E</Kbd> exports.
+          </List.Item>
+        </List>
+      )}
     </Stack>
   );
 }

@@ -174,6 +174,24 @@ export interface OAuthConnection {
   last_used_at: string | null;
 }
 
+// --------------------------------------------------------------------------
+// Saved networks (projects) and sharing
+// --------------------------------------------------------------------------
+
+/** owner: one per project, manages sharing · editor: changes the network · viewer: reads it. */
+export type ProjectRole = 'owner' | 'editor' | 'viewer';
+
+/** The roles the owner can give to other people. */
+export type MemberRole = Exclude<ProjectRole, 'owner'>;
+
+/** 'view': anyone with the share link can view the network without an account. */
+export type LinkAccess = 'none' | 'view';
+
+export interface UserRef {
+  id: number;
+  username: string;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -181,6 +199,52 @@ export interface Project {
   graph: GraphDocument;
   num_layers: number;
   created_at: string;
+  updated_at: string;
+  owner: UserRef;
+  /** The role of the current user. */
+  role: ProjectRole;
+  /** Goes up with every change; saves send it to detect changes by others (HTTP 409). */
+  version: number;
+  /** Who made the last change. */
+  updated_by: string | null;
+  /** Has members or an active share link. */
+  shared: boolean;
+  link_access: LinkAccess;
+  /** Only sent to the owner (null for everyone else and while the link is off). */
+  share_token: string | null;
+}
+
+/** The answer to a save based on an old version (HTTP 409). */
+export interface ProjectConflict {
+  detail: string;
+  /** The current state, including who changed it. */
+  project: Project;
+}
+
+export interface ProjectMember {
+  id: number;
+  user: UserRef;
+  role: MemberRole;
+  created_at: string;
+}
+
+export interface ProjectMembers {
+  owner: UserRef;
+  members: ProjectMember[];
+}
+
+export interface ShareLink {
+  link_access: LinkAccess;
+  share_token: string | null;
+}
+
+/** A network opened through its share link (no login needed). */
+export interface SharedNetwork {
+  name: string;
+  description: string;
+  graph: GraphDocument;
+  /** Username of the owner. */
+  owner: string;
   updated_at: string;
 }
 

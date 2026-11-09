@@ -3,8 +3,10 @@ import {
   IconChevronDown,
   IconCircleCheck,
   IconCode,
+  IconCopyPlus,
   IconDeviceFloppy,
   IconDownload,
+  IconEye,
   IconFileExport,
   IconFileImport,
   IconFilePlus,
@@ -12,6 +14,7 @@ import {
   IconLayoutSidebar,
   IconPlayerPlay,
   IconSchool,
+  IconUsersPlus,
 } from '@tabler/icons-react';
 import {
   ActionIcon,
@@ -27,6 +30,8 @@ import {
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
 import { DEMO } from '@/demo';
+import { PeopleAvatars } from '@/sharing/PeopleAvatars';
+import sharingClasses from '@/sharing/Sharing.module.css';
 import { progressLabel } from '@/training/format';
 import { formatCount } from './format';
 
@@ -40,12 +45,22 @@ interface ToolbarProps {
   examples: Example[];
   saving: boolean;
   isSaved: boolean;
+  /** View only (shared with the user as a viewer): no saving, editing or training. */
+  readOnly?: boolean;
+  /** Username of the owner of the open network, if it is saved and known. */
+  owner?: string | null;
+  /** Everyone with access to a shared network, the owner first; null if it is not shared. */
+  people?: string[] | null;
   onLoadExample: (example: Example) => void;
   onNew: () => void;
   onImport: () => void;
   onExportJson: () => void;
   onTidy: () => void;
   onSave: () => void;
+  /** Opens the share dialog; not available in the online demo. */
+  onShare?: () => void;
+  /** Viewers: copy the network into the own account. */
+  onDuplicate?: () => void;
   onShowCode: () => void;
   onExportPython: () => void;
   onTrain: () => void;
@@ -115,7 +130,8 @@ function Status({
 }
 
 export function Toolbar(props: ToolbarProps) {
-  const { name, onNameChange, examples, saving, isSaved } = props;
+  const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
+  const { onShare, onDuplicate } = props;
 
   return (
     <Group
@@ -127,21 +143,25 @@ export function Toolbar(props: ToolbarProps) {
       style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
     >
       <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
-        <Tooltip label="Layers">
-          <ActionIcon
-            hiddenFrom="md"
-            variant="default"
-            size="lg"
-            onClick={props.onOpenPalette}
-            aria-label="Show layers"
-          >
-            <IconLayoutSidebar size={18} />
-          </ActionIcon>
-        </Tooltip>
+        {!readOnly && (
+          <Tooltip label="Layers">
+            <ActionIcon
+              hiddenFrom="md"
+              variant="default"
+              size="lg"
+              onClick={props.onOpenPalette}
+              aria-label="Show layers"
+            >
+              <IconLayoutSidebar size={18} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <TextInput
           aria-label="Network name"
           value={name}
           onChange={(event) => onNameChange(event.currentTarget.value)}
+          readOnly={readOnly}
+          variant={readOnly ? 'filled' : 'default'}
           w={{ base: 150, sm: 210 }}
           // On phones the name takes the free width of its row.
           flex={{ base: '1 1 150px', sm: 'none' }}
@@ -150,9 +170,49 @@ export function Toolbar(props: ToolbarProps) {
           styles={{ input: { fontWeight: 600 } }}
         />
         <Status {...props} />
+        {readOnly && (
+          <Tooltip
+            label={`${owner ? `Shared with you by ${owner}. ` : ''}You can view it, not change it.`}
+            multiline
+            w={240}
+          >
+            <Badge
+              color="gray"
+              variant="outline"
+              tt="none"
+              leftSection={<IconEye size={12} />}
+              style={{ flexShrink: 0 }}
+            >
+              <span className={sharingClasses.badgeLabel}>View only</span>
+            </Badge>
+          </Tooltip>
+        )}
+        {/* Phones show who has access next to the name; the share button is in the menu. */}
+        {people && onShare && !readOnly && (
+          <Box hiddenFrom="sm" className={sharingClasses.phoneAvatars}>
+            <PeopleAvatars names={people} max={2} onClick={onShare} />
+          </Box>
+        )}
       </Group>
 
       <Group gap="xs" wrap="nowrap" ml="auto">
+        {people && onShare && (
+          <Box visibleFrom="sm">
+            <PeopleAvatars names={people} onClick={onShare} />
+          </Box>
+        )}
+        {onShare && (
+          <Tooltip label="Invite people or share a link">
+            <Button
+              variant="default"
+              leftSection={<IconUsersPlus size={16} />}
+              onClick={onShare}
+              visibleFrom="sm"
+            >
+              Share
+            </Button>
+          </Tooltip>
+        )}
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
             <Button variant="default" rightSection={<IconChevronDown size={14} />}>
@@ -169,16 +229,36 @@ export function Toolbar(props: ToolbarProps) {
             <Menu.Item leftSection={<IconFileExport size={16} />} onClick={props.onExportJson}>
               Save as JSON file
             </Menu.Item>
-            <Menu.Item leftSection={<IconLayoutGrid size={16} />} onClick={props.onTidy}>
-              Tidy up layout
-            </Menu.Item>
-            {!DEMO && (
+            {!readOnly && (
+              <Menu.Item leftSection={<IconLayoutGrid size={16} />} onClick={props.onTidy}>
+                Tidy up layout
+              </Menu.Item>
+            )}
+            {!DEMO && !readOnly && (
               <Menu.Item
                 hiddenFrom="sm"
                 leftSection={<IconDeviceFloppy size={16} />}
                 onClick={props.onSave}
               >
                 Save to account
+              </Menu.Item>
+            )}
+            {readOnly && onDuplicate && (
+              <Menu.Item
+                hiddenFrom="sm"
+                leftSection={<IconCopyPlus size={16} />}
+                onClick={onDuplicate}
+              >
+                Duplicate to my networks
+              </Menu.Item>
+            )}
+            {onShare && (
+              <Menu.Item
+                hiddenFrom="sm"
+                leftSection={<IconUsersPlus size={16} />}
+                onClick={onShare}
+              >
+                Share…
               </Menu.Item>
             )}
             <Menu.Item
@@ -205,7 +285,7 @@ export function Toolbar(props: ToolbarProps) {
           </Menu.Dropdown>
         </Menu>
 
-        {!DEMO && (
+        {!DEMO && !readOnly && (
           <Tooltip label={isSaved ? 'Saved to your account' : 'Save to your account (Ctrl+S)'}>
             <ActionIcon
               variant="default"
@@ -219,6 +299,31 @@ export function Toolbar(props: ToolbarProps) {
             </ActionIcon>
           </Tooltip>
         )}
+        {readOnly && onDuplicate && (
+          <>
+            <Tooltip label="Make a copy that you can change">
+              <Button
+                variant="default"
+                leftSection={<IconCopyPlus size={16} />}
+                onClick={onDuplicate}
+                visibleFrom="sm"
+              >
+                Duplicate to my networks
+              </Button>
+            </Tooltip>
+            <Tooltip label="Duplicate to my networks">
+              <ActionIcon
+                variant="default"
+                size="lg"
+                onClick={onDuplicate}
+                hiddenFrom="sm"
+                aria-label="Duplicate to my networks"
+              >
+                <IconCopyPlus size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </>
+        )}
         <Button
           variant="default"
           leftSection={<IconCode size={16} />}
@@ -227,7 +332,7 @@ export function Toolbar(props: ToolbarProps) {
         >
           Code
         </Button>
-        <TrainButton run={props.trainingRun} onClick={props.onTrain} />
+        {!readOnly && <TrainButton run={props.trainingRun} onClick={props.onTrain} />}
         <Tooltip label="Download the PyTorch script (Ctrl+E)">
           <Button leftSection={<IconDownload size={16} />} onClick={props.onExportPython}>
             Export .py

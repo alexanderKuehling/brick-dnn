@@ -18,6 +18,7 @@ import type {
   GraphDocument,
   ImportOptions,
   LayerCatalog,
+  MemberRole,
   NewApiToken,
   OAuthConnection,
   OAuthDecision,
@@ -26,9 +27,13 @@ import type {
   PreviewRequest,
   PreviewResult,
   Project,
+  ProjectMember,
+  ProjectMembers,
   RunDetail,
   RunInput,
   RunSummary,
+  SharedNetwork,
+  ShareLink,
   StepCatalog,
   Tokens,
   TrainingStatus,
@@ -105,13 +110,66 @@ const serverApi = {
   },
 
   projects: {
-    list: () => request<Project[]>('/api/projects/', { auth: true }),
+    /** Own and shared projects (each with the user's `role`), newest first. */
+    list: (scope?: 'mine' | 'shared') =>
+      request<Project[]>(`/api/projects/${scope ? `?scope=${scope}` : ''}`, { auth: true }),
     get: (id: number) => request<Project>(`/api/projects/${id}/`, { auth: true }),
     create: (data: ProjectInput) =>
       request<Project>('/api/projects/', { method: 'POST', body: data, auth: true }),
-    update: (id: number, data: Partial<ProjectInput>) =>
+    /**
+     * Owners and editors. With `version`, a save based on an older version fails with HTTP 409
+     * and a ProjectConflict; without it, the save overwrites.
+     */
+    update: (id: number, data: Partial<ProjectInput> & { version?: number }) =>
       request<Project>(`/api/projects/${id}/`, { method: 'PATCH', body: data, auth: true }),
+    /** Owner only. */
     remove: (id: number) => request<void>(`/api/projects/${id}/`, { method: 'DELETE', auth: true }),
+    /** A copy owned by the current user, named "<name> (copy)". Any role. */
+    duplicate: (id: number) =>
+      request<Project>(`/api/projects/${id}/duplicate/`, { method: 'POST', auth: true }),
+    members: {
+      list: (projectId: number) =>
+        request<ProjectMembers>(`/api/projects/${projectId}/members/`, { auth: true }),
+      /** Owner only. `user` is a username or an e-mail address. */
+      add: (projectId: number, user: string, role: MemberRole) =>
+        request<ProjectMember>(`/api/projects/${projectId}/members/`, {
+          method: 'POST',
+          body: { user, role },
+          auth: true,
+        }),
+      /** Owner only. */
+      update: (projectId: number, memberId: number, role: MemberRole) =>
+        request<ProjectMember>(`/api/projects/${projectId}/members/${memberId}/`, {
+          method: 'PATCH',
+          body: { role },
+          auth: true,
+        }),
+      /** The owner removes anyone; members remove themselves (leave). */
+      remove: (projectId: number, memberId: number) =>
+        request<void>(`/api/projects/${projectId}/members/${memberId}/`, {
+          method: 'DELETE',
+          auth: true,
+        }),
+    },
+    /** Owner only: turn the view link on or off, or replace it (the old one stops working). */
+    setLink: (projectId: number, enabled: boolean, regenerate = false) =>
+      request<ShareLink>(`/api/projects/${projectId}/link/`, {
+        method: 'POST',
+        body: regenerate ? { enabled, regenerate } : { enabled },
+        auth: true,
+      }),
+  },
+
+  /** Networks opened through a share link. */
+  shared: {
+    /** Public: no login needed. 404 if the link is unknown or turned off. */
+    get: (token: string) => request<SharedNetwork>(`/api/shared/${encodeURIComponent(token)}/`),
+    /** A copy in the current user's account. */
+    duplicate: (token: string) =>
+      request<Project>(`/api/shared/${encodeURIComponent(token)}/duplicate/`, {
+        method: 'POST',
+        auth: true,
+      }),
   },
 
   training: {

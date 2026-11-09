@@ -9,7 +9,10 @@ def empty_graph() -> dict:
 
 
 class Project(models.Model):
-    """A saved network: the graph JSON exactly as the editor produced it."""
+    """A saved network: the graph JSON exactly as the editor produced it.
+
+    The owner can share it with other users (:class:`ProjectMember`) and by link.
+    """
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="projects"
@@ -19,12 +22,57 @@ class Project(models.Model):
     graph = models.JSONField(default=empty_graph)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Goes up with every change: a save based on an older version is a conflict.
+    version = models.PositiveIntegerField(default=1)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    # "view": anyone with the link /share/<share_token> can look at the network.
+    link_access = models.CharField(
+        max_length=10,
+        choices=[("none", "No link"), ("view", "Anyone with the link can view")],
+        default="none",
+    )
+    share_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
 
     class Meta:
         ordering = ["-updated_at"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner})"
+
+
+class ProjectMember(models.Model):
+    """A user the owner shared a project with. The owner is not a member."""
+
+    ROLES = [("editor", "Can edit"), ("viewer", "Can view")]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="project_memberships"
+    )
+    role = models.CharField(max_length=10, choices=ROLES)
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["project", "user"], name="unique_project_member")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} ({self.role}) in {self.project.name}"
 
 
 def default_prep_settings() -> dict:

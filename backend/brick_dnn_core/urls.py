@@ -2,11 +2,11 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
-from . import data_views, mcp, oauth, views
+from . import data_views, mcp, oauth, projects, views
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
-router.register("projects", views.ProjectViewSet, basename="project")
+router.register("projects", projects.ProjectViewSet, basename="project")
 router.register("auth/api-tokens", views.ApiTokenViewSet, basename="api-token")
 router.register("auth/connections", oauth.ConnectionViewSet, basename="oauth-connection")
 router.register("training/datasets", views.DatasetViewSet, basename="training-dataset")
@@ -26,6 +26,13 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", views.me, name="me"),
+    # Networks shared by link (see projects.py).
+    path("shared/<str:token>/", projects.SharedProjectView.as_view(), name="shared-project"),
+    path(
+        "shared/<str:token>/duplicate/",
+        projects.SharedProjectDuplicateView.as_view(),
+        name="shared-project-duplicate",
+    ),
     # MCP server for AI assistants (log in with an API token). Both spellings: MCP clients
     # POST to the URL as given, and Django cannot redirect a POST to add the slash.
     path("mcp/", mcp.McpView.as_view(), name="mcp"),

@@ -8,15 +8,25 @@ from .models import (
     OAuthClient,
     OAuthConnection,
     Project,
+    ProjectMember,
     TrainingRun,
 )
 
 
+class ProjectMemberInline(admin.TabularInline):
+    model = ProjectMember
+    fk_name = "project"
+    extra = 0
+    raw_id_fields = ("user", "invited_by")
+
+
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "updated_at")
-    list_filter = ("owner",)
+    list_display = ("name", "owner", "version", "link_access", "updated_at")
+    list_filter = ("owner", "link_access")
     search_fields = ("name", "description", "owner__username")
+    readonly_fields = ("version", "updated_by", "share_token")
+    inlines = [ProjectMemberInline]
 
 
 @admin.register(Dataset)

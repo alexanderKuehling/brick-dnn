@@ -103,16 +103,32 @@ For MCP clients; details in [mcp.md](mcp.md).
 
 ## Saved networks (login required)
 
-| Method        | Path                   | Description                              |
-| ------------- | ---------------------- | ---------------------------------------- |
-| GET           | `/api/projects/`       | Your networks, newest first              |
-| POST          | `/api/projects/`       | `{name, graph, description?}`            |
-| GET           | `/api/projects/<id>/`  | One network                              |
-| PUT / PATCH   | `/api/projects/<id>/`  | Update                                   |
-| DELETE        | `/api/projects/<id>/`  | Delete                                   |
+| Method        | Path                                   | Description                                          |
+| ------------- | -------------------------------------- | ---------------------------------------------------- |
+| GET           | `/api/projects/`                       | Your networks and the ones shared with you, newest first (`?scope=mine` / `shared`) |
+| POST          | `/api/projects/`                       | `{name, graph, description?}`                        |
+| GET           | `/api/projects/<id>/`                  | One network                                          |
+| PUT / PATCH   | `/api/projects/<id>/`                  | Update (owner, editors); send `version` to avoid overwriting others |
+| DELETE        | `/api/projects/<id>/`                  | Delete (owner)                                       |
+| POST          | `/api/projects/<id>/duplicate/`        | Copy into your account                               |
+| GET / POST    | `/api/projects/<id>/members/`          | List members / invite `{user: username or e-mail, role}` (owner) |
+| PATCH / DELETE| `/api/projects/<id>/members/<member>/` | Change the role (owner) / remove (owner) or leave (the member) |
+| POST          | `/api/projects/<id>/link/`             | `{enabled, regenerate?}`: view link on or off (owner) |
+| GET           | `/api/shared/<token>/`                 | A network shared by link (no login needed)           |
+| POST          | `/api/shared/<token>/duplicate/`       | Copy a linked network into your account              |
 
-Every user only sees their own networks. Graphs may be saved with errors (work in progress)
-but are limited to 500 layers and 2000 connections.
+Graphs may be saved with errors (work in progress) but are limited to 500 layers and 2000
+connections.
+
+**Sharing.** The owner shares a network with other users as `editor` (may change it) or
+`viewer` (may look), or turns on a view link (`/share/<token>` in the web app). Every project
+in a response has `owner`, `role` (`owner`, `editor` or `viewer`), `version`, `updated_by`,
+`shared`, `link_access` and, for the owner, `share_token`. Turning the link off invalidates
+it; turning it on again creates a new one.
+
+**Conflicts.** `version` goes up with every change. A `PATCH` with `version` that is not the
+current one answers `409` with `{detail, project}` (the current state) and saves nothing;
+without `version`, the save overwrites.
 
 ## Training (login required)
 
@@ -280,5 +296,6 @@ Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and r
 preparations: 60/hour, previews and downloads of preparations: 1200/hour, MCP requests:
 600/hour, OAuth registration, token and revocation requests: 120/minute. Adjust with
 `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`, `BRICKDNN_TRAINING_RATE`,
-`BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE` and `BRICKDNN_OAUTH_RATE`
+`BRICKDNN_UPLOAD_RATE`, `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
+`BRICKDNN_SHARING_RATE` (invitations and link changes, 120/hour)
 (e.g. `100/minute`).

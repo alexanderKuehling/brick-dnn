@@ -7,6 +7,8 @@ export interface BuilderContextValue {
   analysis: Analysis | null;
   errorsByNode: Record<string, string[]>;
   warningsByNode: Record<string, string[]>;
+  /** View only: settings are shown but cannot be changed. */
+  readOnly: boolean;
   updateNode: (id: string, patch: Partial<LayerNodeData>) => void;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
