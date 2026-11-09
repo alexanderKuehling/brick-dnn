@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Sharing networks.** Owners invite other users by username or e-mail as editors or
+  viewers, or share a view link (`/share/<token>`) that works without an account; members
+  see shared networks next to their own and can leave, anyone can make a copy. Saving checks
+  the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
+  state). The MCP tools list shared networks and respect the roles.
+
 ## 1.1.0 (2026-11-09)
 
 Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in

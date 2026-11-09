@@ -20,12 +20,11 @@ from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import training_service as training
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
-from .models import ApiToken, Dataset, Project, TrainingRun
+from .models import ApiToken, Dataset, TrainingRun
 from .serializers import (
     ApiTokenCreateSerializer,
     ApiTokenSerializer,
     DatasetSerializer,
-    ProjectSerializer,
     RegisterSerializer,
     RunDetailSerializer,
     RunSummarySerializer,
@@ -151,15 +150,7 @@ class ApiTokenViewSet(
 # --------------------------------------------------------------------------- #
 
 
-class ProjectViewSet(viewsets.ModelViewSet):
-    serializer_class = ProjectSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Project.objects.filter(owner=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+# ProjectViewSet and sharing: see projects.py.
 
 
 # --------------------------------------------------------------------------- #

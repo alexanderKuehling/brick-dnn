@@ -203,6 +203,8 @@ REST_FRAMEWORK = {
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
         # Requests to the MCP server (one per tool call of an AI assistant).
         "mcp": os.environ.get("BRICKDNN_MCP_RATE", "600/hour"),
+        # Inviting people to a project and changing its link.
+        "sharing": os.environ.get("BRICKDNN_SHARING_RATE", "120/hour"),
         # OAuth app registration, tokens and revocation (per IP address: apps like Claude
         # call it from their servers, for all their users).
         "oauth": os.environ.get("BRICKDNN_OAUTH_RATE", "120/minute"),
