@@ -67,9 +67,10 @@ export function RegisterPage() {
           />
           <TextInput
             label="Email"
-            description="Optional"
+            description="Other people can invite you to their networks with it."
             type="email"
             autoComplete="email"
+            required
             value={email}
             onChange={(e) => setEmail(e.currentTarget.value)}
           />

@@ -40,6 +40,11 @@
   sees them. The REST API and MCP use the same delete code, so live editors are told when a
   project is deleted either way.
 
+### Changed
+- An e-mail address is required to create an account, and each address can be used by one
+  account only (people are invited to shared networks by e-mail, too). Existing accounts
+  without one keep working.
+
 ## 1.1.0 (2026-11-09)
 
 Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in

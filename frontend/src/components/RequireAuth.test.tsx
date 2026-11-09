@@ -72,9 +72,10 @@ describe('RequireAuth', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'Create one' }));
     expect(await screen.findByRole('heading', { name: 'Create an account' })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/Username/), 'alex');
+    await userEvent.type(screen.getByLabelText(/Email/), 'alex@example.com');
     await userEvent.type(screen.getByLabelText(/^Password/), 'secret-password');
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(api.register).toHaveBeenCalledWith('alex', '', 'secret-password');
+    expect(api.register).toHaveBeenCalledWith('alex', 'alex@example.com', 'secret-password');
     expect(await screen.findByTestId('protected')).toHaveTextContent(PAGE);
   });
 
