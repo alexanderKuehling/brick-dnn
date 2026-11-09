@@ -49,6 +49,7 @@ const ACCOUNT: Account = {
     training_runs: 5,
     api_tokens: 0,
     connected_apps: 0,
+    agent_actions: 0,
     upload_bytes: 3 * 1024 * 1024,
   },
 };
@@ -109,6 +110,9 @@ test('storedSummary', () => {
     '2 training datasets',
     '5 training runs',
   ]);
+  expect(storedSummary({ ...ACCOUNT.stored, agent_actions: 1234 })).toContain(
+    '1,234 entries in the agent activity log'
+  );
 });
 
 test('shows the account and what is stored', async () => {
