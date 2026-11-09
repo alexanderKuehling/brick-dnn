@@ -175,7 +175,10 @@ export function tokenLifetime(token: string, now = Date.now()): number | null {
   }
 }
 
-/** Uploads refresh the access token first if it expires within this many seconds. */
+/** Requests refresh the access token first if it expires within this many seconds. */
+const REQUEST_TOKEN_MARGIN = 10;
+
+/** Uploads refresh it earlier: they can take a while to send. */
 const UPLOAD_TOKEN_MARGIN = 60;
 
 /** Live connections get a token that is valid for at least this many more seconds. */
@@ -202,11 +205,14 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   const { method = 'GET', body, auth = false, signal } = options;
   const multipart = typeof FormData !== 'undefined' && body instanceof FormData;
 
-  // The server rejects an expired token before reading a large upload, which browsers often
-  // report as a dropped connection instead of a 401. So refresh it before sending the file.
-  if (auth && multipart && tokens?.access) {
+  // Refresh an access token that has expired (or is about to) before sending, rather than
+  // waiting for the 401: browsers log every 401 as an error, e.g. on the first request after
+  // the page was left open. Uploads get more margin: the server rejects an expired token
+  // before reading a large upload, which browsers often report as a dropped connection.
+  if (auth && tokens?.access) {
     const lifetime = tokenLifetime(tokens.access);
-    if (lifetime !== null && lifetime < UPLOAD_TOKEN_MARGIN) {
+    const margin = multipart ? UPLOAD_TOKEN_MARGIN : REQUEST_TOKEN_MARGIN;
+    if (lifetime !== null && lifetime < margin) {
       await refreshAccessToken();
     }
   }
