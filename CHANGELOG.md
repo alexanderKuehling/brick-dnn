@@ -32,6 +32,22 @@
   overage), usage and budgets of tokens and apps on the API tokens page, the estimated
   compute and what is left in the training panel, and why a run was stopped. Usage records
   are part of the data export and are deleted with the account.
+- **Agent activity: a log of everything AI agents do.** Every MCP tool call and every API
+  request made with an API token or a connected app is recorded for its user: the token or
+  app, the client, the tool or route, whether it worked (with the error the agent got), how
+  long it took, the networks, trainings and datasets it touched and a sentence such as
+  *Started training “GP 1” on dataset “houses.csv” (#3)*. Arguments are summarised and
+  redacted (sizes and counts instead of CSV text and prediction inputs; never tokens or
+  passwords). The new page *Agent activity* (account menu, and next to each token and app on
+  the API tokens page) shows it live: new entries slide in while the page is open, repeated
+  checks of a training count up in one row, failed actions are marked, details show the
+  arguments, and names link to the network, training or dataset; filters for the token or app
+  and for errors. Website use is not logged; each user sees only their own agents. Entries are
+  kept for `BRICKDNN_AGENT_LOG_DAYS` (90) days and at most 20,000 per account, deleted by
+  `purge_old_data`, exported with the account and deleted with it; revoking a token keeps its
+  entries until then. API: `GET /api/agent-activity/` (filters, pages, `?after=` for polling)
+  and `/api/agent-activity/summary/`. Logging happens after the response and never breaks a
+  call.
 - **Classical models: Gaussian processes and support vector machines.** New bricks next to
   the neural layers: kernels (`RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`,
   `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum` and
@@ -66,6 +82,16 @@
   and shows a fitted run with its fit time, rows, fitted and starting kernel, log marginal
   likelihood or support vectors and the scores (accuracy, or RMSE and R²) instead of loss
   curves; the model downloads as `<run>.joblib` with a joblib snippet.
+- **R² for regressions of neural networks**, like for classical models: the coefficient of
+  determination on the validation data (per epoch) and the test data, measured against the
+  mean of those rows themselves (the same number as scikit-learn's `r2_score`; with several
+  outputs their mean; null when all targets of a split are equal). It is reported wherever the
+  RMSE is: `val_r2` in the history, the trials and the best trial of a search, `r2` in the
+  test result, the run metrics `val_r2` and `test_r2` (REST and MCP), the final message and
+  `brickdnn train` (epochs, trials, the table of trials, the test line). The run view shows
+  the R² next to the validation and test RMSE, a *Validation R²* curve and R² columns in the
+  tables of the epochs and the trials; the list of runs shows the test R² of neural
+  regressions too.
 - After the first training of a user that completes, a notification asks once (per browser)
   for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).

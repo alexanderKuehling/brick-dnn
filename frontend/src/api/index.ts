@@ -3,6 +3,9 @@ import { request, requestFile, type UploadOptions } from './client';
 import { createDemoApi } from './demoApi';
 import type {
   Account,
+  AgentActivityPage,
+  AgentActivityQuery,
+  AgentActivitySummary,
   Analysis,
   ApiToken,
   ApiTokenInput,
@@ -66,6 +69,18 @@ export {
 } from './client';
 
 type ProjectInput = Pick<Project, 'name' | 'graph'> & Partial<Pick<Project, 'description'>>;
+
+/** "?a=1&b=x" for the values that are set, "" for none. */
+function queryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      search.set(key, String(value));
+    }
+  }
+  const text = search.toString();
+  return text ? `?${text}` : '';
+}
 
 const serverApi = {
   layers: () => request<LayerCatalog>('/api/layers/'),
@@ -182,6 +197,19 @@ const serverApi = {
         body: { budget_cpu_minutes: cpuMinutes },
         auth: true,
       }),
+  },
+
+  /** What AI agents did with the user's API tokens and apps (website login only). */
+  agentActivity: {
+    /** Newest first; `after` for polling, `before` for older pages. */
+    list: (query: AgentActivityQuery = {}, signal?: AbortSignal) =>
+      request<AgentActivityPage>(`/api/agent-activity/${queryString(query)}`, {
+        auth: true,
+        signal,
+      }),
+    /** The tokens and apps that acted, the tools used and the latest entry. */
+    summary: (signal?: AbortSignal) =>
+      request<AgentActivitySummary>('/api/agent-activity/summary/', { auth: true, signal }),
   },
 
   projects: {

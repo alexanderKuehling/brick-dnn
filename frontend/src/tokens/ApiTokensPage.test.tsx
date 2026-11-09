@@ -1,4 +1,5 @@
 import { render, screen, userEvent, waitFor, within } from '@test-utils';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -13,6 +14,7 @@ vi.mock('@/api', async (importOriginal) => {
     api: {
       apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
       connections: { list: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
+      agentActivity: { summary: vi.fn() },
     },
   };
 });
@@ -70,9 +72,11 @@ const CREATED: NewApiToken = {
 
 function renderPage() {
   return render(
-    <ModalsProvider>
-      <ApiTokensPage />
-    </ModalsProvider>
+    <MemoryRouter>
+      <ModalsProvider>
+        <ApiTokensPage />
+      </ModalsProvider>
+    </MemoryRouter>
   );
 }
 
@@ -81,6 +85,14 @@ beforeEach(() => {
   vi.spyOn(notifications, 'show').mockImplementation(() => 'id');
   vi.mocked(api.apiTokens.list).mockResolvedValue([LAPTOP, SCRIPT]);
   vi.mocked(api.connections.list).mockResolvedValue([]);
+  vi.mocked(api.agentActivity.summary).mockResolvedValue({
+    agents: [],
+    tools: [],
+    total: 0,
+    latest_id: 0,
+    latest_at: null,
+    retention_days: 90,
+  });
 });
 
 describe('setup snippets', () => {
@@ -130,6 +142,42 @@ describe('ApiTokensPage', () => {
     expect(within(script).getByText('Never')).toBeInTheDocument();
     // The badge and the label of the date.
     expect(within(script).getAllByText('Expired')).toHaveLength(2);
+  });
+
+  it('links each token and app to what it did', async () => {
+    vi.mocked(api.connections.list).mockResolvedValue([CLAUDE]);
+    vi.mocked(api.agentActivity.summary).mockResolvedValue({
+      agents: [
+        {
+          kind: 'token',
+          id: LAPTOP.id,
+          key: `token:${LAPTOP.id}`,
+          name: LAPTOP.name,
+          prefix: LAPTOP.prefix,
+          active: true,
+          actions: 42,
+          errors: 2,
+          last_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+          last_id: 99,
+        },
+      ],
+      tools: [],
+      total: 42,
+      latest_id: 99,
+      latest_at: null,
+      retention_days: 90,
+    });
+    renderPage();
+    const laptop = await screen.findByRole('listitem', { name: 'Claude on my laptop' });
+    const link = await within(laptop).findByRole('link', { name: /42 actions · 5 min ago/ });
+    expect(link).toHaveAttribute('href', `/activity?agent=token:${LAPTOP.id}`);
+    expect(link).toHaveTextContent('2 failed');
+    const claude = await screen.findByRole('listitem', { name: 'Claude' });
+    expect(within(claude).getByText('None yet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Agent activity' })).toHaveAttribute(
+      'href',
+      '/activity'
+    );
   });
 
   it('shows how to connect an assistant, with a placeholder for the token', async () => {

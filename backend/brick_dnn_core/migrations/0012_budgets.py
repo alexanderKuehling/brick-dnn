@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("brick_dnn_core", "0010_privacy"),
+        ("brick_dnn_core", "0011_agent_activity"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

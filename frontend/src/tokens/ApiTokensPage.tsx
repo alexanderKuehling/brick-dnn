@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IconKey, IconPlus, IconTrash } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -16,9 +18,10 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type ApiToken } from '@/api';
+import { api, type ActivityAgent, type AgentKey, type ApiToken } from '@/api';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
+import { ActivityLink } from './ActivityLink';
 import { ConnectedApps } from './ConnectedApps';
 import { CreateTokenModal } from './CreateTokenModal';
 import { McpSetup } from './McpSetup';
@@ -30,10 +33,12 @@ function isExpired(token: ApiToken, now = Date.now()): boolean {
 
 function TokenItem({
   token,
+  activity,
   onRevoke,
   onBudget,
 }: {
   token: ApiToken;
+  activity: ActivityAgent | undefined;
   onRevoke: () => void;
   onBudget: (budget: number | null) => Promise<void>;
 }) {
@@ -100,6 +105,12 @@ function TokenItem({
             </dd>
           </div>
         )}
+        <div>
+          <dt>Agent activity</dt>
+          <dd>
+            <ActivityLink agentKey={`token:${token.id}`} activity={activity} />
+          </dd>
+        </div>
       </dl>
     </li>
   );
@@ -120,6 +131,17 @@ export function ApiTokensPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  // What each token and app did lately (the log is on the page "Agent activity").
+  const [activity, setActivity] = useState<Map<AgentKey, ActivityAgent>>(new Map());
+  useEffect(() => {
+    const controller = new AbortController();
+    api.agentActivity
+      .summary(controller.signal)
+      .then((summary) => setActivity(new Map(summary.agents.map((agent) => [agent.key, agent]))))
+      .catch(() => undefined); // The links still work.
+    return () => controller.abort();
+  }, []);
 
   const create = () => {
     setDialogKey((key) => key + 1);
@@ -157,7 +179,12 @@ export function ApiTokensPage() {
       <Text mt="xs" maw={720}>
         AI assistants (through MCP) and your own scripts can use Brick DNN as you: apps like Claude
         by signing in, others with an API token. Treat tokens like passwords: anyone who has one can
-        use your account as far as the token allows, until it expires or you revoke it.
+        use your account as far as the token allows, until it expires or you revoke it. Everything
+        they do is listed under{' '}
+        <Anchor component={Link} to="/activity">
+          Agent activity
+        </Anchor>
+        .
       </Text>
 
       <section className={classes.section} aria-labelledby="mcp-title">
@@ -173,7 +200,7 @@ export function ApiTokensPage() {
         <McpSetup />
       </section>
 
-      <ConnectedApps />
+      <ConnectedApps activity={activity} />
 
       <section className={classes.section} aria-labelledby="tokens-title">
         <Group justify="space-between" mb="md">
@@ -214,6 +241,7 @@ export function ApiTokensPage() {
               <TokenItem
                 key={token.id}
                 token={token}
+                activity={activity.get(`token:${token.id}`)}
                 onRevoke={() => revoke(token)}
                 onBudget={async (budget) => {
                   const updated = await api.apiTokens.setBudget(token.id, budget);

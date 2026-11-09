@@ -5,6 +5,7 @@ from django.db.models import Q
 
 from . import budgets
 from .models import (
+    AgentAction,
     ApiToken,
     DataPrep,
     Dataset,
@@ -273,6 +274,19 @@ class UsageRecordAdmin(admin.ModelAdmin):
     list_filter = ("period", "kind", "source")
     search_fields = ("user__username", "via", "run_name")
     date_hierarchy = "created_at"
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+
+@admin.register(AgentAction)
+class AgentActionAdmin(admin.ModelAdmin):
+    """The activity log of AI agents (see agent_activity.py): to look at, not to change."""
+
+    list_display = ("created_at", "owner", "agent_name", "tool", "outcome", "summary")
+    list_filter = ("outcome", "source", "agent_kind")
+    search_fields = ("owner__username", "agent_name", "tool", "summary")
+    raw_id_fields = ("owner",)
 
     def has_add_permission(self, request) -> bool:
         return False

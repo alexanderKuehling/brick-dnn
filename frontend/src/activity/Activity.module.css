@@ -1,0 +1,263 @@
+.intro {
+  max-width: 720px;
+}
+
+/* "Live" next to the title: a dot that breathes while new entries are fetched. */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.liveDot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-gray-5);
+
+  &[data-state='live'] {
+    background: var(--mantine-color-green-filled);
+  }
+
+  &[data-state='live']::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    border-radius: 50%;
+    background: var(--mantine-color-green-filled);
+    animation: breathe 2s ease-out infinite;
+  }
+
+  &[data-state='offline'] {
+    background: var(--mantine-color-red-filled);
+  }
+}
+
+@keyframes breathe {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+.filters {
+  margin-top: var(--mantine-spacing-lg);
+}
+
+.agentSelect {
+  flex: 1 1 16rem;
+  max-width: 22rem;
+}
+
+.day {
+  margin: var(--mantine-spacing-lg) 0 var(--mantine-spacing-xs);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+/* One action (or a run of the same one). */
+.item {
+  position: relative;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  background: var(--mantine-color-body);
+
+  & + & {
+    border-top: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  }
+
+  /* A red edge marks what failed. */
+  &[data-error]::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    content: '';
+    background: var(--mantine-color-red-filled);
+  }
+
+  /* New entries slide in and glow briefly. */
+  &[data-fresh] {
+    animation:
+      slide-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      glow 2.4s ease-out;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes glow {
+  from {
+    background: light-dark(var(--mantine-color-brick-0), var(--mantine-color-dark-5));
+  }
+
+  to {
+    background: var(--mantine-color-body);
+  }
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-sm);
+  cursor: pointer;
+}
+
+.icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.summary {
+  overflow-wrap: anywhere;
+}
+
+.link {
+  font-weight: 600;
+  vertical-align: baseline;
+}
+
+.error {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--mantine-spacing-xs);
+  margin-top: 4px;
+}
+
+.agentBadge {
+  max-width: 100%;
+  text-transform: none;
+}
+
+.tool {
+  overflow-wrap: anywhere;
+}
+
+/* "×12": the badge pops when another call of the run comes in. */
+.count {
+  animation: pop 360ms ease-out;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(1.35);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+.side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.chevron {
+  transition: transform 150ms ease;
+
+  &[data-open] {
+    transform: rotate(180deg);
+  }
+}
+
+.details {
+  margin: var(--mantine-spacing-sm) 0 var(--mantine-spacing-xs)
+    calc(32px + var(--mantine-spacing-sm));
+  padding: var(--mantine-spacing-sm);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px var(--mantine-spacing-md);
+  margin: 0;
+
+  dt {
+    color: var(--mantine-color-dimmed);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.calls {
+  margin: var(--mantine-spacing-xs) 0 0;
+  padding-left: var(--mantine-spacing-md);
+}
+
+@media (width < 36em) {
+  .item {
+    padding: var(--mantine-spacing-sm);
+  }
+
+  .details {
+    margin-left: 0;
+  }
+
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+
+    dd + dt {
+      margin-top: 6px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item[data-fresh],
+  .count,
+  .liveDot::after {
+    animation: none;
+  }
+}

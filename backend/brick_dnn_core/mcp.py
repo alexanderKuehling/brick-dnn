@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -36,6 +37,7 @@ from brickdnn.training.config import TrainingConfig
 from . import budgets, downloads, history
 from . import training_service as training
 from .accounts import usage_data
+from .agent_activity import record_tool_call
 from .api_tokens import uses_api_token
 from .models import ApiToken, Project, TrainingRun
 from .oauth import McpAuthentication
@@ -718,8 +720,10 @@ TOOLS: dict[str, Tool] = {
             "get_training_run",
             "Show a training run",
             "One training run with its settings, its history of metrics per epoch and its "
-            "status. Classical models have one entry (the fit) and state.classical with the "
-            "fitted kernel, log marginal likelihood or support vectors.",
+            "status. Regressions report the RMSE (in the units of the target) and R² "
+            "(val_rmse, val_r2; test_rmse, test_r2 in metrics). Classical models have one "
+            "entry (the fit) and state.classical with the fitted kernel, log marginal "
+            "likelihood or support vectors.",
             get_training_run,
             {"id": {"type": "string"}},
             ("id",),
@@ -841,34 +845,42 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
-    tool = TOOLS.get(params.get("name"))  # type: ignore[arg-type]
-    if tool is None:
-        raise McpError(-32602, f"Unknown tool: {params.get('name')}")
-    args = params.get("arguments") or {}
-    if not isinstance(args, dict):
-        raise McpError(-32602, "'arguments' must be an object.")
-
+def _run_tool(tool: Tool, request: Request, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """The tool's result, or the error message for the assistant."""
     try:
         if tool.writes and not _can_write(request):
             raise ToolError("This API token is read-only. Use a token with full access.")
         missing = [name for name in tool.required if args.get(name) is None]
         if missing:
             raise ToolError(f"Missing argument: {', '.join(missing)}.")
-        result = tool.run(request, args)
+        return tool.run(request, args), None
     except ToolError as exc:
-        return {"content": [{"type": "text", "text": str(exc)}], "isError": True}
+        return None, str(exc)
     except budgets.BudgetError as exc:
         # A budget or the storage quota does not allow it: say which, and how to get more.
-        text = f"{exc.message}\nget_usage shows the usage and budgets of this month."
-        return {"content": [{"type": "text", "text": text}], "isError": True}
+        return None, f"{exc.message}\nget_usage shows the usage and budgets of this month."
     except Exception:
         logger.exception("MCP tool %s failed", tool.name)
-        return {
-            "content": [{"type": "text", "text": "Internal error in the Brick DNN server."}],
-            "isError": True,
-        }
+        return None, "Internal error in the Brick DNN server."
 
+
+def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
+    started = time.monotonic()
+    name = params.get("name")
+    tool = TOOLS.get(name) if isinstance(name, str) else None
+    args = params.get("arguments") or {}
+    if tool is None or not isinstance(args, dict):
+        message = f"Unknown tool: {name}" if tool is None else "'arguments' must be an object."
+        record_tool_call(request, name, args, started=started, error=message)
+        raise McpError(-32602, message)
+
+    result, error = _run_tool(tool, request, args)
+    # The activity log (agent_activity.py); written after the response.
+    record_tool_call(
+        request, tool.name, args, started=started, result=result, error=error, writes=tool.writes
+    )
+    if error is not None:
+        return {"content": [{"type": "text", "text": error}], "isError": True}
     if isinstance(result, str):
         return {"content": [{"type": "text", "text": result}]}
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)

@@ -197,25 +197,35 @@ function Builder() {
   const [trainingLoaded, setTrainingLoaded] = useState(false);
   const location = useLocation();
   // "Train with this data" in the Data tab opens the training panel here, with the exported
-  // dataset selected (also when the builder is open already, e.g. from a notification). The
-  // state is cleared, so going back or reloading does not open it again.
+  // dataset selected (also when the builder is open already, e.g. from a notification); the
+  // agent activity page opens a run (`run`) or selects a dataset the same way. The state is
+  // cleared, so going back or reloading does not open it again.
   const { setSource: setTrainingSource, reloadDatasets } = training.data;
   useEffect(() => {
-    const state = location.state as { openTraining?: boolean; dataset?: unknown } | null;
+    const state = location.state as {
+      openTraining?: boolean;
+      dataset?: unknown;
+      run?: unknown;
+    } | null;
     if (!state?.openTraining) {
       return;
     }
-    const { dataset } = state;
+    const { dataset, run } = state;
     if (typeof dataset === 'number') {
       setTrainingSource((current) => ({ ...current, tab: 'upload', upload: dataset }));
       reloadDatasets();
     }
-    training.open();
+    if (typeof run === 'string') {
+      training.openRun(run);
+    } else {
+      training.open();
+    }
     navigate(location.pathname, { replace: true, state: null });
   }, [
     location.state,
     location.pathname,
     training.open,
+    training.openRun,
     setTrainingSource,
     reloadDatasets,
     navigate,

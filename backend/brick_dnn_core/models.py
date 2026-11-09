@@ -543,3 +543,72 @@ class UsageRecord(models.Model):
 
     def __str__(self) -> str:
         return f"{self.kind} of {self.user}: {self.quantity:.1f} {self.unit} ({self.period})"
+
+
+class AgentAction(models.Model):
+    """One thing an AI agent or a script did in a user's account: an MCP tool call, or a REST
+    request made with an API token. The activity log (see agent_activity.py) shows them on the
+    page "Agent activity"; ordinary use of the website is not logged.
+
+    Arguments are summarised and redacted before they are stored: no file contents, no
+    prediction inputs, no tokens or passwords. Entries are kept for BRICKDNN_AGENT_LOG_DAYS
+    days and deleted with the account. They outlive the token or app that made them: the
+    token or app is named here instead of being a foreign key.
+    """
+
+    SOURCES = [("mcp", "MCP tool"), ("api", "REST API")]
+    AGENT_KINDS = [("token", "API token"), ("app", "Connected app")]
+    OUTCOMES = [("ok", "Done"), ("error", "Failed")]
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="agent_actions"
+    )
+    # When the action finished (it started duration_ms before).
+    created_at = models.DateTimeField(default=timezone.now)
+    source = models.CharField(max_length=3, choices=SOURCES)
+    # Who: a personal API token (ApiToken.pk) or an app connected with OAuth
+    # (OAuthConnection.pk), by number only, with its name at the time.
+    agent_kind = models.CharField(max_length=5, choices=AGENT_KINDS)
+    agent_id = models.PositiveBigIntegerField()
+    agent_name = models.CharField(max_length=200)
+    # The start of the token used ("bdnn_" and 8 characters); apps get a new one every hour.
+    token_prefix = models.CharField(max_length=20, blank=True)
+    user_agent = models.CharField(max_length=200, blank=True)
+    # What: the MCP tool, or the name of the REST route (e.g. "training-run-stop") and method.
+    tool = models.CharField(max_length=64)
+    method = models.CharField(max_length=7, blank=True)
+    # Changes something (saves, uploads, starts, stops, deletes) rather than only reading.
+    writes = models.BooleanField(default=False)
+    outcome = models.CharField(max_length=10, choices=OUTCOMES, default="ok")
+    # What went wrong (outcome "error"), as the agent was told.
+    error = models.CharField(max_length=500, blank=True)
+    # REST requests: the HTTP status of the answer.
+    status_code = models.PositiveSmallIntegerField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField(default=0)
+    # A sentence for people, e.g. 'Started training “GP 1” on “houses.csv”'.
+    summary = models.CharField(max_length=300)
+    # The arguments, summarised: {"graph": "5 layers, 4 connections", "csv": "48 KB, …"}.
+    arguments = models.JSONField(default=dict)
+    # What it touched: [{"kind": "project" | "run" | "dataset" | "data_source" | "data_prep",
+    # "id", "name"?}, ...]
+    targets = models.JSONField(default=list)
+    # The network it was about, if any (for filtering). Not enforced by the database, so that
+    # the entry keeps the number when the network is deleted.
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        ordering = ["-id"]
+        indexes = [
+            models.Index(fields=["owner", "-id"], name="agent_action_owner_id"),
+            models.Index(fields=["created_at"], name="agent_action_created"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.agent_name} ({self.owner}): {self.summary}"

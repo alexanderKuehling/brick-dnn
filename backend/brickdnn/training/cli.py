@@ -197,7 +197,9 @@ class ConsoleReporter(Reporter):
         columns = ["trial", *[LABELS[name] for name in names], "val loss"]
         accuracy = any(t.get("val_accuracy") is not None for t in self._trials)
         rmse = any(t.get("val_rmse") is not None for t in self._trials)
+        r2 = not accuracy and any(t.get("val_r2") is not None for t in self._trials)
         columns += ["val acc"] if accuracy else ["val rmse"] if rmse else []
+        columns += ["val R²"] if r2 else []
         ranked = sorted(
             self._trials,
             key=lambda t: (t["val_loss"] is None, t["val_loss"] or 0.0, t["trial"]),
@@ -215,6 +217,8 @@ class ConsoleReporter(Reporter):
                     cells.append(f"{trial['val_accuracy']:.1%}")
                 elif rmse:
                     cells.append(f"{trial['val_rmse']:.4g}")
+                if r2:
+                    cells.append(_number(trial.get("val_r2"), ".3f"))
             rows.append(cells)
         widths = [
             max([len(columns[i])] + [len(row[i]) for row in rows if i < len(row)])
@@ -258,7 +262,15 @@ def _metrics(trial: dict[str, Any], prefix: str) -> str:
         text += f", {prefix} acc {trial[f'{prefix}_accuracy']:.1%}"
     if trial.get(f"{prefix}_rmse") is not None:
         text += f", {prefix} rmse {trial[f'{prefix}_rmse']:.4g}"
+    if trial.get(f"{prefix}_r2") is not None:
+        text += f", {prefix} R² {trial[f'{prefix}_r2']:.3f}"
     return text
+
+
+def _number(value: float | None, spec: str) -> str:
+    """A table cell: ``value`` formatted with ``spec``, "–" for None (e.g. an R² of a
+    validation split whose targets are all equal)."""
+    return "–" if value is None else format(value, spec)
 
 
 def parse_values(text: str, name: str) -> dict[str, float] | list[Any]:

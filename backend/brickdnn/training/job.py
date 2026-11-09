@@ -82,8 +82,7 @@ class TrainingResult:
     weights: bool = False
     history: list[dict[str, Any]] = field(default_factory=list)
     best: dict[str, Any] | None = None
-    # {"loss", "accuracy", "rmse"} of the final model on the test set (classical models:
-    # also "r2")
+    # {"loss", "accuracy", "rmse", "r2"} of the final model on the test set
     test: dict[str, Any] | None = None
     # Hyperparameter search: every trial (see state.py) and the number of the best one
     trials: list[dict[str, Any]] = field(default_factory=list)

@@ -40,6 +40,8 @@ Every run lives in its own directory::
          "train_accuracy": 0.91, "val_accuracy": 0.95, "seconds": 12.3}
       ],                             # accuracies are null for regression; regression runs
                                      # add "val_rmse" (root mean squared error, original units)
+                                     # and "val_r2" (coefficient of determination; null if
+                                     # the validation targets are all equal)
       "progress": {"epoch": 2, "step": 120, "steps": 938, "loss": 0.21,
                    "samples_per_second": 5400.0},          # null outside of an epoch
       "best": {"epoch": 1, "val_loss": 0.15, "val_accuracy": 0.95},  # lowest val_loss
@@ -48,8 +50,9 @@ Every run lives in its own directory::
                                      # the epochs are over, and if the saved weights are not
                                      # those of a finished epoch (stopped without restore_best)
       "stopped_early": false,        # true if early stopping (patience) ended the training
-      "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null},  # kept weights on the test
-                                     # set; null without a test set or before the end
+      "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null, "r2": null},  # kept weights
+                                     # on the test set (rmse and r2: regression only); null
+                                     # without a test set or before the end
       "weights": false,              # true once weights.pt exists
       "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights:
                                      # {"kind": "image", channels, height, width, layout,
@@ -75,7 +78,7 @@ Every run lives in its own directory::
       "trials": [                    # one entry per started trial
         {"trial": 1, "params": {"learning_rate": 0.00312}, "status": "completed",
          "message": "", "epochs_done": 10, "train_loss": 0.2, "val_loss": 0.15,
-         "val_accuracy": 0.95, "val_rmse": null, "weights_epoch": 8,
+         "val_accuracy": 0.95, "val_rmse": null, "val_r2": null, "weights_epoch": 8,
          "stopped_early": false, "seconds": 120.5}
       ],                             # status: running | completed | failed | stopped;
                                      # the metrics are those of the epoch whose weights the
@@ -90,8 +93,8 @@ are saved; ``weights_epoch`` and ``stopped_early`` then describe the best trial.
 
 Classical models (``family`` "classical") are fitted once: ``epochs`` and
 ``steps_per_epoch`` are 1, ``progress`` stays null, and when the fit is done ``history``
-gets a single entry (epoch 1, the metrics of the fitted model; regression adds
-"val_r2"), ``weights_epoch`` is 1 and ``test`` adds "r2". ``device`` is "cpu".
+gets a single entry (epoch 1, the metrics of the fitted model), ``weights_epoch`` is 1
+and ``device`` is "cpu".
 ``train_size`` counts the rows the model is fitted on (after the row limit). The losses
 are the cross-entropy of the predicted class probabilities and, for regression, the mean
 squared error of the standardised target (like those of a neural network), so runs of

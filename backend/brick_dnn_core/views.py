@@ -491,6 +491,7 @@ class ApiRoot(APIView):
                     "api_tokens": f"{base}auth/api-tokens/",
                     "account": f"{base}auth/account/",
                     "usage": f"{base}account/usage/",
+                    "agent_activity": f"{base}agent-activity/",
                     "legal": f"{base}legal/",
                     "mcp": f"{base}mcp/",
                     "projects": f"{base}projects/",

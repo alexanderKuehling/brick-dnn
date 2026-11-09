@@ -354,6 +354,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |
 | `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` | `0` (off)        | Delete accounts unused for this many days, with everything they own |
 | `BRICKDNN_EXPORT_MAX_FILES_MB` | `200`                      | Uploaded files included in a user's data export      |
+| `BRICKDNN_AGENT_LOG_DAYS`      | `90`                       | Days the activity log of AI agents is kept (`0`: no log) |
 | `BRICKDNN_PLANS`               | unset (no limits)          | Plans with their limits per account as JSON: compute per month, storage, compute per training, trainings at a time ([docs/training.md](docs/training.md#plans-and-limits)) |
 | `BRICKDNN_DEFAULT_PLAN`        | the first plan             | The plan of accounts without one (`manage.py set_plan` changes it) |
 | `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH` / `_PER_RUN` | `0` (unlimited) | Without plans: compute per account and month / per training |

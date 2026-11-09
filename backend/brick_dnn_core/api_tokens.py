@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import weakref
 from datetime import timedelta
 
 from django.utils import timezone
@@ -80,6 +81,10 @@ class ApiTokenAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("This API token has expired.")
         if not token.owner.is_active:
             raise exceptions.AuthenticationFailed("This account is disabled.")
+        # The activity log of agents (agent_activity.py) records what the token does, also
+        # when it is refused below.
+        request._request.agent_token = token
+        request._request.agent_request = weakref.ref(request)
         match = request._request.resolver_match
         url_name = match.url_name if match is not None else None
         # Apps connected with OAuth were allowed to use the MCP server, nothing else.

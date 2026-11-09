@@ -110,6 +110,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Logs what AI agents do with API tokens (after the response, see agent_activity.py).
+    "brick_dnn_core.agent_activity.AgentActivityMiddleware",
 ]
 
 ROOT_URLCONF = "brick_dnn_site.urls"
@@ -347,6 +349,10 @@ DELETE_INACTIVE_ACCOUNTS_DAYS = int(os.environ.get("BRICKDNN_DELETE_INACTIVE_ACC
 # The data export of an account includes uploaded files up to this many MB in total; larger
 # files are listed only.
 EXPORT_MAX_FILES_MB = float(os.environ.get("BRICKDNN_EXPORT_MAX_FILES_MB", "200"))
+# The activity log of AI agents (MCP tool calls and REST requests with API tokens, shown on
+# the page "Agent activity"): entries older than this many days are deleted by
+# `manage.py purge_old_data`. 0: nothing is logged (and the purge deletes what is there).
+AGENT_LOG_DAYS = max(0, int(os.environ.get("BRICKDNN_AGENT_LOG_DAYS") or 90))
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

@@ -3,18 +3,21 @@ import { IconPlugConnectedX } from '@tabler/icons-react';
 import { Alert, Badge, Button, Center, Group, Loader, Text, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type OAuthConnection } from '@/api';
+import { api, type ActivityAgent, type AgentKey, type OAuthConnection } from '@/api';
 import { urlHost } from '@/oauth/url';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
+import { ActivityLink } from './ActivityLink';
 import classes from './Tokens.module.css';
 
 function ConnectionItem({
   connection,
+  activity,
   onDisconnect,
   onBudget,
 }: {
   connection: OAuthConnection;
+  activity: ActivityAgent | undefined;
   onDisconnect: () => void;
   onBudget: (budget: number | null) => Promise<void>;
 }) {
@@ -75,13 +78,24 @@ function ConnectionItem({
             </dd>
           </div>
         )}
+        <div>
+          <dt>Agent activity</dt>
+          <dd>
+            <ActivityLink agentKey={`app:${connection.id}`} activity={activity} />
+          </dd>
+        </div>
       </dl>
     </li>
   );
 }
 
 /** Apps the user allowed to use their account by signing in (OAuth), e.g. the Claude apps. */
-export function ConnectedApps() {
+export function ConnectedApps({
+  activity = new Map(),
+}: {
+  /** What each app did lately, by "app:<id>". */
+  activity?: Map<AgentKey, ActivityAgent>;
+}) {
   const [connections, setConnections] = useState<OAuthConnection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,6 +154,7 @@ export function ConnectedApps() {
             <ConnectionItem
               key={connection.id}
               connection={connection}
+              activity={activity.get(`app:${connection.id}`)}
               onDisconnect={() => disconnect(connection)}
               onBudget={async (budget) => {
                 const updated = await api.connections.setBudget(connection.id, budget);

@@ -248,6 +248,22 @@ export function isClassification(run: RunSummary, history: HistoryEntry[] = []):
   );
 }
 
+/**
+ * Whether a run of a neural network shows its R² next to the RMSE: regressions. Their history
+ * entries carry `val_r2` (null when the validation targets are all equal); runs of older
+ * versions, which did not report it, have no R² anywhere and show none.
+ */
+export function reportsR2(run: RunSummary, history: HistoryEntry[]): boolean {
+  if (isClassification(run, history)) {
+    return false;
+  }
+  const values = [run.metrics?.val_r2, run.metrics?.test_r2, ...history.map((h) => h.val_r2)];
+  if (values.some((value) => typeof value === 'number')) {
+    return true;
+  }
+  return run.task === 'regression' && history.every((entry) => 'val_r2' in entry);
+}
+
 /** Whether a test set result exists (only after the end of a run with a test set). */
 export function hasTestResult(metrics: RunMetrics | null | undefined): boolean {
   return (
@@ -268,7 +284,7 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   if (typeof metrics.test_accuracy === 'number') {
     return [formatPercent(metrics.test_accuracy), 'test accuracy'];
   }
-  // Classical regression: R² says more than an RMSE in the units of the target.
+  // Regression: R² says more than an RMSE in the units of the target.
   if (typeof metrics.test_r2 === 'number') {
     return [formatR2(metrics.test_r2), 'test R²'];
   }

@@ -13,6 +13,8 @@ x-logging: &logging
 x-retention: &retention
   BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS: ${BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS:-}
   BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS: ${BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS:-}
+  # Days the activity log of AI agents is kept (empty: 90; 0: no log).
+  BRICKDNN_AGENT_LOG_DAYS: ${BRICKDNN_AGENT_LOG_DAYS:-}
 
 # Plans and budgets per account (docs/training.md); unset: no limits.
 x-budgets: &budgets

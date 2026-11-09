@@ -110,8 +110,9 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 
 `Account` is `{id, username, email, date_joined, last_login, last_active_at,
 terms_accepted_at, terms_version, privacy_version, stored}`; `stored` counts the projects,
-memberships, comments, data sources and preparations, datasets, training runs, API tokens and
-connected apps, and the bytes of uploaded files. What the export holds and what deleting an
+memberships, comments, data sources and preparations, datasets, training runs, API tokens,
+connected apps and entries of the agent activity log (`agent_actions`), and the bytes of
+uploaded files. What the export holds and what deleting an
 account deletes: [privacy.md](privacy.md).
 
 ### Legal pages (public)
@@ -145,6 +146,31 @@ budget_cpu_minutes, used_cpu_minutes}`; `PATCH /api/auth/api-tokens/<id>/
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
 endpoints need a website login (JWT): an API token cannot manage tokens.
+
+## Agent activity
+
+What AI agents and scripts did with the user's API tokens and connected apps (see
+[mcp.md](mcp.md#activity-log)). Website login (JWT) only; each user sees their own entries.
+
+| Method | Path                            | Response                                         |
+| ------ | ------------------------------- | ------------------------------------------------ |
+| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days}`, newest first |
+| GET    | `/api/agent-activity/summary/`  | `{agents, tools, total, latest_id, latest_at, retention_days}` |
+
+Query parameters of the list: `limit` (default 50, at most 200), `before=<id>` (older
+entries: the next page), `after=<id>` (only newer entries: poll with the last `latest_id`),
+and the filters `agent=token:<id>` or `app:<connection id>`, `tool=<tool or route>`,
+`outcome=ok|error`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
+time>`. `latest_id` is the user's newest entry whatever the filters. With `after`, `has_more`
+means more new entries than `limit` arrived: load the first page again.
+
+`AgentAction` is `{id, created_at, source ("mcp" | "api"), agent: {kind ("token" | "app"), id,
+key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error"), error,
+status_code, duration_ms, summary, arguments, targets: [{kind, id, name?}], project}`.
+`arguments` are summarised and redacted; `targets` kinds are `project`, `run`, `dataset`,
+`data_source` and `data_prep`. The summary's `agents` are `{kind, id, key, name, prefix,
+active, actions, errors, last_at, last_id}`, the most recently active first; `active` is false
+for revoked tokens and disconnected apps.
 
 ## OAuth (MCP sign-in)
 
@@ -418,17 +444,21 @@ the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weigh
 and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
 and the last log lines. Poll it about once per second while a run is active. `state.family`
 is `neural` or `classical`; a classical run is fitted once: it has no `progress`, a single
-`history` entry when the fit is done (regression adds `val_r2`), `test` adds `r2`, and
+`history` entry when the fit is done, and
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
 `fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
 `support_vectors` and `train` (the metrics on the training rows), see
 [training.md](training.md#classical-models).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
-`test_loss`, `test_accuracy`, `test_rmse`; `val_r2` and `test_r2` for classical regression,
-`null` otherwise), `family`, `tuning` (the normalised search settings or
+`test_loss`, `test_accuracy`, `test_rmse` and `test_r2`; RMSE and R² for regressions, `null`
+otherwise), `family`, `tuning` (the normalised search settings or
 `null`), `trials_done` and `best_trial` (`{trial, params, val_loss, val_accuracy, val_rmse,
-weights_epoch}`). In a search, `state.trials` lists every trial with its `params`, `status`,
+val_r2, weights_epoch}`). Regressions of neural networks and classical models add `val_r2` to
+the `history` entries and trials and `r2` to `test`: R², the coefficient of determination,
+measured against the mean of the validation or test rows themselves, `null` when all their
+targets are equal (see [training.md](training.md#regression-metrics)).
+In a search, `state.trials` lists every trial with its `params`, `status`,
 the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
 `metrics` belong to the running trial and, at the end, to the best one. The file format is
 documented in `backend/brickdnn/training/state.py`.
