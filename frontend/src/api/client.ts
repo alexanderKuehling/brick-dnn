@@ -178,6 +178,25 @@ export function tokenLifetime(token: string, now = Date.now()): number | null {
 /** Uploads refresh the access token first if it expires within this many seconds. */
 const UPLOAD_TOKEN_MARGIN = 60;
 
+/** Live connections get a token that is valid for at least this many more seconds. */
+const LIVE_TOKEN_MARGIN = 60;
+
+/**
+ * The access token for a connection that cannot refresh it on a 401 itself (the live editing
+ * WebSocket): refreshed first if it expires soon, or always with `force`. null: logged out.
+ */
+export async function freshAccessToken(force = false): Promise<string | null> {
+  const access = tokens?.access;
+  if (!access) {
+    return null;
+  }
+  const lifetime = tokenLifetime(access);
+  if (force || (lifetime !== null && lifetime < LIVE_TOKEN_MARGIN)) {
+    await refreshAccessToken();
+  }
+  return tokens?.access ?? null;
+}
+
 /** Send a request (refreshing the access token once on 401) and return the raw response. */
 async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
   const { method = 'GET', body, auth = false, signal } = options;

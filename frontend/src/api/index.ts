@@ -46,6 +46,7 @@ export * from './types';
 export {
   ApiError,
   apiBaseUrl,
+  freshAccessToken,
   getTokens,
   onTokensChange,
   setTokens,
