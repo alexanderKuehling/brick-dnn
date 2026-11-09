@@ -361,6 +361,40 @@ class TrainingRunViewSet(
         run = training.stop_run(run)
         return Response(RunDetailSerializer(run).data)
 
+    @action(detail=True, methods=["post"], throttle_scope="predict")
+    def predict(self, request: Request, pk=None) -> Response:
+        """Run the trained network on a few inputs: ``{"inputs", "input_scale"?, "top_k"?}``
+        (see brickdnn.training.inference). Everyone who can see the run may."""
+        run = self.get_object()
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            prediction = training.prepare_prediction(
+                run, data.get("inputs"), data.get("input_scale"), data.get("top_k")
+            )
+        except training.TrainingUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except training.TrainingInputError as exc:
+            return Response(
+                {"detail": str(exc), "inputs": training.describe_inputs(run)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except training.PredictionUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        # Only requests that start a process count against the rate limit.
+        throttle = ScopedRateThrottle()
+        if not throttle.allow_request(request, self):
+            self.throttled(request, throttle.wait())
+        try:
+            return Response(training.run_prediction(prediction))
+        except training.TrainingBusy as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "5"},
+            )
+        except training.PredictionFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(
         detail=True,
         methods=["get"],

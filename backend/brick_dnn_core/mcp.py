@@ -30,7 +30,7 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
-from brickdnn.training import ACTIVE_STATUSES, DatasetError
+from brickdnn.training import ACTIVE_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
 from . import downloads, history
@@ -77,7 +77,9 @@ shape has no batch dimension; nodes without outgoing edges are the outputs.
 Typical workflow: look up layer types with list_layer_types (or start from list_examples),
 build the graph, call analyze_network until it is valid (it infers shapes and parameter
 counts and explains errors), then generate_pytorch_code, save_project, or train it on a
-dataset (get_training_options, check_training, start_training, get_training_run).
+dataset (get_training_options, upload_dataset for a small CSV file, check_training,
+start_training, get_training_run). A finished run can predict new samples (predict) and
+its weights can be downloaded with a short-lived link (get_weights_download).
 Saved networks also appear in the user's Brick DNN web app."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
@@ -177,9 +179,9 @@ def _project(request: Request, args: dict[str, Any]) -> Project:
     return project
 
 
-def _run(request: Request, args: dict[str, Any]) -> TrainingRun:
+def _run(request: Request, args: dict[str, Any], key: str = "id") -> TrainingRun:
     try:
-        run = visible_runs(request.user).filter(pk=args.get("id")).first()
+        run = visible_runs(request.user).filter(pk=args.get(key)).first()
     except (ValidationError, ValueError):
         run = None
     if run is None:
@@ -424,6 +426,32 @@ def get_weights_download(request: Request, args: dict[str, Any]) -> Any:
     return downloads.weights_info(request, run, request.user)
 
 
+class _PredictScope:
+    """Predictions over MCP count against the same rate limit as in the web app."""
+
+    throttle_scope = "predict"
+
+
+def predict(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args, "run_id")
+    try:
+        prediction = training.prepare_prediction(
+            run, args["inputs"], args.get("input_scale"), args.get("top_k")
+        )
+    except training.TrainingInputError as exc:
+        expected = training.describe_inputs(run)
+        raise ToolError(f"{exc}\nExpected inputs: {expected}" if expected else str(exc)) from None
+    except (training.TrainingUnavailable, training.PredictionUnavailable) as exc:
+        raise ToolError(str(exc)) from None
+    # Only calls that start a process count against the rate limit.
+    if not ScopedRateThrottle().allow_request(request, _PredictScope()):
+        raise ToolError("Too many predictions were made recently. Try again later.")
+    try:
+        return training.run_prediction(prediction)
+    except (training.TrainingBusy, training.PredictionFailed) as exc:
+        raise ToolError(str(exc)) from None
+
+
 def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args)
     if not can_delete_run(request.user, run):
@@ -646,6 +674,43 @@ TOOLS: dict[str, Tool] = {
             get_weights_download,
             {"id": {"type": "string", "description": "Run id from list_training_runs"}},
             ("id",),
+        ),
+        Tool(
+            "predict",
+            "Predict with a trained network",
+            "Run the trained network of a finished or stopped run on up to "
+            f"{inference.MAX_SAMPLES} samples on the server. Classification: the most likely "
+            "class with its probability and the top_k classes; regression: the predicted "
+            "value in the units of the target column. Inputs of a network trained on a CSV "
+            "file: one row per sample, as an object {column: value} or a list of the feature "
+            "values in column order, raw as in the CSV file (they are standardised like in "
+            "training). Inputs of an image network: one image per sample as a nested array of "
+            "channels×height×width (grayscale also height×width) or in the shape of its Input "
+            "layer, with input_scale 'raw' (pixels 0–255), 'unit' (0–1) or 'normalized' "
+            "(already normalised like in training). Runs trained on demo data take arrays of "
+            "the Input shape as they are. get_weights_download describes a run's inputs.",
+            predict,
+            {
+                "run_id": {"type": "string", "description": "Run id from list_training_runs"},
+                "inputs": {
+                    "type": "array",
+                    "description": f"The samples, at most {inference.MAX_SAMPLES}",
+                },
+                "input_scale": {
+                    "type": "string",
+                    "enum": list(inference.INPUT_SCALES),
+                    "description": "How the values are given (required for image networks): "
+                    "'raw' as in the CSV file or image file (pixels 0–255), 'unit' for "
+                    "pixels in 0–1, 'normalized' if already prepared like in training",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": inference.MAX_TOP_K,
+                    "description": f"Classes listed per sample (default {inference.DEFAULT_TOP_K})",
+                },
+            },
+            ("run_id", "inputs"),
         ),
         Tool(
             "delete_training_run",

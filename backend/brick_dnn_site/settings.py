@@ -176,6 +176,11 @@ TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.
 # None means [sys.executable, "-m", "brickdnn.training.runner"] (tests use a fake runner).
 TRAINING_RUNNER_COMMAND: list[str] | None = None
+# Predictions with trained weights run in a separate process too, at most this many at the
+# same time (counted across all users). The command gets the run directory as its last
+# argument; None means [sys.executable, "-m", "brickdnn.training.predict"].
+TRAINING_MAX_PREDICTIONS = int(os.environ.get("BRICKDNN_MAX_PREDICTIONS", "1"))
+TRAINING_PREDICT_COMMAND: list[str] | None = None
 # Largest CSV text that AI assistants can upload with the MCP tool upload_dataset, in MB (at
 # most BRICKDNN_MAX_UPLOAD_MB). The MCP endpoint accepts requests of about twice this size
 # (JSON escapes the text), unlike other JSON requests (DATA_UPLOAD_MAX_MEMORY_SIZE).
@@ -220,6 +225,8 @@ REST_FRAMEWORK = {
         "auth": os.environ.get("BRICKDNN_AUTH_RATE", "20/minute"),
         "training": os.environ.get("BRICKDNN_TRAINING_RATE", "120/hour"),
         "uploads": os.environ.get("BRICKDNN_UPLOAD_RATE", "60/hour"),
+        # Predictions with trained weights (each one starts a process that loads PyTorch).
+        "predict": os.environ.get("BRICKDNN_PREDICT_RATE", "120/hour"),
         # Previews of data preparations (one per change in the Data tab).
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
         # Requests to the MCP server (one per tool call of an AI assistant).

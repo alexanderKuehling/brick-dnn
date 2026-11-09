@@ -1,5 +1,6 @@
-"""Using a trained network (no PyTorch needed): what it takes as input and how to prepare
-new inputs the way the training data was prepared.
+"""Using a trained network (no PyTorch needed): what it takes as input, how to prepare new
+inputs the way the training data was prepared, and how to read its outputs. The network
+itself runs in a separate process (:mod:`.predict`), like a training.
 
 Everything here works on two documents of a run: the training plan (``TrainingRun.plan``,
 see compat.py) and the ``preprocessing`` that the training wrote into ``state.json``
@@ -17,13 +18,28 @@ from __future__ import annotations
 import keyword
 import math
 import re
+from dataclasses import dataclass
 from typing import Any
 
+from .datasets import parse_number
+
 KINDS = ("tabular", "image", "demo")
+# Limits of one prediction request.
+MAX_SAMPLES = 64
+MAX_VALUES = 250_000  # input numbers of all samples together
+MAX_TOP_K = 10
+DEFAULT_TOP_K = 3
+# How input values are given: "raw" as in the CSV file or image file (pixels 0-255), "unit"
+# for pixels scaled to 0-1, "normalized" for values that are already prepared.
+INPUT_SCALES = ("raw", "unit", "normalized")
 
 
 class UnknownPreprocessing(ValueError):
     """The run cannot be used for predictions: how its inputs were prepared is unknown."""
+
+
+class InvalidInputs(ValueError):
+    """The inputs for a prediction do not fit the network. The message is for the user."""
 
 
 # --------------------------------------------------------------------------- #
@@ -73,7 +89,7 @@ def kind_of(plan: Any, preprocessing: Any) -> str:
         columns = preprocessing.get("columns")
         n = len(columns) if isinstance(columns, list) else -1
         if inputs[0]["shape"] != [n] or not (
-            _numbers(preprocessing.get("mean"), n) and _numbers(preprocessing.get("std"), n)
+            _numbers(preprocessing.get("mean"), n) and _positive(preprocessing.get("std"), n)
         ):
             raise unknown
         if targets[0].get("kind") == "value" and not (
@@ -81,17 +97,23 @@ def kind_of(plan: Any, preprocessing: Any) -> str:
         ):
             raise unknown
     elif kind == "image":
-        channels = preprocessing.get("channels")
+        c, h, w = (preprocessing.get(key) for key in ("channels", "height", "width"))
         if not (
-            channels in (1, 3)
-            and isinstance(preprocessing.get("height"), int)
-            and isinstance(preprocessing.get("width"), int)
-            and preprocessing.get("layout") in ("chw", "hw", "flat")
-            and _numbers(preprocessing.get("mean"), channels)
-            and _numbers(preprocessing.get("std"), channels)
+            c in (1, 3)
+            and isinstance(h, int)
+            and isinstance(w, int)
+            and _numbers(preprocessing.get("mean"), c)
+            and _positive(preprocessing.get("std"), c)
         ):
             raise unknown
+        layouts = {"chw": [c, h, w], "hw": [h, w], "flat": [c * h * w]}
+        if layouts.get(preprocessing.get("layout")) != inputs[0]["shape"]:
+            raise unknown
     return kind
+
+
+def _positive(value: Any, length: int) -> bool:
+    return _numbers(value, length) and all(v > 0 for v in value)
 
 
 def class_names(plan: Any, preprocessing: Any, index: int = 0) -> list[str] | None:
@@ -127,14 +149,17 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
     if kind == "image":
         c, h, w = preprocessing["channels"], preprocessing["height"], preprocessing["width"]
         mode = "RGB" if c == 3 else "grayscale"
-        layout = {
-            "chw": f"a {c}×{h}×{w} array (channels, height, width)",
-            "hw": f"a {h}×{w} array (height, width)",
-            "flat": f"{c * h * w} values (channels × height × width, flattened)",
+        network = {
+            "chw": "",
+            "hw": f" The network takes it as {h}×{w} (height, width).",
+            "flat": f" The network takes it flattened to {c * h * w} values.",
         }[preprocessing["layout"]]
+        also = f" or {h}×{w}" if c == 1 else ""
         return (
-            f"One {mode} image of {w}×{h} pixels per sample, as {layout}. Pixels are scaled to "
-            "0–1 (pixel / 255), then normalised per channel: (x - mean) / std."
+            f"One {mode} image of {w}×{h} pixels per sample, as a {c}×{h}×{w} array (channels, "
+            f"height, width){also}.{network} Pixels are scaled to 0–1 (pixel / 255), then "
+            f"normalised per channel: (x - mean) / std with mean {_list(preprocessing['mean'])} "
+            f"and std {_list(preprocessing['std'])}."
         )
     shapes = "; ".join(
         f"{_shape_text(s['shape'])} {'token ids' if s.get('dtype') == 'long' else 'numbers'}"
@@ -153,10 +178,12 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
 
 def module_name(name: str) -> str:
     """A Python module name for the generated script, e.g. ``iris_classifier``."""
-    ident = re.sub(r"\W+", "_", name.strip().lower()).strip("_")
-    if not ident or not ident.isascii() or not ident.isidentifier() or keyword.iskeyword(ident):
+    ident = re.sub(r"\W+", "_", name.strip().lower()).strip("_")[:60]
+    if ident[:1].isdigit():
+        ident = f"model_{ident}"
+    if not ident.isascii() or not ident.isidentifier() or keyword.iskeyword(ident):
         return "model"
-    return f"model_{ident}" if ident[0].isdigit() else ident[:60]
+    return ident
 
 
 def _list(values: list[float], digits: int = 6) -> str:
@@ -243,3 +270,326 @@ def usage_snippet(
             "print([CLASS_NAMES[i] for i in probabilities.argmax(dim=1).tolist()])",
         ]
     return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Inputs of a prediction
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class PreparedInputs:
+    """Inputs as the network gets them: one tensor per Input layer, ``{"dtype": "float" |
+    "long", "shape": [N, ...], "values": [all numbers, row-major]}``."""
+
+    kind: str
+    count: int
+    tensors: list[dict[str, Any]]
+    top_k: int
+
+
+def _dims(value: Any) -> list[int]:
+    """The shape of a nested list, following its first elements."""
+    dims = []
+    while isinstance(value, list):
+        dims.append(len(value))
+        if not value:
+            break
+        value = value[0]
+    return dims
+
+
+def _shape_of(value: Any) -> str:
+    dims = _dims(value)
+    if dims:
+        return _shape_text(dims)
+    return "a single value" if isinstance(value, (int, float)) else type(value).__name__
+
+
+def _number(value: Any, where: str, decimal_comma: bool = False) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if math.isfinite(value):
+            return float(value)
+    elif isinstance(value, str):
+        parsed = parse_number(value, decimal_comma)
+        if parsed is not None:
+            return parsed
+    raise InvalidInputs(f"{where}: {repr(value)[:30]} is not a number.")
+
+
+def _flatten(sample: Any, shape: list[int], label: str, wanted: str) -> list[float]:
+    """The numbers of a nested list of ``shape``, row-major."""
+    values: list[float] = []
+
+    def walk(value: Any, depth: int) -> None:
+        if depth == len(shape):
+            values.append(_number(value, label))
+            return
+        if not isinstance(value, list) or len(value) != shape[depth]:
+            raise InvalidInputs(
+                f"{label} has the shape {_shape_of(sample)}, but the network takes {wanted}."
+            )
+        for item in value:
+            walk(item, depth + 1)
+
+    walk(sample, 0)
+    return values
+
+
+def _sample_list(inputs: Any, shapes: list[list[int]], wanted: str) -> list[Any]:
+    """The list of samples; a single sample of one of ``shapes`` may be given unwrapped."""
+    if not isinstance(inputs, list) or not inputs:
+        raise InvalidInputs(
+            f"'inputs' must be a list of samples (at most {MAX_SAMPLES}), each {wanted}."
+        )
+    if _dims(inputs) in shapes:
+        inputs = [inputs]
+    if len(inputs) > MAX_SAMPLES:
+        raise InvalidInputs(
+            f"{len(inputs)} samples are too many: predict at most {MAX_SAMPLES} at a time."
+        )
+    return inputs
+
+
+def _check_size(count: int, shape: list[int]) -> None:
+    if count * math.prod(shape) > MAX_VALUES:
+        raise InvalidInputs(
+            f"The inputs are too large: at most {MAX_VALUES:,} numbers per request "
+            f"({count} samples of {math.prod(shape):,} numbers). Send fewer samples at a time."
+        )
+
+
+def _label(number: int, count: int) -> str:
+    return f"Sample {number}" if count > 1 else "The sample"
+
+
+def _tabular_inputs(preprocessing: dict[str, Any], inputs: Any, scale: str) -> list[float]:
+    columns = [str(c) for c in preprocessing["columns"]]
+    n = len(columns)
+    wanted = f"an object {{column: value}} or a list of {n} numbers ({', '.join(columns)})"
+    if scale == "unit":
+        raise InvalidInputs("input_scale 'unit' is for image models; use 'raw' or 'normalized'.")
+    if isinstance(inputs, dict) or (
+        isinstance(inputs, list) and inputs and not isinstance(inputs[0], (list, dict))
+    ):
+        inputs = [inputs]  # a single row
+    rows = _sample_list(inputs, [], wanted)
+    _check_size(len(rows), [n])
+    index = {name: i for i, name in enumerate(columns)}
+    target = preprocessing.get("target")
+    decimal_comma = bool(preprocessing.get("decimal_comma"))
+    mean, std = preprocessing["mean"], preprocessing["std"]
+    values: list[float] = []
+    for number, row in enumerate(rows, start=1):
+        label = _label(number, len(rows))
+        if isinstance(row, dict):
+            if len(index) != n:
+                raise InvalidInputs(
+                    "The CSV file has columns with the same name: give each sample as a list "
+                    f"of {n} numbers in column order."
+                )
+            unknown = [str(k) for k in row if k not in index and k != target]
+            if unknown:
+                raise InvalidInputs(
+                    f"{label}: unknown column '{unknown[0][:60]}'. The network takes: "
+                    f"{', '.join(columns)}."
+                )
+            missing = [c for c in columns if c not in row]
+            if missing:
+                more = f" (and {len(missing) - 1} more)" if len(missing) > 1 else ""
+                raise InvalidInputs(
+                    f"{label}: the column '{missing[0]}' is missing{more}. The network takes: "
+                    f"{', '.join(columns)}."
+                )
+            cells = [row[c] for c in columns]
+        elif isinstance(row, list):
+            if len(row) != n:
+                raise InvalidInputs(
+                    f"{label} has {len(row)} values, but the network takes {n}: "
+                    f"{', '.join(columns)}."
+                )
+            cells = row
+        else:
+            raise InvalidInputs(f"{label} must be {wanted}.")
+        for i, cell in enumerate(cells):
+            x = _number(cell, f"{label}, '{columns[i]}'", decimal_comma)
+            values.append((x - mean[i]) / std[i] if scale == "raw" else x)
+    return values
+
+
+def _image_inputs(
+    plan: Any, preprocessing: dict[str, Any], inputs: Any, scale: str | None
+) -> tuple[int, list[float]]:
+    c, h, w = preprocessing["channels"], preprocessing["height"], preprocessing["width"]
+    shape = input_specs(plan)[0]["shape"]
+    mean, std = preprocessing["mean"], preprocessing["std"]
+    if scale is None:
+        raise InvalidInputs(
+            "Say how the pixel values are given with input_scale: 'raw' (0–255, as in an "
+            "image file), 'unit' (0–1) or 'normalized' (scaled to 0–1, then normalised per "
+            f"channel with mean {mean} and std {std})."
+        )
+    # An image as channels × height × width (grayscale: also height × width) or in the shape
+    # of the Input layer: all of them flatten to the same order (data.apply_layout).
+    shapes = [[c, h, w]] + ([[h, w]] if c == 1 else [])
+    if shape not in shapes:
+        shapes.append(shape)
+    wanted = f"{'an RGB' if c == 3 else 'a grayscale'} image as a nested list of " + " or ".join(
+        _shape_text(s) for s in shapes
+    )
+    samples = _sample_list(inputs, shapes, wanted)
+    _check_size(len(samples), shape)
+    values: list[float] = []
+    plane = h * w
+    for number, sample in enumerate(samples, start=1):
+        label = _label(number, len(samples))
+        dims = _dims(sample)
+        own = next((s for s in shapes if s == dims), shapes[0])
+        flat = _flatten(sample, own, label, wanted)
+        if scale == "normalized":
+            values += flat
+            continue
+        top = 255.0 if scale == "raw" else 1.0
+        for i, x in enumerate(flat):
+            if not 0 <= x <= top:
+                hint = " Use input_scale 'raw' for values up to 255." if scale == "unit" else ""
+                raise InvalidInputs(
+                    f"{label}: {x:g} is not a pixel value between 0 and {top:g}.{hint}"
+                )
+            channel = i // plane
+            values.append((x / top - mean[channel]) / std[channel])
+    return len(samples), values
+
+
+def _demo_inputs(plan: Any, inputs: Any) -> tuple[int, list[float], str]:
+    specs = input_specs(plan)
+    if len(specs) != 1:
+        raise InvalidInputs(
+            f"This network has {len(specs)} Input layers; predictions support one Input."
+        )
+    spec = specs[0]
+    shape, dtype = spec["shape"], spec.get("dtype") or "float"
+    wanted = _shape_text(shape) + (" token ids" if dtype == "long" else " numbers")
+    samples = _sample_list(inputs, [shape], f"a nested list of {wanted}")
+    _check_size(len(samples), shape)
+    values: list[float] = []
+    vocab = int(spec.get("vocab") or 2)
+    for number, sample in enumerate(samples, start=1):
+        label = _label(number, len(samples))
+        flat = _flatten(sample, shape, label, wanted)
+        if dtype == "long" and not all(x.is_integer() and 0 <= x < vocab for x in flat):
+            raise InvalidInputs(f"{label}: token ids must be whole numbers from 0 to {vocab - 1}.")
+        values += flat
+    return len(samples), values, dtype
+
+
+def prepare_inputs(
+    plan: Any,
+    preprocessing: Any,
+    inputs: Any,
+    input_scale: Any = None,
+    top_k: Any = None,
+) -> PreparedInputs:
+    """Check ``inputs`` against the network and prepare them like the training data.
+
+    Raises :class:`UnknownPreprocessing` (the run cannot be used) or :class:`InvalidInputs`.
+    """
+    kind = kind_of(plan, preprocessing)
+    if input_scale is not None and input_scale not in INPUT_SCALES:
+        raise InvalidInputs(f"input_scale must be one of: {', '.join(INPUT_SCALES)}.")
+    if top_k is None:
+        top_k = DEFAULT_TOP_K
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= MAX_TOP_K:
+        raise InvalidInputs(f"top_k must be a whole number from 1 to {MAX_TOP_K}.")
+    shape = input_specs(plan)[0]["shape"]
+    dtype = "float"
+    if kind == "tabular":
+        values = _tabular_inputs(preprocessing, inputs, input_scale or "raw")
+        count = len(values) // shape[0]
+    elif kind == "image":
+        count, values = _image_inputs(plan, preprocessing, inputs, input_scale)
+    else:
+        count, values, dtype = _demo_inputs(plan, inputs)
+    tensor = {"dtype": dtype, "shape": [count, *shape], "values": values}
+    return PreparedInputs(kind, count, [tensor], top_k)
+
+
+# --------------------------------------------------------------------------- #
+# Outputs of a prediction
+# --------------------------------------------------------------------------- #
+
+
+def _finite(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, list):
+        return [_finite(v) for v in value]
+    return value
+
+
+def _flat_numbers(value: Any) -> list[float | None]:
+    if isinstance(value, list):
+        return [x for item in value for x in _flat_numbers(item)]
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return [float(value) if math.isfinite(value) else None]
+    if value is None:  # NaN or infinity, written as null
+        return [None]
+    raise ValueError("The network returned something that is not a number.")
+
+
+def _classes(scores: list[float | None], names: list[str], top_k: int) -> dict[str, Any]:
+    if any(s is None for s in scores):
+        return {"class": None, "index": None, "probability": None, "top": []}
+    numbers = [float(s) for s in scores if s is not None]
+    peak = max(numbers)
+    exps = [math.exp(s - peak) for s in numbers]
+    total = sum(exps)
+    probabilities = [e / total for e in exps]
+    order = sorted(range(len(numbers)), key=lambda i: -probabilities[i])
+    top = [
+        {"class": names[i], "index": i, "probability": round(probabilities[i], 4)}
+        for i in order[:top_k]
+    ]
+    return {**top[0], "top": top}
+
+
+def read_outputs(
+    plan: Any, preprocessing: Any, outputs: Any, count: int, top_k: int = DEFAULT_TOP_K
+) -> list[dict[str, Any]]:
+    """Turn the raw outputs of the network (one nested list per output, ``count`` samples
+    each) into one prediction per sample: the classes with their probabilities (softmax,
+    as the training's cross-entropy loss reads them) or the predicted value. Raises
+    ``ValueError`` for outputs that do not fit the training plan."""
+    kind = kind_of(plan, preprocessing)
+    targets = plan["targets"]
+    if not isinstance(outputs, list) or len(outputs) != len(targets):
+        raise ValueError("The network returned an unexpected number of outputs.")
+    per_output = []
+    for index, output in enumerate(outputs):
+        if not isinstance(output, list) or len(output) != count:
+            raise ValueError("The network returned an unexpected number of samples.")
+        names = class_names(plan, preprocessing, index)
+        results = []
+        for sample in output:
+            if names is not None:
+                scores = _flat_numbers(sample)
+                if len(scores) != len(names):
+                    raise ValueError("The network returned an unexpected number of classes.")
+                results.append(_classes(scores, names, top_k))
+            elif kind == "tabular":
+                scores = _flat_numbers(sample)
+                if len(scores) != 1:
+                    raise ValueError("The network returned an unexpected number of values.")
+                value = scores[0]
+                if value is not None:
+                    value = value * preprocessing["target_std"] + preprocessing["target_mean"]
+                results.append({"value": value})
+            else:
+                value = _finite(sample)
+                if isinstance(value, list) and len(value) == 1:
+                    value = value[0]
+                results.append({"value": value})
+        per_output.append(results)
+    if len(per_output) == 1:
+        return per_output[0]
+    return [{"outputs": [results[i] for results in per_output]} for i in range(count)]
