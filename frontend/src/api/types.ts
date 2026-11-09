@@ -180,6 +180,8 @@ export interface Account extends User {
     training_runs: number;
     api_tokens: number;
     connected_apps: number;
+    /** Entries of the agent activity log. */
+    agent_actions: number;
     /** Imported CSV files and training datasets together. */
     upload_bytes: number;
   };
@@ -271,6 +273,108 @@ export interface OAuthConnection {
   read_only: boolean;
   created_at: string;
   last_used_at: string | null;
+}
+
+// --------------------------------------------------------------------------
+// Agent activity: what assistants and scripts did with the user's tokens and apps
+// --------------------------------------------------------------------------
+
+/** "token:<ApiToken id>" or "app:<OAuthConnection id>". */
+export type AgentKey = `${'token' | 'app'}:${number}`;
+
+/** The API token or connected app an action was made with. */
+export interface AgentRef {
+  kind: 'token' | 'app';
+  id: number;
+  key: AgentKey;
+  name: string;
+  /** The start of a personal token (apps get a new token every hour: null). */
+  prefix: string | null;
+}
+
+export type AgentTargetKind = 'project' | 'run' | 'dataset' | 'data_source' | 'data_prep';
+
+/** Something an action touched. `name` is missing when the user cannot see it (any more). */
+export interface AgentTarget {
+  kind: AgentTargetKind;
+  /** A number; a text for training runs (and for ids the agent got wrong). */
+  id: number | string;
+  name?: string;
+}
+
+type ArgumentValue = string | number | boolean | null | (number | boolean | null)[];
+
+/** A summarised argument: sizes and counts instead of contents, secrets "[redacted]". */
+export type AgentArgument = ArgumentValue | Record<string, ArgumentValue>;
+
+/** One entry of the activity log: an MCP tool call or a REST request with an API token. */
+export interface AgentAction {
+  id: number;
+  /** When it finished (it started `duration_ms` before). */
+  created_at: string;
+  source: 'mcp' | 'api';
+  agent: AgentRef;
+  user_agent: string;
+  /** The MCP tool, or the REST route (e.g. "training-run-stop") with `method`. */
+  tool: string;
+  method: string;
+  /** Changes something rather than only reading. */
+  writes: boolean;
+  outcome: 'ok' | 'error';
+  /** What the agent was told went wrong ("" when it worked). */
+  error: string;
+  /** REST requests: the HTTP status. */
+  status_code: number | null;
+  duration_ms: number;
+  /** A sentence, e.g. 'Started training “GP 1” on dataset “houses.csv” (#3)'. */
+  summary: string;
+  arguments: Record<string, AgentArgument>;
+  targets: AgentTarget[];
+  /** The network it was about, if any. */
+  project: number | null;
+}
+
+export interface AgentActivityQuery {
+  agent?: AgentKey;
+  tool?: string;
+  outcome?: 'ok' | 'error';
+  project?: number;
+  /** Older entries than this id (the next page). */
+  before?: number;
+  /** Newer entries than this id (polling). */
+  after?: number;
+  limit?: number;
+}
+
+export interface AgentActivityPage {
+  /** Newest first. */
+  results: AgentAction[];
+  /** More entries match: older ones, or with `after` more new ones than `limit`. */
+  has_more: boolean;
+  /** The user's newest entry, whatever the filters: poll with `after` this. 0: none. */
+  latest_id: number;
+  /** How long entries are kept; 0: this server keeps no log. */
+  retention_days: number;
+}
+
+/** A token or app that acted, for filters and the API tokens page. */
+export interface ActivityAgent extends AgentRef {
+  /** The token or connection still exists (it was not revoked or disconnected). */
+  active: boolean;
+  actions: number;
+  errors: number;
+  last_at: string;
+  last_id: number;
+}
+
+export interface AgentActivitySummary {
+  /** The most recently active first. */
+  agents: ActivityAgent[];
+  tools: { tool: string; actions: number }[];
+  total: number;
+  latest_id: number;
+  latest_at: string | null;
+  retention_days: number;
 }
 
 // --------------------------------------------------------------------------
