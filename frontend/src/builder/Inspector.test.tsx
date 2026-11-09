@@ -170,6 +170,21 @@ describe('Inspector of classical bricks', () => {
     );
   });
 
+  it('counts the hyperparameters of a kernel sum in its kernels', () => {
+    renderBrick({
+      id: 'sum',
+      type: 'layer',
+      position: { x: 0, y: 0 },
+      data: { type: 'KernelSum', params: {} },
+    });
+    expect(screen.getByText('Fitted hyperparameters').nextSibling).toHaveTextContent(
+      'in its kernels'
+    );
+    expect(screen.getByLabelText('Kernel as scikit-learn code').textContent).toBe(
+      'RBF(length_scale=1.0)\n+ WhiteKernel(noise_level=0.1)'
+    );
+  });
+
   it('shows the kernel of a Gaussian process, one term per line', () => {
     renderBrick({
       id: 'gp',

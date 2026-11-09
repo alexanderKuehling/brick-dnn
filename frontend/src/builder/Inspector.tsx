@@ -32,7 +32,7 @@ import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
 import { formatOutput, formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
-import { isClassicalSpec, isKernelNode, kernelTerms, networkFamily } from './kinds';
+import { inputSlots, isClassicalSpec, isKernelNode, kernelTerms, networkFamily } from './kinds';
 import { ParamField } from './ParamField';
 
 const GAUSSIAN_PROCESSES = ['GaussianProcessRegressor', 'GaussianProcessClassifier'];
@@ -54,6 +54,10 @@ function paramsStat(
   }
   if (count === null) {
     return { label: 'Support vectors', value: 'after the fit' };
+  }
+  if (inputSlots(spec).length > 0) {
+    // A kernel sum or product has none of its own; the kernels it combines count theirs.
+    return { label: 'Fitted hyperparameters', value: 'in its kernels' };
   }
   return { label: 'Fitted hyperparameters', value: count?.toLocaleString('en-US') ?? '–' };
 }
