@@ -402,6 +402,7 @@ def check_script_reproduces(tmp_path: Path, main: Table, items: tuple, settings:
     assert not result.failed, [r["error"] for r in result.reports if r["error"]]
     infos = source_infos(main, other)
     script = pandas_script(infos, 1, steps(*items), settings, result, name="Churn – Kunden")
+    assert script.startswith("# Built with Brick DNN: https://brickdnn.com")
     done = run_script(tmp_path, script, "--output", "out.csv")
     assert done.returncode == 0, done.stderr
     assert "Wrote" in done.stdout

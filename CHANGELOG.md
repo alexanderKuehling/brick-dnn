@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- After the first training of a user that completes, a notification asks once (per browser)
+  for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - The Input layer follows the training data: choosing a dataset (also with *Train with this
   data* in the Data tab) sets the Input shape and the number of outputs when only those keep
   the network from fitting, with a notification and *Undo*; an empty canvas gets a small
@@ -79,6 +81,10 @@
   server reads and checks the file. A training upload can be cancelled while it is sent.
 
 ### Changed
+- Generated scripts start with a comment line that links to Brick DNN
+  (`# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn`):
+  the PyTorch code (also from the MCP tool and with the trained weights) and the pandas script
+  of the Data tab.
 - **Built-in datasets validate on their training images.** Without a test set, MNIST,
   Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
   `val_split`, so the images that chose the best epoch were also the reported result. Now

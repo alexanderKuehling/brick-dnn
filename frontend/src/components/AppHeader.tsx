@@ -23,12 +23,11 @@ import {
 } from '@mantine/core';
 import { useAuth } from '@/auth/AuthContext';
 import { DEMO } from '@/demo';
+import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
 
 export const HEADER_HEIGHT = 56;
-export const REPOSITORY_URL = 'https://github.com/alexanderKuehling/brick-dnn';
-export const SUPPORT_URL = 'https://buymeacoffee.com/alexanderkzw';
 
 export function AppHeader() {
   const { user, ready, logout } = useAuth();

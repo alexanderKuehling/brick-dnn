@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunSummary, type TrainingStatus } from '@/api';
-import { isRelevantRun, NO_SCOPE, otherStarter, type TrainingScope } from './access';
+import { isOwnRun, isRelevantRun, NO_SCOPE, otherStarter, type TrainingScope } from './access';
 import { isActive, resultText } from './format';
+import { showSupportHintOnce } from './supportHint';
 import { useDatasets, type DataController } from './useDatasets';
 
 export type TrainingView = 'setup' | 'history' | 'run';
@@ -194,6 +195,9 @@ export function useTraining(
         const previous = lastStatus.current.get(run.id);
         if (previous && isActive(previous) && !isActive(run.status)) {
           notifyFinished(run);
+          if (run.status === 'completed' && isOwnRun(run, scopeRef.current)) {
+            showSupportHintOnce();
+          }
         }
         lastStatus.current.set(run.id, run.status);
       }
