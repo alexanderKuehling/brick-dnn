@@ -1564,8 +1564,9 @@ class ClassicalModel(Layer):
     estimator: ClassVar[str]  # the scikit-learn class
     module: ClassVar[str]  # where it is imported from
     takes_kernel: ClassVar[bool] = False
-    # Which training row limit applies (brickdnn.training.limits): gaussian_process | svm
-    scale: ClassVar[str]
+    scale: ClassVar[str]  # gaussian_process | svm
+    # Which row limit applies (brickdnn.training.config.CLASSICAL_MAX_ROWS)
+    limit: ClassVar[str]
 
     def __init__(self, raw_params: dict[str, Any] | None = None):
         super().__init__(raw_params)
@@ -1629,6 +1630,7 @@ class _GaussianProcess(ClassicalModel):
     takes_kernel = True
     max_inputs = 2
     scale = "gaussian_process"
+    limit = "gaussian_process"
 
     def num_params(self) -> int:
         """Hyperparameters of the default kernel (a connected kernel counts its own)."""
@@ -1697,10 +1699,12 @@ class GaussianProcessClassifier(_GaussianProcess):
         "Classifies with class probabilities (Laplace approximation; with more than two "
         "classes one Gaussian process per class). Connect the Input (features) and optionally "
         "a kernel; without one it uses ConstantKernel × RBF. The classes come from the data. "
-        "Fitting takes O(n³): for up to a few thousand training rows."
+        "Fitting takes O(n³) per class: for up to about two thousand training rows."
     )
     task = "classification"
     estimator = "GaussianProcessClassifier"
+    # The Laplace approximation fits much slower than a regression, once per class.
+    limit = "gaussian_process_classifier"
     params = (_RESTARTS,)
     name_prefix = "gp"
 
@@ -1763,6 +1767,7 @@ def _svm_params() -> tuple[Param, ...]:
 class _SupportVectorMachine(ClassicalModel):
     module = "sklearn.svm"
     scale = "svm"
+    limit = "svm"
 
     def __init__(self, raw_params: dict[str, Any] | None = None):
         super().__init__(raw_params)

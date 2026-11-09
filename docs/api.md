@@ -335,12 +335,14 @@ because `available` and `reason` are about PyTorch:
 ```json
 "classical": {
   "available": true, "reason": null, "sklearn_version": "1.9.1",
-  "max_rows": { "gaussian_process": 5000, "svm": 50000 },
+  "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000 },
   "tuning": false
 }
 ```
 
-Only `val_split`, `test_split`, `max_samples` (at most `max_rows`) and `seed` of `config` apply;
+`max_rows` gives, per classical model type, the most training rows it is fitted on (larger
+training sets are subsampled). Only `val_split`, `test_split`, `max_samples` (at most
+`max_rows`) and `seed` of `config` apply;
 a `tuning` gives `400`. Their runs have `family` `"classical"` (otherwise `"neural"`) and
 `epochs` 1.
 

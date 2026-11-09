@@ -662,9 +662,14 @@ def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[
 
 # Demo data of classical classifiers has this many classes.
 CLASSICAL_DEMO_CLASSES = 3
-# How the row limit of each kind of model is described: (models, variable, cost)
-SCALES = {
+# How the row limits are described: (models, variable, cost)
+LIMITS = {
     "gaussian_process": ("Gaussian processes", "BRICKDNN_GP_MAX_ROWS", "n³"),
+    "gaussian_process_classifier": (
+        "Gaussian process classifiers",
+        "BRICKDNN_GPC_MAX_ROWS",
+        "n³ for every class",
+    ),
     "svm": ("Support vector machines", "BRICKDNN_SVM_MAX_ROWS", "n² or more"),
 }
 CLASSICAL_NOTE = (
@@ -684,8 +689,8 @@ def _check_classical(
     node = analysis.model
     assert node is not None and isinstance(node.layer, ClassicalModel)
     layer = node.layer
-    max_rows = classical_max_rows(layer.scale)
-    models, variable, cost = SCALES[layer.scale]
+    max_rows = classical_max_rows(layer.limit)
+    models, variable, cost = LIMITS[layer.limit]
     classical: dict[str, Any] = {
         "node": node.id,
         "type": node.type,

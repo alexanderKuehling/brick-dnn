@@ -13,8 +13,9 @@
   hyperparameters the fit optimises. The export is a scikit-learn script (`make_model()`
   returns `Pipeline(StandardScaler(), model)`; CSV fitting with metrics, `--save model.joblib`,
   `--predict`). They train on CSV files, prepared datasets and demo data with scikit-learn,
-  fitted once instead of epoch by epoch, at most `BRICKDNN_GP_MAX_ROWS` (5,000) training rows
-  for Gaussian processes and `BRICKDNN_SVM_MAX_ROWS` (50,000) for SVMs; runs report the fitted
+  fitted once instead of epoch by epoch, on at most `BRICKDNN_GP_MAX_ROWS` (5,000) training
+  rows for Gaussian process regression, `BRICKDNN_GPC_MAX_ROWS` (2,000) for Gaussian process
+  classification and `BRICKDNN_SVM_MAX_ROWS` (50,000) for SVMs; runs report the fitted
   kernel and log marginal likelihood or the support vectors, save the fitted pipeline as a
   `.joblib` file, and predict class probabilities or values with the Gaussian process's
   uncertainty (REST, MCP and `brickdnn train`). Examples: Gaussian process regression, SVM

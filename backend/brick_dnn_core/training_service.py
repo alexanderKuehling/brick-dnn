@@ -42,7 +42,8 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from brickdnn import Analysis, analyze
+from brickdnn import REGISTRY, Analysis, analyze
+from brickdnn.layers import ClassicalModel
 from brickdnn.training import (
     ACTIVE_STATUSES,
     BUILTIN_DATASETS,
@@ -63,7 +64,7 @@ from brickdnn.training import (
     torch_installed,
     torchvision_installed,
 )
-from brickdnn.training.config import CLASSICAL_MAX_ROWS, ConfigError, classical_max_rows
+from brickdnn.training.config import ConfigError, classical_max_rows
 from brickdnn.training.job import graph_family
 from brickdnn.training.state import (
     LOG_FILE,
@@ -301,8 +302,12 @@ def classical_capabilities() -> dict[str, Any]:
         "available": reason is None,
         "reason": reason,
         "sklearn_version": _sklearn_version() if reason is None else None,
-        # Training rows a model is fitted on at most (more are subsampled).
-        "max_rows": {scale: classical_max_rows(scale) for scale in CLASSICAL_MAX_ROWS},
+        # Training rows each classical model is fitted on at most (more are subsampled).
+        "max_rows": {
+            name: classical_max_rows(layer.limit)
+            for name, layer in REGISTRY.items()
+            if issubclass(layer, ClassicalModel)
+        },
         "tuning": False,
     }
 

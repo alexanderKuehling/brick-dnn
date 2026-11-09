@@ -49,8 +49,8 @@ from .reporting import Reporter, StopTraining, TrainingError, short_error
 from .state import finite, preprocessing_path, write_json_atomic
 from .tabular import CHANGED, csv_columns, csv_rows, held_out_size, read_split, split_sizes
 
-# Demo data: this many random rows.
-DEMO_ROWS = 1000
+# Demo data: this many random rows (Gaussian processes fit in O(n³)).
+DEMO_ROWS = {"gaussian_process": 500, "svm": 1000}
 # Rows per prediction call: a Gaussian process builds a (training rows × chunk) matrix.
 PREDICT_CHUNK = 2048
 # How often the stop request is checked while fitting (seconds).
@@ -439,13 +439,17 @@ class _ClassicalRun:
     def _demo(self, n_features: int) -> tuple[np.ndarray, np.ndarray]:
         """Random features and a hidden smooth rule (regression) or class boundaries."""
         rng = self._rng(0)
-        x = rng.normal(size=(DEMO_ROWS, n_features))
+        rows = DEMO_ROWS[self.layer.scale]
+        x = rng.normal(size=(rows, n_features))
         direction = rng.normal(size=n_features) / math.sqrt(n_features)
         z = x @ direction
         if not self.classification:
-            return x, np.sin(2 * z) + 0.5 * z + 0.1 * rng.normal(size=DEMO_ROWS)
+            return x, np.sin(2 * z) + 0.5 * z + 0.1 * rng.normal(size=rows)
         weights = rng.normal(size=(n_features, self.num_classes))
         scores = x @ weights + np.sin(2 * z)[:, None] * rng.normal(size=self.num_classes)
+        # Some label noise: perfectly separable classes make a Gaussian process classifier
+        # push its kernel amplitude to the bound, which takes long.
+        scores += 0.3 * rng.gumbel(size=scores.shape)
         return x, np.argmax(scores, axis=1).astype(np.int64)
 
     def _check_classes(self, y: np.ndarray) -> None:

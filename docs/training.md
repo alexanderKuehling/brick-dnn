@@ -249,7 +249,8 @@ They are trained with scikit-learn by the same runner process, with the same run
 history and API, but **fitted once instead of epoch by epoch**:
 
 - **Data**: CSV files, datasets from the *Data* tab (with their split) and demo data
-  (1,000 random rows with a hidden rule; 3 classes for classifiers). Images and the
+  (random rows with a hidden rule: 500 for Gaussian processes, 1,000 for SVMs; 3 classes
+  for classifiers). Images and the
   built-in datasets give a compatibility error. Regression models need a numeric target;
   classifiers take text labels, whole numbers (each value is a class) or the classes of a
   prepared dataset. The check explains mismatches, e.g. *"The target column 'species'
@@ -265,8 +266,11 @@ history and API, but **fitted once instead of epoch by epoch**:
   weights do not, and the hyperparameter search is not available (a Gaussian process
   optimises its kernel hyperparameters itself).
 - **Size limits**: fitting a Gaussian process takes O(n³) time and O(n²) memory, an SVM
-  between O(n²) and O(n³). Gaussian processes are fitted on at most 5,000 training rows
-  (`BRICKDNN_GP_MAX_ROWS`), SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`). Larger training
+  between O(n²) and O(n³). A Gaussian process classifier is much slower than a regression
+  (its Laplace approximation is iterative, and it fits one Gaussian process per class when
+  there are more than two). Gaussian process regression is fitted on at most 5,000 training
+  rows (`BRICKDNN_GP_MAX_ROWS`), classification on at most 2,000 (`BRICKDNN_GPC_MAX_ROWS`),
+  SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`). Larger training
   sets are subsampled like with *Max. samples* (validation and test shrink in proportion),
   which the check warns about and the log says; a larger *Max. samples* is refused.
 - **What is reported**: the status says what happens ("Fitting the Gaussian process on 4,000
@@ -384,7 +388,8 @@ The REST endpoints are documented in [api.md](api.md#training-login-required).
 | `BRICKDNN_PREDICT_RATE` | `120/hour` | Rate limit for predictions |
 | `BRICKDNN_MCP_UPLOAD_MB` | `5` | Largest CSV file AI assistants can upload over MCP |
 | `BRICKDNN_INSTALL_TORCH` | `false` | Docker build: install PyTorch (CPU) into the backend image |
-| `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process is fitted on at most (more are subsampled) |
+| `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process regression is fitted on at most (more are subsampled) |
+| `BRICKDNN_GPC_MAX_ROWS` | `2000` | Training rows a Gaussian process classifier is fitted on at most (more are subsampled) |
 | `BRICKDNN_SVM_MAX_ROWS` | `50000` | Training rows an SVM is fitted on at most (more are subsampled) |
 
 On a public server, keep in mind that every registered user can use the server's CPU/GPU for
@@ -400,7 +405,7 @@ training and predictions; disable registration or training if that is not wanted
   `pip install -r requirements.txt` (or `pip install scikit-learn`) in the backend
   environment and restart it.
 - **A Gaussian process takes very long or runs out of memory**: set *Max. samples*, or lower
-  `BRICKDNN_GP_MAX_ROWS`. A fit that fails with a matrix that is not positive definite needs
+  `BRICKDNN_GP_MAX_ROWS` / `BRICKDNN_GPC_MAX_ROWS`. A fit that fails with a matrix that is not positive definite needs
   a larger `alpha` or a `WhiteKernel` in its kernel.
 - **Out of memory**: lower the batch size, the image size or the network size. On a server
   with limits ([deploy/server](../deploy/server/README.md#cpu-and-memory-the-site-comes-first))

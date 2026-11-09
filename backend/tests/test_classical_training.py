@@ -185,7 +185,7 @@ def test_plans_of_classical_models():
     assert plan.class_names == ["no", "yes"]
     assert plan.classical["class_targets"] == "labels"
     assert plan.classical["kernel"].startswith("ConstantKernel(constant_value=1.0) * RBF(")
-    assert plan.classical["max_rows"] == 5_000
+    assert plan.classical["max_rows"] == 2_000  # BRICKDNN_GPC_MAX_ROWS
 
     plan = check_compatibility(model_graph("SVC"), csv_info(**INTEGER)).plan
     assert plan.class_names == ["1", "4", "7"] and plan.classical["class_targets"] == "values"
@@ -221,6 +221,14 @@ def test_row_limits(monkeypatch):
     assert not result.ok and "Max. samples is 60" in result.errors[0]
     monkeypatch.setenv("BRICKDNN_GP_MAX_ROWS", "not a number")
     assert check_compatibility(graph, csv_info(**NUMBER)).plan.classical["max_rows"] == 5_000
+    # Gaussian process classifiers have a limit of their own (much slower to fit).
+    monkeypatch.setenv("BRICKDNN_GPC_MAX_ROWS", "30")
+    result = check_compatibility(model_graph("GaussianProcessClassifier"), csv_info(**TEXT))
+    assert result.plan.classical["max_rows"] == 30
+    assert (
+        "(BRICKDNN_GPC_MAX_ROWS; the time to fit grows with n³ for every class)"
+        in (result.warnings[0])
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -325,7 +333,7 @@ def test_integer_classes_and_demo_data(tmp_path):
         model_graph("GaussianProcessRegressor", 3), random_info(), tmp_path / "demo"
     )
     assert result.status == "completed", result.message
-    assert rec.info["task"] == "demo" and rec.info["train_size"] == 800
+    assert rec.info["task"] == "demo" and rec.info["train_size"] == 400
     assert rec.info["preprocessing"] == {"kind": "demo"}
     assert rec.history[0]["val_r2"] > 0.5  # the hidden rule can be learned
     assert (tmp_path / "demo" / "model.joblib").exists()

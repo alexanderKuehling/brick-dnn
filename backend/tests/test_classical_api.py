@@ -60,7 +60,12 @@ def test_capabilities_list_classical_models(auth_client, training_dir, monkeypat
     classical = data["classical"]
     assert classical["available"] is True and classical["reason"] is None
     assert classical["sklearn_version"] and classical["tuning"] is False
-    assert classical["max_rows"] == {"gaussian_process": 1234, "svm": 50_000}
+    assert classical["max_rows"] == {
+        "GaussianProcessRegressor": 1234,
+        "GaussianProcessClassifier": 2_000,
+        "SVR": 50_000,
+        "SVC": 50_000,
+    }
     monkeypatch.setattr(training_service, "sklearn_installed", lambda: False)
     classical = auth_client.get("/api/training/").data["classical"]
     assert classical["available"] is False and "pip install scikit-learn" in classical["reason"]
