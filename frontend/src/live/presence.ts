@@ -124,6 +124,9 @@ export class PresenceStore {
   /** Everyone here (one entry per person, even with several tabs open). */
   getPeople = (): RemotePerson[] => this.people;
 
+  /** Everyone here with their presence state (one entry per browser tab). */
+  getPeers = (): Peer[] => this.peers;
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

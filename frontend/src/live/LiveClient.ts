@@ -52,7 +52,10 @@ export interface LiveClientOptions {
   /** A valid access token; `force`: refresh it even if it looks valid (after a 4401). */
   getToken: (force: boolean) => Promise<string | null>;
   createSocket?: (url: string) => SocketLike;
-  /** Ops changed within this time go out in one message. */
+  /**
+   * At most one ops message per this time: a change goes out at once, the ones that follow
+   * within this time are collected into the next message.
+   */
   batchMs?: number;
   /** At most one presence message per this time. */
   presenceMs?: number;
@@ -100,6 +103,7 @@ export class LiveClient {
   private sent: PendingMessage[] = [];
   private presence: PresenceState | null = null;
   private presenceSentAt = 0;
+  private flushedAt = 0;
   private attempt = 0;
   private forceToken = false;
   private forceTokenTried = false;
@@ -158,7 +162,12 @@ export class LiveClient {
     }
     this.outbox = appendOps(this.outbox, ops);
     if (this.batchTimer === null) {
-      this.batchTimer = setTimeout(() => this.flush(), this.options.batchMs);
+      const wait = this.flushedAt + this.options.batchMs - Date.now();
+      if (wait <= 0) {
+        this.flush();
+        return;
+      }
+      this.batchTimer = setTimeout(() => this.flush(), wait);
     }
     this.changed();
   }
@@ -174,6 +183,7 @@ export class LiveClient {
     }
     const ops = this.outbox;
     this.outbox = [];
+    this.flushedAt = Date.now();
     for (let i = 0; i < ops.length; i += MAX_OPS_PER_MESSAGE) {
       const message = { id: messageId(), ops: ops.slice(i, i + MAX_OPS_PER_MESSAGE) };
       this.sent.push(message);
@@ -464,11 +474,11 @@ export class LiveClient {
     this.everLive = true;
     this.peers = [];
     this.status = 'live';
-    // Subscribers apply the pending ops on top of the server state first ...
-    this.emit(message);
-    // ... then they are sent again: the confirmations of the old connection are lost.
+    // The confirmations of the old connection are lost: its messages go out again (merged).
     this.outbox = appendOps([], this.pendingOps());
     this.sent = [];
+    // Subscribers apply the pending ops on top of the server state first, then they are sent.
+    this.emit(message);
     this.flush();
     this.stopPing();
     this.pingTimer = setInterval(() => this.send({ type: 'ping' }), this.options.pingMs);

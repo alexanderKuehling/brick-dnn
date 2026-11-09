@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBaseUrl, freshAccessToken, type ProjectRole } from '@/api';
 import { LiveClient, type EndReason, type LiveStatus } from './LiveClient';
 import { PresenceStore } from './presence';
-import type { LiveOp, ServerMessage } from './protocol';
+import type { LiveOp, PresenceState, ServerMessage } from './protocol';
 
 /** The WebSocket address of a project, next to the API (wss:// for https://). */
 export function liveUrl(projectId: number): string {
@@ -29,6 +29,10 @@ export interface LiveProject extends LiveState {
   getClient: () => LiveClient | null;
   /** Who is here and what they have selected or drag. */
   presence: PresenceStore;
+  /** Changes for the server (batched; ignored while live editing is off). */
+  sendOps: (ops: LiveOp[]) => void;
+  /** Our selection etc. for the others (throttled). */
+  sendPresence: (state: PresenceState) => void;
   /** Messages from the server, also across reconnects and project changes. */
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
 }
@@ -111,6 +115,11 @@ export function useLiveProject(
   }, []);
 
   const getClient = useCallback(() => current.current, []);
+  const sendOps = useCallback((ops: LiveOp[]) => current.current?.sendOps(ops), []);
+  const sendPresence = useCallback(
+    (presenceState: PresenceState) => current.current?.sendPresence(presenceState),
+    []
+  );
 
-  return { ...state, client, getClient, presence, subscribe };
+  return { ...state, client, getClient, presence, subscribe, sendOps, sendPresence };
 }

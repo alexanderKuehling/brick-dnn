@@ -76,21 +76,25 @@ describe('LiveClient', () => {
     expect(received.map((m) => m.type)).toEqual(['hello']);
   });
 
-  it('sends ops in batches and merges changes of the same layer', async () => {
+  it('sends a change at once and batches the ones that follow', async () => {
     const { client } = setup();
     const socket = await connect();
+    client.sendOps([update('in', { size: 1 })]);
+    expect(socket.messages('ops').map((m) => m.ops)).toEqual([[update('in', { size: 1 })]]);
+
     client.sendOps([update('fc', { out_features: 1 })]);
     client.sendOps([update('fc', { out_features: 12 }), update('in', { size: 3 })]);
     client.sendOps([update('fc', { bias: 0 })]);
-    expect(socket.messages('ops')).toHaveLength(0);
+    expect(socket.messages('ops')).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(120);
-    const [message] = socket.messages('ops');
+    const [, message] = socket.messages('ops');
+    // Changes of the same layer are merged.
     expect(message.ops).toEqual([
       update('fc', { out_features: 12, bias: 0 }),
       update('in', { size: 3 }),
     ]);
-    expect(client.pendingCount).toBe(1);
+    expect(client.pendingCount).toBe(2);
   });
 
   it('takes its own echo as confirmation and passes the ops of others on', async () => {
@@ -152,7 +156,7 @@ describe('LiveClient', () => {
     });
     second.receive(hello({ client_id: 'me-2', version: 7 }));
     // Subscribers see the pending ops at hello (to put them on top of the server state) ...
-    expect(pendingAtHello).toHaveLength(2);
+    expect(pendingAtHello).toEqual([update('fc', { out_features: 12, bias: 0 })]);
     // ... then they go out again, merged into one message.
     const [resent] = second.messages('ops');
     expect(resent.ops).toEqual([update('fc', { out_features: 12, bias: 0 })]);
