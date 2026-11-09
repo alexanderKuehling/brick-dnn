@@ -35,6 +35,7 @@ from brickdnn.training import DatasetError, DatasetInfo, inspect_csv
 
 from . import training_service as training
 from .models import DataPrep, Dataset, DataSource
+from .retention import touch
 
 if TYPE_CHECKING:
     from brickdnn.data.pipeline import PipelineResult
@@ -211,6 +212,7 @@ def _load_table(source: DataSource) -> Table:
     directory = source_dir(source.pk) / TABLE_DIR
     if not (directory / "table.json").is_file():
         raise DataError(MISSING_FILES_MESSAGE)
+    touch(source)
     return load_table_cached(directory)
 
 

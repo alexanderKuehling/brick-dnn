@@ -61,7 +61,7 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 
 | Method | Path                       | Body                               | Response                    |
 | ------ | -------------------------- | ---------------------------------- | --------------------------- |
-| POST   | `/api/auth/register/`      | `{username, email, password}`      | `201 {user, access, refresh}` |
+| POST   | `/api/auth/register/`      | `{username, email, password, accept_terms?}` | `201 {user, access, refresh}` |
 | POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`         |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
@@ -69,7 +69,38 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 
 Send the access token as `Authorization: Bearer <access>`. Access tokens live 30 minutes,
 refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
-account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`.
+account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`. If the
+server has terms of use (`GET /api/legal/` says `accept_terms_required`), registration needs
+`accept_terms: true`; the acceptance is stored with the version of the terms.
+
+### The own account
+
+These endpoints need a website login (JWT), not an API token. Changes, the export and the
+deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
+
+| Method | Path                          | Body                                  | Response                    |
+| ------ | ----------------------------- | ------------------------------------- | --------------------------- |
+| GET    | `/api/auth/account/`          | –                                     | `Account`                   |
+| PATCH  | `/api/auth/account/`          | `{email}`                             | `Account`                   |
+| POST   | `/api/auth/account/password/` | `{current_password, new_password}`    | `{access, refresh}`; all other logins end |
+| GET    | `/api/auth/account/export/`   | –                                     | a ZIP file with everything stored about the account |
+| POST   | `/api/auth/account/delete/`   | `{password, username}`                | `204`: the account and everything it owns are deleted |
+
+`Account` is `{id, username, email, date_joined, last_login, last_active_at,
+terms_accepted_at, terms_version, privacy_version, stored}`; `stored` counts the projects,
+memberships, comments, data sources and preparations, datasets, training runs, API tokens and
+connected apps, and the bytes of uploaded files. What the export holds and what deleting an
+account deletes: [privacy.md](privacy.md).
+
+### Legal pages (public)
+
+| Method | Path                    | Response                                                       |
+| ------ | ----------------------- | -------------------------------------------------------------- |
+| GET    | `/api/legal/`           | `{pages: {imprint, privacy, terms}, terms_version, privacy_version, accept_terms_required, retention: {unused_uploads_days, inactive_accounts_days}}` |
+| GET    | `/api/legal/<page>/`    | `{page, title, content, version, updated_at}`; `404` if the page is not set up |
+
+`<page>` is `imprint`, `privacy` or `terms`; `content` is the operator's Markdown file and
+`version` the start of its SHA-256 hash. See [privacy.md](privacy.md).
 
 ## API tokens
 
@@ -420,8 +451,9 @@ Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and r
 20/minute, starting training runs: 120/hour, dataset uploads, CSV imports and exports of
 preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
 1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
-120/minute. Adjust with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
+120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour. Adjust
+with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
 `BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
-`BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE` and
+`BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE`, `BRICKDNN_ACCOUNT_RATE` and
 `BRICKDNN_SHARING_RATE` (invitations and link changes, 120/hour)
 (e.g. `100/minute`).

@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 def empty_graph() -> dict:
@@ -102,6 +103,9 @@ class DataSource(models.Model):
     import_options = models.JSONField(default=dict)
     report = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Opened, or its table read (preview, export, join): for deleting unused uploads
+    # (BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS, see retention.py).
+    last_used_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -156,6 +160,8 @@ class Dataset(models.Model):
     # Projects whose members may train on it.
     projects = models.ManyToManyField("Project", blank=True, related_name="datasets")
     created_at = models.DateTimeField(auto_now_add=True)
+    # Opened or trained on (see retention.py).
+    last_used_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -215,6 +221,8 @@ class TrainingRun(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    # Opened, predicted with or its weights downloaded (see retention.py).
+    last_used_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-created_at"]
@@ -376,3 +384,22 @@ class Comment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.author} on {self.project.name}: {self.text[:40]}"
+
+
+class UserProfile(models.Model):
+    """What Brick DNN keeps about an account besides Django's user: when it was last used
+    (for deleting inactive accounts, see retention.py) and which terms it accepted."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
+    )
+    # Log-ins, token refreshes and API token use; updated at most about once an hour.
+    last_active_at = models.DateTimeField(default=timezone.now)
+    # The terms of use and the privacy policy shown at sign-up (see legal.py): a hash of
+    # each file, empty if the page was not set up.
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    terms_version = models.CharField(max_length=64, blank=True)
+    privacy_version = models.CharField(max_length=64, blank=True)
+
+    def __str__(self) -> str:
+        return f"Profile of {self.user}"
