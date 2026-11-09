@@ -581,6 +581,7 @@ def test_check_compatible(auth_client, training_dir):
     assert response.data["errors"] == []
     assert response.data["plan"]["task"] == "classification"
     assert response.data["plan"]["class_names"] == ["setosa", "versicolor", "virginica"]
+    assert response.data["fixes"] == []
     # Ids may also arrive as strings (e.g. from a <select>).
     assert check(auth_client, DEMO_GRAPH, {"kind": "upload", "id": str(dataset_id)}).data["ok"]
 
@@ -592,6 +593,16 @@ def test_check_incompatible(auth_client, training_dir):
     assert data["ok"] is False
     assert data["plan"] is None
     assert "Set the Input shape to 4" in data["errors"][0]
+    # What to change, for the UI's "Adapt network" action.
+    assert data["fixes"] == [
+        {
+            "node": "n0",
+            "type": "Input",
+            "params": {"shape": [4]},
+            "previous": {"shape": [5]},
+            "summary": "Input shape 5 → 4",
+        }
+    ]
 
     data = check(auth_client, DEMO_GRAPH, {"kind": "builtin", "id": "mnist"}).data
     assert data["ok"] is False
