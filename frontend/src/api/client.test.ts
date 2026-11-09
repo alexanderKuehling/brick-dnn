@@ -182,6 +182,18 @@ describe('requests', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes an expired token before a request instead of waiting for a 401', async () => {
+    setTokens({ access: jwt(Date.now() / 1000 - 5), refresh: 'refresh-token' });
+    fetchMock
+      .mockResolvedValueOnce(json({ access: 'fresh-access' }))
+      .mockResolvedValueOnce(json({ id: 1, username: 'alex' }));
+    await api.me();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/token/refresh/');
+    expect(headersOf(fetchMock.mock.calls[1]).Authorization).toBe('Bearer fresh-access');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('does not refresh a token that is still valid for a while', async () => {
     setTokens({ access: jwt(Date.now() / 1000 + 600), refresh: 'refresh-token' });
     fetchMock.mockResolvedValueOnce(json({ id: 5 }, 201));
