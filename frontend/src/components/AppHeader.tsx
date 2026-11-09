@@ -1,6 +1,7 @@
 import {
   IconBrandGithub,
   IconChevronDown,
+  IconCoffee,
   IconFolder,
   IconKey,
   IconLogout,
@@ -27,6 +28,7 @@ import { Logo } from './Logo';
 
 export const HEADER_HEIGHT = 56;
 export const REPOSITORY_URL = 'https://github.com/alexanderKuehling/brick-dnn';
+export const SUPPORT_URL = 'https://buymeacoffee.com/alexanderkzw';
 
 export function AppHeader() {
   const { user, ready, logout } = useAuth();
@@ -91,6 +93,20 @@ export function AppHeader() {
             <IconBrandGithub size={18} />
           </ActionIcon>
         </Tooltip>
+        <Tooltip label="Buy me a coffee">
+          <ActionIcon
+            component="a"
+            href={SUPPORT_URL}
+            target="_blank"
+            rel="noreferrer"
+            variant="default"
+            size="lg"
+            aria-label="Buy me a coffee"
+            visibleFrom="sm"
+          >
+            <IconCoffee size={18} />
+          </ActionIcon>
+        </Tooltip>
         <ColorSchemeToggle />
         {!DEMO && ready && !user && (
           <>
@@ -152,7 +168,7 @@ export function AppHeader() {
   );
 }
 
-/** Below `sm` the page links and the GitHub link move into a menu. */
+/** Below `sm` the page links and the GitHub and support links move into a menu. */
 function PhoneMenu({
   loggedIn,
   isActive,
@@ -194,6 +210,15 @@ function PhoneMenu({
             leftSection={<IconBrandGithub size={16} />}
           >
             Source code on GitHub
+          </Menu.Item>
+          <Menu.Item
+            component="a"
+            href={SUPPORT_URL}
+            target="_blank"
+            rel="noreferrer"
+            leftSection={<IconCoffee size={16} />}
+          >
+            Buy me a coffee
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
