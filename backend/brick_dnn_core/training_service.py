@@ -385,7 +385,10 @@ def resolve_dataset(user, ref: Any) -> ResolvedDataset:
             dataset_id = int(dataset_id)
         if not isinstance(dataset_id, int) or isinstance(dataset_id, bool):
             raise TrainingInputError("Choose one of your uploaded datasets.")
-        dataset = Dataset.objects.filter(owner=user, pk=dataset_id).first()
+        from .shared_data import visible_datasets
+
+        # Your own datasets and the ones shared in your projects.
+        dataset = visible_datasets(user).filter(pk=dataset_id).first()
         if dataset is None:
             raise TrainingInputError(
                 "This dataset does not exist (any more). Upload it again or choose another one."
@@ -445,7 +448,13 @@ def active_run_count() -> int:
 
 
 def start_run(
-    user, name: Any, graph: Any, dataset_ref: Any, config: Any, tuning: Any = None
+    user,
+    name: Any,
+    graph: Any,
+    dataset_ref: Any,
+    config: Any,
+    tuning: Any = None,
+    project_id: Any = None,
 ) -> TrainingRun:
     """Validate everything and start a training process.
 
@@ -465,6 +474,15 @@ def start_run(
     if len(name) > 120:
         raise TrainingInputError("The name can be at most 120 characters long.")
     validate_graph(graph)
+    project = None
+    if project_id is not None:
+        from .shared_data import editable_projects
+
+        if isinstance(project_id, bool) or not isinstance(project_id, int):
+            raise TrainingInputError("'project' must be the id of a project.")
+        project = editable_projects(user).filter(pk=project_id).first()
+        if project is None:
+            raise TrainingInputError("You can only train in projects you own or can edit.")
     try:
         training_config = TrainingConfig.from_dict(config)
         search = TuningConfig.from_dict(tuning) if tuning is not None else None
@@ -482,6 +500,7 @@ def start_run(
             raise TrainingBusy(BUSY_MESSAGE)
         run = TrainingRun.objects.create(
             owner=user,
+            project=project,
             name=name,
             graph=graph,
             dataset=dataset.summary,

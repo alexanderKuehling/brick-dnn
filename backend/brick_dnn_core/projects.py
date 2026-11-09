@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from . import history, live
+from . import history, live, shared_data
 from .models import Comment, Project, ProjectMember
 from .serializers import ProjectSerializer
 
@@ -317,6 +317,46 @@ class ProjectViewSet(viewsets.ModelViewSet):
             project.share_token = None
         project.save(update_fields=["link_access", "share_token"])
         return Response({"link_access": project.link_access, "share_token": project.share_token})
+
+    # Data of the project ----------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def data(self, request: Request, pk=None) -> Response:
+        """``GET``: datasets and data preparations shared in this project.
+        ``POST {kind: "dataset" | "prep", id}``: add one of your own (owner and editors)."""
+        project = self.get_object()
+        if request.method == "GET":
+            return Response(shared_data.project_data_items(project))
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        body = request.data if isinstance(request.data, dict) else {}
+        item = shared_data.find_item(body.get("kind"), body.get("id"))
+        if item is None or item.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Choose one of your own datasets or data preparations."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item.projects.add(project)
+        return Response(shared_data.project_data_items(project), status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"data/(?P<kind>dataset|prep)/(?P<item_id>\d+)",
+    )
+    def data_item(self, request: Request, pk=None, kind=None, item_id=None) -> Response:
+        """Stop sharing an item in this project (its owner or the project's owner)."""
+        project = self.get_object()
+        item = shared_data.find_item(kind, int(item_id))
+        if item is None or not item.projects.filter(pk=project.pk).exists():
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.owner_id != request.user.pk and project.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Only its owner or the project's owner can remove it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        item.projects.remove(project)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # History ----------------------------------------------------------------
 

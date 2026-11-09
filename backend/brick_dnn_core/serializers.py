@@ -85,11 +85,43 @@ class ApiTokenCreateSerializer(serializers.Serializer):
 
 class DatasetSerializer(serializers.ModelSerializer):
     prepared_from = serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
+    mine = serializers.SerializerMethodField()
+    shared_in = serializers.SerializerMethodField()
 
     class Meta:
         model = Dataset
-        fields = ["id", "name", "kind", "size_bytes", "created_at", "info", "prepared_from"]
+        fields = [
+            "id",
+            "name",
+            "kind",
+            "size_bytes",
+            "created_at",
+            "info",
+            "prepared_from",
+            "owner",
+            "mine",
+            "shared_in",
+        ]
         read_only_fields = fields
+
+    def _user(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None) or self.context.get("user")
+
+    def get_owner(self, obj: Dataset) -> str:
+        return obj.owner.get_username()
+
+    def get_mine(self, obj: Dataset) -> bool:
+        user = self._user()
+        return user is not None and obj.owner_id == user.pk
+
+    def get_shared_in(self, obj: Dataset) -> list:
+        """Projects it is shared in (those the requesting user can see)."""
+        from .shared_data import shared_in
+
+        user = self._user()
+        return shared_in(user, obj) if user is not None and user.is_authenticated else []
 
     def get_prepared_from(self, obj: Dataset) -> dict | None:
         """The data preparation (Data tab) the dataset was made from: ``{id, name}``."""
@@ -124,8 +156,15 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "total_params",
             "created_at",
             "finished_at",
+            "project",
+            "started_by",
         ]
         read_only_fields = fields
+
+    started_by = serializers.SerializerMethodField()
+
+    def get_started_by(self, obj: TrainingRun) -> str:
+        return obj.owner.get_username()
 
     def get_task(self, obj: TrainingRun) -> str | None:
         return obj.plan.get("task") if isinstance(obj.plan, dict) else None
@@ -222,8 +261,22 @@ class DataPrepSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated:
-            fields["source"].queryset = DataSource.objects.filter(owner=user)
+            # Editors of a shared preparation choose among the owner's sources.
+            owner = self.instance.owner if isinstance(self.instance, DataPrep) else user
+            fields["source"].queryset = DataSource.objects.filter(owner=owner)
         return fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and isinstance(instance, DataPrep):
+            from .shared_data import prep_role, shared_in
+
+            data["owner"] = instance.owner.get_username()
+            data["role"] = prep_role(user, instance)
+            data["shared_in"] = shared_in(user, instance)
+        return data
 
     def validate_steps(self, value):
         from . import data_service

@@ -34,7 +34,7 @@ from brickdnn.training.config import TrainingConfig
 from . import history
 from . import training_service as training
 from .api_tokens import uses_api_token
-from .models import ApiToken, Dataset, Project, TrainingRun
+from .models import ApiToken, Project, TrainingRun
 from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
 from .projects import (
@@ -50,6 +50,7 @@ from .serializers import (
     RunDetailSerializer,
     RunSummarySerializer,
 )
+from .shared_data import can_stop_run, visible_datasets, visible_runs
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ def _project(request: Request, args: dict[str, Any]) -> Project:
 
 def _run(request: Request, args: dict[str, Any]) -> TrainingRun:
     try:
-        run = TrainingRun.objects.filter(owner=request.user, pk=args.get("id")).first()
+        run = visible_runs(request.user).filter(pk=args.get("id")).first()
     except (ValidationError, ValueError):
         run = None
     if run is None:
@@ -259,8 +260,11 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "reason": capabilities["reason"],
         "devices": capabilities["devices"],
         "builtin_datasets": capabilities["builtin_datasets"],
+        # Your own datasets and the ones shared in your projects (see "owner" and "mine").
         "your_datasets": DatasetSerializer(
-            Dataset.objects.filter(owner=request.user), many=True
+            visible_datasets(request.user).select_related("owner", "prepared_from"),
+            many=True,
+            context={"user": request.user},
         ).data,
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
@@ -297,6 +301,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
             args["dataset"],
             args.get("config"),
             args.get("tuning"),
+            args.get("project_id"),
         )
     except training.IncompatibleNetwork as exc:
         raise ToolError(json.dumps({"detail": str(exc), **exc.compatibility.to_dict()})) from None
@@ -310,7 +315,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
 
 
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
-    runs = TrainingRun.objects.filter(owner=request.user)
+    runs = visible_runs(request.user).select_related("owner")
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
     return RunSummarySerializer(runs, many=True).data
 
@@ -320,7 +325,10 @@ def get_training_run(request: Request, args: dict[str, Any]) -> Any:
 
 
 def stop_training(request: Request, args: dict[str, Any]) -> Any:
-    return RunSummarySerializer(training.stop_run(_run(request, args))).data
+    run = _run(request, args)
+    if not can_stop_run(request.user, run):
+        raise ToolError("Only who started it and the project's editors can stop it.")
+    return RunSummarySerializer(training.stop_run(run)).data
 
 
 TOOLS: dict[str, Tool] = {
@@ -434,6 +442,10 @@ TOOLS: dict[str, Tool] = {
                 "name": {"type": "string", "maxLength": 120},
                 "config": {"type": "object"},
                 "tuning": {"type": "object"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "Shared project to train in: its members see the run",
+                },
             },
             ("graph", "dataset"),
             writes=True,

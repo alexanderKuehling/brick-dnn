@@ -124,6 +124,8 @@ class DataPrep(models.Model):
     steps = models.JSONField(default=list)
     # {"target", "task", "split": {"val", "test", "seed", "stratify"}}
     settings = models.JSONField(default=default_prep_settings)
+    # Projects whose members may use it (editors of those projects may change it too).
+    projects = models.ManyToManyField("Project", blank=True, related_name="data_preps")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -151,6 +153,8 @@ class Dataset(models.Model):
     prepared_from = models.ForeignKey(
         DataPrep, on_delete=models.SET_NULL, null=True, blank=True, related_name="datasets"
     )
+    # Projects whose members may train on it.
+    projects = models.ManyToManyField("Project", blank=True, related_name="datasets")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -186,6 +190,10 @@ class TrainingRun(models.Model):
     dataset = models.JSONField(default=dict)
     upload = models.ForeignKey(
         Dataset, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
+    )
+    # Started from a shared project: its members see the run.
+    project = models.ForeignKey(
+        "Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
     )
     config = models.JSONField(default=dict)
     # Hyperparameter search settings (TuningConfig.to_dict()); null for a normal training.

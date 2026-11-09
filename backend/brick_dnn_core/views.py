@@ -5,7 +5,7 @@ from django.http import FileResponse, HttpResponse
 from django.utils.text import slugify
 from rest_framework import mixins, permissions, renderers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -18,6 +18,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
+from . import shared_data
 from . import training_service as training
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .models import ApiToken, Dataset, TrainingRun
@@ -223,7 +224,15 @@ class DatasetViewSet(
     throttle_scope = "uploads"
 
     def get_queryset(self):
-        return Dataset.objects.filter(owner=self.request.user).select_related("prepared_from")
+        # Your own datasets and the ones shared in your projects; only your own can be
+        # deleted.
+        user = self.request.user
+        datasets = (
+            Dataset.objects.filter(owner=user)
+            if self.action == "destroy"
+            else shared_data.visible_datasets(user)
+        )
+        return datasets.select_related("prepared_from", "owner")
 
     def get_throttles(self):
         throttles = super().get_throttles()
@@ -263,7 +272,10 @@ class DatasetViewSet(
             )
         except DatasetError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(DatasetSerializer(dataset).data, status=status.HTTP_201_CREATED)
+        return Response(
+            DatasetSerializer(dataset, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     def perform_destroy(self, instance: Dataset) -> None:
         if training.dataset_in_use(instance):
@@ -279,13 +291,18 @@ class TrainingRunViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Training runs of the logged-in user. Training happens in a separate process."""
+    """Training runs of the logged-in user and of their shared projects (``?project=<id>``).
+    Training happens in a separate process."""
 
     permission_classes = [permissions.IsAuthenticated]
     throttle_scope = "training"
 
     def get_queryset(self):
-        return TrainingRun.objects.filter(owner=self.request.user)
+        runs = shared_data.visible_runs(self.request.user).select_related("owner")
+        project = self.request.query_params.get("project")
+        if project is not None and project.isdigit():
+            runs = runs.filter(project_id=int(project))
+        return runs
 
     def get_serializer_class(self):
         return RunSummarySerializer if self.action == "list" else RunDetailSerializer
@@ -304,7 +321,9 @@ class TrainingRunViewSet(
         return super().list(request, *args, **kwargs)
 
     def create(self, request: Request) -> Response:
-        """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?}``."""
+        """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?, "project"?}``.
+
+        With ``project`` (a project you own or edit), the run belongs to that project too."""
         data = request.data if isinstance(request.data, dict) else {}
         try:
             run = training.start_run(
@@ -314,6 +333,7 @@ class TrainingRunViewSet(
                 data.get("dataset"),
                 data.get("config"),
                 data.get("tuning"),
+                data.get("project"),
             )
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -330,13 +350,18 @@ class TrainingRunViewSet(
         return Response(RunDetailSerializer(run).data, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance: TrainingRun) -> None:
+        if not shared_data.can_delete_run(self.request.user, instance):
+            raise PermissionDenied("Only who started it and the project's owner can delete it.")
         training.terminate_run(instance)
         instance.delete()  # the run directory is removed by a post_delete signal
 
     @action(detail=True, methods=["post"])
     def stop(self, request: Request, pk=None) -> Response:
         """Stop after the current batch; the weights trained so far are kept."""
-        run = training.stop_run(self.get_object())
+        run = self.get_object()
+        if not shared_data.can_stop_run(request.user, run):
+            raise PermissionDenied("Only who started it and the project's editors can stop it.")
+        run = training.stop_run(run)
         return Response(RunDetailSerializer(run).data)
 
     @action(
