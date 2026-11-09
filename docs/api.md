@@ -419,6 +419,7 @@ See [training.md](training.md#usage-and-budgets).
           "concurrent_trainings": 1, "priority": 0, "overage_price_per_cpu_hour": null},
  "unlimited": false,
  "plans": [ …the plans with prices, if the server has several… ],
+ "upgrade_url": null,
  "overage": {"available": false, "enabled": false, "price_per_cpu_hour": null,
              "currency": "EUR", "cap_cpu_hours": null, "used_cpu_minutes": 0, "cost": null},
  "compute": {"unit": "cpu_minutes", "used": 12.5, "limit": 30, "remaining": 17.5,
@@ -440,7 +441,10 @@ or the own budget, whichever is lower; null: unlimited), `available` what the ca
 use with its token's or app's budget, `caller` only with an API token or app. A budget of
 `null` removes it; 0 allows nothing. `ApiToken` and connections have `budget_cpu_minutes` and
 `used_cpu_minutes` (this month). Only a website login can change budgets, so an agent cannot
-raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour`.
+raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour` and, on a
+server with [paid plans](billing.md), a subscription that is paid and not cancelled.
+`upgrade_url` is the pricing page on such a server (else null); the `403` of a used-up
+allowance or a full storage carries it too.
 
 The check also takes the `config` (optional) to check what depends on it, e.g. `max_samples`
 against the row limit of a classical model. For classical models, only the Input layer's

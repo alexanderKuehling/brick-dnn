@@ -154,9 +154,14 @@ account with its own ids, tokens and keys, and no real money.
 - **Notifications that did not arrive** are retried by Paddle; whatever is still missing is
   caught by the daily `billing_sync`, and the pricing page asks Paddle itself after a
   checkout when the notification takes longer than a few seconds.
-- With Docker Compose, the `backend` and the `cleanup` service both need the Paddle settings
-  **and the plans** (`BRICKDNN_PLANS`); a server set up with `deploy/server` reads them from
-  the site settings.
+- The `backend` and the `cleanup` service both need the Paddle settings **and the plans**
+  (`BRICKDNN_PLANS`): `docker-compose.yml` passes both to both, and a server set up with
+  `deploy/server` reads the public ones from the site settings. If the cleanup log says
+  "paid plans are OFF, the settings are incomplete", that service lacks one of them.
+- **Where users are led to the pricing page:** the header, "Plan & billing" and "Usage &
+  budget" on the account page, and the messages of a used-up allowance or a full storage
+  (web, REST and MCP; with `BRICKDNN_PUBLIC_URL` they carry the full address, and their JSON
+  has `upgrade_url`).
 
 ## Overage: compute beyond the allowance
 
