@@ -1,0 +1,139 @@
+/* Invite form: the field takes the free width; on phones role and button wrap below it. */
+.invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-xs);
+}
+
+.inviteUser {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.inviteControls {
+  display: flex;
+  flex: none;
+  gap: var(--mantine-spacing-xs);
+}
+
+.people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A person with access: avatar, name and (on narrow screens below them) the role controls. */
+.person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-xs) 0;
+}
+
+.person + .person {
+  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.personName {
+  display: flex;
+  flex: 1 1 5rem;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+}
+
+.personActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* The share link with its copy button. */
+.link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  margin-top: var(--mantine-spacing-sm);
+}
+
+.linkUrl {
+  flex: 1 1 14rem;
+  min-width: 0;
+
+  input {
+    font-family: var(--mantine-font-family-monospace);
+  }
+}
+
+/* An inline confirmation (stacked dialogs fight over the focus). */
+.confirm {
+  margin-top: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm);
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+/* The page of a share link: name, owner and actions above the canvas. */
+.sharedBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.sharedTitle {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.sharedName {
+  overflow-wrap: anywhere;
+}
+
+.sharedActions {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+
+  /* Phones: a row of their own, the buttons share it (or take one line each). */
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: 1 1 100%;
+
+    & > * {
+      flex: 1 1 auto;
+    }
+  }
+}
+
+/* Next to the network name on phones; the narrowest ones need the space for the name. */
+.phoneAvatars {
+  flex: none;
+
+  @media (max-width: 22.4em) {
+    display: none;
+  }
+}
+
+/* The "View only" text: the narrowest phones only show the icon (screen readers still read it). */
+.badgeLabel {
+  @media (max-width: 22.4em) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.sharedDescription {
+  flex-basis: 100%;
+  white-space: pre-line;
+}

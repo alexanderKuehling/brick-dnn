@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
-import { useNavigate } from 'react-router-dom';
+import {
+  IconCopyPlus,
+  IconDots,
+  IconEdit,
+  IconEye,
+  IconFolder,
+  IconFolderOpen,
+  IconLogout,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+  IconUsers,
+  IconUsersPlus,
+} from '@tabler/icons-react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ActionIcon,
   Alert,
@@ -13,6 +26,7 @@ import {
   Loader,
   Menu,
   SimpleGrid,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -20,16 +34,26 @@ import {
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, type Project } from '@/api';
-import { loadDraft, saveDraft, type Draft } from '@/builder/draft';
+import { useAuth } from '@/auth/AuthContext';
+import { projectDraft } from '@/builder/draft';
+import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
+import { leaveProject, ROLE_LABELS } from '@/sharing/roles';
+import { ShareDialog } from '@/sharing/ShareDialog';
+
+type Tab = 'mine' | 'shared';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function ProjectsPage() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const openInBuilder = useOpenInBuilder();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: Tab = searchParams.get('tab') === 'shared' ? 'shared' : 'mine';
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<Project | null>(null);
 
   const load = useCallback(() => {
     api.projects
@@ -40,35 +64,19 @@ export function ProjectsPage() {
 
   useEffect(load, [load]);
 
-  /** Ask before replacing a different network that is open in the builder. */
-  const replaceDraft = (draft: Draft) => {
-    const current = loadDraft();
-    const replace = () => {
-      saveDraft(draft);
-      navigate('/');
-    };
-    const sameProject = draft.projectId !== null && current?.projectId === draft.projectId;
-    if (!current || current.doc.nodes.length === 0 || sameProject) {
-      replace();
-      return;
-    }
-    modals.openConfirmModal({
-      title: 'Replace the network in the builder?',
-      children: (
-        <Text size="sm">
-          “{current.name}” is currently open in the builder. Unsaved changes to it will be lost.
-        </Text>
-      ),
-      labels: { confirm: 'Replace', cancel: 'Cancel' },
-      onConfirm: replace,
-    });
-  };
+  const replaceProject = (updated: Partial<Project> & { id: number }) =>
+    setProjects(
+      (list) => list?.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)) ?? null
+    );
+  const dropProject = (id: number) =>
+    setProjects((list) => list?.filter((p) => p.id !== id) ?? null);
+  const failed = (title: string, err: unknown) =>
+    notifications.show({ color: 'red', title, message: (err as Error).message });
 
-  const open = (project: Project) =>
-    replaceDraft({ doc: project.graph, name: project.name, projectId: project.id });
+  const open = (project: Project) => openInBuilder(projectDraft(project));
 
   const createNew = () =>
-    replaceDraft({
+    openInBuilder({
       doc: { version: 1, nodes: [], edges: [] },
       name: 'Untitled network',
       projectId: null,
@@ -91,34 +99,123 @@ export function ProjectsPage() {
       labels: { confirm: 'Save', cancel: 'Cancel' },
       onConfirm: async () => {
         try {
-          await api.projects.update(project.id, { name: value.trim() || project.name });
-          load();
+          replaceProject(
+            await api.projects.update(project.id, { name: value.trim() || project.name })
+          );
         } catch (err) {
-          notifications.show({ color: 'red', message: (err as Error).message });
+          failed('Could not rename the network', err);
         }
       },
     });
   };
 
+  const duplicate = async (project: Project) => {
+    try {
+      const copy = await api.projects.duplicate(project.id);
+      setProjects((list) => [copy, ...(list ?? [])]);
+      notifications.show({
+        color: 'green',
+        message:
+          tab === 'mine'
+            ? `Created “${copy.name}”.`
+            : `Saved “${copy.name}” to your own networks (“Mine”).`,
+      });
+    } catch (err) {
+      failed('Could not duplicate the network', err);
+    }
+  };
+
   const remove = (project: Project) =>
     modals.openConfirmModal({
       title: `Delete "${project.name}"?`,
-      children: <Text size="sm">This cannot be undone.</Text>,
+      children: (
+        <Text size="sm">
+          {project.shared && 'Everyone you shared it with loses access too. '}This cannot be undone.
+        </Text>
+      ),
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
           await api.projects.remove(project.id);
-          setProjects((list) => list?.filter((p) => p.id !== project.id) ?? null);
+          dropProject(project.id);
         } catch (err) {
-          notifications.show({ color: 'red', message: (err as Error).message });
+          failed('Could not delete the network', err);
         }
       },
     });
 
+  const leave = (project: Project) =>
+    modals.openConfirmModal({
+      title: `Leave “${project.name}”?`,
+      children: (
+        <Text size="sm">
+          You lose access to this network. Only {project.owner.username} can invite you again.
+        </Text>
+      ),
+      labels: { confirm: 'Leave', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        if (!user) {
+          return;
+        }
+        try {
+          await leaveProject(project.id, user.id);
+          dropProject(project.id);
+          notifications.show({ message: `You left “${project.name}”.` });
+        } catch (err) {
+          failed('Could not leave the network', err);
+        }
+      },
+    });
+
+  const lists: Record<Tab, Project[] | null> = {
+    mine: projects?.filter((p) => p.role === 'owner') ?? null,
+    shared: projects?.filter((p) => p.role !== 'owner') ?? null,
+  };
+
+  const panel = (value: Tab) => {
+    const list = lists[value];
+    return (
+      <Tabs.Panel value={value} pt="lg">
+        {list?.length === 0 && (
+          <Card withBorder p="xl" ta="center">
+            <Text c="dimmed">
+              {value === 'mine'
+                ? 'You have not saved any networks yet. Build one in the editor and press “Save”.'
+                : 'Nobody has shared a network with you yet. When someone invites you, it appears here.'}
+            </Text>
+          </Card>
+        )}
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
+          {list?.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              username={user?.username ?? null}
+              onOpen={() => open(project)}
+              onShare={() => setSharing(project)}
+              onRename={() => rename(project)}
+              onDuplicate={() => void duplicate(project)}
+              onDelete={() => remove(project)}
+              onLeave={() => leave(project)}
+            />
+          ))}
+        </SimpleGrid>
+      </Tabs.Panel>
+    );
+  };
+
+  const count = (value: Tab) =>
+    lists[value] && (
+      <Badge size="sm" variant="light" color="gray" circle={lists[value].length < 10}>
+        {lists[value].length}
+      </Badge>
+    );
+
   return (
     <Container size="lg" py="xl">
-      <Group justify="space-between" mb="lg">
+      <Group justify="space-between" mb="md">
         <Title order={2}>My networks</Title>
         <Button leftSection={<IconPlus size={16} />} onClick={createNew}>
           New network
@@ -131,53 +228,144 @@ export function ProjectsPage() {
           <Loader />
         </Center>
       )}
-      {projects?.length === 0 && (
-        <Card withBorder p="xl" ta="center">
-          <Text c="dimmed">
-            You have not saved any networks yet. Build one in the editor and press “Save”.
-          </Text>
-        </Card>
+
+      {projects && (
+        <Tabs
+          value={tab}
+          onChange={(value) =>
+            setSearchParams(value === 'shared' ? { tab: 'shared' } : {}, { replace: true })
+          }
+        >
+          <Tabs.List>
+            <Tabs.Tab
+              value="mine"
+              leftSection={<IconFolder size={16} />}
+              rightSection={count('mine')}
+            >
+              Mine
+            </Tabs.Tab>
+            <Tabs.Tab
+              value="shared"
+              leftSection={<IconUsers size={16} />}
+              rightSection={count('shared')}
+            >
+              Shared with me
+            </Tabs.Tab>
+          </Tabs.List>
+          {panel('mine')}
+          {panel('shared')}
+        </Tabs>
       )}
 
-      <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
-        {projects?.map((project) => (
-          <Card key={project.id} withBorder padding="lg" radius="md">
-            <Group justify="space-between" wrap="nowrap" align="flex-start">
-              <Text fw={600} lineClamp={2}>
-                {project.name}
-              </Text>
-              <Menu position="bottom-end" withinPortal>
-                <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray" aria-label="Network actions">
-                    <IconDots size={16} />
-                  </ActionIcon>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => rename(project)}>
-                    Rename
-                  </Menu.Item>
-                  <Menu.Item
-                    color="red"
-                    leftSection={<IconTrash size={14} />}
-                    onClick={() => remove(project)}
-                  >
-                    Delete
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
-            </Group>
-            <Group gap="xs" mt="xs">
-              <Badge variant="light">{project.num_layers} layers</Badge>
-            </Group>
-            <Text size="xs" c="dimmed" mt="sm">
-              Updated {formatDate(project.updated_at)}
-            </Text>
-            <Button variant="light" fullWidth mt="md" onClick={() => open(project)}>
-              Open in builder
-            </Button>
-          </Card>
-        ))}
-      </SimpleGrid>
+      {sharing && (
+        <ShareDialog
+          project={sharing}
+          onClose={() => setSharing(null)}
+          onChange={({ shared, link_access, share_token }) =>
+            replaceProject({ id: sharing.id, shared, link_access, share_token })
+          }
+          onLeave={() => dropProject(sharing.id)}
+        />
+      )}
     </Container>
+  );
+}
+
+interface ProjectCardProps {
+  project: Project;
+  /** The current user: "Updated … by" only names other people. */
+  username: string | null;
+  onOpen: () => void;
+  onShare: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onLeave: () => void;
+}
+
+function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
+  const isOwner = project.role === 'owner';
+  const changedBy = project.updated_by !== username ? project.updated_by : null;
+  return (
+    <Card withBorder padding="lg" radius="md" component="article" aria-label={project.name}>
+      <Group justify="space-between" wrap="nowrap" align="flex-start">
+        <Text fw={600} lineClamp={2} style={{ overflowWrap: 'anywhere' }}>
+          {project.name}
+        </Text>
+        <Menu position="bottom-end" withinPortal>
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray" aria-label="Network actions">
+              <IconDots size={16} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconFolderOpen size={14} />} onClick={actions.onOpen}>
+              Open
+            </Menu.Item>
+            <Menu.Item leftSection={<IconUsersPlus size={14} />} onClick={actions.onShare}>
+              Share…
+            </Menu.Item>
+            {project.role !== 'viewer' && (
+              <Menu.Item leftSection={<IconPencil size={14} />} onClick={actions.onRename}>
+                Rename
+              </Menu.Item>
+            )}
+            <Menu.Item leftSection={<IconCopyPlus size={14} />} onClick={actions.onDuplicate}>
+              Duplicate
+            </Menu.Item>
+            <Menu.Divider />
+            {isOwner ? (
+              <Menu.Item
+                color="red"
+                leftSection={<IconTrash size={14} />}
+                onClick={actions.onDelete}
+              >
+                Delete
+              </Menu.Item>
+            ) : (
+              <Menu.Item
+                color="red"
+                leftSection={<IconLogout size={14} />}
+                onClick={actions.onLeave}
+              >
+                Leave
+              </Menu.Item>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+      </Group>
+      {!isOwner && (
+        <Text size="sm" c="dimmed">
+          by {project.owner.username}
+        </Text>
+      )}
+      <Group gap="xs" mt="xs">
+        {!isOwner && (
+          <Badge
+            variant="light"
+            color={project.role === 'editor' ? 'brick' : 'gray'}
+            leftSection={project.role === 'editor' ? <IconEdit size={12} /> : <IconEye size={12} />}
+            tt="none"
+          >
+            {ROLE_LABELS[project.role]}
+          </Badge>
+        )}
+        <Badge variant="light" color={isOwner ? undefined : 'gray'}>
+          {project.num_layers} layers
+        </Badge>
+        {isOwner && project.shared && (
+          <Badge variant="outline" leftSection={<IconUsers size={12} />} tt="none">
+            Shared
+          </Badge>
+        )}
+      </Group>
+      <Text size="xs" c="dimmed" mt="sm">
+        Updated {formatDate(project.updated_at)}
+        {changedBy && ` by ${changedBy}`}
+      </Text>
+      <Button variant="light" fullWidth mt="md" onClick={actions.onOpen}>
+        Open in builder
+      </Button>
+    </Card>
   );
 }
