@@ -11,11 +11,11 @@ Ein Datenschutzbeauftragter ist nicht benannt (als Privatperson nicht vorgeschri
 
 ## 2. Überblick
 
-Brick DNN ist ein kostenloses Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammensetzen, PyTorch-Code erzeugen, Daten aufbereiten und Netze auf diesem Server trainieren können. Für Netze, Daten und Trainings brauchen Sie ein Konto.
+Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammensetzen, PyTorch-Code erzeugen, Daten aufbereiten und Netze auf diesem Server trainieren können. Die Grundfunktionen sind kostenlos. Für Netze, Daten und Trainings brauchen Sie ein Konto.
 
-- Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server).
+- Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Die App versendet **keine E-Mails**.
-- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server bzw. die Datenbank für mich betreiben.
+- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server bzw. die Datenbank für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Links zu anderen Seiten (z. B. GitHub oder „Buy me a coffee“) werden erst geladen, wenn Sie sie anklicken; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
 
 ## 3. Hosting
@@ -85,9 +85,25 @@ Verbinden Sie eine App, ruft diese auf Ihre Veranlassung Daten Ihres Kontos ab u
 
 **Protokoll der Agentenaktionen:** Was ein Token oder eine verbundene App in Ihrem Konto tut (jeder Aufruf über MCP oder die API), wird protokolliert und Ihnen unter „Agent activity“ angezeigt: Name des Tokens bzw. der App, Anfang des Tokens, Kennung des Programms (User-Agent), Aktion, Ergebnis mit Fehlermeldung, Dauer, betroffene Netze, Trainings und Datensätze sowie die Argumente in zusammengefasster Form (Größen und Anzahlen statt Dateiinhalten und Eingabedaten, nie Passwörter oder Token). Nur Sie sehen Ihr Protokoll. Es wird nach 90 Tagen automatisch gelöscht (höchstens 20.000 Einträge je Konto), mit dem Konto gelöscht und ist im Datenexport enthalten. Zweck: Nachvollziehbarkeit und Kontrolle dessen, was Assistenten in Ihrem Namen tun. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
 
-## 10. Speicherdauer und Löschung
+## 10. Kostenpflichtige Tarife: Zahlung über Paddle
 
-- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen und Nutzungsdaten gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
+Die Grundfunktionen von Brick DNN sind kostenlos. Dieser Abschnitt betrifft Sie nur, wenn Sie ein kostenpflichtiges Abo abschließen (soweit auf der Seite „Pricing“ Tarife angeboten werden).
+
+Verkäufer der Tarife ist nicht der Betreiber dieser Seite, sondern **Paddle.com Market Ltd** mit Sitz in London, Vereinigtes Königreich („Paddle“). Paddle verkauft die Tarife als Wiederverkäufer (Merchant of Record), wickelt die Zahlung ab, stellt die Rechnung aus und führt die Umsatzsteuer ab. Für diese Verarbeitung ist Paddle selbst verantwortlich; es gilt die Datenschutzerklärung von Paddle (https://www.paddle.com/legal).
+
+- **Was an Paddle übermittelt wird:** Wenn Sie den Bezahlvorgang öffnen, legt der Server für Ihr Konto einen Kundeneintrag bei Paddle an und übermittelt dafür Ihre E-Mail-Adresse und die interne Nummer Ihres Kontos, damit der Kauf Ihrem Konto zugeordnet werden kann. Ändern Sie später Ihre E-Mail-Adresse, wird sie auch bei Paddle geändert.
+- **Was Sie bei Paddle eingeben:** Zahlungsdaten (z. B. Karte, PayPal), Land und Postleitzahl bzw. Rechnungsanschrift und gegebenenfalls eine Umsatzsteuer-ID geben Sie direkt bei Paddle ein. Zahlungsdaten wie Kartennummern erreichen diesen Server nicht. Im Händlerkonto bei Paddle sind die Angaben zu Ihrem Kauf einsehbar (z. B. E-Mail-Adresse, Land, Tarif, Beträge, Zahlungsstatus).
+- **Inhalte von Paddle im Browser:** Erst wenn Sie den Bezahlvorgang öffnen (oder einem Zahlungslink von Paddle folgen), lädt Ihr Browser ein Skript und das Bezahlformular von Servern von Paddle. Paddle erhält dabei Ihre IP-Adresse und Angaben zu Ihrem Browser und kann eigene Cookies setzen, etwa zur Betrugsprävention. Vorher wird nichts von Paddle geladen, auch nicht auf der Preisseite. Das Kundenportal für Zahlungsmittel und Rechnungen ist eine Seite von Paddle.
+- **Was dieser Server speichert:** Ihre Kunden- und Abonummer bei Paddle, Tarif, Status und Zeitraum des Abos, zu jeder Mitteilung von Paddle über Ihr Abo Art, Zeitpunkt und Abonummer (nicht ihren Inhalt) sowie abgerechnete zusätzliche Rechenzeit. Diese Angaben stehen im Daten-Export und werden mit dem Konto gelöscht.
+- **E-Mails:** Bestätigungen, Rechnungen und Zahlungshinweise versendet Paddle an Ihre E-Mail-Adresse; die App selbst versendet weiterhin keine E-Mails.
+- **Speicherdauer bei Paddle:** Rechnungen und Zahlungsdaten bewahrt Paddle nach den für Paddle geltenden gesetzlichen Fristen auf, auch nachdem Ihr Konto hier gelöscht wurde. Wenn Sie Ihr Konto löschen, wird ein laufendes Abo sofort beendet.
+- **Drittland:** Für das Vereinigte Königreich besteht ein Angemessenheitsbeschluss der EU-Kommission (Art. 45 DSGVO). Welche weiteren Dienstleister Paddle einsetzt, auch außerhalb der EU, steht in der Datenschutzerklärung von Paddle.
+
+Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
+
+## 11. Speicherdauer und Löschung
+
+- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen, Nutzungsdaten und die Angaben zu einem Abo (Abschnitt 10) gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
 - **Ungenutzte Uploads und Trainings** (hochgeladene Dateien, aufbereitete Datensätze und abgeschlossene Trainings) werden nach 180 Tagen ohne Nutzung automatisch gelöscht.
 - **Inaktive Konten** werden nach zwei Jahren (730 Tagen) ohne Login und ohne Nutzung mit allen Inhalten automatisch gelöscht. Die App versendet keine E-Mails, eine Erinnerung vorher gibt es daher nicht.
 - **Nutzungsdaten** bleiben gespeichert, solange Ihr Konto besteht, auch wenn ein Training, Token oder eine App gelöscht wird (sie gehören zum Verbrauch des Monats).
@@ -96,7 +112,7 @@ Verbinden Sie eine App, ruft diese auf Ihre Veranlassung Daten Ihres Kontos ab u
 - **Server-Logs:** siehe Abschnitt 4.
 - **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank bzw. des Servers enthalten sein, bis diese turnusmäßig überschrieben werden (in der Regel nach wenigen Tagen).
 
-## 11. Ihre Rechte
+## 12. Ihre Rechte
 
 Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21).
 
@@ -104,10 +120,10 @@ Vieles können Sie selbst unter **Account** erledigen: E-Mail-Adresse ändern, *
 
 Sie haben außerdem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren (Art. 77 DSGVO), insbesondere in dem Mitgliedstaat Ihres Aufenthaltsorts, Ihres Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes.
 
-## 12. Pflicht zur Bereitstellung, automatisierte Entscheidungen
+## 13. Pflicht zur Bereitstellung, automatisierte Entscheidungen
 
 Für ein Konto sind Benutzername, E-Mail-Adresse und Passwort nötig; ohne sie kann kein Konto angelegt werden. Netze bauen und Code erzeugen geht auch ohne Konto. Es gibt keine automatisierten Entscheidungen oder Profiling im Sinne von Art. 22 DSGVO.
 
-## 13. Änderungen
+## 14. Änderungen
 
 Ich passe diese Erklärung an, wenn sich die App oder die Rechtslage ändert. Es gilt die hier veröffentlichte Fassung.
