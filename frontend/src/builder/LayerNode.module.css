@@ -1,4 +1,6 @@
 .node {
+  --kernel-color: var(--mantine-color-pink-6);
+
   position: relative;
   width: 220px;
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
@@ -52,6 +54,15 @@
   flex-shrink: 0;
   border-radius: 3px;
   background: var(--node-color);
+
+  /* Kernels: a diamond, like their output handle. */
+  &[data-kernel] {
+    width: 9px;
+    height: 9px;
+    margin-inline: 0.5px;
+    border-radius: 1px;
+    transform: rotate(45deg);
+  }
 }
 
 .title {
@@ -80,6 +91,10 @@
 .shape {
   color: var(--mantine-color-text);
   font-weight: 600;
+
+  &[data-kind='kernel'] {
+    color: var(--kernel-color);
+  }
 }
 
 .handle {
@@ -87,6 +102,25 @@
   height: 12px;
   border: 2px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
   background: var(--node-color);
+
+  /*
+   * Kernels flow along their own connections: diamond handles in the kernel colour, drawn
+   * by ::after so that the label next to the handle is not rotated.
+   */
+  &[data-kind='kernel'] {
+    border-color: transparent;
+    background: transparent;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border: 2px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+      border-radius: 2px;
+      background: var(--kernel-color);
+      transform: rotate(45deg);
+    }
+  }
 
   /* A bigger target for fingers; the dot keeps its size. */
   @media (pointer: coarse) {
@@ -97,6 +131,18 @@
       border-radius: 50%;
     }
   }
+}
+
+/* Bricks with several inputs: "features" and "kernel" next to their handles. */
+.slotLabel {
+  position: absolute;
+  right: 11px;
+  bottom: 7px;
+  color: var(--mantine-color-dimmed);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* The name of the person who has the layer selected, above its top left corner. */

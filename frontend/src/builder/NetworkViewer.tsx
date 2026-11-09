@@ -26,7 +26,7 @@ import {
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import type { GraphDocument } from '@/api';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
-import { EDGE_DEFAULTS, miniMapColor, nodeTypes, withEdgeStyle } from './flow';
+import { EDGE_DEFAULTS, miniMapColor, nodeTypes, useDecoratedEdges, withEdgeStyle } from './flow';
 import { fromDocument, type LayerFlowNode } from './graph';
 import { Inspector } from './Inspector';
 import { useAnalysis } from './useAnalysis';
@@ -65,11 +65,12 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
 
   const initial = useMemo(() => fromDocument(doc), [doc]);
   const [nodes, setNodes, onNodesChange] = useNodesState<LayerFlowNode>(initial.nodes);
-  const edges = useMemo(() => withEdgeStyle(initial.edges), [initial]);
   const specs = useMemo(
     () => Object.fromEntries((catalog?.layers ?? []).map((spec) => [spec.type, spec])),
     [catalog]
   );
+  const styled = useMemo(() => withEdgeStyle(initial.edges), [initial]);
+  const edges = useDecoratedEdges(styled, nodes, specs);
   const selected = nodes.find((node) => node.selected) ?? null;
 
   // Pinching zooms the network, not the page (Safari's gesture events, see the builder).

@@ -35,7 +35,8 @@ import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
 import sharingClasses from '@/sharing/Sharing.module.css';
 import { progressLabel } from '@/training/format';
-import { formatCount } from './format';
+import { networkSize } from './format';
+import { networkFamily } from './kinds';
 import classes from './Toolbar.module.css';
 
 interface ToolbarProps {
@@ -105,6 +106,7 @@ function Status({
     return <Loader size="xs" />;
   }
   if (analysis.valid) {
+    const count = networkSize(analysis);
     return (
       <Badge
         color="green"
@@ -118,7 +120,7 @@ function Status({
         <Box component="span" visibleFrom="xs">
           Valid ·{' '}
         </Box>
-        {formatCount(analysis.total_params)} params
+        {count}
       </Badge>
     );
   }
@@ -138,6 +140,7 @@ function Status({
 
 export function Toolbar(props: ToolbarProps) {
   const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
+  const library = networkFamily(props.analysis) === 'classical' ? 'scikit-learn' : 'PyTorch';
   const { onShare, onDuplicate, here = null, live = null } = props;
   const canSave = !DEMO && !readOnly && !live;
 
@@ -342,7 +345,7 @@ export function Toolbar(props: ToolbarProps) {
           Code
         </Button>
         {!readOnly && <TrainButton run={props.trainingRun} onClick={props.onTrain} />}
-        <Tooltip label="Download the PyTorch script (Ctrl+E)">
+        <Tooltip label={`Download the ${library} script (Ctrl+E)`}>
           <Button
             leftSection={<IconDownload size={16} />}
             onClick={props.onExportPython}
@@ -351,12 +354,12 @@ export function Toolbar(props: ToolbarProps) {
             Export .py
           </Button>
         </Tooltip>
-        <Tooltip label="Export .py: download the PyTorch script">
+        <Tooltip label={`Export .py: download the ${library} script`}>
           <ActionIcon
             size="lg"
             onClick={props.onExportPython}
             className={classes.exportIcon}
-            aria-label="Download the PyTorch script"
+            aria-label={`Download the ${library} script`}
           >
             <IconDownload size={18} />
           </ActionIcon>
