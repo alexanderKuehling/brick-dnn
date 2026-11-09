@@ -495,8 +495,9 @@ def test_csv_classification_with_text_labels(tmp_path):
     assert len(pre["mean"]) == 4 and len(pre["std"]) == 4
     assert pre["target_mean"] is None
     assert rec.history[-1]["val_accuracy"] > 0.9  # well separated classes
-    assert "val_rmse" not in rec.history[-1]
+    assert "val_rmse" not in rec.history[-1] and "val_r2" not in rec.history[-1]
     assert result.message.startswith("Finished: validation accuracy")
+    assert "R²" not in result.message
 
 
 def test_csv_classification_with_integer_labels_and_semicolons(tmp_path):
@@ -941,8 +942,8 @@ def test_demo_training_with_a_test_set(tmp_path):
     assert result.status == "completed", result.message
     sizes = (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"])
     assert sizes == (1408, 512, 640)  # 55 % / 20 % / 25 % of 2,560
-    assert set(rec.test) == {"loss", "accuracy", "rmse"}
-    assert 0 <= rec.test["accuracy"] <= 1 and rec.test["rmse"] is None
+    assert set(rec.test) == {"loss", "accuracy", "rmse", "r2"}
+    assert 0 <= rec.test["accuracy"] <= 1 and rec.test["rmse"] is None and rec.test["r2"] is None
     assert result.test == rec.test
     assert rec.events[-2:] == [("test_end",), ("finish", "completed")]
     assert ("running", "Testing the final model …") in rec.statuses
@@ -994,6 +995,222 @@ def test_csv_test_set_uses_the_training_statistics(tmp_path):
     saved = json.loads((tmp_path / "weights.preprocessing.json").read_text())
     assert saved == json.loads(json.dumps(pre))
     assert saved["columns"] == ["a", "b", "c"] and saved["target"] == "price"
+
+
+# --------------------------------------------------------------------------- #
+# R² of regressions
+# --------------------------------------------------------------------------- #
+
+
+def r2_score(y_true, y_pred):
+    """scikit-learn's R² (a uniform average over the columns) on tensors."""
+    metrics = pytest.importorskip("sklearn.metrics")
+    return metrics.r2_score(y_true.double().numpy(), y_pred.double().numpy())
+
+
+def noisy_prices(tmp_path, n=80):
+    """A CSV whose last column is a noisy linear function of the others; returns its path
+    and the targets as written."""
+    gen = torch.Generator().manual_seed(1)
+    x = torch.randn(n, 3, generator=gen)
+    y = 1000 + 250 * (x @ torch.tensor([1.0, -2.0, 0.5])) + 200 * torch.randn(n, generator=gen)
+    cells = [f"{t:.2f}" for t in y.tolist()]
+    lines = ["a,b,c,price"] + [
+        ",".join(f"{v:.4f}" for v in row.tolist()) + f",{t}" for row, t in zip(x, cells)
+    ]
+    path = tmp_path / "prices.csv"
+    path.write_text("\n".join(lines))
+    return path, torch.tensor([float(t) for t in cells], dtype=torch.float64)
+
+
+def saved_predictions(graph, tmp_path, source):
+    """Targets and outputs of the saved weights on a whole source (one column per value)."""
+    model = build_model(graph)
+    model.load_state_dict(torch.load(tmp_path / "weights.pt"))
+    model.eval()
+    inputs, targets = source.batch(torch.arange(len(source)))
+    with torch.no_grad():
+        outputs = model(*inputs)
+    outputs = outputs if isinstance(outputs, tuple) else (outputs,)
+    n = len(targets[0])
+    return (
+        torch.cat([t.reshape(n, -1) for t in targets], dim=1).double(),
+        torch.cat([o.reshape(n, -1) for o in outputs], dim=1).double(),
+    )
+
+
+def test_csv_regression_reports_r2_like_scikit_learn(tmp_path):
+    path, prices = noisy_prices(tmp_path)
+    graph, info = mlp(3, 1), inspect_csv(path)
+    settings = {"epochs": 4, "batch_size": 8, "learning_rate": 0.01, "test_split": 0.25}
+    result, rec = run_job(graph, info, tmp_path, path=path, **settings)
+    assert result.status == "completed", result.message
+    assert all(entry["val_r2"] is not None for entry in rec.history)
+    pre = rec.info["preprocessing"]
+    plan = check_compatibility(graph, info).plan
+    prepared = data.prepare_data(
+        plan, info, path, config(**settings), None, Recorder(), torch.Generator().manual_seed(0)
+    )
+    _, val_rows, test_rows = data.split_indices(
+        80, 0.2, None, torch.Generator().manual_seed(0), 0.25
+    )
+    # 16 validation and 20 test rows in batches of 8: summed up over batches, a partial one.
+    assert (len(val_rows), len(test_rows)) == (16, 20)
+    kept = next(entry for entry in rec.history if entry["epoch"] == result.weights_epoch)
+    for source, rows, r2 in (
+        (prepared.val, val_rows, kept["val_r2"]),
+        (prepared.test, test_rows, rec.test["r2"]),
+    ):
+        targets, outputs = saved_predictions(graph, tmp_path, source)
+        # In the units of the CSV file, against the mean of the split itself.
+        assert targets[:, 0] * pre["target_std"] + pre["target_mean"] == pytest.approx(
+            prices[rows], abs=1e-3
+        )
+        outputs = outputs * pre["target_std"] + pre["target_mean"]
+        assert r2 == pytest.approx(r2_score(prices[rows], outputs), abs=1e-5)
+        assert 0 < r2 < 1  # it learned something, but not the noise
+    assert result.test == rec.test
+    assert f", R² {kept['val_r2']:.3f}; test loss " in result.message
+    assert result.message.endswith(f", R² {rec.test['r2']:.3f}")
+
+
+def test_constant_targets_have_no_r2(tmp_path):
+    path = tmp_path / "flat.csv"
+    path.write_text("a,b,y\n" + "".join(f"{i % 7},{i % 3},2.5\n" for i in range(40)))
+    result, rec = run_job(
+        mlp(2, 1), inspect_csv(path), tmp_path, path=path, epochs=2, batch_size=8, test_split=0.2
+    )
+    assert result.status == "completed", result.message
+    assert rec.info["task"] == "regression"
+    assert all(e["val_r2"] is None and e["val_rmse"] is not None for e in rec.history)
+    assert rec.test["r2"] is None and rec.test["rmse"] is not None
+    assert "RMSE" in result.message and "R²" not in result.message
+
+
+def test_r2_is_summed_up_over_batches_and_outputs():
+    gen = torch.Generator().manual_seed(3)
+    first = 1e6 + 50 * torch.randn(50, 2, generator=gen)  # far from 0: needs stable sums
+    second = torch.randn(50, 1, generator=gen)
+    guess_first = first + 20 * torch.randn(50, 2, generator=gen)
+    guess_second = 0.5 * second + 0.3 * torch.randn(50, 1, generator=gen)
+    r2 = engine._R2()
+    for rows in torch.arange(50).split([16, 16, 16, 1, 1]):
+        r2.add([guess_first[rows], guess_second[rows]], [first[rows], second[rows]])
+    expected = r2_score(torch.cat([first, second], 1), torch.cat([guess_first, guess_second], 1))
+    assert r2.value() == pytest.approx(expected, rel=1e-9)
+    assert 0 < r2.value() < 1
+
+    # Undefined: without samples, if all targets of an output are equal, for NaN.
+    assert engine._R2().value() is None
+    flat = engine._R2()
+    targets = torch.stack([torch.full((4,), 7.0), torch.arange(4.0)], dim=1)
+    for rows in torch.arange(4).split(2):
+        flat.add([torch.randn(2, 2)], [targets[rows]])
+    assert flat.value() is None
+    broken = engine._R2()
+    broken.add([torch.tensor([[float("nan")], [1.0]])], [torch.tensor([[0.0], [1.0]])])
+    assert broken.value() is None
+    # Every batch is constant, but the split is not.
+    halves = engine._R2()
+    halves.add([torch.zeros(2, 1)], [torch.ones(2, 1)])
+    halves.add([torch.zeros(2, 1)], [-torch.ones(2, 1)])
+    assert halves.value() == pytest.approx(0.0)
+
+
+def two_value_heads():
+    """A network with two outputs of one value each."""
+    layers = {
+        "in": ("Input", {"shape": [6]}),
+        "hidden": ("Linear", {"out_features": 16}),
+        "act": ("Activation", {}),
+        "first": ("Linear", {"out_features": 1}),
+        "second": ("Linear", {"out_features": 1}),
+    }
+    edges = [("in", "hidden"), ("hidden", "act"), ("act", "first"), ("act", "second")]
+    return {
+        "nodes": [{"id": i, "type": t, "params": p} for i, (t, p) in layers.items()],
+        "edges": [{"source": a, "target": b} for a, b in edges],
+    }
+
+
+def test_several_value_outputs_report_the_mean_r2(tmp_path, monkeypatch):
+    graph = two_value_heads()
+    plan = check_compatibility(graph, random_info()).plan
+    assert [t["kind"] for t in plan.targets] == ["value", "value"]
+    original = engine._Run._prepare_data
+
+    def as_regression(self):
+        original(self)
+        self.regression = True  # demo data is no regression task of its own
+
+    monkeypatch.setattr(engine._Run, "_prepare_data", as_regression)
+    settings = {"epochs": 2, "max_samples": 400, "test_split": 0.2, "learning_rate": 0.01}
+    result, rec = run_job(graph, random_info(), tmp_path, **settings)
+    assert result.status == "completed", result.message
+    prepared = data.demo_data(plan, config(**settings), torch.Generator().manual_seed(0))
+    kept = next(entry for entry in rec.history if entry["epoch"] == result.weights_epoch)
+    for source, r2 in ((prepared.val, kept["val_r2"]), (prepared.test, rec.test["r2"])):
+        targets, outputs = saved_predictions(graph, tmp_path, source)
+        assert targets.shape[1] == 2
+        assert r2 == pytest.approx(r2_score(targets, outputs), abs=1e-5)
+    assert kept["val_rmse"] is None  # the RMSE needs the units of a CSV target
+
+
+def test_search_trials_report_r2(tmp_path):
+    path, _ = noisy_prices(tmp_path)
+    rec = Recorder()
+    tuning = {"method": "grid", "space": {"learning_rate": [0.01, 0.001]}}
+    job = TrainingJob(
+        graph=mlp(3, 1),
+        dataset=inspect_csv(path),
+        config=config(epochs=2, batch_size=8),
+        path=str(path),
+        tuning=TuningConfig.from_dict(tuning),
+    )
+    result = train(job, rec, tmp_path / "weights.pt")
+    assert result.status == "completed", result.message
+    assert all(trial["val_r2"] is not None for trial, _ in rec.trials_ended)
+    best = next(t for t in result.trials if t["trial"] == result.best_trial)
+    kept = next(entry for entry in result.history if entry["epoch"] == best["weights_epoch"])
+    assert best["val_r2"] == kept["val_r2"]
+    assert result.message.endswith(f", R² {best['val_r2']:.3f}")
+
+
+def test_state_reporter_keeps_the_r2_of_a_running_trial(tmp_path):
+    reporter = runner.StateReporter(tmp_path, epochs=2, heartbeat=0.05)
+    reporter.trial_start(
+        {"trial": 1, "trials": 2, "params": {"learning_rate": 0.1}, "steps_per_epoch": 7}
+    )
+    assert st.read_state(tmp_path)["trials"][0]["val_r2"] is None
+    entry = {"epoch": 1, "train_loss": 0.5, "val_loss": 0.4, "val_accuracy": None}
+    entry.update(val_rmse=12.5, val_r2=0.81, seconds=1)
+    reporter.epoch_end(entry, {"epoch": 1, "val_loss": 0.4, "val_accuracy": None})
+    live = st.read_state(tmp_path)["trials"][0]
+    assert live["val_rmse"] == 12.5 and live["val_r2"] == 0.81
+    reporter.finish("stopped", "Stopped.", False)
+
+
+def test_cli_reports_r2_for_a_regression(tmp_path, capsys):
+    path, _ = noisy_prices(tmp_path)
+    graph = tmp_path / "prices.json"
+    graph.write_text(json.dumps(mlp(3, 1)))
+    common = [str(graph), "--data", str(path), "--epochs", "2", "--batch-size", "8"]
+    common += ["--device", "cpu", "--seed", "0", "--save", str(tmp_path / "prices.pt")]
+    assert cli.main([*common, "--test-split", "0.25"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    epochs = [line for line in lines if line.startswith("Epoch ")]
+    assert len(epochs) == 2 and all("  val rmse " in e and "  val R² " in e for e in epochs)
+    test = next(line for line in lines if line.startswith("Test: "))
+    assert ", rmse " in test and ", R² " in test
+    finished = next(line for line in lines if line.startswith("Finished: "))
+    assert ", RMSE " in finished and finished.count(", R² ") == 2  # validation and test
+
+    assert cli.main([*common, "--search", "grid", "--tune-lr", "0.01,0.001"]) == 0
+    out = capsys.readouterr().out
+    trials = [line for line in out.splitlines() if line.startswith("Trial 1/2: ")]
+    assert any(", val rmse " in line and ", val R² " in line for line in trials)
+    header = out.split("Trials, best first:\n")[1].splitlines()[0]
+    assert header.endswith("val rmse  val R²")
 
 
 @needs_pil
@@ -1074,11 +1291,11 @@ def scripted_validation(monkeypatch, losses, states):
     original = engine._Run._validate
 
     def validate(self, epoch):
-        _, accuracy, rmse = original(self, epoch)
+        result = original(self, epoch)
         script = losses[self.config.learning_rate] if isinstance(losses, dict) else losses
         key = (self.config.learning_rate, epoch) if isinstance(losses, dict) else epoch
         states[key] = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
-        return script[epoch - 1], accuracy, rmse
+        return {**result, "loss": script[epoch - 1]}
 
     monkeypatch.setattr(engine._Run, "_validate", validate)
 
@@ -1727,7 +1944,11 @@ def test_cli_early_stopping(tmp_path, capsys, monkeypatch):
     assert args.patience is None and args.restore_best is None  # the defaults of the config
     args = parser.parse_args(["--patience", "3", "--no-restore-best"])
     assert args.patience == 3 and args.restore_best is False
-    monkeypatch.setattr(engine._Run, "_validate", lambda self, epoch: (epoch / 10, 0.5, None))
+    monkeypatch.setattr(
+        engine._Run,
+        "_validate",
+        lambda self, epoch: {"loss": epoch / 10, "accuracy": 0.5, "rmse": None, "r2": None},
+    )
     save = tmp_path / "early.pt"
     code = cli.main(
         ["--example", "mlp_mnist", "--epochs", "5", "--patience", "2", "--device", "cpu"]

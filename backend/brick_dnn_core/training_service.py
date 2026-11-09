@@ -128,7 +128,7 @@ STOP_TIMEOUT_SECONDS = 30
 # A stale heartbeat must still be stale this long after it was first noticed before the
 # run is given up. Wall-clock based heartbeats look stale right after a laptop wakes up.
 STALE_GRACE_SECONDS = 15
-# val_r2 and test_r2: classical regression only (None otherwise)
+# val_rmse, val_r2, test_rmse and test_r2: regression only (None otherwise)
 METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse", "val_r2")
 TEST_KEYS = {
     "test_loss": "loss",
@@ -136,7 +136,15 @@ TEST_KEYS = {
     "test_rmse": "rmse",
     "test_r2": "r2",
 }
-TRIAL_KEYS = ("trial", "params", "val_loss", "val_accuracy", "val_rmse", "weights_epoch")
+TRIAL_KEYS = (
+    "trial",
+    "params",
+    "val_loss",
+    "val_accuracy",
+    "val_rmse",
+    "val_r2",
+    "weights_epoch",
+)
 
 # Training processes started by this server process, by run id. A daemon thread waits
 # for each of them so that finished processes do not linger as zombies.
