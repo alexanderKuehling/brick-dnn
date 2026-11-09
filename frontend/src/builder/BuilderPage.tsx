@@ -3,7 +3,6 @@ import { IconPlugConnectedX, IconSchool } from '@tabler/icons-react';
 import {
   Background,
   Controls,
-  MarkerType,
   MiniMap,
   Panel,
   ReactFlow,
@@ -41,19 +40,22 @@ import {
   type GenerateOptions,
   type GraphDocument,
   type LayerSpec,
+  type Project,
+  type ProjectConflict,
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
-import { categoryColor } from '@/theme';
+import { ShareDialog } from '@/sharing/ShareDialog';
 import { useTraining } from '@/training/useTraining';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
+import { ConflictDialog, type ConflictChoice } from './ConflictDialog';
 import { downloadText } from './download';
 import { loadDraft, saveDraft, type Draft } from './draft';
+import { EDGE_DEFAULTS, makeEdge, miniMapColor, nodeTypes, withEdgeStyle } from './flow';
 import {
   autoLayout,
   createNode,
-  edgeId,
   freePosition,
   fromDocument,
   LAYER_SPACING_X,
@@ -67,31 +69,29 @@ import {
   type LayerNodeData,
 } from './graph';
 import { Inspector } from './Inspector';
-import { LayerNode } from './LayerNode';
 import { Palette } from './Palette';
 import type { Point } from './pointerDrag';
 import { Toolbar } from './Toolbar';
 import { useAnalysis } from './useAnalysis';
 import { useCatalog } from './useCatalog';
-
-const nodeTypes = { layer: LayerNode };
+import { openProjectOf, useOpenProject, type OpenProject } from './useOpenProject';
 
 // The syntax highlighter is large, so the code preview is loaded on first use.
 const CodeModal = lazy(() => import('./CodeModal'));
 // Same for the training panel (charts, forms); it stays mounted once it was opened.
 const TrainingDrawer = lazy(() => import('@/training/TrainingDrawer'));
 
-const EDGE_DEFAULTS = {
-  type: 'smoothstep',
-  markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-} as const;
-
-function makeEdge(source: string, target: string): Edge {
-  return { id: edgeId(source, target), source, target, ...EDGE_DEFAULTS };
+/** Name and graph without layout: equal keys mean there is nothing to save. */
+function contentKey(name: string, graph: GraphDocument): string {
+  const { nodes, edges } = fromDocument(graph);
+  return `${name}\n${semanticKey(toDocument(nodes, edges))}`;
 }
 
-function withEdgeStyle(edges: Edge[]): Edge[] {
-  return edges.map((edge) => ({ ...edge, ...EDGE_DEFAULTS }));
+interface SaveOptions {
+  /** Save over this version (after a conflict) instead of the one the canvas is based on. */
+  baseVersion?: number;
+  /** Save as a new network named "<name> (copy)". */
+  asCopy?: boolean;
 }
 
 export function BuilderPage() {
@@ -104,7 +104,7 @@ export function BuilderPage() {
 
 function Builder() {
   const { catalog, examples, error: catalogError, reload } = useCatalog();
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
   const navigate = useNavigate();
   const flow = useReactFlow<LayerFlowNode, Edge>();
   const theme = useMantineTheme();
@@ -115,14 +115,33 @@ function Builder() {
   // ---------------------------------------------------------------- state
   const initial = useMemo(() => {
     const draft = loadDraft();
-    return draft ? { ...draft, ...fromDocument(draft.doc) } : null;
+    if (!draft) {
+      return null;
+    }
+    const loaded = fromDocument(draft.doc);
+    const project: OpenProject | null =
+      draft.projectId === null
+        ? null
+        : {
+            id: draft.projectId,
+            version: draft.version ?? null,
+            role: draft.role ?? null,
+            info: null,
+          };
+    return { ...draft, ...loaded, key: contentKey(draft.name, draft.doc), project };
   }, []);
   const [nodes, setNodes, onNodesChange] = useNodesState<LayerFlowNode>(initial?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(withEdgeStyle(initial?.edges ?? []));
   const [name, setName] = useState(initial?.name ?? 'Untitled network');
-  const [projectId, setProjectId] = useState<number | null>(initial?.projectId ?? null);
-  const [savedKey, setSavedKey] = useState<string | null>(null);
+  // The saved project the canvas belongs to: its version, the user's role and the sharing.
+  const { project, setProject, attach, detach, members, applySharing, readOnly } = useOpenProject(
+    initial?.project ?? null
+  );
+  const projectId = project?.id ?? null;
+  const [savedKey, setSavedKey] = useState<string | null>(initial?.saved ? initial.key : null);
   const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState<Project | null>(null);
+  const [shareOpened, setShareOpened] = useState(false);
   const [codeOptions, setCodeOptions] = useState<GenerateOptions>({
     class_name: 'NeuralNetwork',
     include_main: true,
@@ -180,20 +199,26 @@ function Builder() {
   const selected = nodes.find((node) => node.selected) ?? null;
   const filename = slugify(name);
   const currentKey = `${name}\n${semanticKey(doc)}`;
+  const isSaved = projectId !== null && savedKey === currentKey;
+  const currentKeyRef = useRef(currentKey);
+  currentKeyRef.current = currentKey;
 
   // ---------------------------------------------------------------- persistence
   const pendingDraft = useRef<Draft | null>(null);
+  const version = project?.version ?? null;
+  const role = project?.role ?? null;
   useEffect(() => {
     if (!seeded.current && nodes.length === 0) {
       return undefined;
     }
-    pendingDraft.current = { doc, name, projectId };
+    const draft: Draft = { doc, name, projectId, version, role, saved: isSaved };
+    pendingDraft.current = draft;
     const timer = window.setTimeout(() => {
-      saveDraft({ doc, name, projectId });
+      saveDraft(draft);
       pendingDraft.current = null;
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [doc, name, projectId]);
+  }, [doc, name, projectId, version, role, isSaved]);
 
   // Write a pending draft immediately when leaving the page or closing the tab.
   useEffect(() => {
@@ -238,18 +263,28 @@ function Builder() {
     return () => window.clearTimeout(timer);
   }, [fitRequest, flow]);
 
+  /** Replace the canvas. `source` is the saved project it shows (null: a new network). */
   const loadDocument = useCallback(
-    (graph: GraphDocument, newName: string, newProjectId: number | null) => {
+    (graph: GraphDocument, newName: string, source: Project | null) => {
       documentGeneration.current += 1;
       const loaded = fromDocument(graph);
       setNodes(loaded.nodes);
       setEdges(withEdgeStyle(loaded.edges));
       setName(newName);
-      setProjectId(newProjectId);
-      setSavedKey(newProjectId ? `${newName}\n${semanticKey(graph)}` : null);
+      if (source) {
+        attach(source);
+      } else {
+        detach();
+      }
+      setSavedKey(source ? contentKey(newName, graph) : null);
       setFitRequest((n) => n + 1);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, attach, detach]
+  );
+
+  const loadProject = useCallback(
+    (source: Project) => loadDocument(source.graph, source.name, source),
+    [loadDocument]
   );
 
   // First visit: show an example so there is something to play with.
@@ -260,8 +295,73 @@ function Builder() {
     }
   }, [examples, loadDocument]);
 
+  // A saved project from the draft (opened in "My networks", or after a reload): get the
+  // user's role, the sharing state and the latest version from the server.
+  const refreshed = useRef(false);
+  useEffect(() => {
+    const opened = initial?.project;
+    if (refreshed.current || !ready || !user || !initial || !opened) {
+      return;
+    }
+    refreshed.current = true;
+    const generation = documentGeneration.current;
+    const stillOpen = () => generation === documentGeneration.current;
+    api.projects
+      .get(opened.id)
+      .then((server) => {
+        if (!stillOpen()) {
+          return;
+        }
+        const current = currentKeyRef.current;
+        if (current === contentKey(server.name, server.graph)) {
+          attach(server);
+          setSavedKey(current);
+          return;
+        }
+        const changedBy = server.updated_by ?? 'Someone';
+        const newer = opened.version !== null && opened.version !== server.version;
+        if (initial.saved && current === initial.key) {
+          // No local changes: show the latest version.
+          loadProject(server);
+          if (newer) {
+            notifications.show({ message: `Showing the latest version: ${changedBy} changed it.` });
+          }
+        } else if (server.role === 'viewer') {
+          detach();
+          notifications.show({
+            title: `You can only view “${server.name}” now`,
+            message: 'Your unsaved changes stay open here as a new network. Save it to keep them.',
+          });
+        } else {
+          // Keep the unsaved changes, with the version they are based on.
+          setProject({ ...openProjectOf(server), version: opened.version ?? server.version });
+          if (newer) {
+            notifications.show({
+              title: `${changedBy} changed “${server.name}”`,
+              message:
+                'Your unsaved changes are based on an older version. When you save, you can ' +
+                'choose which version to keep.',
+            });
+          }
+        }
+      })
+      .catch((error) => {
+        if (stillOpen() && error instanceof ApiError && [403, 404].includes(error.status)) {
+          detach();
+          notifications.show({
+            color: 'yellow',
+            title: 'No access any more',
+            message:
+              `“${initial.name}” was deleted or is no longer shared with you. It stays open ` +
+              'here as an unsaved network.',
+          });
+        }
+      });
+  }, [ready, user, initial, attach, detach, setProject, loadProject]);
+
   const confirmReplace = (action: () => void) => {
-    if (nodes.length === 0) {
+    // Viewers cannot have unsaved changes.
+    if (nodes.length === 0 || readOnly) {
       action();
       return;
     }
@@ -429,49 +529,162 @@ function Builder() {
     }
   };
 
-  const save = async () => {
+  /** Save to the account. Resolves to the saved project, or null if it was not saved. */
+  const save = async ({ baseVersion, asCopy = false }: SaveOptions = {}) => {
     if (!user) {
       notifications.show({
         title: 'Log in to save',
         message: 'Saving networks needs a free account. Your work is kept while you log in.',
       });
       navigate('/login', { state: { from: '/' } });
-      return;
+      return null;
+    }
+    if (readOnly && !asCopy) {
+      notifications.show({
+        title: 'View only',
+        message: 'You can view this network but not change it. Duplicate it to get your own copy.',
+      });
+      return null;
     }
     if (savingRef.current) {
-      return;
+      return null;
     }
     savingRef.current = true;
     const generation = documentGeneration.current;
     setSaving(true);
-    const payload = { name: name.trim() || 'Untitled network', graph: doc };
+    const trimmed = name.trim() || 'Untitled network';
+    const payload = { name: asCopy ? `${trimmed} (copy)` : trimmed, graph: doc };
+    let savedAsNew = false;
     try {
-      let project;
-      try {
-        project = projectId
-          ? await api.projects.update(projectId, payload)
-          : await api.projects.create(payload);
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 404) {
-          project = await api.projects.create(payload); // deleted elsewhere: save as new
-        } else {
-          throw error;
+      let saved: Project;
+      if (project && !asCopy) {
+        const base = baseVersion ?? project.version;
+        try {
+          saved = await api.projects.update(
+            project.id,
+            base === null ? payload : { ...payload, version: base }
+          );
+        } catch (error) {
+          if (!(error instanceof ApiError) || ![403, 404, 409].includes(error.status)) {
+            throw error;
+          }
+          if (error.status === 409) {
+            // Someone else saved in the meantime: let the user choose.
+            const current =
+              (error.data as Partial<ProjectConflict> | null)?.project ??
+              (await api.projects.get(project.id));
+            if (generation === documentGeneration.current) {
+              setConflict(current);
+            }
+            return null;
+          }
+          if (error.status === 403) {
+            // Only allowed to view now: the changes can still be saved as a new network.
+            if (generation === documentGeneration.current) {
+              detach();
+            }
+            notifications.show({
+              color: 'yellow',
+              title: `You can only view “${project.info?.name ?? trimmed}” now`,
+              message: 'Your changes stay open here as a new network. Save again to keep them.',
+            });
+            return null;
+          }
+          // Deleted, or no longer shared with this user: save as a new network.
+          saved = await api.projects.create(payload);
+          savedAsNew = true;
         }
+      } else {
+        saved = await api.projects.create(payload);
       }
       if (generation === documentGeneration.current) {
-        setProjectId(project.id);
-        setSavedKey(`${name}\n${semanticKey(doc)}`);
+        attach(saved);
+        if (asCopy) {
+          setName(saved.name);
+        }
+        setSavedKey(`${asCopy ? saved.name : name}\n${semanticKey(doc)}`);
       }
-      notifications.show({ color: 'green', message: `Saved “${project.name}”.` });
+      notifications.show({
+        color: 'green',
+        message: savedAsNew
+          ? `The network no longer exists or is not shared with you. Saved it as “${saved.name}”.`
+          : `Saved “${saved.name}”.`,
+      });
+      return saved;
     } catch (error) {
       notifications.show({
         color: 'red',
         title: 'Saving failed',
         message: (error as Error).message,
       });
+      return null;
     } finally {
       savingRef.current = false;
       setSaving(false);
+    }
+  };
+
+  const resolveConflict = (choice: ConflictChoice) => {
+    const current = conflict;
+    setConflict(null);
+    if (!current) {
+      return;
+    }
+    if (choice === 'theirs') {
+      loadProject(current);
+    } else if (choice === 'mine') {
+      // Over the version just seen: if it changed yet again, the user is asked again.
+      void save({ baseVersion: current.version });
+    } else {
+      void save({ asCopy: true });
+    }
+  };
+
+  /** Opens the share dialog; a network that is not saved yet is saved first. */
+  const share = async () => {
+    if (project?.info) {
+      setShareOpened(true);
+      return;
+    }
+    if (project && user) {
+      // Opened from a draft and the details are not loaded yet.
+      try {
+        const server = await api.projects.get(project.id);
+        setProject((current) =>
+          current?.id === server.id
+            ? { ...openProjectOf(server), version: current.version }
+            : current
+        );
+        setShareOpened(true);
+      } catch (error) {
+        notifications.show({ color: 'red', message: (error as Error).message });
+      }
+      return;
+    }
+    if (await save()) {
+      setShareOpened(true);
+    }
+  };
+
+  /** Viewers: copy the project into their own account and continue with the copy. */
+  const duplicateProject = async () => {
+    if (!project) {
+      return;
+    }
+    try {
+      const copy = await api.projects.duplicate(project.id);
+      loadProject(copy);
+      notifications.show({
+        color: 'green',
+        title: `Saved “${copy.name}” to your networks`,
+        message: 'This copy is yours: you can change it.',
+      });
+    } catch (error) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not duplicate the network',
+        message: (error as Error).message,
+      });
     }
   };
 
@@ -556,7 +769,7 @@ function Builder() {
     // The online demo has no accounts, so Ctrl+S saves a JSON file instead.
     ['mod+S', () => (DEMO ? exportJson() : void save())],
     ['mod+E', () => void exportPython()],
-    ['mod+Enter', training.open],
+    ['mod+Enter', () => !readOnly && training.open()],
   ]);
 
   // ---------------------------------------------------------------- render
@@ -566,12 +779,13 @@ function Builder() {
       analysis,
       errorsByNode: groupIssues(analysis?.errors),
       warningsByNode: groupIssues(analysis?.warnings),
+      readOnly,
       updateNode,
       deleteNode,
       duplicateNode,
       focusNode,
     }),
-    [specs, analysis, updateNode, deleteNode, duplicateNode, focusNode]
+    [specs, analysis, readOnly, updateNode, deleteNode, duplicateNode, focusNode]
   );
 
   if (!catalog) {
@@ -620,17 +834,23 @@ function Builder() {
     />
   );
   const inspectorView = <Inspector node={selected} nodes={nodes} />;
+  const people = members
+    ? [members.owner.username, ...members.members.map((member) => member.user.username)]
+    : null;
 
   return (
     <BuilderContext.Provider value={context}>
       <Box style={{ display: 'flex', height: `calc(100dvh - ${HEADER_HEIGHT}px)` }}>
-        <Box
-          visibleFrom="md"
-          w={230}
-          style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
-        >
-          {paletteView}
-        </Box>
+        {/* Viewers cannot add layers. */}
+        {!readOnly && (
+          <Box
+            visibleFrom="md"
+            w={230}
+            style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+          >
+            {paletteView}
+          </Box>
+        )}
 
         <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Toolbar
@@ -642,13 +862,18 @@ function Builder() {
             empty={nodes.length === 0}
             examples={examples}
             saving={saving}
-            isSaved={projectId !== null && savedKey === currentKey}
+            isSaved={isSaved}
+            readOnly={readOnly}
+            owner={project?.info?.owner.username ?? null}
+            people={people}
             onLoadExample={loadExample}
             onNew={newNetwork}
             onImport={() => fileInput.current?.click()}
             onExportJson={exportJson}
             onTidy={tidyUp}
             onSave={() => void save()}
+            onShare={DEMO ? undefined : () => void share()}
+            onDuplicate={() => void duplicateProject()}
             onShowCode={code.open}
             onExportPython={() => void exportPython()}
             onTrain={training.open}
@@ -664,10 +889,12 @@ function Builder() {
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onConnect={readOnly ? undefined : onConnect}
               isValidConnection={isValidConnection}
+              nodesDraggable={!readOnly}
+              nodesConnectable={!readOnly}
               defaultEdgeOptions={EDGE_DEFAULTS}
-              deleteKeyCode={['Backspace', 'Delete']}
+              deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
               colorMode={colorScheme}
               minZoom={0.15}
               maxZoom={2}
@@ -675,19 +902,9 @@ function Builder() {
               fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
             >
               <Background gap={20} />
-              <Controls />
-              {mediumScreen && (
-                <MiniMap
-                  pannable
-                  zoomable
-                  nodeColor={(node) =>
-                    theme.colors[
-                      categoryColor(specs[(node.data as LayerNodeData).type]?.category)
-                    ]?.[6] ?? theme.colors.gray[6]
-                  }
-                />
-              )}
-              {nodes.length === 0 && (
+              <Controls showInteractive={!readOnly} />
+              {mediumScreen && <MiniMap pannable zoomable nodeColor={miniMapColor(theme, specs)} />}
+              {nodes.length === 0 && !readOnly && (
                 <Panel position="top-center">
                   <Paper
                     withBorder
@@ -733,9 +950,11 @@ function Builder() {
         </Box>
       </Box>
 
-      <Drawer opened={paletteOpened} onClose={palette.close} title="Layers" size={280}>
-        <Box h="calc(100dvh - 90px - env(safe-area-inset-bottom))">{paletteView}</Box>
-      </Drawer>
+      {!readOnly && (
+        <Drawer opened={paletteOpened} onClose={palette.close} title="Layers" size={280}>
+          <Box h="calc(100dvh - 90px - env(safe-area-inset-bottom))">{paletteView}</Box>
+        </Drawer>
+      )}
       <Drawer
         opened={inspectorOpened && !wideScreen}
         onClose={inspector.close}
@@ -745,6 +964,20 @@ function Builder() {
       >
         {inspectorView}
       </Drawer>
+      <ConflictDialog
+        project={conflict}
+        onChoose={resolveConflict}
+        onClose={() => setConflict(null)}
+      />
+      {shareOpened && project?.info && (
+        <ShareDialog
+          project={project.info}
+          onClose={() => setShareOpened(false)}
+          onChange={applySharing}
+          // The network stays open here, as a new network that is not saved.
+          onLeave={detach}
+        />
+      )}
       {codeOpened && (
         <Suspense fallback={null}>
           <CodeModal
