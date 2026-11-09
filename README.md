@@ -168,6 +168,7 @@ The exported file runs as is:
 ```bash
 python small_cnn_mnist.py                       # prints the model, runs a random batch
 python tabular_model.py --csv data.csv --epochs 20   # tabular models: train on a CSV file
+python tabular_model.py --predict new.csv             # … and predict new rows with model.pt
 ```
 
 <details>
