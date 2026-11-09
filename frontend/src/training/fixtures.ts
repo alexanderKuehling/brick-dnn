@@ -296,6 +296,81 @@ export function dataset(overrides: Partial<Dataset> = {}): Dataset {
   };
 }
 
+/**
+ * A finished regression of a neural network on a CSV file with a test set: 3 epochs, the
+ * weights of epoch 2 (lowest validation loss) are kept.
+ */
+export function regressionDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = detail({
+    name: 'House prices MLP',
+    status: 'completed',
+    message: 'Finished 3 epochs; kept the weights of epoch 2 (lowest validation loss). …',
+    dataset: { kind: 'upload', id: 1, name: 'houses' },
+    config: { ...CONFIG, epochs: 3, test_split: 0.2 },
+    task: 'regression',
+    epochs: 3,
+    epochs_done: 3,
+    metrics: {
+      train_loss: 0.21,
+      val_loss: 0.18,
+      val_accuracy: null,
+      val_rmse: 41.27,
+      val_r2: 0.8234,
+      test_loss: 0.2,
+      test_accuracy: null,
+      test_rmse: 43.9,
+      test_r2: 0.7961,
+    },
+    best: { epoch: 2, val_loss: 0.18, val_accuracy: null },
+    has_weights: true,
+    total_params: 161,
+    finished_at: '2026-10-28T10:00:30Z',
+  });
+  const epoch = (n: number, loss: number, rmse: number, r2: number | null) => ({
+    epoch: n,
+    train_loss: loss + 0.03,
+    val_loss: loss,
+    train_accuracy: null,
+    val_accuracy: null,
+    val_rmse: rmse,
+    val_r2: r2,
+    seconds: 0.4,
+  });
+  return {
+    ...base,
+    state: {
+      ...base.state!,
+      status: 'completed',
+      message: base.message,
+      finished_at: 1761645630,
+      device: 'cpu',
+      device_label: 'CPU',
+      task: 'regression',
+      num_classes: null,
+      class_names: null,
+      train_size: 600,
+      val_size: 200,
+      test_size: 200,
+      epochs: 3,
+      steps_per_epoch: 10,
+      total_params: 161,
+      history: [
+        epoch(1, 0.62, 76.4, -0.4512),
+        epoch(2, 0.18, 41.27, 0.8234),
+        epoch(3, 0.2, 43.5, 0.8),
+      ],
+      progress: null,
+      best: { epoch: 2, val_loss: 0.18, val_accuracy: null },
+      weights_epoch: 2,
+      stopped_early: false,
+      test: { loss: 0.2, accuracy: null, rmse: 43.9, r2: 0.7961 },
+      weights: true,
+      log: [],
+    },
+    ...overrides,
+  };
+}
+
 // --------------------------------------------------------------------------
 // Classical models (scikit-learn)
 // --------------------------------------------------------------------------
