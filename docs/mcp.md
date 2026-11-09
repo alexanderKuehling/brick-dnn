@@ -133,8 +133,8 @@ stored and checked exactly like an upload in the web app and returned like
 train on it. With `project_id` (a project you own or edit) it is shared there right away.
 CSV text can have up to `BRICKDNN_MCP_UPLOAD_MB` (default 5 MB, at most
 `BRICKDNN_MAX_UPLOAD_MB`); the MCP endpoint accepts requests of about twice that size, while
-other JSON requests stay limited to 1 MB. The bundled nginx lets requests to `/api/` through
-up to 2 MB: raise its `client_max_body_size` for `/api/mcp` if assistants should upload more.
+other JSON requests stay limited to 1 MB. The bundled nginx lets requests to `/api/mcp` through
+up to 12 MB.
 Larger files belong in the web app.
 
 ### Downloading the weights
