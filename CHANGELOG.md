@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Data tab: the target column setting points out how to get a target from another table and
+  adds a *Join another table* step in one click (with a single other table, it is chosen and a
+  key column both tables share, such as `id`, is set).
 - **Sharing networks.** Owners invite other users by username or e-mail as editors or
   viewers, or share a view link (`/share/<token>`) that works without an account; members
   see shared networks next to their own and can leave, anyone can make a copy. Saving checks
