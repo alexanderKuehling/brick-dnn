@@ -97,7 +97,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `get_training_options`  | read   |             | Whether training is available, datasets, default settings, search, upload limit |
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
-| `check_training`        | read   |             | Does a network fit a dataset?                                   |
+| `check_training`        | read   |             | Does a network fit a dataset? With `fixes` for the Input and last layer |
 | `start_training`        | full   |             | Train in the background                                         |
 | `list_training_runs`    | read   |             | Your training runs with status and metrics                      |
 | `get_training_run`      | read   |             | One run with its metrics per epoch                              |

@@ -36,7 +36,8 @@ stored per user.
 2. Press **Train** in the toolbar.
 3. Choose the data (see below). Brick DNN immediately checks whether the network fits the data
    and explains what to change, for example *"The network outputs 5 values, but MNIST has 10
-   classes. The last layer should output 10 values."*
+   classes. The last layer should output 10 values."* The Input layer follows the data: see
+   [Adapting the network to the data](#adapting-the-network-to-the-data).
 4. Adjust the settings (epochs, batch size, learning rate, optimizer, device) and press
    **Start training**. Optionally hold out a [test set](#validation-and-test-data), let
    [early stopping](#early-stopping-and-the-kept-weights) end the training when the network
@@ -58,13 +59,15 @@ Only one training runs at a time by default (`BRICKDNN_TRAINING_MAX_RUNS`).
 | **MNIST**, **Fashion-MNIST** | 70,000 grayscale 28×28 images of digits / clothing, 10 classes. Downloaded on first use (12 / 30 MB). | Input `1, 28, 28`, `28, 28` or `784`; 10 outputs |
 | **CIFAR-10** | 60,000 colour 32×32 photos, 10 classes. Downloaded on first use (170 MB). | Input `3, 32, 32` or `3072`; 10 outputs |
 | **CSV file** | Upload a `.csv`: every column but the last is a numeric feature, the last column is the target. | Input = number of feature columns; 1 output (regression) or one output per class |
-| **Image folder** | Upload a `.zip` with one folder per class, e.g. `cats/001.jpg`, `dogs/001.jpg`. | Input `1, H, W` or `3, H, W`; one output per class |
+| **Image folder** | Upload a `.zip` with one folder per class, e.g. `cats/001.jpg`, `dogs/001.jpg`. | Input `1, H, W` or `3, H, W` (or flat: `3·S·S` or `S·S` values for S×S images); one output per class |
 
 Details:
 
 - **Images** are converted to the number of channels of the Input layer (grayscale or RGB) and
   resized to its height and width, so a CNN built for 32×32 also trains on MNIST. Pixel values
-  are normalised per channel.
+  are normalised per channel. A flat Input (e.g. followed by a Linear layer) takes the images
+  flattened: `784` = 28×28 grayscale for MNIST, `3072` = 3×32×32 for CIFAR-10; for an image
+  folder, `12288` = 3×64×64 RGB or `784` = 28×28 grayscale (square images of at least 8×8).
 - How much data is held out for validation and testing is explained
   [below](#validation-and-test-data).
 - **CSV files** may use `,`, `;` or tabs as separators and decimal commas (`1,5`). A header
@@ -76,6 +79,31 @@ Details:
 - Text models (Input data type `long`) and networks with several inputs or outputs can only be
   trained on demo data so far.
 - Uploads are limited to `BRICKDNN_MAX_UPLOAD_MB` (default 500 MB).
+
+### Adapting the network to the data
+
+The Input layer follows the dataset chosen for training. When the network does not fit, the
+check also says how to fix it, and Brick DNN applies the fix for you:
+
+- **Automatically**, once each time you choose a dataset (in the training panel, after an
+  upload, or with **Train with this data** in the [Data tab](data-preparation.md)), if only the
+  Input layer's shape (and data type) and the number of outputs of the last layer have to
+  change. A notification says what changed, e.g. *"Input set to 4 features, last layer to 3
+  outputs from “iris”"*, with **Undo**. On an empty canvas, choosing a dataset starts a small
+  network for it (Input → Linear → ReLU → Linear; images are flattened first).
+- **With one click** otherwise: **Adapt network to “…”** below the check result lists the
+  changes, for example also when the network fits but has more outputs than there are classes.
+  The Inspector of an Input layer shows *Matches “…”* or offers **Set from dataset**.
+
+Only two layers are ever changed: the Input layer (`shape`, data type `float`) and the last
+Linear layer (also behind activations or dropout; `out_features` = one per class for
+classification, 1 for a regression). A shape that works is kept (a CNN for 1×28×28 also trains
+on CIFAR-10); otherwise the Input gets the shape of the data, flat when it is flat now (e.g.
+`784` for MNIST before a Linear layer). Nothing is suggested when other layers would have to
+change too, e.g. a CNN on a CSV file or a Linear layer with a fixed number of input features;
+the check then explains what to do. Opening a network does not change it, even if a dataset is
+remembered from before, and people who can only view a network never get any of this. In a
+shared network, the changes reach the others like any edit.
 
 ### Settings
 

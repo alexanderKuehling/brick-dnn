@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- The Input layer follows the training data: choosing a dataset (also with *Train with this
+  data* in the Data tab) sets the Input shape and the number of outputs when only those keep
+  the network from fitting, with a notification and *Undo*; an empty canvas gets a small
+  network for the data. Otherwise *Adapt network to “…”* in the training panel and *Set from
+  dataset* in the Input layer's properties do it with one click. `POST /api/training/check/`
+  (and the MCP tool `check_training`) return these changes as `fixes`. Image folders also fit
+  a flat Input (`3·S·S` or `S·S` values) now, like the built-in datasets.
 - Data tab: the target column setting points out how to get a target from another table and
   adds a *Join another table* step in one click (with a single other table, it is chosen and a
   key column both tables share, such as `id`, is set).

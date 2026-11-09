@@ -247,10 +247,28 @@ curl -X POST http://localhost:8080/api/training/runs/ \
   -d '{"name": "MLP", "graph": '"$(cat mlp.json)"', "dataset": {"kind": "builtin", "id": "mnist"}, "config": {"epochs": 3}}'
 ```
 
-`POST /api/training/check/` and `POST /api/training/runs/` answer incompatible combinations with
-explanations, e.g. `400 {"detail": "...", "errors": ["The network outputs 5 values, but MNIST has
-10 classes. ..."], "warnings": []}`. Starting a run while another one is active gives `409`, and
-`503` when PyTorch is not installed or training is disabled.
+`POST /api/training/check/` answers `{"ok", "errors", "warnings", "plan", "fixes"}`: `plan` is
+how the data is fed and which loss is used (`task`, `inputs`, `targets`, `image`,
+`class_names`, `notes`), `fixes` the parameter changes that make the network fit the data,
+applied together (empty when it fits or when other layers would have to change):
+
+```json
+"fixes": [
+  {"node": "input", "type": "Input", "params": {"shape": [4]}, "previous": {"shape": [784]},
+   "summary": "Input shape 784 → 4"},
+  {"node": "fc3", "type": "Linear", "params": {"out_features": 3}, "previous": {"out_features": 10},
+   "summary": "Outputs of the last layer 10 → 3"}
+]
+```
+
+Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed;
+a fix for surplus class outputs can also come with `"ok": true`. See
+[training.md](training.md#adapting-the-network-to-the-data).
+
+`POST /api/training/runs/` answers incompatible combinations with explanations, e.g.
+`400 {"detail": "...", "errors": ["The network outputs 5 values, but MNIST has 10 classes. ..."],
+"warnings": []}`. Starting a run while another one is active gives `409`, and `503` when
+PyTorch is not installed or training is disabled.
 
 A run's `status` is `starting`, `preparing` (loading or downloading data), `running`,
 `completed`, `stopped` or `failed`. `GET /api/training/runs/<id>/` includes `state` with the
