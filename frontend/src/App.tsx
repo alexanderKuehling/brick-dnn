@@ -7,12 +7,14 @@ import { BrowserRouter, HashRouter, Route, Routes } from 'react-router-dom';
 import { AppShell, MantineProvider } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
+import { AccountPage } from './account/AccountPage';
 import { AuthProvider } from './auth/AuthContext';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
 import { RequireAuth } from './components/RequireAuth';
 import { DataPage } from './data/DataPage';
 import { DEMO } from './demo';
+import { LegalPage } from './legal/LegalPage';
 import { AuthorizePage } from './oauth/AuthorizePage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -61,6 +63,18 @@ export default function App() {
                           </RequireAuth>
                         }
                       />
+                      <Route
+                        path="/account"
+                        element={
+                          <RequireAuth>
+                            <AccountPage />
+                          </RequireAuth>
+                        }
+                      />
+                      {/* Markdown files the operator puts on the server (docs/privacy.md). */}
+                      <Route path="/imprint" element={<LegalPage page="imprint" />} />
+                      <Route path="/privacy" element={<LegalPage page="privacy" />} />
+                      <Route path="/terms" element={<LegalPage page="terms" />} />
                       {/* Apps (e.g. Claude) send the browser here to connect to the MCP server. */}
                       <Route
                         path="/oauth/authorize"

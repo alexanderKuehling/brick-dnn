@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Alert, Anchor, Button, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Button,
+  Checkbox,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { useAuth } from '@/auth/AuthContext';
+import { useLegalInfo } from '@/legal/useLegalInfo';
 import { AuthLayout } from './AuthLayout';
 import type { ReturnTo } from './LoginPage';
 
@@ -14,8 +24,11 @@ export function RegisterPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const legal = useLegalInfo();
+  const termsRequired = Boolean(legal?.accept_terms_required);
 
   if (user) {
     return <Navigate to={from} replace state={returnState} />;
@@ -26,7 +39,7 @@ export function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      await register(username.trim(), email.trim(), password);
+      await register(username.trim(), email.trim(), password, termsRequired && accepted);
       navigate(from, { replace: true, state: returnState });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed.');
@@ -82,6 +95,41 @@ export function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
           />
+          {termsRequired ? (
+            <Checkbox
+              required
+              checked={accepted}
+              onChange={(e) => setAccepted(e.currentTarget.checked)}
+              label={
+                <>
+                  I agree to the{' '}
+                  <Anchor component={Link} to="/terms" target="_blank" inherit>
+                    terms of use
+                  </Anchor>
+                  {legal?.pages.privacy && (
+                    <>
+                      {' '}
+                      and have read the{' '}
+                      <Anchor component={Link} to="/privacy" target="_blank" inherit>
+                        privacy policy
+                      </Anchor>
+                    </>
+                  )}
+                  .
+                </>
+              }
+            />
+          ) : (
+            legal?.pages.privacy && (
+              <Text size="xs" c="dimmed">
+                How this server handles your data:{' '}
+                <Anchor component={Link} to="/privacy" target="_blank" inherit>
+                  privacy policy
+                </Anchor>
+                .
+              </Text>
+            )
+          )}
           <Button type="submit" loading={busy} fullWidth mt="sm">
             Create account
           </Button>
