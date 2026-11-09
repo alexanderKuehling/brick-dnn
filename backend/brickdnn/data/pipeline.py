@@ -39,6 +39,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .checks import (
+    class_issues,
+    feature_issues,
+    issue,
+    numbers_in_text,
+    regression_target_issues,
+    row_issues,
+    sort_issues,
+    step_fix,
+    string_feature_issues,
+    target_variant_issues,
+)
 from .steps import REGISTRY, StepContext, StepResult, get_step
 from .table import MAX_NEW_COLUMNS, NUMERIC_KINDS, TEST, TRAIN, VAL, DataError, Table
 
@@ -624,40 +636,41 @@ def run_pipeline(
 # --------------------------------------------------------------------------- #
 
 
-def _issue(
-    severity: str, message: str, column: str | None = None, fix: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    return {"severity": severity, "column": column, "message": message, "fix": fix}
-
-
-def _fix(step_type: str, params: dict[str, Any], label: str) -> dict[str, Any]:
-    return {"type": step_type, "params": params, "label": label}
-
-
 def _columns_text(columns: list[str]) -> str:
     return columns[0] if len(columns) == 1 else _count(len(columns), "column")
 
 
-def _mostly_numbers(series: pd.Series) -> bool:
+def _mostly_numbers(series: pd.Series) -> dict[str, Any] | None:
+    """How a string target can be read as numbers (see ``checks.numbers_in_text``)."""
     present = series.dropna()
     if len(present) == 0:
-        return False
-    parsed = pd.to_numeric(present.astype(str).str.strip(), errors="coerce")
-    return float(parsed.notna().mean()) >= 0.9
+        return None
+    values = present.astype(str).str.strip()
+    parsed = pd.to_numeric(values, errors="coerce")
+    if float(parsed.notna().mean()) >= 0.9:
+        return {"decimal_comma": False, "strip_units": False}
+    return numbers_in_text(values)
 
 
-def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[str, Any]:
+def readiness(
+    table: Table, settings: dict[str, Any], task: str | None, *, checks: bool = True
+) -> dict[str, Any]:
     """Can ``table`` be exported as a training dataset? See ``Readiness`` in
     ``frontend/src/api/types.ts``.
 
     Errors: no target chosen / target missing / missing target values (fix: drop_missing on
     the target), fewer than 2 or more than ``MAX_CLASSES`` classes, a non-numeric regression
-    target, no feature columns, categorical features (fix: encode one-hot), text features
-    (fix: drop_columns), datetime features (fix: datetime_features), missing feature values
-    (fix: impute), infinite values, an empty training or validation part.
-    Warnings: classes with fewer than 2 training rows, strong class imbalance, constant
-    features (fix: drop_columns), more than 1,000 feature columns.
-    Every fix is ``{"type": step type, "params": {...}, "label": "Impute 3 columns (median)"}``.
+    target, no feature columns, categorical features (fix: encode one-hot; numbers or dates
+    stored as text: cast; ID-like values: drop; spellings that differ only in case: replace
+    values; many categories: frequency or target mean encoding), text features (fix:
+    drop_columns), datetime features (fix: datetime_features), missing feature values (fix:
+    impute), infinite values, an empty training or validation part.
+    Warnings and notes: constant features (fix: drop_columns), more than 1,000 feature
+    columns, strong class imbalance, and with ``checks`` the sanity checks of
+    :mod:`brickdnn.data.checks` (target leakage, duplicates, rare classes …). Every issue is
+    ``{"code", "severity", "column", "columns", "message", "fix"}`` with ``fix`` ``{"type":
+    step type, "params": {...}, "label": "Impute 3 columns (median)"}`` or None. ``checks``
+    False leaves out the sanity checks (only the errors decide whether data can be exported).
     """
     target = settings.get("target") or None
     errors: list[dict[str, Any]] = []
@@ -666,20 +679,27 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
     split_counts = table.split_counts()
     num_classes: int | None = None
     class_names: list[str] | None = None
+    class_codes: np.ndarray | None = None
     has_target = bool(target) and target in table.kinds
+    stratify = bool((settings.get("split") or {}).get("stratify", DEFAULT_SPLIT["stratify"]))
 
     # ---- the target
     if not target:
         errors.append(
-            _issue("error", "Choose the target column: the column the network should predict.")
+            issue(
+                "no_target",
+                "error",
+                "Choose the target column: the column the network should predict.",
+            )
         )
     elif not has_target:
         errors.append(
-            _issue(
+            issue(
+                "target_not_found",
                 "error",
                 f"The target column '{target}' does not exist (any more). A step may have "
                 "renamed or dropped it; choose the target again.",
-                target,
+                [target],
             )
         )
     else:
@@ -687,11 +707,12 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
         missing = int(df[target].isna().sum())
         if missing:
             errors.append(
-                _issue(
+                issue(
+                    "target_missing",
                     "error",
                     f"{_count(missing, 'row has', 'rows have')} no target value ({target}).",
-                    target,
-                    _fix(
+                    [target],
+                    step_fix(
                         "drop_missing",
                         {"columns": [target], "how": "any"},
                         f"Drop {_count(missing, 'row')} without a target",
@@ -700,11 +721,12 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
             )
         if kind == "datetime" and task is None:
             errors.append(
-                _issue(
+                issue(
+                    "target_date",
                     "error",
                     f"The target '{target}' is a date. Choose another target, or turn it into "
                     "numbers or classes first.",
-                    target,
+                    [target],
                 )
             )
         elif task == "classification":
@@ -712,12 +734,13 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
             num_classes = len(names)
             if num_classes > MAX_CLASSES:
                 errors.append(
-                    _issue(
+                    issue(
+                        "too_many_classes",
                         "error",
                         f"The target '{target}' has {num_classes:,} different values; "
                         f"classification supports at most {MAX_CLASSES:,} classes. "
                         "Choose regression for numbers.",
-                        target,
+                        [target],
                     )
                 )
                 num_classes = None
@@ -726,38 +749,46 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
                 if num_classes < 2:
                     only = f" ('{names[0]}')" if names else ""
                     errors.append(
-                        _issue(
+                        issue(
+                            "one_class",
                             "error",
                             f"The target '{target}' has only {num_classes} class{only}. "
                             "Classification needs at least 2.",
-                            target,
+                            [target],
                         )
                     )
                 else:
+                    class_codes = codes
                     train_codes = codes[table.train_mask() & (codes >= 0)]
                     counts = np.bincount(train_codes, minlength=num_classes)
-                    rare = [names[i] for i in np.flatnonzero(counts < 2)]
-                    if rare:
-                        warnings.append(
-                            _issue(
-                                "warning",
-                                f"{_count(len(rare), 'class has', 'classes have')} fewer than 2 "
-                                f"training rows ({_names(rare)}); the network can hardly "
-                                "learn them.",
-                                target,
+                    if checks:
+                        warnings.extend(class_issues(table, target, names, codes, stratify))
+                        if kind in ("categorical", "text"):
+                            warnings.extend(target_variant_issues(table, target))
+                    else:
+                        rare = [names[i] for i in np.flatnonzero(counts < 2)]
+                        if rare:
+                            warnings.append(
+                                issue(
+                                    "rare_classes",
+                                    "warning",
+                                    f"{_count(len(rare), 'class has', 'classes have')} fewer "
+                                    f"than 2 training rows ({_names(rare)}).",
+                                    [target],
+                                )
                             )
-                        )
                     present = counts[counts > 0]
                     if len(present) >= 2:
                         ratio = float(present.max() / present.min())
                         if ratio > IMBALANCE_RATIO:
                             warnings.append(
-                                _issue(
+                                issue(
+                                    "imbalanced",
                                     "warning",
                                     f"The classes are imbalanced ({ratio:.1f} : 1 in the "
                                     "training rows).",
-                                    target,
-                                    _fix(
+                                    [target],
+                                    step_fix(
                                         "balance_classes",
                                         {"method": "oversample"},
                                         "Balance the classes (oversample)",
@@ -766,29 +797,32 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
                             )
         elif task == "regression" and kind not in NUMERIC_KINDS:
             fix = None
-            if kind in ("categorical", "text") and _mostly_numbers(df[target]):
-                fix = _fix(
-                    "cast",
-                    {"columns": [target], "to": "numeric"},
-                    f"Change {target} to numbers",
-                )
+            found = _mostly_numbers(df[target]) if kind in ("categorical", "text") else None
+            if found is not None:
+                params: dict[str, Any] = {"columns": [target], "to": "numeric"}
+                params.update({k: True for k in ("decimal_comma", "strip_units") if found[k]})
+                fix = step_fix("cast", params, f"Change {target} to numbers")
             errors.append(
-                _issue(
+                issue(
+                    "target_not_numeric",
                     "error",
                     f"The target '{target}' is {kind}, not numeric, so it cannot be used for "
                     "regression. Choose classification or another target.",
-                    target,
+                    [target],
                     fix,
                 )
             )
+        elif task == "regression" and checks:
+            warnings.extend(regression_target_issues(table, target))
         if kind in NUMERIC_KINDS:
             infinite = int(np.isinf(df[target].to_numpy(dtype=float, na_value=np.nan)).sum())
             if infinite:
                 errors.append(
-                    _issue(
+                    issue(
+                        "infinite_values",
                         "error",
                         f"The target '{target}' has {_count(infinite, 'infinite value')}.",
-                        target,
+                        [target],
                     )
                 )
 
@@ -799,22 +833,32 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
         by_kind.setdefault(table.kinds[name], []).append(name)
     numeric = [c for c in features if table.kinds[c] in NUMERIC_KINDS]
     if not features:
-        errors.append(_issue("error", "There are no feature columns besides the target."))
-    if categorical := by_kind.get("categorical"):
         errors.append(
-            _issue(
+            issue("no_features", "error", "There are no feature columns besides the target.")
+        )
+    categorical = by_kind.get("categorical", [])
+    text = by_kind.get("text", [])
+    if checks and (categorical or text):
+        found_issues, categorical, text = string_feature_issues(
+            table, categorical, text, task if has_target else None
+        )
+        errors.extend(found_issues)
+    if categorical:
+        errors.append(
+            issue(
+                "categorical_features",
                 "error",
                 f"{_count(len(categorical), 'feature column is', 'feature columns are')} "
                 f"categorical ({_names(categorical)}). Networks need numbers.",
-                categorical[0],
-                _fix(
+                categorical,
+                step_fix(
                     "encode",
                     {"columns": categorical, "method": "onehot"},
                     f"One-hot encode {_columns_text(categorical)}",
                 ),
             )
         )
-    if text := by_kind.get("text"):
+    if text:
         message = (
             f"{text[0]} is free text and cannot be used as a feature."
             if len(text) == 1
@@ -822,11 +866,12 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
             "used as features."
         )
         errors.append(
-            _issue(
+            issue(
+                "text_features",
                 "error",
                 message,
-                text[0],
-                _fix("drop_columns", {"columns": text}, f"Drop {_columns_text(text)}"),
+                text,
+                step_fix("drop_columns", {"columns": text}, f"Drop {_columns_text(text)}"),
             )
         )
     if dates := by_kind.get("datetime"):
@@ -838,11 +883,12 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
         )
         what = dates[0] if len(dates) == 1 else f"{len(dates):,} date columns"
         errors.append(
-            _issue(
+            issue(
+                "date_features",
                 "error",
                 message,
-                dates[0],
-                _fix(
+                dates,
+                step_fix(
                     "datetime_features",
                     {
                         "columns": dates,
@@ -853,18 +899,20 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
                 ),
             )
         )
+    constant: list[str] = []
     if numeric:
         values = df[numeric].to_numpy(dtype=float, na_value=np.nan)
         nan_counts = np.isnan(values).sum(axis=0)
         with_missing = [c for c, k in zip(numeric, nan_counts, strict=True) if k]
         if with_missing:
             errors.append(
-                _issue(
+                issue(
+                    "missing_values",
                     "error",
                     f"{_count(len(with_missing), 'feature column has', 'feature columns have')} "
                     f"missing values ({_names(with_missing)}).",
-                    with_missing[0],
-                    _fix(
+                    with_missing,
+                    step_fix(
                         "impute",
                         {"columns": with_missing, "strategy": "median"},
                         f"Impute {_columns_text(with_missing)} (median)",
@@ -875,11 +923,12 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
         with_inf = [c for c, k in zip(numeric, inf_counts, strict=True) if k]
         if with_inf:
             errors.append(
-                _issue(
+                issue(
+                    "infinite_values",
                     "error",
                     f"{_count(len(with_inf), 'feature column has', 'feature columns have')} "
                     f"infinite values ({_names(with_inf)}).",
-                    with_inf[0],
+                    with_inf,
                 )
             )
         finite = np.where(np.isfinite(values), values, np.nan)
@@ -892,50 +941,65 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
             ]
         if constant:
             warnings.append(
-                _issue(
+                issue(
+                    "constant",
                     "warning",
                     f"{_count(len(constant), 'feature column is', 'feature columns are')} "
                     f"constant ({_names(constant)}) and carry no information.",
-                    constant[0],
-                    _fix("drop_columns", {"columns": constant}, f"Drop {_columns_text(constant)}"),
+                    constant,
+                    step_fix(
+                        "drop_columns", {"columns": constant}, f"Drop {_columns_text(constant)}"
+                    ),
                 )
             )
     if features and all(_is_number_text(c) for c in features):
         mapping = {c: f"x{c}" for c in features}
         errors.append(
-            _issue(
+            issue(
+                "numeric_names",
                 "error",
                 f"All feature names are numbers ({_names(features)}), so the column header "
                 "of the training file cannot be recognised. Rename at least one column.",
-                features[0],
-                _fix("rename_columns", {"mapping": mapping}, "Rename the columns (x1, x2 …)"),
+                features,
+                step_fix("rename_columns", {"mapping": mapping}, "Rename the columns (x1, x2 …)"),
             )
         )
     if len(features) > MANY_FEATURES:
         warnings.append(
-            _issue(
+            issue(
+                "many_features",
                 "warning",
                 f"The data has {len(features):,} feature columns; training will be slow and "
                 "needs much memory. Consider feature selection.",
             )
         )
+    if checks and features and table.n_rows >= MIN_ROWS:
+        with np.errstate(all="ignore"):
+            warnings.extend(
+                feature_issues(
+                    table, target if has_target else None, task, class_codes, constant=constant
+                )
+            )
+            warnings.extend(row_issues(table, target if has_target else None, task, len(features)))
 
     # ---- rows and split
     if table.n_rows < MIN_ROWS:
         errors.append(
-            _issue(
+            issue(
+                "too_few_rows",
                 "error",
                 f"The data has {_count(table.n_rows, 'row')}; at least {MIN_ROWS} are needed.",
             )
         )
     if split_counts is None:
-        errors.append(_issue("error", "The rows have no train/validation/test split."))
+        errors.append(issue("no_split", "error", "The rows have no train/validation/test split."))
     elif table.n_rows:
         if split_counts[TRAIN] == 0:
-            errors.append(_issue("error", "There are no training rows left."))
+            errors.append(issue("no_training_rows", "error", "There are no training rows left."))
         if split_counts[VAL] == 0:
             errors.append(
-                _issue(
+                issue(
+                    "no_validation_rows",
                     "error",
                     "There are no validation rows left. Increase the validation share or keep "
                     "more rows.",
@@ -951,7 +1015,7 @@ def readiness(table: Table, settings: dict[str, Any], task: str | None) -> dict[
         "num_classes": num_classes,
         "class_names": class_names,
         "split_counts": split_counts,
-        "issues": errors + warnings,
+        "issues": sort_issues(errors + warnings),
     }
 
 
