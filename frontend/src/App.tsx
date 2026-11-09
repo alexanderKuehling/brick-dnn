@@ -18,6 +18,7 @@ import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { SharedNetworkPage } from './sharing/SharedNetworkPage';
 import { theme } from './theme';
 import { ApiTokensPage } from './tokens/ApiTokensPage';
 
@@ -69,6 +70,8 @@ export default function App() {
                           </RequireAuth>
                         }
                       />
+                      {/* A network shared with a link: viewing needs no account. */}
+                      <Route path="/share/:token" element={<SharedNetworkPage />} />
                       <Route path="/login" element={<LoginPage />} />
                       <Route path="/register" element={<RegisterPage />} />
                     </>
