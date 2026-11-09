@@ -101,8 +101,8 @@ export function PipelineEditor({
     setExpanded(next);
   };
 
-  const addStep = (spec: StepSpec) => {
-    const next = insertStep(catalog, steps, { type: spec.type, params: {} }, null, {
+  const addStep = (spec: StepSpec, params: Record<string, unknown> = {}) => {
+    const next = insertStep(catalog, steps, { type: spec.type, params }, null, {
       reserved: reservedIds(),
     });
     const created = next.find((step) => !steps.some((old) => old.id === step.id));
@@ -133,6 +133,31 @@ export function PipelineEditor({
     }
   };
 
+  // The target can come from another table: a join brings it in (offered in Target & split).
+  const joinSpec = catalog.steps.find((spec) => spec.type === 'join');
+  const joinUnavailable = sharedBy
+    ? `Only ${sharedBy} can join other tables into this preparation.`
+    : hasOtherSources
+      ? null
+      : 'Import that table as well, then add a “Join another table” step to bring the target in through a column both tables share.';
+  /** With a single other table: choose it, and a key column both tables have (e.g. id). */
+  const joinDefaults = (): Record<string, unknown> => {
+    const others = sources.filter((source) => source.id !== currentSourceId);
+    if (others.length !== 1) {
+      return {};
+    }
+    const there = new Set(others[0].columns.map((column) => column.name));
+    const shared = sourceColumns.map((column) => column.name).filter((name) => there.has(name));
+    const key = shared.find((name) => /(^|[_\s-])id$/i.test(name) || /^id$/i.test(name));
+    const keyColumn = key ?? (shared.length === 1 ? shared[0] : undefined);
+    return { source: others[0].id, ...(keyColumn ? { left_on: [keyColumn] } : {}) };
+  };
+
+  const onAddJoin =
+    joinSpec && !readOnly && !limit && joinUnavailable === null
+      ? () => addStep(joinSpec, joinDefaults())
+      : undefined;
+
   const addMenu = (fullWidth: boolean) => (
     <AddStepMenu
       catalog={catalog}
@@ -160,6 +185,8 @@ export function PipelineEditor({
         task={task}
         splitCounts={splitCounts}
         readOnly={readOnly}
+        onAddJoin={onAddJoin}
+        joinUnavailable={joinUnavailable}
       />
 
       <section aria-labelledby={headingId} aria-busy={previewing}>

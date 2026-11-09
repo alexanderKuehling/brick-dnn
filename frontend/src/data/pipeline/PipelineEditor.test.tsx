@@ -52,6 +52,21 @@ async function stepAction(index: number, action: string) {
 }
 
 describe('PipelineEditor', () => {
+  it('offers a join step when the target is in another table', async () => {
+    render(<Harness initialSteps={[]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add a join step' }));
+    expect(steps.map((step) => step.type)).toEqual(['join']);
+    // The only other table is chosen, with the column both tables share as the key.
+    expect(steps[0].params.source).toBe(OTHER_SOURCE.id);
+    expect(steps[0].params.left_on).toEqual(['city']);
+  });
+
+  it('says to import the other table first when there is none', () => {
+    render(<Harness sources={[SOURCE]} />);
+    expect(screen.queryByRole('button', { name: 'Add a join step' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Import that table as well/)).toBeInTheDocument();
+  });
+
   it('shows the target and split settings', () => {
     render(<Harness />);
     expect(screen.getByRole('combobox', { name: 'Target column' })).toHaveValue('churn');
