@@ -1,13 +1,19 @@
+import { Fragment } from 'react';
 import {
   IconBrandGithub,
   IconChevronDown,
   IconCoffee,
+  IconFileText,
   IconFolder,
+  IconId,
+  IconInfoCircle,
   IconKey,
   IconLogout,
   IconMenu2,
+  IconShieldLock,
   IconTable,
   IconTopologyStar3,
+  IconUserCircle,
 } from '@tabler/icons-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -21,8 +27,10 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
+import type { LegalPageName } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { DEMO } from '@/demo';
+import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
 
@@ -30,10 +38,17 @@ export const HEADER_HEIGHT = 56;
 export const REPOSITORY_URL = 'https://github.com/alexanderKuehling/brick-dnn';
 export const SUPPORT_URL = 'https://buymeacoffee.com/alexanderkzw';
 
+const LEGAL_ICONS: Record<LegalPageName, React.ReactNode> = {
+  imprint: <IconId size={16} />,
+  privacy: <IconShieldLock size={16} />,
+  terms: <IconFileText size={16} />,
+};
+
 export function AppHeader() {
   const { user, ready, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const legal = legalPages(useLegalInfo());
   const navVariant = (path: string) =>
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
 
@@ -78,7 +93,11 @@ export function AppHeader() {
       </Group>
 
       <Group gap="xs" wrap="nowrap">
-        <PhoneMenu loggedIn={Boolean(user)} isActive={(path) => navVariant(path) === 'light'} />
+        <PhoneMenu
+          loggedIn={Boolean(user)}
+          legal={legal}
+          isActive={(path) => navVariant(path) === 'light'}
+        />
         <Tooltip label="Source code on GitHub">
           <ActionIcon
             component="a"
@@ -107,6 +126,30 @@ export function AppHeader() {
             <IconCoffee size={18} />
           </ActionIcon>
         </Tooltip>
+        {legal.length > 0 && (
+          <Box visibleFrom="sm">
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Tooltip label="Imprint and privacy">
+                  <ActionIcon variant="default" size="lg" aria-label="Legal information">
+                    <IconInfoCircle size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {legal.map((page) => (
+                  <Menu.Item
+                    key={page}
+                    leftSection={LEGAL_ICONS[page]}
+                    onClick={() => navigate(`/${page}`)}
+                  >
+                    {LEGAL_LABELS[page]}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+          </Box>
+        )}
         <ColorSchemeToggle />
         {!DEMO && ready && !user && (
           <>
@@ -150,6 +193,12 @@ export function AppHeader() {
               <Menu.Item leftSection={<IconKey size={16} />} onClick={() => navigate('/tokens')}>
                 API tokens
               </Menu.Item>
+              <Menu.Item
+                leftSection={<IconUserCircle size={16} />}
+                onClick={() => navigate('/account')}
+              >
+                Account
+              </Menu.Item>
               <Menu.Divider />
               <Menu.Item
                 leftSection={<IconLogout size={16} />}
@@ -171,9 +220,11 @@ export function AppHeader() {
 /** Below `sm` the page links and the GitHub and support links move into a menu. */
 function PhoneMenu({
   loggedIn,
+  legal,
   isActive,
 }: {
   loggedIn: boolean;
+  legal: LegalPageName[];
   isActive: (path: string) => boolean;
 }) {
   const navigate = useNavigate();
@@ -220,6 +271,12 @@ function PhoneMenu({
           >
             Buy me a coffee
           </Menu.Item>
+          {legal.length > 0 && <Menu.Divider />}
+          {legal.map((page) => (
+            <Fragment key={page}>
+              {item(`/${page}`, LEGAL_LABELS[page], LEGAL_ICONS[page])}
+            </Fragment>
+          ))}
         </Menu.Dropdown>
       </Menu>
     </Box>

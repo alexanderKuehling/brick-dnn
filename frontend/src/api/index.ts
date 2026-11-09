@@ -2,6 +2,7 @@ import { DEMO } from '@/demo';
 import { request, requestFile, type UploadOptions } from './client';
 import { createDemoApi } from './demoApi';
 import type {
+  Account,
   Analysis,
   ApiToken,
   ApiTokenInput,
@@ -19,6 +20,9 @@ import type {
   GraphDocument,
   ImportOptions,
   LayerCatalog,
+  LegalInfo,
+  LegalPage,
+  LegalPageName,
   MemberRole,
   NewApiToken,
   OAuthConnection,
@@ -70,14 +74,44 @@ const serverApi = {
 
   login: (username: string, password: string) =>
     request<Tokens>('/api/auth/token/', { method: 'POST', body: { username, password } }),
-  register: (username: string, email: string, password: string) =>
+  /** `acceptTerms` is required when the server has terms of use (LegalInfo). */
+  register: (username: string, email: string, password: string, acceptTerms = false) =>
     request<Tokens & { user: User }>('/api/auth/register/', {
       method: 'POST',
-      body: { username, email, password },
+      body: { username, email, password, ...(acceptTerms ? { accept_terms: true } : {}) },
     }),
   logout: (refresh: string) =>
     request<void>('/api/auth/logout/', { method: 'POST', body: { refresh } }),
   me: () => request<User>('/api/auth/me/', { auth: true }),
+
+  /** The own account (website login only, not API tokens). */
+  account: {
+    get: () => request<Account>('/api/auth/account/', { auth: true }),
+    changeEmail: (email: string) =>
+      request<Account>('/api/auth/account/', { method: 'PATCH', body: { email }, auth: true }),
+    /** Ends all other logins; the answer holds new tokens for this one. */
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<Tokens>('/api/auth/account/password/', {
+        method: 'POST',
+        body: { current_password: currentPassword, new_password: newPassword },
+        auth: true,
+      }),
+    /** A ZIP file with everything stored about the account. */
+    exportData: () => requestFile('/api/auth/account/export/', { auth: true }),
+    /** Deletes the account and everything it owns, for good. */
+    remove: (password: string, username: string) =>
+      request<void>('/api/auth/account/delete/', {
+        method: 'POST',
+        body: { password, username },
+        auth: true,
+      }),
+  },
+
+  /** Imprint, privacy policy and terms of use, as far as the server has them (public). */
+  legal: {
+    info: () => request<LegalInfo>('/api/legal/'),
+    page: (page: LegalPageName) => request<LegalPage>(`/api/legal/${page}/`),
+  },
 
   /** Personal API tokens. Only the normal login can manage them, not the tokens themselves. */
   apiTokens: {

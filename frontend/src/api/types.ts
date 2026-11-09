@@ -108,6 +108,55 @@ export interface Tokens {
   refresh: string;
 }
 
+// --------------------------------------------------------------------------
+// The own account and the legal pages
+// --------------------------------------------------------------------------
+
+/** The logged-in user's account (page /account) and how much the server stores for it. */
+export interface Account extends User {
+  last_login: string | null;
+  last_active_at: string | null;
+  /** When the terms of use were accepted at sign-up; null if the server had none then. */
+  terms_accepted_at: string | null;
+  terms_version: string | null;
+  privacy_version: string | null;
+  stored: {
+    projects: number;
+    memberships: number;
+    comments: number;
+    data_sources: number;
+    data_preps: number;
+    datasets: number;
+    training_runs: number;
+    api_tokens: number;
+    connected_apps: number;
+    /** Imported CSV files and training datasets together. */
+    upload_bytes: number;
+  };
+}
+
+export type LegalPageName = 'imprint' | 'privacy' | 'terms';
+
+/** Which legal pages the server has (Markdown files the operator puts on it). */
+export interface LegalInfo {
+  pages: Record<LegalPageName, boolean>;
+  terms_version: string | null;
+  privacy_version: string | null;
+  /** Sign-up needs `accept_terms: true` (the server has terms of use). */
+  accept_terms_required: boolean;
+  /** Automatic deletion after this many days without use; 0: off. */
+  retention: { unused_uploads_days: number; inactive_accounts_days: number };
+}
+
+export interface LegalPage {
+  page: LegalPageName;
+  title: string;
+  /** Markdown, rendered without raw HTML (see legal/markdown.tsx). */
+  content: string;
+  version: string;
+  updated_at: string;
+}
+
 /** Days until a new API token expires; null means it never does. */
 export type ApiTokenExpiry = 7 | 30 | 90 | 365;
 

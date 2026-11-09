@@ -10,7 +10,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 import brickdnn
@@ -19,8 +18,10 @@ from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import downloads, shared_data
 from . import training_service as training
+from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .models import ApiToken, Dataset, TrainingRun
+from .retention import touch
 from .serializers import (
     ApiTokenCreateSerializer,
     ApiTokenSerializer,
@@ -78,12 +79,8 @@ def generate(request: Request) -> Response | HttpResponse:
 # --------------------------------------------------------------------------- #
 
 
-def _tokens_for(user) -> dict:
-    refresh = RefreshToken.for_user(user)
-    return {"access": str(refresh.access_token), "refresh": str(refresh)}
-
-
 class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
 
@@ -102,7 +99,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
-            {"user": UserSerializer(user).data, **_tokens_for(user)},
+            {"user": UserSerializer(user).data, **tokens_for(user)},
             status=status.HTTP_201_CREATED,
         )
 
@@ -239,6 +236,12 @@ class DatasetViewSet(
             throttles.append(ScopedRateThrottle())
         return throttles
 
+    def get_object(self) -> Dataset:
+        dataset = super().get_object()
+        if self.action == "retrieve":
+            touch(dataset)
+        return dataset
+
     def create(self, request: Request, *args, **kwargs) -> Response:
         if (response := _disabled_response()) is not None:
             return response
@@ -312,7 +315,9 @@ class TrainingRunViewSet(
         return throttles
 
     def get_object(self) -> TrainingRun:
-        return training.sync_run(super().get_object())
+        run = super().get_object()
+        touch(run)
+        return training.sync_run(run)
 
     def list(self, request: Request, *args, **kwargs) -> Response:
         training.sync_runs(self.get_queryset().filter(status__in=ACTIVE_STATUSES))
@@ -410,6 +415,7 @@ class TrainingRunViewSet(
         signature = request.query_params.get("sig")
         if signature is not None:
             run = downloads.run_for_link(signature, pk)
+            touch(run)
         elif not request.user.is_authenticated:
             raise NotAuthenticated()
         else:
@@ -447,6 +453,8 @@ class ApiRoot(APIView):
                     "register": f"{base}auth/register/",
                     "login": f"{base}auth/token/",
                     "api_tokens": f"{base}auth/api-tokens/",
+                    "account": f"{base}auth/account/",
+                    "legal": f"{base}legal/",
                     "mcp": f"{base}mcp/",
                     "projects": f"{base}projects/",
                     "training": f"{base}training/",

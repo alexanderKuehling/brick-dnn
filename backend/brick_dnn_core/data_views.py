@@ -23,6 +23,7 @@ from . import data_service as data
 from . import training_service as training
 from .models import DataPrep, Dataset, DataSource
 from .parsers import SafeJSONParser
+from .retention import touch
 from .serializers import DataPrepSerializer, DatasetSerializer, DataSourceSerializer
 from .views import Conflict
 
@@ -142,6 +143,12 @@ class DataSourceViewSet(
             return self.scoped_throttle("uploads")
         return super().get_throttles()
 
+    def get_object(self) -> DataSource:
+        source = super().get_object()
+        if self.action == "retrieve":
+            touch(source)
+        return source
+
     def create(self, request: Request, *args, **kwargs) -> Response:
         limit = data.max_upload_bytes()
         too_large = Response(
@@ -244,6 +251,8 @@ class DataPrepViewSet(
             self.request.user, prep
         ):
             raise PermissionDenied("This data preparation was shared with you read-only.")
+        if self.action != "destroy":
+            touch(prep.source)  # an open preparation keeps its data
         return prep
 
     @action(detail=True, methods=["post"])

@@ -10,6 +10,7 @@ from .models import (
     Project,
     ProjectMember,
     TrainingRun,
+    UserProfile,
 )
 
 
@@ -138,6 +139,24 @@ class OAuthConnectionAdmin(admin.ModelAdmin):
         "refresh_expires_at",
         "created_at",
         "last_used_at",
+    )
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    """When accounts were last used and which terms they accepted (see retention.py)."""
+
+    list_display = ("user", "last_active_at", "terms_accepted_at", "terms_version")
+    search_fields = ("user__username",)
+    readonly_fields = (
+        "user",
+        "last_active_at",
+        "terms_accepted_at",
+        "terms_version",
+        "privacy_version",
     )
 
     def has_add_permission(self, request) -> bool:

@@ -44,6 +44,7 @@ from brickdnn.training import DatasetError, DatasetInfo, inspect_csv
 from . import training_service as training
 from . import url_import
 from .models import DataPrep, Dataset, DataSource
+from .retention import touch
 
 if TYPE_CHECKING:
     from brickdnn.data.pipeline import PipelineResult
@@ -207,6 +208,19 @@ def _known_suffix(filename: str) -> bool:
     return Path(filename).suffix.lower() in {*FORMAT_SUFFIXES, *COMPRESSED_SUFFIXES}
 
 
+def original_file(source_id: int) -> Path | None:
+    """The stored original of a source (``original.csv``, ``original.xlsx`` ...), if any."""
+    directory = source_dir(source_id)
+    if not directory.is_dir():
+        return None
+    found = sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and (path.name == "original" or path.name.startswith("original."))
+    )
+    return found[0] if found else None
+
+
 def _original_name(filename: str) -> str:
     """``original`` plus the known endings of ``filename`` (``original.csv.gz``)."""
     suffixes = [s.lower() for s in Path(filename).suffixes[-2:]]
@@ -309,6 +323,7 @@ def _load_table(source: DataSource) -> Table:
     directory = source_dir(source.pk) / TABLE_DIR
     if not (directory / "table.json").is_file():
         raise DataError(MISSING_FILES_MESSAGE)
+    touch(source)
     return load_table_cached(directory)
 
 

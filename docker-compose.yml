@@ -1,4 +1,19 @@
 # One-command setup:   docker compose up -d   ->   http://localhost:8080
+
+# Docker keeps at most 3 × 10 MB of logs per container, so that the access logs (with
+# shortened IP addresses, see frontend/nginx.conf) do not pile up. See docs/privacy.md.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Automatic deletion of old data (docs/privacy.md); 0 keeps everything. The backend shows the
+# periods to users, the cleanup service deletes.
+x-retention: &retention
+  BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS: ${BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS:-0}
+  BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS: ${BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS:-0}
+
 services:
   backend:
     build:
@@ -6,11 +21,12 @@ services:
       args:
         # Set to "true" to install PyTorch (CPU) and enable training in the UI.
         INSTALL_TORCH: ${BRICKDNN_INSTALL_TORCH:-false}
-    # The realtime service runs the same image.
+    # The realtime and cleanup services run the same image.
     image: brick-dnn-backend:local
     # A minimal init process reaps training processes whose gunicorn worker was restarted.
     init: true
     environment:
+      <<: *retention
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -23,6 +39,9 @@ services:
       BRICKDNN_DATA_MAX_UPLOAD_MB: ${BRICKDNN_DATA_MAX_UPLOAD_MB:-200}
       BRICKDNN_DATA_URL_IMPORT: ${BRICKDNN_DATA_URL_IMPORT:-true}
       BRICKDNN_DATA_URL_ALLOW_PRIVATE: ${BRICKDNN_DATA_URL_ALLOW_PRIVATE:-false}
+      # Imprint, privacy policy, terms of use: imprint.md, privacy.md, terms.md in this folder
+      # of the data volume (docs/privacy.md); deploy/server/compose.yml mounts one of the server.
+      BRICKDNN_LEGAL_DIR: /data/legal
       # Empty: SQLite in the volume. postgresql://… (e.g. Supabase): see docs/database.md.
       DATABASE_URL: ${DATABASE_URL:-}
       # nginx in the frontend container is the one proxy in front of Django.
@@ -33,6 +52,7 @@ services:
       - brickdnn-data:/data
     depends_on:
       - redis
+    logging: *logging
     restart: unless-stopped
 
   # Live editing (WebSockets under /api/ws/): the same image, served by Daphne.
@@ -55,12 +75,39 @@ services:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 2)"]
       interval: 30s
       timeout: 5s
+    logging: *logging
+    restart: unless-stopped
+
+  # Once a day: deletes old data if BRICKDNN_DELETE_* is set, and expired logins. The same
+  # image; it sleeps most of the time. The first run is ten minutes after a start (the backend
+  # migrates the database first). `docker compose logs cleanup` shows what it deleted.
+  cleanup:
+    image: brick-dnn-backend:local
+    pull_policy: never
+    # Passes the stop signal on to the shell loop, so that the container stops at once.
+    init: true
+    command:
+      - sh
+      - -c
+      - "sleep 600; while true; do python manage.py purge_old_data; sleep 86400; done"
+    environment:
+      <<: *retention
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+    volumes:
+      - brickdnn-data:/data
+    depends_on:
+      - backend
+    healthcheck:
+      disable: true
+    logging: *logging
     restart: unless-stopped
 
   # Passes live-editing messages between the server processes; keeps nothing on disk.
   redis:
     image: redis:7.4-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb"]
+    logging: *logging
     restart: unless-stopped
 
   frontend:
@@ -70,6 +117,7 @@ services:
     depends_on:
       - backend
       - realtime
+    logging: *logging
     restart: unless-stopped
 
 volumes:

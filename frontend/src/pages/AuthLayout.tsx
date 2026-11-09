@@ -1,4 +1,5 @@
 import { Container, Paper, Text, Title } from '@mantine/core';
+import { LegalLinks } from '@/legal/LegalLinks';
 
 export function AuthLayout({
   title,
@@ -22,6 +23,7 @@ export function AuthLayout({
       <Paper withBorder shadow="sm" p="xl" mt="xl" radius="md">
         {children}
       </Paper>
+      <LegalLinks mt="lg" />
     </Container>
   );
 }

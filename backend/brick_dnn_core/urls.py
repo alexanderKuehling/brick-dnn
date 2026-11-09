@@ -1,8 +1,8 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenBlacklistView
 
-from . import data_views, mcp, oauth, projects, views
+from . import accounts, data_views, legal, mcp, oauth, projects, views
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
@@ -23,9 +23,17 @@ urlpatterns = [
     path("generate/", views.generate, name="generate"),
     path("auth/register/", views.RegisterView.as_view(), name="register"),
     path("auth/token/", views.LoginView.as_view(), name="token"),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("auth/token/refresh/", accounts.RefreshView.as_view(), name="token-refresh"),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", views.me, name="me"),
+    # The own account: e-mail, password, data export, deletion (website login only).
+    path("auth/account/", accounts.AccountView.as_view(), name="account"),
+    path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
+    path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
+    path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
+    # Imprint, privacy policy, terms of use: Markdown files on the server (public).
+    path("legal/", legal.legal_index, name="legal"),
+    re_path(r"^legal/(?P<page>imprint|privacy|terms)/$", legal.legal_page, name="legal-page"),
     # Networks shared by link (see projects.py).
     path("shared/<str:token>/", projects.SharedProjectView.as_view(), name="shared-project"),
     path(

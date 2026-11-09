@@ -48,6 +48,7 @@ from .projects import (
     update_project,
 )
 from .projects import delete_project as remove_project
+from .retention import touch
 from .serializers import (
     DatasetSerializer,
     ProjectSerializer,
@@ -186,6 +187,7 @@ def _run(request: Request, args: dict[str, Any], key: str = "id") -> TrainingRun
         run = None
     if run is None:
         raise ToolError("No such training run. list_training_runs shows the user's runs.")
+    touch(run)
     return training.sync_run(run)
 
 

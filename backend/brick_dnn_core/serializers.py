@@ -1,11 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
+from . import legal
 from .api_tokens import EXPIRY_DAYS
-from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun
+from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun, UserProfile
 
 User = get_user_model()
 
@@ -46,10 +48,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "email", "date_joined"]
 
 
-class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+def email_field() -> serializers.EmailField:
     # Required: people are invited to shared networks by e-mail, too.
-    email = serializers.EmailField(
+    return serializers.EmailField(
         max_length=254,
         error_messages={
             "required": "Enter your e-mail address.",
@@ -57,23 +58,52 @@ class RegisterSerializer(serializers.ModelSerializer):
         },
     )
 
+
+def clean_email(value: str, user=None) -> str:
+    """A normalised e-mail address that no other account uses (``user``: the own account)."""
+    value = User.objects.normalize_email(value.strip())
+    others = User.objects.filter(email__iexact=value)
+    if user is not None:
+        others = others.exclude(pk=user.pk)
+    if others.exists():
+        raise serializers.ValidationError("An account with this e-mail address exists already.")
+    return value
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    email = email_field()
+    # Required when the server has terms of use (see legal.py).
+    accept_terms = serializers.BooleanField(required=False, default=False, write_only=True)
+
     class Meta:
         model = User
-        fields = ["username", "email", "password"]
+        fields = ["username", "email", "password", "accept_terms"]
 
     def validate_email(self, value: str) -> str:
-        value = User.objects.normalize_email(value.strip())
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("An account with this e-mail address exists already.")
-        return value
+        return clean_email(value)
 
     def validate(self, attrs):
+        self.legal_versions = legal.versions()
+        if self.legal_versions["terms"] is not None and attrs.get("accept_terms") is not True:
+            raise serializers.ValidationError(
+                {"accept_terms": "Please agree to the terms of use to create an account."}
+            )
         candidate = User(username=attrs.get("username"), email=attrs.get("email", ""))
         validate_password(attrs["password"], user=candidate)
         return attrs
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        accepted = validated_data.pop("accept_terms", False)
+        user = User.objects.create_user(**validated_data)
+        versions = getattr(self, "legal_versions", {})
+        profile = UserProfile(user=user)
+        if accepted and versions.get("terms"):
+            profile.terms_accepted_at = timezone.now()
+            profile.terms_version = versions["terms"]
+            profile.privacy_version = versions.get("privacy") or ""
+        profile.save()
+        return user
 
 
 # --------------------------------------------------------------------------- #
