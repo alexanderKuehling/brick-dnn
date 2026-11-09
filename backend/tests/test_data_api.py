@@ -504,6 +504,12 @@ def test_import_from_a_link(auth_client, settings, file_server, data_dirs):
     directory = data_dirs / "prepare" / "sources" / str(data["id"])
     assert (directory / "original.csv").read_bytes() == churn_csv()
 
+    # The query of a link can hold secrets (signed links): it is not stored.
+    file_server.routes["/data/churn.csv?token=secret"] = file_server.routes["/data/churn.csv"]
+    response = import_url(auth_client, f"{file_server.url}/data/churn.csv?token=secret#top")
+    assert response.status_code == 201, response.data
+    assert response.data["report"]["url"] == f"{file_server.url}/data/churn.csv?…"
+
     response = import_url(auth_client, f"{file_server.url}/sheet", name="Kunden", sheet="B")
     assert response.status_code == 201, response.data
     assert response.data["name"] == "Kunden" and response.data["filename"] == "Customers.xlsx"

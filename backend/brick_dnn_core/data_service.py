@@ -24,6 +24,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
 from django.db import transaction
@@ -194,6 +195,14 @@ def import_url(user, url: Any, fields: dict[str, Any]) -> DataSource:
     return _import(user, save, fields, url=given)
 
 
+def _shown_url(url: str) -> str:
+    """The link as stored and shown, e.g. to people a preparation is shared with: without
+    its query and fragment, which can hold secrets (signed links, access tokens)."""
+    parts = urlsplit(url)
+    hidden = "?…" if parts.query else ""
+    return urlunsplit(parts._replace(query="", fragment="")) + hidden
+
+
 def _known_suffix(filename: str) -> bool:
     return Path(filename).suffix.lower() in {*FORMAT_SUFFIXES, *COMPRESSED_SUFFIXES}
 
@@ -249,7 +258,7 @@ def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataS
         stored_options = {key: options.to_dict().get(key) for key in OPTION_FIELDS}
         stored_report = report.to_dict()
         if url:
-            stored_report["url"] = url
+            stored_report["url"] = _shown_url(url)
         source = DataSource.objects.create(
             owner=user,
             name=name,
