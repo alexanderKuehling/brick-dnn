@@ -37,6 +37,16 @@
   and shows a fitted run with its fit time, rows, fitted and starting kernel, log marginal
   likelihood or support vectors and the scores (accuracy, or RMSE and R²) instead of loss
   curves; the model downloads as `<run>.joblib` with a joblib snippet.
+- **R² for regressions of neural networks**, like for classical models: the coefficient of
+  determination on the validation data (per epoch) and the test data, measured against the
+  mean of those rows themselves (the same number as scikit-learn's `r2_score`; with several
+  outputs their mean; null when all targets of a split are equal). It is reported wherever the
+  RMSE is: `val_r2` in the history, the trials and the best trial of a search, `r2` in the
+  test result, the run metrics `val_r2` and `test_r2` (REST and MCP), the final message and
+  `brickdnn train` (epochs, trials, the table of trials, the test line). The run view shows
+  the R² next to the validation and test RMSE, a *Validation R²* curve and R² columns in the
+  tables of the epochs and the trials; the list of runs shows the test R² of neural
+  regressions too.
 - After the first training of a user that completes, a notification asks once (per browser)
   for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).

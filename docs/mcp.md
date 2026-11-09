@@ -100,7 +100,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
 | `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer |
 | `start_training`        | full   |             | Train in the background                                         |
-| `list_training_runs`    | read   |             | Your training runs with status and metrics                      |
+| `list_training_runs`    | read   |             | Your training runs with status and metrics (regressions: RMSE and R²) |
 | `get_training_run`      | read   |             | One run with its metrics per epoch                              |
 | `stop_training`         | full   |             | Stop a run after the current batch (starter, project editors)   |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |

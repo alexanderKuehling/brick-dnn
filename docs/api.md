@@ -353,17 +353,21 @@ the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weigh
 and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
 and the last log lines. Poll it about once per second while a run is active. `state.family`
 is `neural` or `classical`; a classical run is fitted once: it has no `progress`, a single
-`history` entry when the fit is done (regression adds `val_r2`), `test` adds `r2`, and
+`history` entry when the fit is done, and
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
 `fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
 `support_vectors` and `train` (the metrics on the training rows), see
 [training.md](training.md#classical-models).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
-`test_loss`, `test_accuracy`, `test_rmse`; `val_r2` and `test_r2` for classical regression,
-`null` otherwise), `family`, `tuning` (the normalised search settings or
+`test_loss`, `test_accuracy`, `test_rmse` and `test_r2`; RMSE and R² for regressions, `null`
+otherwise), `family`, `tuning` (the normalised search settings or
 `null`), `trials_done` and `best_trial` (`{trial, params, val_loss, val_accuracy, val_rmse,
-weights_epoch}`). In a search, `state.trials` lists every trial with its `params`, `status`,
+val_r2, weights_epoch}`). Regressions of neural networks and classical models add `val_r2` to
+the `history` entries and trials and `r2` to `test`: R², the coefficient of determination,
+measured against the mean of the validation or test rows themselves, `null` when all their
+targets are equal (see [training.md](training.md#regression-metrics)).
+In a search, `state.trials` lists every trial with its `params`, `status`,
 the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
 `metrics` belong to the running trial and, at the end, to the best one. The file format is
 documented in `backend/brickdnn/training/state.py`.
