@@ -747,9 +747,16 @@ export interface DataStatus {
   default_sample_rows: number;
   max_sample_rows: number;
   login_required: boolean;
+  /** File name endings the server can import (e.g. ".csv", ".xlsx", ".gz"). */
+  file_types?: string[];
+  /** Whether files can be imported from a link (the server downloads them). */
+  url_import?: boolean;
 }
 
-/** How to read a CSV file; 'auto' means detect. Sent as form fields with the upload. */
+/**
+ * How to read a file; 'auto' means detect. Sent as form fields with the upload (or as JSON
+ * with a link). Delimiter, decimal mark and encoding apply to text (CSV) files only.
+ */
 export interface ImportOptions {
   delimiter: 'auto' | ',' | ';' | '\t' | '|';
   decimal: 'auto' | '.' | ',';
@@ -757,20 +764,38 @@ export interface ImportOptions {
   encoding: 'auto' | 'utf-8' | 'cp1252' | 'latin-1';
   /** Cell values that mean "missing"; null: the defaults (NA, N/A, null, ? …). */
   missing_values: string[] | null;
+  /** The sheet of a workbook (Excel, OpenDocument); null: the first one with values. */
+  sheet?: string | null;
 }
 
-/** What the CSV reader detected. */
+export type ImportFormat =
+  'csv' | 'xlsx' | 'xls' | 'ods' | 'json' | 'jsonl' | 'parquet' | 'feather';
+
+/** What the reader detected. Sources imported before other formats existed lack `format`. */
 export interface ImportReport {
-  delimiter: string;
+  /** null: not a CSV file. */
+  delimiter: string | null;
   decimal: string;
   header: boolean;
-  encoding: string;
+  /** null: a binary file (Excel, Parquet …). */
+  encoding: string | null;
   rows: number;
   columns: number;
   warnings: string[];
+  format?: ImportFormat;
+  /** gzip, bz2, xz or zip if the file was packed; `member`: the file inside the ZIP file. */
+  compression?: string | null;
+  member?: string | null;
+  /** Workbooks: the imported sheet and all sheets. */
+  sheet?: string | null;
+  sheets?: string[];
+  /** JSON: the keys that lead to the table, e.g. ["data"]. */
+  json_path?: string[] | null;
+  /** The link the file was downloaded from. */
+  url?: string;
 }
 
-/** An imported CSV file (raw data). Several sources can be combined in one preparation. */
+/** An imported data file (raw data). Several sources can be combined in one preparation. */
 export interface DataSource {
   id: number;
   name: string;

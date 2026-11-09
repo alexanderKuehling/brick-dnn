@@ -10,6 +10,7 @@ import { downloadBlob } from '@/builder/download';
 import type { AnalysisPanelProps } from './analysis/AnalysisPanel';
 import { DataPage } from './DataPage';
 import { CATALOG, DATA_STATUS, OTHER_SOURCE, PREP, PREVIEW, READINESS, SOURCE } from './fixtures';
+import { EXAMPLE_LINK } from './ImportDialog';
 import type { PipelineEditorProps } from './pipeline/PipelineEditor';
 import type { ReadinessPanelProps } from './readiness/ReadinessPanel';
 import type { DataTableProps } from './table/DataTable';
@@ -26,6 +27,7 @@ vi.mock('@/api', async (importOriginal) => {
           list: vi.fn(),
           get: vi.fn(),
           upload: vi.fn(),
+          importUrl: vi.fn(),
           rename: vi.fn(),
           remove: vi.fn(),
         },
@@ -249,8 +251,8 @@ describe('DataPage', () => {
     renderPage('/data');
     expect(await screen.findByText('Prepare data for training')).toBeInTheDocument();
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Import CSV file' })[0]);
-    const dialog = await screen.findByRole('dialog', { name: 'Import a CSV file' });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Import data' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
     const file = new File(['id;age\n1;34\n'], 'customers.csv', { type: 'text/csv' });
     await userEvent.upload(dialog.querySelector('input[type=file]') as HTMLInputElement, file);
     expect(within(dialog).getByText('customers.csv')).toBeInTheDocument();
@@ -291,8 +293,8 @@ describe('DataPage', () => {
     });
     renderPage();
     await opened();
-    await userEvent.click(screen.getByRole('button', { name: 'Import CSV file' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Import a CSV file' });
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
     const file = new File(['a,b,c\n'], 'orders.csv', { type: 'text/csv' });
     await userEvent.upload(dialog.querySelector('input[type=file]') as HTMLInputElement, file);
     // Offered while a preparation is open: add the table to join it there.
@@ -330,8 +332,8 @@ describe('DataPage', () => {
     vi.mocked(api.data.preps.create).mockResolvedValue({ ...PREP, id: 13, name: 'orders' });
     const view = renderPage();
     await opened();
-    await userEvent.click(screen.getByRole('button', { name: 'Import CSV file' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Import a CSV file' });
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
     const file = new File(['a;b\n1;2\n'], 'orders.csv', { type: 'text/csv' });
     await userEvent.upload(dialog.querySelector('input[type=file]') as HTMLInputElement, file);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
@@ -355,9 +357,9 @@ describe('DataPage', () => {
 
     // Everything sent: the bar has no value while the server reads the file.
     act(() => upload.progress?.(48 * MB, 48 * MB));
-    expect(within(dialog).getByRole('status')).toHaveTextContent('Reading and checking the CSV …');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Reading and checking the file …');
     expect(bar).not.toHaveAttribute('aria-valuenow');
-    expect(bar).toHaveAttribute('aria-valuetext', 'Reading and checking the CSV …');
+    expect(bar).toHaveAttribute('aria-valuetext', 'Reading and checking the file …');
     expect(within(dialog).queryByText('25%')).not.toBeInTheDocument();
 
     await act(async () => upload.finish?.(ORDERS));
@@ -407,25 +409,192 @@ describe('DataPage', () => {
     const file = new File(['a;b\n1;2\n'], 'orders.csv', { type: 'text/csv' });
     const dataTransfer = { types: ['Files'], files: [file], dropEffect: 'none' };
     fireEvent.dragEnter(target, { dataTransfer });
-    expect(screen.getByText('Drop the CSV file to import it')).toBeInTheDocument();
+    expect(screen.getByText('Drop the file to import it')).toBeInTheDocument();
     fireEvent.drop(target, { dataTransfer });
-    expect(screen.queryByText('Drop the CSV file to import it')).not.toBeInTheDocument();
-    const dialog = await screen.findByRole('dialog', { name: 'Import a CSV file' });
+    expect(screen.queryByText('Drop the file to import it')).not.toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
     expect(within(dialog).getByText('orders.csv')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Name')).toHaveValue('orders');
   });
 
-  it('refuses files that are not CSV files', async () => {
+  it('refuses files of other types', async () => {
     renderPage();
     await opened();
-    await userEvent.click(screen.getByRole('button', { name: 'Import CSV file' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Import a CSV file' });
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
     const input = dialog.querySelector('input[type=file]') as HTMLInputElement;
     await userEvent.upload(input, new File(['x'], 'photo.png', { type: 'image/png' }), {
       applyAccept: false,
     });
-    expect(within(dialog).getByText(/is not a CSV file/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/cannot be imported/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Import' })).toBeDisabled();
+  });
+
+  it('accepts Excel, JSON and Parquet files and offers only the options that apply', async () => {
+    renderPage();
+    await opened();
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
+    const input = dialog.querySelector('input[type=file]') as HTMLInputElement;
+    expect(input.accept).toContain('.xlsx');
+    expect(input.accept).toContain('.parquet');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import options' }));
+
+    await userEvent.upload(input, new File(['PK'], 'Sales 2024.xlsx'));
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Sales 2024');
+    expect(within(dialog).getByRole('combobox', { name: 'Header row' })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('combobox', { name: 'Separator' })).not.toBeInTheDocument();
+
+    await userEvent.upload(input, new File(['PAR1'], 'events.parquet'));
+    expect(within(dialog).queryByRole('combobox', { name: 'Header row' })).not.toBeInTheDocument();
+    await userEvent.upload(input, new File(['a;b'], 'orders.csv.gz'));
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('orders');
+    expect(within(dialog).getByRole('combobox', { name: 'Separator' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Import' })).toBeEnabled();
+    // Without links on this server, there is no tab for them.
+    expect(within(dialog).queryByRole('tab', { name: 'From a link' })).not.toBeInTheDocument();
+  });
+
+  const BOOK: DataSource = {
+    ...OTHER_SOURCE,
+    id: 5,
+    name: 'book',
+    filename: 'book.xlsx',
+    report: {
+      ...OTHER_SOURCE.report,
+      format: 'xlsx',
+      delimiter: null,
+      encoding: null,
+      sheet: 'Notes',
+      sheets: ['Notes', 'Data'],
+    },
+  };
+
+  /** Imports book.xlsx, whose report lists two sheets: the dialog asks which one. */
+  async function importWorkbook() {
+    vi.mocked(api.data.sources.remove).mockResolvedValue(undefined);
+    vi.mocked(api.data.preps.create).mockResolvedValue({ ...PREP, id: 13, name: 'book' });
+    renderPage();
+    await opened();
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const form = await screen.findByRole('dialog', { name: 'Import data' });
+    const file = new File(['PK'], 'book.xlsx');
+    await userEvent.upload(form.querySelector('input[type=file]') as HTMLInputElement, file);
+    await userEvent.click(within(form).getByRole('button', { name: 'Import' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose the sheet' });
+    return { dialog, file };
+  }
+
+  it('lets the user choose another sheet of a workbook', async () => {
+    const data = { ...BOOK, id: 6, report: { ...BOOK.report, sheet: 'Data' } };
+    vi.mocked(api.data.sources.upload).mockResolvedValueOnce(BOOK).mockResolvedValueOnce(data);
+    const { dialog, file } = await importWorkbook();
+    expect(within(dialog).getByText(/has 2 sheets/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('radio', { name: 'Notes' })).toBeChecked();
+    expect(within(dialog).getByText('Read: 5 rows × 3 columns')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Data' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import this sheet' }));
+    expect(api.data.sources.upload).toHaveBeenLastCalledWith(
+      file,
+      { sheet: 'Data', name: 'book' },
+      { signal: expect.any(AbortSignal), onUploadProgress: expect.any(Function) }
+    );
+    await waitFor(() =>
+      expect(api.data.preps.create).toHaveBeenCalledWith({ name: 'book', source: 6 })
+    );
+    // The table of the first sheet was only read to choose: it is removed again.
+    expect(api.data.sources.remove).toHaveBeenCalledWith(5);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the sheet that was read, or removes it when cancelled', async () => {
+    vi.mocked(api.data.sources.upload).mockResolvedValue(BOOK);
+    const first = await importWorkbook();
+    await userEvent.click(within(first.dialog).getByRole('button', { name: 'Continue' }));
+    await waitFor(() =>
+      expect(api.data.preps.create).toHaveBeenCalledWith({ name: 'book', source: 5 })
+    );
+    expect(api.data.sources.upload).toHaveBeenCalledTimes(1);
+    expect(api.data.sources.remove).not.toHaveBeenCalled();
+  });
+
+  it('removes the table read to choose a sheet when the import is cancelled', async () => {
+    vi.mocked(api.data.sources.upload).mockResolvedValue(BOOK);
+    const { dialog } = await importWorkbook();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.data.sources.remove).toHaveBeenCalledWith(5);
+    expect(api.data.preps.create).not.toHaveBeenCalled();
+  });
+
+  it('offers the sheets when a sheet cannot be imported', async () => {
+    const message = 'The sheet “Notes” is empty.';
+    vi.mocked(api.data.sources.upload)
+      .mockRejectedValueOnce(
+        new ApiError(400, { detail: message, sheets: ['Notes', 'Data'] }, message)
+      )
+      .mockResolvedValueOnce({ ...BOOK, report: { ...BOOK.report, sheet: 'Data' } });
+    vi.mocked(api.data.preps.create).mockResolvedValue({ ...PREP, id: 13, name: 'book' });
+    renderPage();
+    await opened();
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
+    const file = new File(['PK'], 'book.xlsx');
+    await userEvent.upload(dialog.querySelector('input[type=file]') as HTMLInputElement, file);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+
+    expect(await within(dialog).findByText(message)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Sheet' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Data' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+    expect(api.data.sources.upload).toHaveBeenLastCalledWith(
+      file,
+      { sheet: 'Data', name: 'book' },
+      expect.anything()
+    );
+    // A sheet was chosen: no need to ask again.
+    await waitFor(() =>
+      expect(api.data.preps.create).toHaveBeenCalledWith({ name: 'book', source: 5 })
+    );
+  });
+
+  it('imports a file from a link', async () => {
+    vi.mocked(api.data.status).mockResolvedValue({ ...DATA_STATUS, url_import: true });
+    const download: { finish?: (source: DataSource) => void; signal?: AbortSignal } = {};
+    vi.mocked(api.data.sources.importUrl).mockImplementation((_url, _options, signal) => {
+      download.signal = signal;
+      return new Promise((resolve) => {
+        download.finish = resolve;
+      });
+    });
+    vi.mocked(api.data.preps.create).mockResolvedValue({ ...PREP, id: 13, name: 'iris' });
+    renderPage();
+    await opened();
+    await userEvent.click(screen.getByRole('button', { name: 'Import data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Import data' });
+    await userEvent.click(within(dialog).getByRole('tab', { name: 'From a link' }));
+    const field = within(dialog).getByRole('textbox', { name: 'Link to the file' });
+    await userEvent.type(field, 'example.org/data.csv');
+    expect(within(dialog).getByText(/starts with https:\/\//)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Import' })).toBeDisabled();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Try the iris flowers/ }));
+    expect(field).toHaveValue(EXAMPLE_LINK);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
+    expect(api.data.sources.importUrl).toHaveBeenCalledWith(EXAMPLE_LINK, {}, download.signal);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Downloading and reading the file …'
+    );
+    const bar = within(dialog).getByRole('progressbar', { name: 'Import from the link' });
+    expect(bar).not.toHaveAttribute('aria-valuenow');
+
+    await act(async () => download.finish?.({ ...SOURCE, id: 7, name: 'iris' }));
+    await waitFor(() =>
+      expect(api.data.preps.create).toHaveBeenCalledWith({ name: 'iris', source: 7 })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('opens the last used preparation', async () => {
