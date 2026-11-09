@@ -186,8 +186,8 @@ TRAINING_PREDICT_COMMAND: list[str] | None = None
 # (JSON escapes the text), unlike other JSON requests (DATA_UPLOAD_MAX_MEMORY_SIZE).
 MCP_UPLOAD_MAX_MB = float(os.environ.get("BRICKDNN_MCP_UPLOAD_MB", "5"))
 
-# Data preparation (the Data tab, needs pandas): imported CSV files and their tables live in
-# DATA_PREP_DIR. Uploads are limited by DATA_MAX_UPLOAD_MB.
+# Data preparation (the Data tab, needs pandas): imported files (CSV, Excel, JSON, Parquet ...)
+# and their tables live in DATA_PREP_DIR. Uploads are limited by DATA_MAX_UPLOAD_MB.
 # Set BRICKDNN_DATA_PREP=false to switch the feature off.
 DATA_PREP_ENABLED = env_bool("BRICKDNN_DATA_PREP", True)
 DATA_PREP_DIR = DATA_DIR / "prepare"
@@ -195,9 +195,15 @@ DATA_PREP_DIR = DATA_DIR / "prepare"
 DATA_MAX_ROWS = int(os.environ.get("BRICKDNN_DATA_MAX_ROWS", "2000000"))
 # Most columns per imported file; 0 or unset: no limit.
 DATA_MAX_COLUMNS = int(os.environ.get("BRICKDNN_DATA_MAX_COLUMNS", "0")) or None
-# Largest CSV import in megabytes. Imports are parsed in memory (roughly 10-15 times the file
-# size while reading), so this is lower than the training upload limit.
+# Largest import in megabytes (uploads, downloads from links and the unpacked content of .gz /
+# .zip files). Imports are parsed in memory (roughly 10-15 times the file size while reading),
+# so this is lower than the training upload limit.
 DATA_MAX_UPLOAD_MB = float(os.environ.get("BRICKDNN_DATA_MAX_UPLOAD_MB", "200"))
+# Imports from links (http/https): the server downloads the file. Only public internet
+# addresses are allowed, unless BRICKDNN_DATA_URL_ALLOW_PRIVATE=true (for local installations
+# that import from servers in their own network).
+DATA_URL_IMPORT_ENABLED = env_bool("BRICKDNN_DATA_URL_IMPORT", True)
+DATA_URL_ALLOW_PRIVATE = env_bool("BRICKDNN_DATA_URL_ALLOW_PRIVATE", False)
 # Rows in a preview sample (the data table and the charts): default and maximum.
 DATA_SAMPLE_ROWS = 5000
 DATA_MAX_SAMPLE_ROWS = 20000

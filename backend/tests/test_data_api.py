@@ -190,7 +190,10 @@ def test_status_is_public(client, settings):
         "default_sample_rows": 5000,
         "max_sample_rows": 20000,
         "login_required": True,
+        "file_types": response.data["file_types"],
+        "url_import": True,
     }
+    assert {".csv", ".xlsx", ".json", ".parquet", ".zip"} <= set(response.data["file_types"])
 
 
 def test_step_catalog_is_public(client):
@@ -276,6 +279,7 @@ def test_import_csv(auth_client, data_dirs):
         "header": "auto",
         "encoding": "auto",
         "missing_values": None,
+        "sheet": None,
     }
     report = data["report"]
     assert report["delimiter"] == "," and report["header"] is True
@@ -313,6 +317,7 @@ def test_import_with_options_and_name(auth_client):
         "header": "yes",
         "encoding": "cp1252",
         "missing_values": ["-999"],
+        "sheet": None,
     }
     assert data["report"]["delimiter"] == ";" and data["report"]["decimal"] == ","
     columns = {c["name"]: c for c in data["columns"]}
@@ -323,7 +328,7 @@ def test_import_with_options_and_name(auth_client):
 @pytest.mark.parametrize(
     ("filename", "content", "fields", "message"),
     [
-        ("data.xlsx", b"a,b\n1,2\n", {}, "Upload a CSV file (.csv, .tsv or .txt)."),
+        ("data.pdf", b"a,b\n1,2\n", {}, "Upload a CSV, Excel, OpenDocument, JSON, Parquet"),
         ("empty.csv", b"", {}, None),
         ("ragged.csv", b"a,b,c\n1,2,3\n4,5\n6,7,8\n", {}, "line"),
         ("data.csv", b"a,b\n1,2\n", {"delimiter": "x"}, None),
@@ -382,6 +387,171 @@ def test_imports_are_rate_limited(auth_client, monkeypatch):
     statuses = [import_csv(auth_client, "a.csv", churn_csv(8)).status_code for _ in range(3)]
     assert statuses == [201, 201, 429]
     assert auth_client.get("/api/data/sources/").status_code == 200  # only imports count
+
+
+def workbook(sheets: dict[str, bytes]) -> bytes:
+    """An .xlsx file with a sheet per CSV text."""
+    import io
+
+    import pandas as pd
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer) as writer:
+        for name, content in sheets.items():
+            frame = pd.read_csv(io.BytesIO(content)) if content else pd.DataFrame()
+            frame.to_excel(writer, sheet_name=name, index=False)
+    return buffer.getvalue()
+
+
+def test_import_excel_sheets(auth_client, data_dirs):
+    pytest.importorskip("openpyxl")
+    content = workbook({"Regions": regions_csv(), "Churn": churn_csv()})
+    response = import_csv(auth_client, "Kunden 2024.xlsx", content)
+    assert response.status_code == 201, response.data
+    data = response.data
+    assert data["name"] == "Kunden 2024" and data["filename"] == "Kunden 2024.xlsx"
+    report = data["report"]
+    assert report["format"] == "xlsx" and report["sheet"] == "Regions"
+    assert report["sheets"] == ["Regions", "Churn"] and report["delimiter"] is None
+    directory = data_dirs / "prepare" / "sources" / str(data["id"])
+    assert (directory / "original.xlsx").read_bytes() == content
+
+    response = import_csv(auth_client, "Kunden 2024.xlsx", content, sheet="Churn")
+    assert response.status_code == 201, response.data
+    assert response.data["report"]["sheet"] == "Churn"
+    assert response.data["import_options"]["sheet"] == "Churn"
+    assert (response.data["n_rows"], response.data["n_columns"]) == (40, 4)
+
+    # A wrong sheet: the answer lists the sheets to choose from.
+    response = import_csv(auth_client, "Kunden 2024.xlsx", content, sheet="Q3")
+    assert response.status_code == 400
+    assert response.data["detail"] == "The workbook has no sheet “Q3”."
+    assert response.data["sheets"] == ["Regions", "Churn"]
+    assert DataSource.objects.count() == 2
+
+
+@pytest.mark.parametrize("filename", ["churn.json", "churn.jsonl", "churn.parquet", "churn.csv.gz"])
+def test_import_other_formats(auth_client, data_dirs, filename):
+    import gzip
+    import io
+
+    import pandas as pd
+
+    frame = pd.read_csv(io.BytesIO(churn_csv()))
+    if filename.endswith(".json"):
+        content = frame.to_json(orient="records").encode()
+    elif filename.endswith(".jsonl"):
+        content = frame.to_json(orient="records", lines=True).encode()
+    elif filename.endswith(".parquet"):
+        pytest.importorskip("pyarrow")
+        content = frame.to_parquet()
+    else:
+        content = gzip.compress(churn_csv())
+    response = import_csv(auth_client, filename, content)
+    assert response.status_code == 201, response.data
+    assert response.data["name"] == "churn"
+    assert (response.data["n_rows"], response.data["n_columns"]) == (40, 4)
+    assert [c["kind"] for c in response.data["columns"]] == [
+        "numeric",
+        "numeric",
+        "numeric",
+        "categorical",
+    ]
+    original = "original" + filename[len("churn") :]
+    directory = data_dirs / "prepare" / "sources" / str(response.data["id"])
+    assert (directory / original).read_bytes() == content
+
+
+def test_python_script_of_an_excel_source(auth_client):
+    pytest.importorskip("openpyxl")
+    content = workbook({"Notes": b"", "Churn": churn_csv()})
+    source = import_csv(auth_client, "churn.xlsx", content).data
+    prep = create_prep(auth_client, source["id"], settings={"target": "churn"}).data
+    response = auth_client.get(f"/api/data/preps/{prep['id']}/download/?format=python")
+    assert response.status_code == 200
+    script = b"".join(response.streaming_content if response.streaming else [response.content])
+    assert b"'format': 'xlsx'" in script and b"'sheet': 'Churn'" in script
+    assert b"'#DIV/0!'" in script  # error values of spreadsheets count as missing
+
+
+@pytest.fixture
+def file_server():
+    from .test_url_import import Server
+
+    server = Server()
+    yield server
+    server.close()
+
+
+def import_url(client, url, **fields):
+    return client.post("/api/data/sources/", {"url": url, **fields}, format="json")
+
+
+def test_import_from_a_link(auth_client, settings, file_server, data_dirs):
+    settings.DATA_URL_ALLOW_PRIVATE = True  # the test server runs on 127.0.0.1
+    file_server.routes["/data/churn.csv"] = (200, {"Content-Type": "text/csv"}, churn_csv())
+    file_server.routes["/sheet"] = (
+        200,
+        {"Content-Disposition": 'attachment; filename="Customers.xlsx"'},
+        workbook({"A": regions_csv(), "B": churn_csv()}),
+    )
+    response = import_url(auth_client, f"{file_server.url}/data/churn.csv")
+    assert response.status_code == 201, response.data
+    data = response.data
+    assert data["name"] == "churn" and data["filename"] == "churn.csv"
+    assert data["report"]["url"] == f"{file_server.url}/data/churn.csv"
+    assert data["size_bytes"] == len(churn_csv()) and data["n_rows"] == 40
+    directory = data_dirs / "prepare" / "sources" / str(data["id"])
+    assert (directory / "original.csv").read_bytes() == churn_csv()
+
+    response = import_url(auth_client, f"{file_server.url}/sheet", name="Kunden", sheet="B")
+    assert response.status_code == 201, response.data
+    assert response.data["name"] == "Kunden" and response.data["filename"] == "Customers.xlsx"
+    assert response.data["report"]["sheet"] == "B" and response.data["n_rows"] == 40
+
+    response = import_url(auth_client, f"{file_server.url}/missing.csv")
+    assert response.status_code == 400
+    assert "Nothing was found at this link" in response.data["detail"]
+    assert entries(data_dirs / "prepare" / "sources") == sorted(
+        str(s.pk) for s in DataSource.objects.all()
+    )
+
+
+def test_links_to_private_addresses_are_refused_by_default(auth_client, file_server):
+    file_server.routes["/churn.csv"] = (200, {}, churn_csv())
+    for url in (f"{file_server.url}/churn.csv", "http://169.254.169.254/latest/meta-data/"):
+        response = import_url(auth_client, url)
+        assert response.status_code == 400
+        assert "not a public internet address" in response.data["detail"]
+    assert file_server.requests == []
+    response = import_url(auth_client, "https://user:pw@example.org/data.csv")
+    assert "user name or password" in response.data["detail"]
+    assert DataSource.objects.count() == 0
+
+
+def test_link_imports_can_be_switched_off(client, auth_client, settings):
+    settings.DATA_URL_IMPORT_ENABLED = False
+    assert client.get("/api/data/").data["url_import"] is False
+    response = import_url(auth_client, "https://example.org/data.csv")
+    assert response.status_code == 403
+    assert response.data["detail"] == "Importing from links is switched off on this server."
+
+
+def test_link_import_requests(auth_client, client):
+    assert import_url(client, "https://example.org/data.csv").status_code == 401
+    response = auth_client.post("/api/data/sources/", {"name": "x"}, format="json")
+    assert response.status_code == 400 and "link of a file" in response.data["detail"]
+    response = import_url(auth_client, "https://example.org/data.csv", delimiter="x")
+    assert response.status_code == 400 and response.data["detail"].startswith("Delimiter")
+
+
+def test_link_imports_count_like_uploads(auth_client, settings, file_server, monkeypatch):
+    settings.DATA_URL_ALLOW_PRIVATE = True
+    file_server.routes["/a.csv"] = (200, {}, churn_csv(8))
+    monkeypatch.setitem(ScopedRateThrottle.THROTTLE_RATES, "uploads", "2/hour")
+    assert import_csv(auth_client, "a.csv", churn_csv(8)).status_code == 201
+    assert import_url(auth_client, f"{file_server.url}/a.csv").status_code == 201
+    assert import_url(auth_client, f"{file_server.url}/a.csv").status_code == 429
 
 
 def test_abandoned_import_folders_are_removed(auth_client, data_dirs):

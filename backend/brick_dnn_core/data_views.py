@@ -51,6 +51,8 @@ def _bad_request(exc: data.DataInputError) -> Response:
     body: dict = {"detail": str(exc)}
     if exc.issues is not None:
         body["issues"] = exc.issues
+    if exc.sheets is not None:
+        body["sheets"] = exc.sheets
     return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -119,7 +121,8 @@ class DataSourceViewSet(
     mixins.DestroyModelMixin,
     DataViewSet,
 ):
-    """Imported CSV files. POST is a multipart upload; PATCH changes the name."""
+    """Imported data files. POST is a multipart upload (``file``) or JSON with a ``url`` to
+    download; PATCH changes the name."""
 
     serializer_class = DataSourceSerializer
     parser_classes = [SafeJSONParser, MultiPartParser]
@@ -155,6 +158,8 @@ class DataSourceViewSet(
             length = 0
         if length > limit + 64 * 1024:
             return too_large
+        if request.content_type.startswith("application/json"):
+            return self._import_url(request)
         upload = request.FILES.get("file")
         if upload is None:
             return Response(
@@ -165,6 +170,23 @@ class DataSourceViewSet(
         fields = {key: request.data.get(key) for key in ("name", *data.OPTION_FIELDS)}
         try:
             source = data.import_source(request.user, upload, fields)
+        except data.DataInputError as exc:
+            return _bad_request(exc)
+        return Response(DataSourceSerializer(source).data, status=status.HTTP_201_CREATED)
+
+    def _import_url(self, request: Request) -> Response:
+        """``{"url", "name"?, ...import options}``: download the file and import it."""
+        if not settings.DATA_URL_IMPORT_ENABLED:
+            raise PermissionDenied(data.URL_DISABLED_MESSAGE)
+        body = request.data if isinstance(request.data, dict) else {}
+        if "url" not in body:
+            return Response(
+                {"detail": 'Send a file (multipart) or the link of a file as JSON: {"url"}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        fields = {key: body.get(key) for key in ("name", *data.OPTION_FIELDS)}
+        try:
+            source = data.import_url(request.user, body.get("url"), fields)
         except data.DataInputError as exc:
             return _bad_request(exc)
         return Response(DataSourceSerializer(source).data, status=status.HTTP_201_CREATED)

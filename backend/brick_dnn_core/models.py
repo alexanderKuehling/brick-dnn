@@ -85,8 +85,9 @@ def default_prep_settings() -> dict:
 
 
 class DataSource(models.Model):
-    """An imported CSV file (Data tab). The files live in DATA_PREP_DIR/sources/<id>/:
-    the uploaded file (``original.csv``) and the typed table (``table/``)."""
+    """An imported data file (Data tab). The files live in DATA_PREP_DIR/sources/<id>/:
+    the uploaded or downloaded file (``original.csv``, ``original.xlsx`` ...) and the typed
+    table (``table/``)."""
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="data_sources"
