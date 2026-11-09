@@ -10,8 +10,11 @@
   state). The MCP tools list shared networks and respect the roles.
 - **Live editing.** Everyone with access works on a network at the same time over a WebSocket
   (`/api/ws/projects/<id>/`, Django Channels): changes are applied on the server in order and
-  reach everyone at once, and you see who else is here and what they select. Docker Compose
-  runs a small realtime service and Redis for it; `manage.py runserver` needs neither.
+  reach everyone at once, and you see who else is here and what they select. In the builder a
+  saved network saves itself as you edit (a status replaces the save button; changes made
+  while offline are sent when the connection is back), and the avatars, selection outlines
+  and layers being dragged show who does what. Docker Compose runs a small realtime service
+  and Redis for it; `manage.py runserver` needs neither.
 - **Version history and comments.** Every change is kept (merged per person and session);
   name versions and restore any of them. Comment on a network or a layer, reply and resolve
   threads, viewers too.

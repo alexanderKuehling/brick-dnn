@@ -46,6 +46,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
+import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
 import { useTraining } from '@/training/useTraining';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
@@ -128,7 +129,9 @@ function Builder() {
             role: draft.role ?? null,
             info: null,
           };
-    return { ...draft, ...loaded, key: contentKey(draft.name, draft.doc), project };
+    // Live changes the server had not confirmed when the page was closed.
+    const seed = project && draft.pending ? { projectId: project.id, ops: draft.pending } : null;
+    return { ...draft, ...loaded, key: contentKey(draft.name, draft.doc), project, seed };
   }, []);
   const [nodes, setNodes, onNodesChange] = useNodesState<LayerFlowNode>(initial?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(withEdgeStyle(initial?.edges ?? []));
@@ -211,28 +214,72 @@ function Builder() {
   const currentKeyRef = useRef(currentKey);
   currentKeyRef.current = currentKey;
 
+  // Live editing of a saved project: changes go out as they happen, others' changes come in.
+  const live = useLiveBuilder({
+    enabled: !DEMO && ready && Boolean(user),
+    user,
+    project,
+    setProject,
+    detach,
+    readOnly,
+    nodes,
+    edges,
+    name,
+    setNodes,
+    setEdges,
+    setName,
+    contentKey: currentKey,
+    isSaved,
+    seed: initial?.seed,
+    onSelectedRemoved: (by) => {
+      inspector.close();
+      notifications.show({ message: `${by.username} deleted the layer you had selected.` });
+    },
+  });
+
   // ---------------------------------------------------------------- persistence
-  const pendingDraft = useRef<Draft | null>(null);
+  const pendingDraft = useRef<(() => Draft) | null>(null);
   const version = project?.version ?? null;
   const role = project?.role ?? null;
+  const { tracking, pendingCount, pendingOps } = live;
   useEffect(() => {
     if (!seeded.current && nodes.length === 0) {
       return undefined;
     }
-    const draft: Draft = { doc, name, projectId, version, role, saved: isSaved };
+    // Live, the draft is saved once the server has confirmed every change; the changes it
+    // has not confirmed yet are kept with it (read when it is written, they change often).
+    const draft = (): Draft => {
+      const pending = tracking ? pendingOps() : [];
+      return {
+        doc,
+        name,
+        projectId,
+        version,
+        role,
+        saved: tracking ? pending.length === 0 : isSaved,
+        ...(pending.length > 0 ? { pending } : {}),
+      };
+    };
     pendingDraft.current = draft;
     const timer = window.setTimeout(() => {
-      saveDraft(draft);
+      saveDraft(draft());
       pendingDraft.current = null;
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [doc, name, projectId, version, role, isSaved]);
+  }, [doc, name, projectId, version, role, isSaved, tracking, pendingCount, pendingOps]);
+
+  // Live, what the server has confirmed is saved (e.g. when the user logs out afterwards).
+  useEffect(() => {
+    if (tracking && pendingCount === 0) {
+      setSavedKey(currentKey);
+    }
+  }, [tracking, pendingCount, currentKey]);
 
   // Write a pending draft immediately when leaving the page or closing the tab.
   useEffect(() => {
     const flush = () => {
       if (pendingDraft.current) {
-        saveDraft(pendingDraft.current);
+        saveDraft(pendingDraft.current());
         pendingDraft.current = null;
       }
     };
@@ -320,6 +367,12 @@ function Builder() {
         if (!stillOpen()) {
           return;
         }
+        if (live.isTracking()) {
+          // Live already: the connection brought the latest state, keep only the details.
+          const { info } = openProjectOf(server);
+          setProject((open) => (open?.id === server.id ? { ...open, info } : open));
+          return;
+        }
         const current = currentKeyRef.current;
         if (current === contentKey(server.name, server.graph)) {
           attach(server);
@@ -357,6 +410,7 @@ function Builder() {
         if (stillOpen() && error instanceof ApiError && [403, 404].includes(error.status)) {
           detach();
           notifications.show({
+            id: 'no-access',
             color: 'yellow',
             title: 'No access any more',
             message:
@@ -365,11 +419,11 @@ function Builder() {
           });
         }
       });
-  }, [ready, user, initial, attach, detach, setProject, loadProject]);
+  }, [ready, user, initial, attach, detach, setProject, loadProject, live.isTracking]);
 
   const confirmReplace = (action: () => void) => {
-    // Viewers cannot have unsaved changes.
-    if (nodes.length === 0 || readOnly) {
+    // Viewers cannot have unsaved changes; live, all changes are saved (unless offline).
+    if (nodes.length === 0 || readOnly || live.indicator === 'live') {
       action();
       return;
     }
@@ -539,6 +593,10 @@ function Builder() {
 
   /** Save to the account. Resolves to the saved project, or null if it was not saved. */
   const save = async ({ baseVersion, asCopy = false }: SaveOptions = {}) => {
+    if (live.tracking && !asCopy) {
+      live.flush(); // Live, changes are saved as they happen.
+      return null;
+    }
     if (!user) {
       notifications.show({
         title: 'Log in to save',
@@ -781,6 +839,7 @@ function Builder() {
   ]);
 
   // ---------------------------------------------------------------- render
+  const presence = live.tracking ? live.presence : null;
   const context: BuilderContextValue = useMemo(
     () => ({
       specs,
@@ -792,8 +851,9 @@ function Builder() {
       deleteNode,
       duplicateNode,
       focusNode,
+      presence,
     }),
-    [specs, analysis, readOnly, updateNode, deleteNode, duplicateNode, focusNode]
+    [specs, analysis, readOnly, updateNode, deleteNode, duplicateNode, focusNode, presence]
   );
 
   if (!catalog) {
@@ -842,9 +902,16 @@ function Builder() {
     />
   );
   const inspectorView = <Inspector node={selected} nodes={nodes} />;
+  // Live: who has the network open, me included (one entry per person).
+  const here =
+    live.tracking && user
+      ? [...new Set([user.username, ...live.people.map((person) => person.username)])]
+      : null;
   const people = members
     ? [members.owner.username, ...members.members.map((member) => member.user.username)]
-    : null;
+    : here && here.length > 1
+      ? here
+      : null;
 
   return (
     <BuilderContext.Provider value={context}>
@@ -874,6 +941,8 @@ function Builder() {
             readOnly={readOnly}
             owner={project?.info?.owner.username ?? null}
             people={people}
+            here={here}
+            live={live.indicator}
             onLoadExample={loadExample}
             onNew={newNetwork}
             onImport={() => fileInput.current?.click()}
@@ -892,7 +961,7 @@ function Builder() {
           />
           <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }}>
             <ReactFlow<LayerFlowNode, Edge>
-              nodes={nodes}
+              nodes={live.displayNodes}
               edges={edges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
