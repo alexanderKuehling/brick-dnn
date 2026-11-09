@@ -6,12 +6,16 @@ from __future__ import annotations
 
 import signal
 import time
+import types
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core import signing
+from rest_framework.test import APIClient
 
 from brick_dnn_core import live, training_service
 from brick_dnn_core.models import Dataset, Project, ProjectMember, TrainingRun
+from brickdnn.training.state import read_state, write_state
 
 from .test_mcp import call, mcp_client, rpc
 from .test_training_api import (  # noqa: F401 (training_dir is a fixture)
@@ -206,7 +210,6 @@ def test_delete_training_run_kills_an_active_run(
 
 
 def test_delete_dataset(team, mcps, training_dir, settings, django_capture_on_commit_callbacks):
-    from rest_framework.test import APIClient
 
     project, users = team
     client = APIClient()
@@ -242,7 +245,6 @@ def test_delete_dataset(team, mcps, training_dir, settings, django_capture_on_co
 
 def test_rest_and_mcp_share_the_delete_code(team, training_dir, monkeypatch):
     """The REST API deletes projects through the same function (it notifies live editors)."""
-    from rest_framework.test import APIClient
 
     project, users = team
     notified = []
@@ -365,3 +367,137 @@ def test_upload_dataset_when_training_is_disabled_or_rate_limited(
     ok(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
     assert "Too many" in error_of(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
     assert Dataset.objects.count() == 1
+
+
+# --------------------------------------------------------------------------- #
+# get_weights_download
+# --------------------------------------------------------------------------- #
+
+
+def finished_run(client, project_id=None, name="Iris net") -> str:
+    run_id = start_run(client, project_id, name)
+    assert wait_until_done(client, run_id)["status"] == "completed"
+    return run_id
+
+
+def set_preprocessing(training_dir, run_id, preprocessing, **changes):
+    """The fake runner records no preprocessing: add it like the real one would."""
+    directory = training_dir / "runs" / run_id
+    state = read_state(directory)
+    state.update(preprocessing=preprocessing, **changes)
+    write_state(directory, state)
+
+
+def download(url, **headers):
+    return APIClient().get(url, **headers)  # no login
+
+
+def test_weights_download_link(team, mcps, training_dir):
+    run_id = finished_run(mcps["ada"])
+    info = ok(mcps["ada"], "get_weights_download", id=run_id)
+    assert info["url"].startswith(f"http://testserver/api/training/runs/{run_id}/weights/?sig=")
+    assert info["expires_in_minutes"] == 15
+    assert info["run"] == {"id": run_id, "name": "Iris net", "status": "completed"}
+    assert info["filename"] == "iris-net.pt" and info["size_bytes"] == len(b"fake weights")
+    assert "class NeuralNetwork(nn.Module)" in info["model_code"]
+    assert "def main" not in info["model_code"]
+    assert info["model_code_filename"] == "iris_net.py"
+    # The fake runner recorded no preprocessing.
+    assert "how_to_use" not in info and any("not known" in n for n in info["notes"])
+
+    response = download(info["url"])
+    assert response.status_code == 200
+    assert b"".join(response.streaming_content) == b"fake weights"
+    assert response["Content-Disposition"] == 'attachment; filename="iris-net.pt"'
+    assert response["Cache-Control"] == "private, no-store"
+    # Again, within the 15 minutes.
+    assert download(info["url"]).status_code == 200
+
+    # Without a signature, the endpoint still needs a login; with one it works as before.
+    url = f"/api/training/runs/{run_id}/weights/"
+    assert download(url).status_code == 401
+    client = APIClient()
+    client.force_authenticate(team[1]["ada"])
+    response = client.get(url)
+    assert response.status_code == 200 and "Cache-Control" not in response
+
+
+def test_weights_download_explains_the_inputs(team, mcps, training_dir):
+    run_id = finished_run(mcps["ada"])
+    set_preprocessing(training_dir, run_id, {"kind": "demo"})
+    info = ok(mcps["ada"], "get_weights_download", id=run_id)
+    assert info["task"] == "demo" and info["preprocessing"] == {"kind": "demo"}
+    assert "random demo data" in info["inputs"]
+    snippet = info["how_to_use"]
+    assert "from iris_net import NeuralNetwork" in snippet
+    assert 'torch.load("iris-net.pt", map_location="cpu", weights_only=True)' in snippet
+    assert "torch.randn(1, 4)" in snippet
+
+
+def test_expired_or_forged_links_are_refused(team, mcps, training_dir, monkeypatch):
+    first = finished_run(mcps["ada"], name="First")
+    second = finished_run(mcps["ada"], name="Second")
+    real = time.time()
+    monkeypatch.setattr(signing, "time", types.SimpleNamespace(time=lambda: real - 16 * 60))
+    old = ok(mcps["ada"], "get_weights_download", id=first)["url"]
+    monkeypatch.setattr(signing, "time", time)
+    response = download(old)
+    assert response.status_code == 403 and "expired" in response.data["detail"]
+
+    url = ok(mcps["ada"], "get_weights_download", id=first)["url"]
+    signature = url.split("?sig=")[1]
+    # Bound to the run: the signature of one run does not open another.
+    response = download(f"/api/training/runs/{second}/weights/?sig={signature}")
+    assert response.status_code == 403 and "another run" in response.data["detail"]
+    # Changed signatures are refused.
+    for forged in (signature[:-2] + "xx", "", "garbage", signature.replace("%3A", "-")):
+        response = download(f"/api/training/runs/{first}/weights/?sig={forged}")
+        assert response.status_code == 403 and "invalid" in response.data["detail"], forged
+
+
+def test_links_end_with_the_access_to_the_run(team, mcps, training_dir):
+    project, users = team
+    run_id = finished_run(mcps["ada"], project.pk)
+    bob_url = ok(mcps["bob"], "get_weights_download", id=run_id)["url"]
+    cy_url = ok(mcps["cy"], "get_weights_download", id=run_id)["url"]  # viewers may download
+    eve = error_of(mcps["eve"], "get_weights_download", id=run_id)
+    assert "No such training run" in eve
+    assert download(bob_url).status_code == 200
+
+    # Removed from the project: the link stops working.
+    ProjectMember.objects.filter(user=users["bob"]).delete()
+    response = download(bob_url)
+    assert response.status_code == 403 and "no access" in response.data["detail"]
+    # Deactivated or deleted accounts too.
+    users["cy"].is_active = False
+    users["cy"].save()
+    assert download(cy_url).status_code == 403
+    users["cy"].delete()
+    assert download(cy_url).status_code == 403
+    # The owner's own link is not affected.
+    assert download(ok(mcps["ada"], "get_weights_download", id=run_id)["url"]).status_code == 200
+
+
+def test_no_weights_no_link(team, mcps, training_dir, settings):
+    use_runner(settings, "until_stop")
+    run_id = start_run(mcps["ada"])
+    text = error_of(mcps["ada"], "get_weights_download", id=run_id)
+    assert "still" in text and "stopped" in text
+    ok(mcps["ada"], "stop_training", id=run_id)
+    wait_until_done(mcps["ada"], run_id)
+    assert ok(mcps["ada"], "get_weights_download", id=run_id)["size_bytes"] > 0
+
+    use_runner(settings, "crash")
+    run_id = start_run(mcps["ada"])
+    wait_until_done(mcps["ada"], run_id)
+    text = error_of(mcps["ada"], "get_weights_download", id=run_id)
+    assert "failed before it saved weights" in text
+
+
+def test_read_only_tokens_can_get_weights(team, training_dir):
+    _, users = team
+    run_id = finished_run(mcp_client(users["ada"]))
+    client = mcp_client(users["ada"], read_only=True)
+    names = {t["name"] for t in rpc(client, "tools/list").json()["result"]["tools"]}
+    assert "get_weights_download" in names
+    assert download(ok(client, "get_weights_download", id=run_id)["url"]).status_code == 200

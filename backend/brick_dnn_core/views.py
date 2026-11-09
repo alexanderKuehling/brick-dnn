@@ -2,10 +2,9 @@ import json
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
-from django.utils.text import slugify
 from rest_framework import mixins, permissions, renderers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -18,7 +17,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
-from . import shared_data
+from . import downloads, shared_data
 from . import training_service as training
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .models import ApiToken, Dataset, TrainingRun
@@ -366,23 +365,37 @@ class TrainingRunViewSet(
         detail=True,
         methods=["get"],
         renderer_classes=[renderers.JSONRenderer, BinaryRenderer],
+        permission_classes=[permissions.AllowAny],  # checked below: login or signed link
     )
     def weights(self, request: Request, pk=None) -> Response | FileResponse:
-        """The trained weights (``model.state_dict()``) as a ``.pt`` file."""
-        run = self.get_object()
+        """The trained weights (``model.state_dict()``) as a ``.pt`` file.
+
+        Logged in, or with ``?sig=`` from a download link (see downloads.py), which works
+        without logging in until it expires.
+        """
+        signature = request.query_params.get("sig")
+        if signature is not None:
+            run = downloads.run_for_link(signature, pk)
+        elif not request.user.is_authenticated:
+            raise NotAuthenticated()
+        else:
+            run = self.get_object()
         path = training.weights_path(run)
         if path is None:
             return Response(
                 {"detail": "No weights available for this run."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        filename = (slugify(run.name) or "weights") + ".pt"
-        return FileResponse(
+        response = FileResponse(
             path.open("rb"),
             as_attachment=True,
-            filename=filename,
+            filename=training.weights_filename(run),
             content_type="application/octet-stream",
         )
+        if signature is not None:
+            response["Cache-Control"] = "private, no-store"
+            response["Referrer-Policy"] = "no-referrer"
+        return response
 
 
 class ApiRoot(APIView):

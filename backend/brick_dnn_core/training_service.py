@@ -34,6 +34,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import serializers
 
 from brickdnn import analyze
@@ -895,6 +896,21 @@ def state_of(run: TrainingRun) -> dict[str, Any] | None:
 def weights_path(run: TrainingRun) -> Path | None:
     path = run_dir(run.pk) / WEIGHTS_FILE
     return path if run.has_weights and path.is_file() else None
+
+
+def weights_filename(run: TrainingRun) -> str:
+    return (slugify(run.name) or "weights") + ".pt"
+
+
+def no_weights_reason(run: TrainingRun) -> str:
+    """Why a run has no weights to download or predict with (for the user)."""
+    if run.status in ACTIVE_STATUSES:
+        return (
+            f"This run is still {run.status}: its weights are saved when it finishes or is stopped."
+        )
+    if run.status == "failed":
+        return f"This run failed before it saved weights: {run.message}"
+    return "This run has no trained weights (it was stopped before the training started)."
 
 
 # --------------------------------------------------------------------------- #

@@ -33,7 +33,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 from brickdnn.training.config import TrainingConfig
 
-from . import history
+from . import downloads, history
 from . import training_service as training
 from .api_tokens import uses_api_token
 from .models import ApiToken, Project, TrainingRun
@@ -417,6 +417,13 @@ def stop_training(request: Request, args: dict[str, Any]) -> Any:
     return RunSummarySerializer(training.stop_run(run)).data
 
 
+def get_weights_download(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args)
+    if training.weights_path(run) is None:
+        raise ToolError(training.no_weights_reason(run))
+    return downloads.weights_info(request, run, request.user)
+
+
 def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args)
     if not can_delete_run(request.user, run):
@@ -626,6 +633,19 @@ TOOLS: dict[str, Tool] = {
             {"id": {"type": "string"}},
             ("id",),
             writes=True,
+        ),
+        Tool(
+            "get_weights_download",
+            "Get the trained weights",
+            "A download link for the trained weights of a finished or stopped run (a PyTorch "
+            "state_dict, .pt), valid for 15 minutes and usable without logging in: give it to "
+            "the user or fetch it with a tool that can download files. Also returns the "
+            "matching model code (class NeuralNetwork), how inputs were prepared during "
+            "training (feature order, normalisation, image size, class names) and a Python "
+            "snippet that loads the weights and predicts.",
+            get_weights_download,
+            {"id": {"type": "string", "description": "Run id from list_training_runs"}},
+            ("id",),
         ),
         Tool(
             "delete_training_run",
