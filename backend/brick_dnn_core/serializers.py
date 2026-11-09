@@ -48,11 +48,24 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
-    email = serializers.EmailField(required=False, allow_blank=True)
+    # Required: people are invited to shared networks by e-mail, too.
+    email = serializers.EmailField(
+        max_length=254,
+        error_messages={
+            "required": "Enter your e-mail address.",
+            "blank": "Enter your e-mail address.",
+        },
+    )
 
     class Meta:
         model = User
         fields = ["username", "email", "password"]
+
+    def validate_email(self, value: str) -> str:
+        value = User.objects.normalize_email(value.strip())
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account with this e-mail address exists already.")
+        return value
 
     def validate(self, attrs):
         candidate = User(username=attrs.get("username"), email=attrs.get("email", ""))

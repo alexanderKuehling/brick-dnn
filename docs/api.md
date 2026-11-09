@@ -58,14 +58,15 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 
 | Method | Path                       | Body                               | Response                    |
 | ------ | -------------------------- | ---------------------------------- | --------------------------- |
-| POST   | `/api/auth/register/`      | `{username, password, email?}`     | `201 {user, access, refresh}` |
+| POST   | `/api/auth/register/`      | `{username, email, password}`      | `201 {user, access, refresh}` |
 | POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`         |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
 | GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined}` |
 
 Send the access token as `Authorization: Bearer <access>`. Access tokens live 30 minutes,
-refresh tokens 7 days. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`.
+refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
+account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`.
 
 ## API tokens
 
