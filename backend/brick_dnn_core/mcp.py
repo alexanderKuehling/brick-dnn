@@ -75,6 +75,15 @@ A network is a JSON graph: {"version": 1, "nodes": [{"id": "in", "type": "Input"
 "edges": [{"source": "in", "target": "fc"}]}. Every network starts with an Input layer whose
 shape has no batch dimension; nodes without outgoing edges are the outputs.
 
+It also builds classical models (scikit-learn) for tabular data: Gaussian processes
+(GaussianProcessRegressor, GaussianProcessClassifier) and support vector machines (SVR,
+SVC). Connect the Input (shape [number of features]) straight to the model; a Gaussian
+process can also take a kernel built from kernel bricks (RBF, Matern, RationalQuadratic,
+ExpSineSquared, DotProduct, WhiteKernel, ConstantKernel, combined with KernelSum and
+KernelProduct), whose edges carry a kernel instead of a tensor. Classical models and neural
+layers cannot be mixed in one network yet. Their code is a scikit-learn script, and they
+are trained on CSV data or demo data (fitted once, no epochs).
+
 Typical workflow: look up layer types with list_layer_types (or start from list_examples),
 build the graph, call analyze_network until it is valid (it infers shapes and parameter
 counts and explains errors), then generate_pytorch_code, save_project, or train it on a
@@ -298,6 +307,7 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
+        "classical": capabilities["classical"],
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
         "upload_dataset_max_mb": _megabytes(upload_limit()),
     }
@@ -368,9 +378,10 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
     try:
         training.validate_graph(args["graph"])
         dataset = training.resolve_dataset(request.user, args["dataset"])
+        config = training.parse_config(args.get("config"))
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
-    return training.check(args["graph"], dataset).to_dict()
+    return training.check(args["graph"], dataset, config).to_dict()
 
 
 class _TrainingScope:
@@ -493,8 +504,11 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "list_layer_types",
             "List layer types",
-            "All layer types (Input, Linear, Conv2d, LSTM, …) with their parameters: kind, "
-            "default, allowed range, and whether the value can be inferred ('auto').",
+            "All layer types (Input, Linear, Conv2d, LSTM, …, kernel bricks such as RBF and "
+            "classical models such as GaussianProcessRegressor or SVC) with their parameters: "
+            "kind, default, allowed range, and whether the value can be inferred ('auto'). "
+            "family says whether a brick is a neural layer or classical (scikit-learn), "
+            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes.",
             list_layer_types,
             {},
         ),
@@ -502,7 +516,7 @@ TOOLS: dict[str, Tool] = {
             "list_examples",
             "List example networks",
             "Example networks with their graphs (MLP, CNN, ResNet block, LSTM, Transformer, "
-            "…): good starting points.",
+            "Gaussian process regression, SVM classifier, …): good starting points.",
             list_examples,
             {},
         ),
@@ -511,7 +525,9 @@ TOOLS: dict[str, Tool] = {
             "Analyze a network",
             "Validate a graph and infer the output shape, dtype and parameter count of every "
             "layer. Returns valid, errors (with the node they belong to), warnings, nodes and "
-            "total_params. Use it after every change.",
+            "total_params. Kernel bricks and Gaussian processes report their kernel as "
+            "scikit-learn code (kernel); family and classical describe a classical model. "
+            "Use it after every change.",
             analyze_network,
             {"graph": GRAPH_SCHEMA},
             ("graph",),
@@ -520,7 +536,10 @@ TOOLS: dict[str, Tool] = {
             "generate_pytorch_code",
             "Generate PyTorch code",
             "Turn a valid graph into a runnable PyTorch script (an nn.Module class, optionally "
-            "with a demo main and a CSV training loop).",
+            "with a demo main and a CSV training loop). For a classical model it is a "
+            "scikit-learn script instead: make_model() returns Pipeline(StandardScaler, model), "
+            "the main fits it to a CSV file, saves it with joblib and predicts new rows "
+            "(class_name does not apply).",
             generate_pytorch_code,
             {
                 "graph": GRAPH_SCHEMA,
@@ -581,9 +600,11 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "get_training_options",
             "Show training options",
-            "Whether training is available on this server, the built-in datasets and the "
-            "user's own datasets, how to refer to a dataset, the default training settings "
-            "(config) and the hyperparameter search options (tuning).",
+            "Whether training is available on this server (available: neural networks with "
+            "PyTorch; classical: Gaussian processes and SVMs with scikit-learn, with the "
+            "most training rows they are fitted on), the built-in datasets and the user's own "
+            "datasets, how to refer to a dataset, the default training settings (config) and "
+            "the hyperparameter search options (tuning, neural networks only).",
             get_training_options,
             {},
         ),
@@ -612,11 +633,13 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "check_training",
             "Check a network against a dataset",
-            "Check whether a network fits a dataset (input shape and dtype, output size, loss) "
-            "before training. Returns ok, errors, warnings, the plan (task, classes) and "
-            "fixes: the params to set on the Input layer and the last layer to make it fit.",
+            "Check whether a network fits a dataset (input shape and dtype, output size, loss; "
+            "classical models: tabular data and the right task) before training. Returns ok, "
+            "errors, warnings, the plan (task, classes) and fixes: the params to set on the "
+            "Input layer and the last layer to make it fit. Pass config to also check the "
+            "settings (e.g. max_samples against the row limit of classical models).",
             check_training,
-            {"graph": GRAPH_SCHEMA, "dataset": DATASET_SCHEMA},
+            {"graph": GRAPH_SCHEMA, "dataset": DATASET_SCHEMA, "config": {"type": "object"}},
             ("graph", "dataset"),
         ),
         Tool(
@@ -625,7 +648,8 @@ TOOLS: dict[str, Tool] = {
             "Train a network on the server. Runs in the background: follow it with "
             "get_training_run. config overrides the defaults from get_training_options "
             "(epochs, batch_size, learning_rate, …); tuning turns the run into a "
-            "hyperparameter search.",
+            "hyperparameter search. A classical model is fitted once (no epochs): only "
+            "val_split, test_split, max_samples and seed apply, and tuning is not available.",
             start_training,
             {
                 "graph": GRAPH_SCHEMA,
@@ -651,7 +675,9 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "get_training_run",
             "Show a training run",
-            "One training run with its settings, its history of metrics per epoch and its status.",
+            "One training run with its settings, its history of metrics per epoch and its "
+            "status. Classical models have one entry (the fit) and state.classical with the "
+            "fitted kernel, log marginal likelihood or support vectors.",
             get_training_run,
             {"id": {"type": "string"}},
             ("id",),
@@ -669,11 +695,12 @@ TOOLS: dict[str, Tool] = {
             "get_weights_download",
             "Get the trained weights",
             "A download link for the trained weights of a finished or stopped run (a PyTorch "
-            "state_dict, .pt), valid for 15 minutes and usable without logging in: give it to "
-            "the user or fetch it with a tool that can download files. Also returns the "
-            "matching model code (class NeuralNetwork), how inputs were prepared during "
-            "training (feature order, normalisation, image size, class names) and a Python "
-            "snippet that loads the weights and predicts.",
+            "state_dict, .pt; for a classical model the fitted scikit-learn pipeline, .joblib), "
+            "valid for 15 minutes and usable without logging in: give it to the user or fetch "
+            "it with a tool that can download files. Also returns the matching model code "
+            "(class NeuralNetwork, or make_model()), how inputs were prepared during training "
+            "(feature order, normalisation, image size, class names) and a Python snippet that "
+            "loads the weights and predicts.",
             get_weights_download,
             {"id": {"type": "string", "description": "Run id from list_training_runs"}},
             ("id",),
@@ -684,7 +711,8 @@ TOOLS: dict[str, Tool] = {
             "Run the trained network of a finished or stopped run on up to "
             f"{inference.MAX_SAMPLES} samples on the server. Classification: the most likely "
             "class with its probability and the top_k classes; regression: the predicted "
-            "value in the units of the target column. Inputs of a network trained on a CSV "
+            "value in the units of the target column (a Gaussian process adds std, its "
+            "uncertainty). Inputs of a network or classical model trained on a CSV "
             "file: one row per sample, as an object {column: value} or a list of the feature "
             "values in column order, raw as in the CSV file (they are standardised like in "
             "training). Inputs of an image network: one image per sample as a nested array of "

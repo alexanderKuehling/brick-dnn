@@ -174,6 +174,7 @@ class DatasetSerializer(serializers.ModelSerializer):
 
 class RunSummarySerializer(serializers.ModelSerializer):
     task = serializers.SerializerMethodField()
+    family = serializers.SerializerMethodField()
     epochs = serializers.SerializerMethodField()
     stop_requested = serializers.SerializerMethodField()
 
@@ -188,6 +189,7 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "config",
             "tuning",
             "task",
+            "family",
             "epochs",
             "epochs_done",
             "metrics",
@@ -212,7 +214,14 @@ class RunSummarySerializer(serializers.ModelSerializer):
     def get_task(self, obj: TrainingRun) -> str | None:
         return obj.plan.get("task") if isinstance(obj.plan, dict) else None
 
+    def get_family(self, obj: TrainingRun) -> str:
+        """``neural`` (PyTorch) or ``classical`` (a scikit-learn model, fitted once)."""
+        plan = obj.plan if isinstance(obj.plan, dict) else {}
+        return "classical" if isinstance(plan.get("classical"), dict) else "neural"
+
     def get_epochs(self, obj: TrainingRun) -> int | None:
+        if self.get_family(obj) == "classical":
+            return 1  # fitted once
         return obj.config.get("epochs") if isinstance(obj.config, dict) else None
 
     def get_stop_requested(self, obj: TrainingRun) -> bool:

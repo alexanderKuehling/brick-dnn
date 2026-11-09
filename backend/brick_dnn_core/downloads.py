@@ -75,14 +75,20 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
     assert path is not None
     filename = training.weights_filename(run)
     module = inference.module_name(run.name)
+    classical = training.run_family(run) == "classical"
     info: dict[str, Any] = {
         "run": {"id": str(run.pk), "name": run.name, "status": run.status},
         **weights_link(request, run, user),
         "filename": filename,
         "size_bytes": path.stat().st_size,
         "format": (
-            "PyTorch state_dict of the class NeuralNetwork in model_code (torch.save); load it "
-            "with model.load_state_dict(torch.load(path, weights_only=True))."
+            "The fitted scikit-learn model saved with joblib: a dict with the Pipeline "
+            '(StandardScaler, then the model) under "model", and "columns", "target", '
+            '"task" and "class_names" (one per column of predict_proba). Load it with '
+            "joblib.load(path); it is a pickle, so only load files you trust."
+            if classical
+            else "PyTorch state_dict of the class NeuralNetwork in model_code (torch.save); "
+            "load it with model.load_state_dict(torch.load(path, weights_only=True))."
         ),
         "notes": [
             "The link works without logging in until it expires; treat it like a password.",
@@ -108,7 +114,14 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
         info["how_to_use"] = inference.usage_snippet(run.plan, preprocessing, module, filename)
     except inference.UnknownPreprocessing as exc:
         info["notes"].append(str(exc))
-    if code is not None:
+    if code is not None and classical:
+        info["notes"].append(
+            "The joblib file holds the whole fitted pipeline: model_code (make_model) is "
+            "only needed to fit it again. generate_pytorch_code gives the full scikit-learn "
+            f"script, whose --predict reads the file: python {module}.py --predict new.csv "
+            f"--save {filename}."
+        )
+    elif code is not None:
         info["notes"].append(
             "Save model_code as "
             f"{module}.py next to the weights; generate_pytorch_code gives the full script "

@@ -716,9 +716,11 @@ def test_run_lifecycle(auth_client, training_dir):
         "val_loss": 0.4,
         "val_accuracy": 0.9,
         "val_rmse": None,
+        "val_r2": None,
         "test_loss": None,
         "test_accuracy": None,
         "test_rmse": None,
+        "test_r2": None,
     }
     assert data["best"] == {"epoch": 1, "val_loss": 0.4, "val_accuracy": 0.9}
     assert data["has_weights"] is True
@@ -813,9 +815,11 @@ def test_metrics_are_those_of_the_kept_weights(auth_client, training_dir, settin
         "val_loss": 0.3,
         "val_accuracy": 0.7,
         "val_rmse": None,
+        "val_r2": None,
         "test_loss": 0.32,
         "test_accuracy": 0.69,
         "test_rmse": None,
+        "test_r2": None,
     }
     assert data["state"]["weights_epoch"] == 1 and data["state"]["stopped_early"] is True
 
