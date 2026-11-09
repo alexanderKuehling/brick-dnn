@@ -11,6 +11,7 @@ import sys
 import pytest
 
 from brickdnn import EXAMPLES, REGISTRY, analyze, generate_code, layer_specs
+from brickdnn.__main__ import main as brickdnn_main
 from brickdnn.classical import kernel_lines
 from brickdnn.layers import CATEGORIES, KernelExpr, combine
 
@@ -635,3 +636,14 @@ def test_make_model_matches_the_bricks(example_id):
             sum(1 for h in estimator.kernel.hyperparameters if not h.fixed)
             == analyze(EXAMPLES[example_id]["graph"]).total_params
         )
+
+
+def test_check_on_the_command_line(capsys):
+    assert brickdnn_main(["--example", "gp_regression", "--check"]) == 0
+    out = capsys.readouterr().out
+    assert "KernelSum" in out and "-> kernel" in out
+    assert "kernel: ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)" in out
+    assert "fitted: 3 kernel hyperparameters" in out
+    assert brickdnn_main(["--example", "svm_classifier", "--check"]) == 0
+    out = capsys.readouterr().out
+    assert "-> class" in out and "fitted: support vectors" in out

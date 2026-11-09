@@ -1,4 +1,4 @@
-"""Train a network from the command line (needs PyTorch).
+"""Train a network from the command line (needs PyTorch; classical models need scikit-learn).
 
 brickdnn train --example cnn_mnist --data mnist --epochs 5
 brickdnn train graph.json --data random                # demo data with a hidden rule

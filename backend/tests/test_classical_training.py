@@ -442,11 +442,14 @@ def write_job(run_dir, graph, path=None, **config):
     st.write_job(run_dir, {"name": "t", "graph": graph, "dataset": dataset, "config": config})
 
 
-def test_runner_fits_and_saves_a_joblib_model(tmp_path):
-    path = regression_csv(tmp_path / "data.csv")
+@pytest.mark.parametrize(
+    "model", ["GaussianProcessRegressor", "GaussianProcessClassifier", "SVR", "SVC"]
+)
+def test_runner_fits_and_saves_a_joblib_model(model, tmp_path):
+    regression = model in ("GaussianProcessRegressor", "SVR")
+    path = (regression_csv if regression else classification_csv)(tmp_path / "data.csv")
     run_dir = tmp_path / "run"
-    graph = model_graph("GaussianProcessRegressor")
-    write_job(run_dir, graph, path, seed=3, test_split=0.2)
+    write_job(run_dir, model_graph(model), path, seed=3, test_split=0.2)
     process = subprocess.run(
         [sys.executable, "-m", "brickdnn.training.runner", str(run_dir)],
         cwd=BACKEND,
@@ -458,8 +461,19 @@ def test_runner_fits_and_saves_a_joblib_model(tmp_path):
     state = st.read_state(run_dir)
     assert state["status"] == "completed", state["message"]
     assert state["family"] == "classical" and state["weights"] is True
+    assert state["task"] == ("regression" if regression else "classification")
     assert state["epochs"] == 1 and len(state["history"]) == 1 and state["weights_epoch"] == 1
-    assert state["test"]["r2"] is not None and state["classical"]["kernel"]
+    assert state["progress"] is None and state["preprocessing"]["kind"] == "tabular"
+    details = state["classical"]
+    assert details["estimator"] == model and details["fit_seconds"] is not None
+    if regression:
+        assert state["test"]["r2"] is not None and state["history"][0]["val_r2"] is not None
+    else:
+        assert state["test"]["accuracy"] is not None and state["class_names"]
+    if model.startswith("Gaussian"):
+        assert details["kernel"] and details["log_marginal_likelihood"] is not None
+    else:
+        assert details["support_vectors"] > 0
     assert sorted(p.name for p in run_dir.iterdir()) == [
         "job.json",
         "model.joblib",
