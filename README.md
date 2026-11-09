@@ -68,10 +68,19 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   weights; you decide whether it may change things or only look. Personal API tokens work
   for clients without OAuth and for scripts against the REST API. See
   [docs/mcp.md](docs/mcp.md).
+- **Classical models** next to the neural networks: **Gaussian process** regression and
+  classification with kernels you compose from bricks (RBF, Matérn, rational quadratic,
+  periodic, dot product, white noise and constant kernels, added and multiplied), and
+  **support vector machines** (SVR, SVC). They train on CSV files and prepared datasets with
+  scikit-learn (no PyTorch needed), report the fitted kernel and its log marginal likelihood
+  or the support vectors, predict with uncertainty (Gaussian processes) or class
+  probabilities, and export as a scikit-learn script. See
+  [docs/training.md](docs/training.md#classical-models).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
-  tabular regression, multi-input model.
+  tabular regression, multi-input model, Gaussian process regression, SVM classifier and a
+  periodic Gaussian process.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and
@@ -108,8 +117,9 @@ docker compose up -d
 ```
 
 Open <http://localhost:8080>. Data (accounts, saved networks, training runs) lives in the
-`brickdnn-data` volume. To enable training, build the image with PyTorch (CPU, about 1 GB more):
-`BRICKDNN_INSTALL_TORCH=true docker compose up -d --build`. To create an admin account for the Django admin at `/admin/`:
+`brickdnn-data` volume. To enable training of neural networks, build the image with PyTorch
+(CPU, about 1 GB more): `BRICKDNN_INSTALL_TORCH=true docker compose up -d --build`. Classical
+models (Gaussian processes, SVMs) train in the default image. To create an admin account for the Django admin at `/admin/`:
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
@@ -169,6 +179,13 @@ successful CI run on `main` (it needs the repository secret `HF_TOKEN`).
 5. Or press **Train**: choose the data and settings and train the network right away. When it is
    done, download the weights (`.pt`) and the script that loads them.
 
+For a **classical model**, connect the Input straight to a model from the *Classical ·
+scikit-learn* part of the palette (Gaussian process, SVR, SVC). Kernels flow along dashed
+connections into a *Kernel sum*, a *Kernel product* or the kernel input of a Gaussian
+process; select the Gaussian process or a kernel sum and click a kernel to plug it in. The
+inspector shows the resulting kernel as scikit-learn code. Training fits the model once and
+gives you the fitted model as a `.joblib` file.
+
 The exported file runs as is:
 
 ```bash
@@ -224,6 +241,8 @@ For graphs with branches, every layer gets its own variable (`added_1 = batchnor
 | Normalization | `BatchNorm1d`, `BatchNorm2d`, `LayerNorm`                                                |
 | Sequence      | `Embedding`, `PositionalEmbedding`, `RNN`, `LSTM`, `GRU`, `TransformerEncoder`, `SequencePool` |
 | Merge         | `Add` (residual connections), `Concat`                                                   |
+| Kernels       | `RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`, `DotProduct`, `WhiteKernel`, `ConstantKernel`, `KernelSum`, `KernelProduct` (for Gaussian processes) |
+| Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC` (scikit-learn) |
 
 Missing a layer? Adding one takes about 30 lines of Python, see
 [docs/adding-a-layer.md](docs/adding-a-layer.md). The UI picks it up automatically.
@@ -242,6 +261,7 @@ brickdnn my_network.json -o model.py --class-name MyNet
 pip install "brickdnn[train] @ git+https://github.com/alexanderKuehling/brick-dnn#subdirectory=backend"
 brickdnn train my_network.json --data mnist --epochs 5 --save weights.pt
 brickdnn train my_network.json --data houses.csv --test-split 0.2 --tune --trials 20
+brickdnn train --example gp_regression --data houses.csv   # classical: only needs "brickdnn[classic]"
 ```
 
 ```python
@@ -269,7 +289,8 @@ backend/   Django REST API: accounts (JWT), saved and shared networks, datasets,
    │          live editing: Django Channels (served by Daphne), Redis between the processes
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
-   ├── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
+   ├── brickdnn/training/   PyTorch training engine (optional) and scikit-learn engine for
+   │                        classical models, used by the runner and the CLI
    └── brickdnn/data/       data preparation with pandas: imports, steps, profiles, export
 ```
 
@@ -325,6 +346,9 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_DATA_URL_IMPORT`     | `true`                     | Set to `false` to switch imports from links off      |
 | `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false`                 | Allow links to private network addresses (trusted local installations only) |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
+| `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
+| `BRICKDNN_GPC_MAX_ROWS`        | `2000`                     | Training rows a Gaussian process classifier is fitted on at most |
+| `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
 | `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …) |
 | `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |

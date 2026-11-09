@@ -192,7 +192,9 @@ def training_info(request: Request) -> Response:
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def training_check(request: Request) -> Response:
-    """Check a network against a dataset before training: ``{"graph", "dataset"}``."""
+    """Check a network against a dataset before training: ``{"graph", "dataset",
+    "config"?}``. With ``config`` (the training settings), the checks that depend on them
+    are made too (e.g. Max. samples against the row limit of classical models)."""
     if (response := _disabled_response()) is not None:
         return response
     data = request.data if isinstance(request.data, dict) else {}
@@ -200,9 +202,10 @@ def training_check(request: Request) -> Response:
     try:
         training.validate_graph(graph)
         dataset = training.resolve_dataset(request.user, data.get("dataset"))
+        config = training.parse_config(data.get("config")) if "config" in data else None
     except training.TrainingInputError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(training.check(graph, dataset).to_dict())
+    return Response(training.check(graph, dataset, config).to_dict())
 
 
 class DatasetViewSet(
@@ -407,7 +410,8 @@ class TrainingRunViewSet(
         permission_classes=[permissions.AllowAny],  # checked below: login or signed link
     )
     def weights(self, request: Request, pk=None) -> Response | FileResponse:
-        """The trained weights (``model.state_dict()``) as a ``.pt`` file.
+        """The trained weights (``model.state_dict()``) as a ``.pt`` file; for a classical
+        model the fitted scikit-learn pipeline as a ``.joblib`` file.
 
         Logged in, or with ``?sig=`` from a download link (see downloads.py), which works
         without logging in until it expires.

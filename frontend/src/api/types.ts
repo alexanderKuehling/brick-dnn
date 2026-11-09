@@ -18,14 +18,37 @@ export interface ParamSpec {
   show_if: { param: string; value: ParamValue } | null;
 }
 
+/** What flows along a connection: data (a tensor) or the kernel of a Gaussian process. */
+export type OutputKind = 'tensor' | 'kernel';
+
+/** neural: PyTorch layer · classical: kernel or classical model (scikit-learn) · shared: Input. */
+export type LayerFamily = 'neural' | 'classical' | 'shared';
+
+/** One kind of incoming connection of a brick (e.g. "features" and "kernel" of a GP). */
+export interface InputSlot {
+  name: string;
+  label: string;
+  kind: OutputKind;
+  /** Connections of this kind the brick needs. */
+  min: number;
+  /** Connections of this kind it accepts; null: any number. */
+  max: number | null;
+}
+
 export interface LayerSpec {
   type: string;
   label: string;
   category: string;
   description: string;
   params: ParamSpec[];
+  /** All incoming connections together. */
   min_inputs: number;
   max_inputs: number | null;
+  /** The fields below are missing from older servers (see builder/kinds.ts for defaults). */
+  family?: LayerFamily;
+  output_kind?: OutputKind;
+  /** [] for bricks without inputs. */
+  input_slots?: InputSlot[];
 }
 
 export interface LayerCatalog {
@@ -58,12 +81,35 @@ export interface Issue {
   message: string;
 }
 
+export type ClassicalTask = 'regression' | 'classification';
+
 export interface NodeAnalysis {
   type: string;
+  /** Null for kernels and classifiers (the classes come from the data) and on errors. */
   output_shape: number[] | null;
   dtype: 'float' | 'long' | null;
+  /**
+   * Trainable parameters; kernels count the hyperparameters a Gaussian process optimises.
+   * Null when unknown before training (SVR, SVC).
+   */
   num_params: number | null;
   params: Params | null;
+  /** What its outgoing connections carry (missing from older servers: tensor). */
+  output_kind?: OutputKind;
+  /** Kernel bricks and Gaussian processes: the kernel as scikit-learn code. */
+  kernel?: string | null;
+  /** Classical models: what they predict. */
+  task?: ClassicalTask | null;
+}
+
+/** The classical model of a network (a Gaussian process or support vector machine). */
+export interface ClassicalModelInfo {
+  node: string;
+  type: string;
+  estimator: string;
+  task: ClassicalTask;
+  /** Gaussian processes: the kernel they start from (the default one without kernel bricks). */
+  kernel: string | null;
 }
 
 export interface Analysis {
@@ -73,7 +119,11 @@ export interface Analysis {
   nodes: Record<string, NodeAnalysis>;
   inputs: string[];
   outputs: string[];
+  /** Null when a layer has an unknown count (SVR, SVC) or the network has errors. */
   total_params: number | null;
+  /** classical: the network contains kernels or a classical model (missing: neural). */
+  family?: 'neural' | 'classical';
+  classical?: ClassicalModelInfo | null;
 }
 
 export interface Example {
@@ -425,6 +475,21 @@ export interface TrainingStatus {
   login_required: boolean;
   /** Limits of the hyperparameter search (missing on servers without it). */
   tuning?: TuningLimits;
+  /**
+   * Classical models (scikit-learn). `available` and `reason` above are about PyTorch;
+   * classical models train without it. Missing on older servers.
+   */
+  classical?: ClassicalCapabilities;
+}
+
+export interface ClassicalCapabilities {
+  available: boolean;
+  reason: string | null;
+  sklearn_version: string | null;
+  /** Training rows each model type is fitted on at most (larger sets are subsampled). */
+  max_rows: Record<string, number>;
+  /** Hyperparameter search for classical models (not yet). */
+  tuning: boolean;
 }
 
 export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images';
@@ -494,6 +559,19 @@ export interface TrainingPlan {
   num_classes: number | null;
   class_names: string[] | null;
   notes: string[];
+  /** Classical models: what is fitted (missing for neural networks and older runs). */
+  classical?: ClassicalPlan | null;
+}
+
+export interface ClassicalPlan {
+  node: string;
+  type: string;
+  estimator: string;
+  label: string;
+  task: ClassicalTask;
+  kernel: string | null;
+  scale: string;
+  max_rows: number;
 }
 
 /**
@@ -649,6 +727,8 @@ export interface TestResult {
   loss: number | null;
   accuracy: number | null;
   rmse: number | null;
+  /** Classical regression only. */
+  r2?: number | null;
 }
 
 /**
@@ -664,6 +744,9 @@ export interface RunMetrics {
   test_loss?: number | null;
   test_accuracy?: number | null;
   test_rmse?: number | null;
+  /** Coefficient of determination: classical regression only (null otherwise). */
+  val_r2?: number | null;
+  test_r2?: number | null;
 }
 
 export interface BestEpoch {
@@ -701,6 +784,8 @@ export interface RunSummary {
   project: number | null;
   /** Username of who started it. */
   started_by: string;
+  /** classical: a scikit-learn model, fitted once (epochs 1). Missing on older servers. */
+  family?: 'neural' | 'classical';
 }
 
 /** One finished epoch. Accuracies are null for regression, which reports val_rmse instead. */
@@ -711,6 +796,8 @@ export interface HistoryEntry {
   train_accuracy?: number | null;
   val_accuracy?: number | null;
   val_rmse?: number | null;
+  /** Classical regression only. */
+  val_r2?: number | null;
   seconds?: number | null;
 }
 
@@ -765,6 +852,39 @@ export interface RunState {
   /** Every started trial, in order. */
   trials?: TrialEntry[];
   best_trial?: number | null;
+  family?: 'neural' | 'classical';
+  /** What the fit of a classical model found (null for neural networks). */
+  classical?: ClassicalRunState | null;
+}
+
+/** The metrics of a fitted classical model on some rows. */
+export interface ClassicalMetrics {
+  loss: number | null;
+  accuracy: number | null;
+  rmse: number | null;
+  r2: number | null;
+}
+
+export interface ClassicalRunState {
+  estimator: string;
+  /** E.g. "Gaussian process regression". */
+  label: string;
+  /** Training rows the model is fitted on at most on this server. */
+  max_rows: number;
+  /** Training rows it was fitted on. */
+  rows: number | null;
+  /** Training rows before the row limit applied (null: not subsampled). */
+  subsampled_from: number | null;
+  fit_seconds: number | null;
+  /** Gaussian processes: the kernel the fit started from and the fitted one. */
+  initial_kernel: string | null;
+  /** A classifier with more than two classes: one per class ("setosa: …; versicolor: …"). */
+  kernel: string | null;
+  log_marginal_likelihood: number | null;
+  /** SVMs: the number of support vectors. */
+  support_vectors: number | null;
+  /** The metrics on the training rows. */
+  train: ClassicalMetrics | null;
 }
 
 export interface RunDetail extends RunSummary {

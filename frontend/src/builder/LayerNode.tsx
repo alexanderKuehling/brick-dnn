@@ -1,14 +1,28 @@
 import { memo } from 'react';
 import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useNodeConnections, type NodeProps } from '@xyflow/react';
 import { Text, Tooltip } from '@mantine/core';
 import { CommentMarker } from '@/comments/CommentMarker';
 import { useRemoteSelection } from '@/live/presence';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
-import { formatCount, formatShape, summarize } from './format';
+import { formatCount, formatOutput, hyperparameters, summarize } from './format';
 import type { LayerFlowNode } from './graph';
+import { inputSlots, isClassicalSpec, isKernelNode, slotHandle } from './kinds';
 import classes from './LayerNode.module.css';
+
+/** Vertical position (percent) of the input handle `index` of `count`. */
+function handleTop(index: number, count: number): string {
+  return `${Math.round(36 + (index * 40) / Math.max(1, count - 1))}%`;
+}
+
+/** What the footer says about the parameters: a count, hyperparameters, or nothing. */
+function paramsText(count: number | null | undefined, classical: boolean): string | null {
+  if (!count) {
+    return null;
+  }
+  return classical ? hyperparameters(count) : `${formatCount(count)} params`;
+}
 
 function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
   const { specs, analysis, errorsByNode, warningsByNode, presence } = useBuilder();
@@ -18,6 +32,17 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
   const warnings = warningsByNode[id] ?? [];
   const color = categoryColor(spec?.category);
   const params = info?.params ?? data.params;
+  const slots = inputSlots(spec);
+  const kernel = isKernelNode(spec, info);
+  const classical = isClassicalSpec(spec);
+  // Gaussian processes: is a kernel connected, or do they use their default kernel?
+  const kernelConnections = useNodeConnections({ handleType: 'target', handleId: 'kernel' });
+  const output = formatOutput(info, kernel);
+  const outputTitle = kernel
+    ? 'Output: a kernel for a Gaussian process'
+    : output === 'classes from data'
+      ? 'One class per sample; the classes come from the training data'
+      : 'Output shape (batch dimension omitted)';
   // Live editing: others who have this layer selected (outline and name tag in their colour).
   const remote = useRemoteSelection(presence ?? null, id);
 
@@ -41,11 +66,24 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
           {remote.length > 1 && ` +${remote.length - 1}`}
         </span>
       )}
-      {spec?.max_inputs !== 0 && (
-        <Handle type="target" position={Position.Left} className={classes.handle} />
-      )}
+      {slots.map((slot, index) => (
+        <Handle
+          key={slot.name}
+          type="target"
+          position={Position.Left}
+          id={slotHandle(slots, slot)}
+          className={classes.handle}
+          data-kind={slot.kind}
+          style={slots.length > 1 ? { top: handleTop(index, slots.length) } : undefined}
+          title={slots.length > 1 ? `${slot.label} (${slot.kind})` : undefined}
+        >
+          {slots.length > 1 && (
+            <span className={classes.slotLabel}>{slot.label.toLowerCase()}</span>
+          )}
+        </Handle>
+      ))}
       <div className={classes.header}>
-        <span className={classes.dot} />
+        <span className={classes.dot} data-kernel={kernel || undefined} />
         <span className={classes.title}>{data.name || spec?.label || data.type}</span>
         {data.name && (
           <Text size="xs" c="dimmed">
@@ -66,7 +104,12 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
       </div>
       <div className={classes.body}>
         <Text size="sm" c="dimmed" truncate="end">
-          {spec ? summarize(data.type, params) || ' ' : `Unknown layer "${data.type}"`}
+          {spec
+            ? summarize(data.type, params, {
+                info,
+                kernelConnected: kernelConnections.length > 0,
+              }) || ' '
+            : `Unknown layer "${data.type}"`}
         </Text>
         {errors[0] && (
           <Text size="xs" c="red" mt={4} lineClamp={3}>
@@ -74,13 +117,24 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
           </Text>
         )}
         <div className={classes.footer}>
-          <span className={classes.shape} title="Output shape (batch dimension omitted)">
-            {info?.output_shape ? formatShape(info.output_shape) : '?'}
+          <span
+            className={classes.shape}
+            title={outputTitle}
+            data-kind={kernel ? 'kernel' : undefined}
+          >
+            {output}
           </span>
-          {Boolean(info?.num_params) && <span>{formatCount(info?.num_params)} params</span>}
+          {paramsText(info?.num_params, classical) && (
+            <span>{paramsText(info?.num_params, classical)}</span>
+          )}
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className={classes.handle} />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className={classes.handle}
+        data-kind={kernel ? 'kernel' : 'tensor'}
+      />
     </div>
   );
 }

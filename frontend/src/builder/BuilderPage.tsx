@@ -12,6 +12,7 @@ import {
   useReactFlow,
   type Connection,
   type Edge,
+  type FinalConnectionState,
   type XYPosition,
 } from '@xyflow/react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -56,13 +57,21 @@ import { BuilderContext, groupIssues, type BuilderContextValue } from './Builder
 import { ConflictDialog, type ConflictChoice } from './ConflictDialog';
 import { downloadText } from './download';
 import { loadDraft, saveDraft, type Draft } from './draft';
-import { EDGE_DEFAULTS, makeEdge, miniMapColor, nodeTypes, withEdgeStyle } from './flow';
+import {
+  EDGE_DEFAULTS,
+  makeEdge,
+  miniMapColor,
+  nodeTypes,
+  useDecoratedEdges,
+  withEdgeStyle,
+} from './flow';
 import {
   autoLayout,
   createNode,
   freePosition,
   fromDocument,
   LAYER_SPACING_X,
+  LAYER_SPACING_Y,
   newId,
   parseGraphFile,
   semanticKey,
@@ -73,6 +82,7 @@ import {
   type LayerNodeData,
 } from './graph';
 import { Inspector } from './Inspector';
+import { connectionProblem, inputSlots, networkFamily, outputKind, slotFor } from './kinds';
 import { Palette } from './Palette';
 import type { Point } from './pointerDrag';
 import { Toolbar } from './Toolbar';
@@ -172,6 +182,8 @@ function Builder() {
     [catalog]
   );
   const doc = useMemo(() => toDocument(nodes, edges), [nodes, edges]);
+  // Connections end at the input that takes what they carry; kernel connections are dashed.
+  const displayEdges = useDecoratedEdges(edges, nodes, specs);
   const { analysis, loading: analyzing, error: analysisError } = useAnalysis(doc);
   // Trainings of a saved network belong to it: its members see them (viewers cannot train).
   const training = useTraining(Boolean(user), {
@@ -452,15 +464,50 @@ function Builder() {
     [setNodes]
   );
 
+  /** The type of a layer on the canvas ('' if there is none with this id). */
+  const typeOf = useCallback(
+    (id: string) => nodes.find((node) => node.id === id)?.data.type ?? '',
+    [nodes]
+  );
+
+  /** Whether `target` can take one more kernel (a Gaussian process takes one). */
+  const takesAnotherKernel = useCallback(
+    (target: LayerFlowNode) => {
+      const slot = slotFor(inputSlots(specs[target.data.type]), 'kernel');
+      if (!slot || slot.kind !== 'kernel') {
+        return false;
+      }
+      const kernels = edges.filter(
+        (edge) => edge.target === target.id && outputKind(specs[typeOf(edge.source)]) === 'kernel'
+      );
+      return slot.max === null || kernels.length < slot.max;
+    },
+    [edges, specs, typeOf]
+  );
+
   const addLayer = useCallback(
     (spec: LayerSpec, dropPosition?: XYPosition) => {
       const anchor = dropPosition
         ? null
         : (nodes.find((node) => node.selected) ?? nodes[nodes.length - 1] ?? null);
+      // A new layer is appended after the anchor if it takes what the anchor puts out. A
+      // kernel has no inputs: it goes into the anchor if that takes kernels (a kernel sum,
+      // a Gaussian process without a kernel).
+      const appends =
+        anchor !== null &&
+        inputSlots(spec).length > 0 &&
+        connectionProblem(specs[anchor.data.type], spec) === null;
+      const feeds =
+        anchor !== null && !appends && outputKind(spec) === 'kernel' && takesAnotherKernel(anchor);
       let position: XYPosition;
       if (dropPosition) {
         position = dropPosition;
-      } else if (spec.max_inputs === 0) {
+      } else if (anchor && feeds) {
+        position = freePosition(nodes, {
+          x: anchor.position.x - LAYER_SPACING_X,
+          y: anchor.position.y + LAYER_SPACING_Y,
+        });
+      } else if (inputSlots(spec).length === 0) {
         const left = Math.min(0, ...nodes.map((node) => node.position.x));
         position = freePosition(nodes, { x: left, y: 0 });
       } else if (anchor) {
@@ -473,8 +520,10 @@ function Builder() {
       }
       const node = { ...createNode(spec, position), selected: true };
       setNodes((current) => [...current.map((n) => ({ ...n, selected: false })), node]);
-      if (anchor && !dropPosition && spec.max_inputs !== 0) {
+      if (anchor && appends) {
         setEdges((current) => [...current, makeEdge(anchor.id, node.id)]);
+      } else if (anchor && feeds) {
+        setEdges((current) => [...current, makeEdge(node.id, anchor.id)]);
       }
       palette.close();
 
@@ -496,7 +545,7 @@ function Builder() {
         }
       }
     },
-    [nodes, setNodes, setEdges, palette, flow]
+    [nodes, specs, takesAnotherKernel, setNodes, setEdges, palette, flow]
   );
 
   const updateNode = useCallback(
@@ -586,23 +635,59 @@ function Builder() {
       if (!source || !target) {
         return;
       }
+      const slots = inputSlots(specs[typeOf(target)]);
+      const kind = outputKind(specs[typeOf(source)]);
+      const slot = slotFor(slots, kind, slots.length > 1 ? connection.targetHandle : null);
       setEdges((current) => {
         let next = current.filter((e) => !(e.source === source && e.target === target));
-        // Layers with a single input: a new connection replaces the old one.
-        if (specs[nodes.find((n) => n.id === target)?.data.type ?? '']?.max_inputs === 1) {
-          next = next.filter((e) => e.target !== target);
+        // An input that takes one connection (e.g. of most layers, or the features of a
+        // Gaussian process): a new connection replaces the old one.
+        if (slot?.max === 1) {
+          next = next.filter(
+            (e) =>
+              e.target !== target ||
+              (slots.length > 1 && outputKind(specs[typeOf(e.source)]) !== slot.kind)
+          );
         }
         return [...next, makeEdge(source, target)];
       });
     },
-    [setEdges, specs, nodes]
+    [setEdges, specs, typeOf]
   );
 
   const isValidConnection = useCallback(
     (connection: Edge | Connection) =>
       connection.source !== connection.target &&
-      !wouldCreateCycle(edges, connection.source, connection.target),
-    [edges]
+      !wouldCreateCycle(edges, connection.source, connection.target) &&
+      // A kernel into a data input or data into a kernel input (the analysis checks the rest).
+      connectionProblem(
+        specs[typeOf(connection.source)],
+        specs[typeOf(connection.target)],
+        connection.targetHandle
+      ) === null,
+    [edges, specs, typeOf]
+  );
+
+  /** Says why a connection of the wrong kind was refused. */
+  const onConnectEnd = useCallback(
+    (_event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+      const { fromNode, toNode, fromHandle, toHandle } = state;
+      if (state.isValid !== false || !fromNode || !toNode || !fromHandle || !toHandle) {
+        return;
+      }
+      const fromSource = fromHandle.type === 'source';
+      const source = fromSource ? fromNode : toNode;
+      const target = fromSource ? toNode : fromNode;
+      const problem = connectionProblem(
+        specs[typeOf(source.id)],
+        specs[typeOf(target.id)],
+        (fromSource ? toHandle : fromHandle).id
+      );
+      if (problem) {
+        notifications.show({ id: `connection:${problem}`, color: 'yellow', message: problem });
+      }
+    },
+    [specs, typeOf]
   );
 
   const dropLayer = useCallback(
@@ -1008,12 +1093,13 @@ function Builder() {
           <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }}>
             <ReactFlow<LayerFlowNode, Edge>
               nodes={live.displayNodes}
-              edges={edges}
+              edges={displayEdges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={readOnly ? undefined : onConnect}
               isValidConnection={isValidConnection}
+              onConnectEnd={readOnly ? undefined : onConnectEnd}
               nodesDraggable={!readOnly}
               nodesConnectable={!readOnly}
               defaultEdgeOptions={EDGE_DEFAULTS}
@@ -1119,6 +1205,7 @@ function Builder() {
             filename={filename}
             options={codeOptions}
             onOptionsChange={setCodeOptions}
+            family={networkFamily(analysis)}
           />
         </Suspense>
       )}

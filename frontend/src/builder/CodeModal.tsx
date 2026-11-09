@@ -27,6 +27,8 @@ interface CodeModalProps {
   filename: string;
   options: GenerateOptions;
   onOptionsChange: (options: GenerateOptions) => void;
+  /** classical: the network is a scikit-learn model (a Gaussian process or an SVM). */
+  family?: 'neural' | 'classical';
 }
 
 export default function CodeModal({
@@ -36,7 +38,9 @@ export default function CodeModal({
   filename,
   options,
   onOptionsChange,
+  family = 'neural',
 }: CodeModalProps) {
+  const classical = family === 'classical';
   const [debounced] = useDebouncedValue(options, 300);
   const key = useMemo(() => semanticKey(doc), [doc]);
   const [code, setCode] = useState<string | null>(null);
@@ -71,7 +75,7 @@ export default function CodeModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title="PyTorch code"
+      title={classical ? 'scikit-learn code' : 'PyTorch code'}
       size="xl"
       fullScreen={fullScreen}
       styles={
@@ -84,14 +88,17 @@ export default function CodeModal({
       }
     >
       <Group align="flex-end" mb="md" gap="md">
-        <TextInput
-          label="Class name"
-          value={options.class_name ?? ''}
-          onChange={(event) =>
-            onOptionsChange({ ...options, class_name: event.currentTarget.value })
-          }
-          w={220}
-        />
+        {/* A classical model is built by make_model(): there is no class to name. */}
+        {!classical && (
+          <TextInput
+            label="Class name"
+            value={options.class_name ?? ''}
+            onChange={(event) =>
+              onOptionsChange({ ...options, class_name: event.currentTarget.value })
+            }
+            w={220}
+          />
+        )}
         <Switch
           label="Runnable script (__main__)"
           checked={options.include_main ?? true}
@@ -100,7 +107,7 @@ export default function CodeModal({
           }
         />
         <Switch
-          label="CSV training loop"
+          label={classical ? 'Fit to a CSV file (--csv)' : 'CSV training loop'}
           disabled={options.include_main === false}
           checked={options.include_training ?? true}
           onChange={(event) =>
@@ -109,8 +116,9 @@ export default function CodeModal({
         />
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
-        The training loop is added for models with one flat input and one flat output (tabular
-        data).
+        {classical
+          ? 'make_model() returns a scikit-learn pipeline that standardises the features. The script fits it to a CSV file, saves it with joblib (--save) and predicts new rows (--predict), also with a model trained in Brick DNN.'
+          : 'The training loop is added for models with one flat input and one flat output (tabular data).'}
       </Text>
 
       {error && (

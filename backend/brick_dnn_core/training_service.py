@@ -4,6 +4,8 @@ Every run is trained by its own process (``python -m brickdnn.training.runner <r
 so the web server never imports PyTorch. The API writes ``job.json`` into the run
 directory, starts the process and afterwards only looks at the files the process writes
 (``state.json``, ``weights.pt``). See :mod:`brickdnn.training.state` for the file format.
+Classical models (Gaussian processes, SVMs) are fitted with scikit-learn by the same
+runner and saved as ``model.joblib``; they need scikit-learn, not PyTorch.
 Predictions with the trained weights also run in a process of their own
 (``python -m brickdnn.training.predict <run_dir>``), one per request.
 """
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import importlib.metadata
 import json
 import logging
 import math
@@ -39,7 +42,8 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from brickdnn import analyze
+from brickdnn import REGISTRY, Analysis, analyze
+from brickdnn.layers import ClassicalModel
 from brickdnn.training import (
     ACTIVE_STATUSES,
     BUILTIN_DATASETS,
@@ -56,16 +60,18 @@ from brickdnn.training import (
     inspect_csv,
     inspect_image_folder,
     random_info,
+    sklearn_installed,
     torch_installed,
     torchvision_installed,
 )
-from brickdnn.training.config import ConfigError
+from brickdnn.training.config import ConfigError, classical_max_rows
+from brickdnn.training.job import graph_family
 from brickdnn.training.state import (
     LOG_FILE,
-    WEIGHTS_FILE,
     is_stale,
     read_state,
     request_stop,
+    weights_file,
     write_job,
 )
 from brickdnn.training.tuning import (
@@ -92,6 +98,14 @@ NO_TORCH_REASON = (
     "PyTorch is not installed on the server. Run `pip install torch torchvision` in the "
     "backend environment (Docker: build with BRICKDNN_INSTALL_TORCH=true)."
 )
+NO_SKLEARN_REASON = (
+    "scikit-learn is not installed on the server, which classical models (Gaussian processes, "
+    "support vector machines) need. Run `pip install scikit-learn` in the backend environment."
+)
+NO_TUNING_MESSAGE = (
+    "Hyperparameter search is not available for classical models yet. Switch it off: a "
+    "Gaussian process optimises its kernel hyperparameters while it is fitted."
+)
 BUSY_MESSAGE = "Another training is still running. Stop it or wait until it finishes."
 UNEXPECTED_MESSAGE = "The training process stopped unexpectedly."
 NOT_STARTED_MESSAGE = "The training process did not start."
@@ -114,8 +128,14 @@ STOP_TIMEOUT_SECONDS = 30
 # A stale heartbeat must still be stale this long after it was first noticed before the
 # run is given up. Wall-clock based heartbeats look stale right after a laptop wakes up.
 STALE_GRACE_SECONDS = 15
-METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse")
-TEST_KEYS = {"test_loss": "loss", "test_accuracy": "accuracy", "test_rmse": "rmse"}
+# val_r2 and test_r2: classical regression only (None otherwise)
+METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse", "val_r2")
+TEST_KEYS = {
+    "test_loss": "loss",
+    "test_accuracy": "accuracy",
+    "test_rmse": "rmse",
+    "test_r2": "r2",
+}
 TRIAL_KEYS = ("trial", "params", "val_loss", "val_accuracy", "val_rmse", "weights_epoch")
 
 # Training processes started by this server process, by run id. A daemon thread waits
@@ -250,13 +270,46 @@ def probe() -> dict[str, Any]:
     return data
 
 
-def unavailable_reason() -> str | None:
-    """Why runs cannot be started right now (cheap: does not run the probe)."""
+def unavailable_reason(family: str = "neural") -> str | None:
+    """Why runs of neural networks (PyTorch) or ``classical`` models (scikit-learn) cannot
+    be started right now (cheap: does not run the probe)."""
     if not settings.TRAINING_ENABLED:
         return DISABLED_REASON
+    if family == "classical":
+        return None if sklearn_installed() else NO_SKLEARN_REASON
     if not torch_installed():
         return NO_TORCH_REASON
     return None
+
+
+def run_family(run: TrainingRun) -> str:
+    """``classical`` for a run of a classical model (scikit-learn), else ``neural``."""
+    plan = run.plan if isinstance(run.plan, dict) else {}
+    return "classical" if isinstance(plan.get("classical"), dict) else "neural"
+
+
+def _sklearn_version() -> str | None:
+    try:
+        return importlib.metadata.version("scikit-learn")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def classical_capabilities() -> dict[str, Any]:
+    """Whether classical models can be trained here (needs scikit-learn, not PyTorch)."""
+    reason = unavailable_reason("classical")
+    return {
+        "available": reason is None,
+        "reason": reason,
+        "sklearn_version": _sklearn_version() if reason is None else None,
+        # Training rows each classical model is fitted on at most (more are subsampled).
+        "max_rows": {
+            name: classical_max_rows(layer.limit)
+            for name, layer in REGISTRY.items()
+            if issubclass(layer, ClassicalModel)
+        },
+        "tuning": False,
+    }
 
 
 def capabilities() -> dict[str, Any]:
@@ -291,6 +344,8 @@ def capabilities() -> dict[str, Any]:
             "max_values": MAX_VALUES,
             "default": TuningConfig().to_dict(),
         },
+        # Classical models (scikit-learn): "available" above is about PyTorch.
+        "classical": classical_capabilities(),
     }
 
 
@@ -425,9 +480,30 @@ def resolve_dataset(user, ref: Any) -> ResolvedDataset:
     raise TrainingInputError("Unknown dataset type. Use 'random', 'builtin' or 'upload'.")
 
 
-def check(graph: Any, dataset: ResolvedDataset) -> Compatibility:
-    """check_compatibility() plus checks that depend on this server."""
-    result = check_compatibility(graph, dataset.info)
+def parse_config(config: Any) -> TrainingConfig | None:
+    """Training settings from a request (None stays None). Raises
+    :class:`TrainingInputError`."""
+    if config is None:
+        return None
+    try:
+        return TrainingConfig.from_dict(config)
+    except ConfigError as exc:
+        raise TrainingInputError(str(exc)) from None
+
+
+def check(
+    graph: Any, dataset: ResolvedDataset, config: TrainingConfig | None = None
+) -> Compatibility:
+    """check_compatibility() plus checks that depend on this server. For a graph document
+    (not an :class:`Analysis`), the result suggests fixes as well."""
+    result = check_compatibility(graph, dataset.info, config)
+    family = graph.family if isinstance(graph, Analysis) else graph_family(graph)
+    if family == "classical":
+        reason = unavailable_reason("classical")
+        if reason is not None and reason != DISABLED_REASON:
+            result.errors.insert(0, reason)
+            result.plan = None
+        return result
     if dataset.info.kind == "builtin" and not torchvision_installed():
         result.errors.insert(
             0,
@@ -493,7 +569,8 @@ def start_run(
     hyperparameter search. Raises :class:`TrainingUnavailable`, :class:`TrainingInputError`
     (also for ``ConfigError``), :class:`IncompatibleNetwork` or :class:`TrainingBusy`.
     """
-    reason = unavailable_reason()
+    family = graph_family(graph)
+    reason = unavailable_reason(family)
     if reason:
         raise TrainingUnavailable(reason)
 
@@ -519,9 +596,11 @@ def start_run(
         search = TuningConfig.from_dict(tuning) if tuning is not None else None
     except ConfigError as exc:
         raise TrainingInputError(str(exc)) from None
+    if family == "classical" and search is not None:
+        raise TrainingInputError(NO_TUNING_MESSAGE)
     dataset = resolve_dataset(user, dataset_ref)
     analysis = analyze(graph)
-    compatibility = check(analysis, dataset)
+    compatibility = check(analysis, dataset, training_config)
     if not compatibility.ok:
         raise IncompatibleNetwork(compatibility)
     assert compatibility.plan is not None
@@ -672,7 +751,7 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
         number = state.get("best_trial")
         best = next((t for t in trials if number is not None and t.get("trial") == number), None)
         run.best_trial = {key: best.get(key) for key in TRIAL_KEYS} if best else None
-    run.has_weights = bool(state.get("weights")) and (run_dir(run.pk) / WEIGHTS_FILE).is_file()
+    run.has_weights = bool(state.get("weights")) and _weights_file(run).is_file()
     total = state.get("total_params")
     if isinstance(total, int) and not isinstance(total, bool):
         run.total_params = total
@@ -717,7 +796,7 @@ def _finish(run: TrainingRun, status: str, message: str, with_log: bool = False)
     run.message = message
     if run.finished_at is None:
         run.finished_at = timezone.now()
-    run.has_weights = run.has_weights and (run_dir(run.pk) / WEIGHTS_FILE).is_file()
+    run.has_weights = run.has_weights and _weights_file(run).is_file()
 
 
 def _is_own_child(run: TrainingRun) -> bool:
@@ -922,13 +1001,20 @@ def state_of(run: TrainingRun) -> dict[str, Any] | None:
     return state
 
 
+def _weights_file(run: TrainingRun) -> Path:
+    """``weights.pt``, or ``model.joblib`` for classical models (see state.py)."""
+    return run_dir(run.pk) / weights_file(run_family(run))
+
+
 def weights_path(run: TrainingRun) -> Path | None:
-    path = run_dir(run.pk) / WEIGHTS_FILE
+    path = _weights_file(run)
     return path if run.has_weights and path.is_file() else None
 
 
 def weights_filename(run: TrainingRun) -> str:
-    return (slugify(run.name) or "weights") + ".pt"
+    """Download name: ``<run>.pt``, or ``<run>.joblib`` for a fitted classical model."""
+    suffix = ".joblib" if run_family(run) == "classical" else ".pt"
+    return (slugify(run.name) or ("model" if suffix == ".joblib" else "weights")) + suffix
 
 
 def no_weights_reason(run: TrainingRun) -> str:
@@ -962,7 +1048,7 @@ def prepare_prediction(
     """Check that ``run`` can predict and prepare ``inputs`` like its training data (cheap:
     no process is started). Raises :class:`TrainingUnavailable`,
     :class:`PredictionUnavailable` or :class:`TrainingInputError`."""
-    reason = unavailable_reason()
+    reason = unavailable_reason(run_family(run))
     if reason:
         raise TrainingUnavailable(reason)
     if weights_path(run) is None:
@@ -994,10 +1080,16 @@ def run_prediction(prediction: Prediction) -> dict[str, Any]:
     """
     run, prepared = prediction.run, prediction.inputs
     with _prediction_slot():
-        result = _predict_process(run, {"inputs": prepared.tensors})
+        result = _predict_process(run, {"inputs": prepared.tensors, "kind": prepared.kind})
     try:
         predictions = inference.read_outputs(
-            run.plan, prediction.preprocessing, result["outputs"], prepared.count, prepared.top_k
+            run.plan,
+            prediction.preprocessing,
+            result["outputs"],
+            prepared.count,
+            prepared.top_k,
+            probabilities=bool(result.get("probabilities")),
+            std=result.get("std"),
         )
     except ValueError as exc:
         raise PredictionFailed(str(exc)) from None
@@ -1013,6 +1105,11 @@ def run_prediction(prediction: Prediction) -> dict[str, Any]:
         answer["target"] = prediction.preprocessing.get("target")
     if prepared.kind == "demo":
         answer["note"] = "Trained on random demo data: the predictions mean nothing."
+    if result.get("std") is not None:
+        answer["std_note"] = (
+            "std is the Gaussian process's predictive standard deviation, in the units of "
+            "the target: how uncertain each prediction is."
+        )
     return answer
 
 

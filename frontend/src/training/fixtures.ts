@@ -295,3 +295,249 @@ export function dataset(overrides: Partial<Dataset> = {}): Dataset {
     ...overrides,
   };
 }
+
+// --------------------------------------------------------------------------
+// Classical models (scikit-learn)
+// --------------------------------------------------------------------------
+
+/** A server without PyTorch: only classical models can be trained. */
+export const CLASSICAL_STATUS: TrainingStatus = {
+  ...STATUS,
+  available: false,
+  reason: 'PyTorch is not installed on the server.',
+  torch_version: null,
+  torchvision: false,
+  devices: [],
+  default_device: null,
+  classical: {
+    available: true,
+    reason: null,
+    sklearn_version: '1.9.1',
+    max_rows: {
+      GaussianProcessRegressor: 5000,
+      GaussianProcessClassifier: 2000,
+      SVR: 50000,
+      SVC: 50000,
+    },
+    tuning: false,
+  },
+};
+
+/** Input → Gaussian process regression with RBF + WhiteKernel (see GP_ANALYSIS). */
+export const GP_DOC: GraphDocument = {
+  version: 1,
+  nodes: [
+    { id: 'in', type: 'Input', params: { shape: [8] }, position: { x: 0, y: 0 } },
+    { id: 'rbf', type: 'RBF', params: { length_scale: 1 }, position: { x: 0, y: 170 } },
+    { id: 'noise', type: 'WhiteKernel', params: { noise_level: 0.1 }, position: { x: 0, y: 340 } },
+    { id: 'sum', type: 'KernelSum', params: {}, position: { x: 300, y: 250 } },
+    { id: 'gp', type: 'GaussianProcessRegressor', params: {}, position: { x: 600, y: 0 } },
+  ],
+  edges: [
+    { id: 'e1', source: 'in', target: 'gp' },
+    { id: 'e2', source: 'rbf', target: 'sum' },
+    { id: 'e3', source: 'noise', target: 'sum' },
+    { id: 'e4', source: 'sum', target: 'gp' },
+  ],
+};
+
+const GP_KERNEL =
+  'ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)';
+
+/** A finished Gaussian process regression on a CSV file (as the server reports it). */
+export function gpDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const metrics = {
+    train_loss: 0.0064,
+    val_loss: 0.0397,
+    val_accuracy: null,
+    val_rmse: 9.6824,
+    val_r2: 0.96496,
+    test_loss: 0.05,
+    test_accuracy: null,
+    test_rmse: 10.21,
+    test_r2: 0.9512,
+  };
+  const base = detail({
+    name: 'House prices GP',
+    status: 'completed',
+    message: 'Finished: validation RMSE 9.682, R² 0.965. Fitted on 640 rows in 0.8 s.',
+    dataset: { kind: 'upload', id: 1, name: 'houses' },
+    config: { ...CONFIG, test_split: 0.2 },
+    task: 'regression',
+    family: 'classical',
+    epochs: 1,
+    epochs_done: 1,
+    metrics,
+    best: { epoch: 1, val_loss: 0.0397, val_accuracy: null },
+    has_weights: true,
+    total_params: 3,
+    finished_at: '2026-10-28T10:00:02Z',
+  });
+  return {
+    ...base,
+    graph: GP_DOC,
+    plan: {
+      task: 'regression',
+      summary:
+        "Regression: predict 'price' from 8 features (1,000 rows) with GaussianProcessRegressor.",
+      inputs: [{ shape: [8], dtype: 'float', vocab: null }],
+      targets: [{ kind: 'value', shape: [1] }],
+      image: null,
+      num_classes: null,
+      class_names: null,
+      notes: [],
+      classical: {
+        node: 'gp',
+        type: 'GaussianProcessRegressor',
+        estimator: 'GaussianProcessRegressor',
+        label: 'Gaussian process regression',
+        task: 'regression',
+        kernel: GP_KERNEL,
+        scale: 'gaussian_process',
+        max_rows: 5000,
+      },
+    },
+    state: {
+      ...base.state!,
+      status: 'completed',
+      message: base.message,
+      finished_at: 1761645602,
+      device: 'cpu',
+      device_label: 'CPU (scikit-learn)',
+      family: 'classical',
+      task: 'regression',
+      num_classes: null,
+      class_names: null,
+      train_size: 640,
+      val_size: 160,
+      test_size: 200,
+      epochs: 1,
+      steps_per_epoch: 1,
+      total_params: 3,
+      history: [
+        {
+          epoch: 1,
+          train_loss: 0.0064,
+          val_loss: 0.0397,
+          train_accuracy: null,
+          val_accuracy: null,
+          val_rmse: 9.6824,
+          val_r2: 0.96496,
+          seconds: 0.85,
+        },
+      ],
+      progress: null,
+      best: { epoch: 1, val_loss: 0.0397, val_accuracy: null },
+      weights_epoch: 1,
+      stopped_early: false,
+      test: { loss: 0.05, accuracy: null, rmse: 10.21, r2: 0.9512 },
+      weights: true,
+      preprocessing: {
+        kind: 'tabular',
+        columns: ['rooms', 'area', 'age', 'x4', 'x5', 'x6', 'x7', 'x8'],
+        target: 'price',
+        mean: [3.2, 120.5, 30, 0, 0, 0, 0, 0],
+        std: [1, 40, 12, 1, 1, 1, 1, 1],
+        target_mean: null,
+        target_std: null,
+        class_names: null,
+        estimator: 'GaussianProcessRegressor',
+      },
+      log: ['Fitted the Gaussian process on 640 rows in 0.8 s.'],
+      classical: {
+        estimator: 'GaussianProcessRegressor',
+        label: 'Gaussian process regression',
+        max_rows: 5000,
+        rows: 640,
+        subsampled_from: null,
+        fit_seconds: 0.838,
+        initial_kernel: GP_KERNEL,
+        kernel: '2.49**2 * RBF(length_scale=3.38) + WhiteKernel(noise_level=0.0141)',
+        log_marginal_likelihood: -117.7,
+        support_vectors: null,
+        train: { loss: 0.0064, accuracy: null, rmse: 3.8988, r2: 0.99357 },
+      },
+    },
+    ...overrides,
+  };
+}
+
+/** A finished SVC on demo data with 3 classes, subsampled to the row limit. */
+export function svcDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = gpDetail();
+  return {
+    ...base,
+    name: 'SVM classifier',
+    message: 'Finished: validation accuracy 93.0%. Fitted on 800 rows in 0.1 s.',
+    dataset: { kind: 'random', id: null, name: 'Demo data' },
+    config: CONFIG,
+    task: 'demo',
+    total_params: null,
+    metrics: {
+      train_loss: 0.2,
+      val_loss: 0.25,
+      val_accuracy: 0.93,
+      val_rmse: null,
+      val_r2: null,
+      test_loss: null,
+      test_accuracy: null,
+      test_rmse: null,
+      test_r2: null,
+    },
+    plan: {
+      ...base.plan!,
+      task: 'demo',
+      summary: 'Demo data: random features and a hidden rule to learn (3 classes).',
+      targets: [{ kind: 'class', num_classes: 3 }],
+      num_classes: 3,
+      class_names: ['class 0', 'class 1', 'class 2'],
+      classical: {
+        ...base.plan!.classical!,
+        node: 'svc',
+        type: 'SVC',
+        estimator: 'SVC',
+        label: 'Support vector classification',
+        task: 'classification',
+        kernel: null,
+        scale: 'svm',
+        max_rows: 800,
+      },
+    },
+    state: {
+      ...base.state!,
+      task: 'demo',
+      num_classes: 3,
+      class_names: ['class 0', 'class 1', 'class 2'],
+      train_size: 800,
+      val_size: 200,
+      test_size: null,
+      total_params: null,
+      history: [
+        {
+          epoch: 1,
+          train_loss: 0.2,
+          val_loss: 0.25,
+          train_accuracy: 0.95,
+          val_accuracy: 0.93,
+          seconds: 0.1,
+        },
+      ],
+      test: null,
+      preprocessing: { kind: 'demo' },
+      classical: {
+        estimator: 'SVC',
+        label: 'Support vector classification',
+        max_rows: 800,
+        rows: 800,
+        subsampled_from: 1600,
+        fit_seconds: 0.12,
+        initial_kernel: null,
+        kernel: null,
+        log_marginal_likelihood: null,
+        support_vectors: 200,
+        train: { loss: 0.2, accuracy: 0.95, rmse: null, r2: null },
+      },
+    },
+    ...overrides,
+  };
+}

@@ -1,4 +1,4 @@
-"""Train a network from the command line (needs PyTorch).
+"""Train a network from the command line (needs PyTorch; classical models need scikit-learn).
 
 brickdnn train --example cnn_mnist --data mnist --epochs 5
 brickdnn train graph.json --data random                # demo data with a hidden rule
@@ -8,8 +8,11 @@ brickdnn train graph.json --data houses.csv --test-split 0.2       # hold out a 
 brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopping
 brickdnn train graph.json --data mnist --tune --trials 20          # hyperparameter search
 brickdnn train graph.json --data mnist --tune-lr 1e-4:1e-2 --tune-batch-size 32,64
+brickdnn train --example gp_regression --data houses.csv     # a classical model (scikit-learn)
 
-Press Ctrl+C to stop after the current batch; the weights are saved anyway.
+Press Ctrl+C to stop after the current batch; the weights are saved anyway. Classical
+models (Gaussian processes, SVMs) are fitted once with scikit-learn and saved with joblib
+(``<name>.joblib``); they do not need PyTorch.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from .. import EXAMPLES, analyze, get_example
-from . import torch_installed
+from . import sklearn_installed, torch_installed
 from .compat import check_compatibility
 from .config import DEVICES, OPTIMIZERS, ConfigError, TrainingConfig
 from .datasets import (
@@ -39,12 +42,17 @@ from .datasets import (
     inspect_image_folder,
     random_info,
 )
+from .job import TrainingJob
 from .reporting import Reporter
 from .state import preprocessing_path
 from .tuning import LABELS, METHODS, TUNABLE, TuningConfig, describe_params, format_value
 
 CSV_SUFFIXES = (".csv", ".tsv", ".txt")
 INSTALL_HINT = 'Training needs PyTorch. Install it with: pip install "brickdnn[train]"'
+SKLEARN_HINT = (
+    'Classical models need scikit-learn. Install it with: pip install "brickdnn[classic]"'
+)
+NO_TUNING = "Hyperparameter search is not available for classical models yet."
 
 
 class ConsoleReporter(Reporter):
@@ -61,6 +69,7 @@ class ConsoleReporter(Reporter):
         self._trial: dict[str, Any] | None = None
         self._trials: list[dict[str, Any]] = []
         self._preprocessing: dict[str, Any] | None = None
+        self.classical = False
 
     def _print(self, text: str, err: bool = False) -> None:
         self._clear()
@@ -79,7 +88,8 @@ class ConsoleReporter(Reporter):
             self._line = False
 
     def status(self, status: str, message: str) -> None:
-        if status != "preparing" or message == self._last_message:
+        # Classical models are fitted in one go: say what they are doing meanwhile.
+        if message == self._last_message or (status != "preparing" and not self.classical):
             return
         self._last_message = message
         if message.startswith("Loading images"):
@@ -92,6 +102,10 @@ class ConsoleReporter(Reporter):
 
     def setup(self, info: dict[str, Any]) -> None:
         self._preprocessing = info.get("preprocessing", self._preprocessing)
+        self.classical = self.classical or info.get("family") == "classical"
+        if self.classical:
+            self._setup_classical(info)
+            return
         if "train_size" not in info:
             self._print(f"Now training on {info.get('device_label')}.")
             return
@@ -118,6 +132,26 @@ class ConsoleReporter(Reporter):
             f"steps per epoch, {info['total_params']:,} parameters."
         )
 
+    def _setup_classical(self, info: dict[str, Any]) -> None:
+        details = info.get("classical") or {}
+        if "train_size" in info:
+            samples = f"{info['train_size']:,} training and {info['val_size']:,} validation"
+            if info.get("test_size"):
+                samples = (
+                    f"{info['train_size']:,} training, {info['val_size']:,} validation and "
+                    f"{info['test_size']:,} test"
+                )
+            self._print(f"{details.get('label', 'Classical model')}: {samples} rows.")
+            if details.get("initial_kernel"):
+                self._print(f"Kernel: {details['initial_kernel']}")
+            return
+        if details.get("kernel"):
+            self._print(f"Fitted kernel: {details['kernel']}")
+        if details.get("log_marginal_likelihood") is not None:
+            self._print(f"Log marginal likelihood: {details['log_marginal_likelihood']:.4g}")
+        if details.get("support_vectors") is not None:
+            self._print(f"Support vectors: {details['support_vectors']:,}")
+
     def progress(self, progress: dict[str, Any]) -> None:
         trial = f"Trial {self._trial['trial']}/{self._trial['trials']}  " if self._trial else ""
         self._show(
@@ -127,14 +161,14 @@ class ConsoleReporter(Reporter):
         )
 
     def epoch_end(self, entry: dict[str, Any], best: dict[str, Any]) -> None:
-        line = (
-            f"Epoch {entry['epoch']:3d}/{self.epochs}  train loss {entry['train_loss']:.4f}"
-            f"  val loss {entry['val_loss']:.4f}"
-        )
+        epoch = "Fitted" if self.classical else f"Epoch {entry['epoch']:3d}/{self.epochs}"
+        line = f"{epoch}  train loss {entry['train_loss']:.4f}  val loss {entry['val_loss']:.4f}"
         if entry.get("val_accuracy") is not None:
             line += f"  val acc {entry['val_accuracy']:.1%}"
         if entry.get("val_rmse") is not None:
             line += f"  val rmse {entry['val_rmse']:.4g}"
+        if entry.get("val_r2") is not None:
+            line += f"  val R² {entry['val_r2']:.3f}"
         self._print(line + f"  ({entry['seconds']:.1f}s)")
 
     def trial_start(self, trial: dict[str, Any]) -> None:
@@ -198,6 +232,8 @@ class ConsoleReporter(Reporter):
             line += f", accuracy {result['accuracy']:.1%}"
         if result.get("rmse") is not None:
             line += f", rmse {result['rmse']:.4g}"
+        if result.get("r2") is not None:
+            line += f", R² {result['r2']:.3f}"
         self._print(line)
 
     def finish(self, status: str, message: str, weights: bool) -> None:
@@ -206,7 +242,8 @@ class ConsoleReporter(Reporter):
             return
         self._print(message)
         if weights:
-            self._print(f"Saved weights to {self.save}")
+            what = "the fitted model (joblib)" if self.classical else "weights"
+            self._print(f"Saved {what} to {self.save}")
             if (self._preprocessing or {}).get("kind", "demo") != "demo":
                 path = preprocessing_path(self.save)
                 self._print(f"Saved the preprocessing (needed to prepare new inputs) to {path}")
@@ -247,8 +284,10 @@ def build_parser() -> argparse.ArgumentParser:
     builtin = ", ".join(BUILTIN_DATASETS)
     parser = argparse.ArgumentParser(
         prog="brickdnn train",
-        description="Train a Brick DNN network with PyTorch and save its weights.",
-        epilog="Ctrl+C stops after the current batch and still saves the weights.",
+        description="Train a Brick DNN network with PyTorch and save its weights, or fit a "
+        "classical model (Gaussian process, SVM) with scikit-learn and save it with joblib.",
+        epilog="Ctrl+C stops after the current batch and still saves the weights (a classical "
+        "model stops once it is fitted and is not saved).",
     )
     parser.add_argument("graph", nargs="?", help="graph JSON file ('-' for stdin)")
     parser.add_argument("--example", choices=sorted(EXAMPLES), help="use a bundled example graph")
@@ -289,7 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep (test and save) the weights of the epoch with the lowest validation loss "
         "instead of those of the last epoch (default: on)",
     )
-    parser.add_argument("--save", help="where to store the weights (default <graph name>.pt)")
+    parser.add_argument(
+        "--save",
+        help="where to store the weights (default <graph name>.pt; classical models: "
+        "<graph name>.joblib)",
+    )
     parser.add_argument(
         "--data-root",
         default=str(DEFAULT_DATA_ROOT),
@@ -375,10 +418,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     graph, stem = _load_graph(args, parser)
 
-    if not torch_installed():
+    analysis = analyze(graph)
+    classical = analysis.family == "classical"
+    if classical and not sklearn_installed():
+        print(f"error: {SKLEARN_HINT}", file=sys.stderr)
+        return 1
+    if not classical and not torch_installed():
         print(f"error: {INSTALL_HINT}", file=sys.stderr)
         return 1
-    analysis = analyze(graph)
     if not analysis.valid:
         for issue in analysis.errors:
             node = f" [{issue.node}]" if issue.node else ""
@@ -405,15 +452,18 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if classical and tuning is not None:
+        print(f"error: {NO_TUNING}", file=sys.stderr)
+        return 1
 
-    save = Path(args.save or f"{stem}.pt")
+    save = Path(args.save or f"{stem}{'.joblib' if classical else '.pt'}")
     with tempfile.TemporaryDirectory(prefix="brickdnn-") as tmp:
         try:
             info, path = resolve_data(args.data, Path(tmp))
         except DatasetError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        compat = check_compatibility(analysis, info)
+        compat = check_compatibility(analysis, info, config)
         for warning in compat.warnings:
             print(f"warning: {warning}")
         if not compat.ok or compat.plan is None:
@@ -424,10 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         for note in compat.plan.notes:
             print(f"note: {note}")
 
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-        from . import engine
-
-        job = engine.TrainingJob(
+        job = TrainingJob(
             graph=graph,
             dataset=info,
             config=config,
@@ -439,7 +486,15 @@ def main(argv: list[str] | None = None) -> int:
         reporter = ConsoleReporter(config.epochs, save)
         restore = _catch_ctrl_c(reporter)
         try:
-            result = engine.train(job, reporter, save)
+            if classical:
+                from . import classical_engine
+
+                result = classical_engine.train(job, reporter, save)
+            else:
+                os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+                from . import engine
+
+                result = engine.train(job, reporter, save)
         except KeyboardInterrupt:
             print("\nAborted, no weights saved.", file=sys.stderr)
             return 130

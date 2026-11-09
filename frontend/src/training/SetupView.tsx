@@ -21,6 +21,7 @@ import {
   type TrainingStatus,
 } from '@/api';
 import type { TrainingProject } from './access';
+import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
 import {
   effectiveSource,
@@ -32,7 +33,7 @@ import {
   type SettingsValues,
   type SourceChoice,
 } from './settings';
-import { SettingsForm } from './SettingsForm';
+import { SettingsForm, type ClassicalSettings } from './SettingsForm';
 import { useCompatibility, type CompatibilityState } from './useCompatibility';
 import type { DatasetFitController } from './useDatasetFit';
 import type { DataController } from './useDatasets';
@@ -119,8 +120,18 @@ export function SetupView({
   const compatibility = fit ? fit.compatibility : ownCheck;
   const check = compatibility.result;
 
+  // A classical model (scikit-learn) is fitted once: fewer settings, no search.
+  const model = trainingFamily(analysis) === 'classical' ? (analysis?.classical ?? null) : null;
+  const maxRows = classicalMaxRows(status, analysis);
+  const classical: ClassicalSettings | null = model && {
+    model: MODEL_KINDS[model.type] ?? model.estimator,
+    maxRows,
+    optimisesKernel: model.kernel !== null,
+  };
+  const search = settings.search && !classical;
+
   const builtinSource = choice.tab === 'builtin';
-  const errors = validateSettings(settings);
+  const errors = validateSettings(settings, { classical: classical && { maxRows } });
   if (builtinSource) {
     // Built-in datasets always test on their official test images: the test share is not used.
     delete errors.test_split;
@@ -170,7 +181,7 @@ export function SetupView({
     setStarting(true);
     setStartError(null);
     try {
-      const tuning = toTuning(settings);
+      const tuning = classical ? null : toTuning(settings);
       const run = await api.training.runs.create({
         name: runName.trim() || networkName.trim() || 'Untitled network',
         graph: doc,
@@ -181,7 +192,7 @@ export function SetupView({
             ...settings,
             device: status.devices.some((d) => d.id === settings.device) ? settings.device : 'auto',
           },
-          { builtin: builtinSource }
+          { builtin: builtinSource, classical: classical !== null }
         ),
         ...(tuning ? { tuning } : {}),
         ...(project ? { project: project.id } : {}),
@@ -272,6 +283,7 @@ export function SetupView({
         defaultDevice={status.default_device}
         builtin={builtinSource}
         predefinedSplit={predefinedSplit}
+        classical={classical}
       />
 
       {startError && (
@@ -317,7 +329,7 @@ export function SetupView({
           loading={starting}
           disabled={!canStart}
         >
-          {settings.search ? 'Start search' : 'Start training'}
+          {search ? 'Start search' : 'Start training'}
         </Button>
       </Group>
     </Stack>

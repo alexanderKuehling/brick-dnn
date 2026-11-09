@@ -9,13 +9,10 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from .classical import generate_classical
 from .graph import Analysis, GraphValidationError, NodeInfo, analyze
 from .layers import fmt_shape
-
-PROJECT_URL = "https://github.com/alexanderKuehling/brick-dnn"
-SITE_URL = "https://brickdnn.com"
-# First line of every generated script: where it comes from.
-BANNER = f"# Built with Brick DNN: {SITE_URL}, {PROJECT_URL}"
+from .links import BANNER, PROJECT_URL, SITE_URL  # noqa: F401 (re-exported)
 
 # Names that must not be used for layers, inputs or the class in the generated module:
 # Python keywords and builtins, public attributes of nn.Module (a layer called "compile"
@@ -129,7 +126,8 @@ class GeneratorOptions:
 
 
 def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None = None) -> str:
-    """Generate PyTorch code for ``graph``.
+    """Generate PyTorch code for ``graph``, or a scikit-learn script for a classical
+    network (a Gaussian process or SVM, see :mod:`brickdnn.classical`).
 
     Raises :class:`GraphValidationError` if the graph contains errors.
     """
@@ -138,6 +136,8 @@ def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None 
     analysis = analyze(graph)
     if not analysis.valid:
         raise GraphValidationError(analysis)
+    if analysis.family == "classical":
+        return generate_classical(analysis, options)
     return _Generator(analysis, options).render()
 
 

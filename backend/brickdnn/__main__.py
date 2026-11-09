@@ -5,7 +5,7 @@ python -m brickdnn graph.json -o model.py     # write it to a file
 python -m brickdnn graph.json --check         # only validate and show shapes
 python -m brickdnn --example cnn_mnist        # start from a bundled example
 python -m brickdnn --list-layers
-python -m brickdnn train graph.json --data mnist   # train it (needs PyTorch, see train --help)
+python -m brickdnn train graph.json --data mnist   # train it (PyTorch or scikit-learn, see train --help)
 """
 
 from __future__ import annotations
@@ -19,23 +19,39 @@ from . import EXAMPLES, GeneratorOptions, GraphValidationError, analyze, generat
 from .layers import REGISTRY, fmt_shape
 
 
+def _output(info) -> str:
+    if info.shape is not None:
+        return fmt_shape(info.shape)
+    if info.output_kind == "kernel" and info.resolved:
+        return "kernel"
+    if info.resolved:  # a classifier: one class per sample
+        return "class"
+    return "?"
+
+
 def _print_analysis(graph: dict) -> int:
     result = analyze(graph)
     for nid in result.order:
         info = result.nodes[nid]
-        shape = fmt_shape(info.shape) if info.shape is not None else "?"
         params = f"{info.num_params:,}" if info.num_params is not None else "-"
-        print(f"  {info.type:<20} {nid:<16} -> {shape:<20} params: {params}")
+        print(f"  {info.type:<24} {nid:<16} -> {_output(info):<20} params: {params}")
+        if info.kernel is not None:
+            print(f"      kernel: {info.kernel.code()}")
     for issue in result.warnings:
         print(f"warning: {issue.message}" + (f" [{issue.node}]" if issue.node else ""))
     for issue in result.errors:
         print(
             f"error: {issue.message}" + (f" [{issue.node}]" if issue.node else ""), file=sys.stderr
         )
-    if result.valid:
+    if not result.valid:
+        return 1
+    if result.family == "classical":
+        total = result.total_params
+        fitted = f"{total:,} kernel hyperparameters" if total is not None else "support vectors"
+        print(f"OK - a classical model (scikit-learn), fitted: {fitted}")
+    else:
         print(f"OK - {result.total_params:,} trainable parameters")
-        return 0
-    return 1
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,7 +63,8 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="brickdnn",
-        description="Generate PyTorch code from a Brick DNN graph (JSON).",
+        description="Generate PyTorch code (scikit-learn code for classical models) from a "
+        "Brick DNN graph (JSON).",
         epilog="To train a network with PyTorch, run: brickdnn train --help",
     )
     parser.add_argument("graph", nargs="?", help="graph JSON file ('-' for stdin)")

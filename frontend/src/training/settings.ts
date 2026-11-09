@@ -240,7 +240,64 @@ export function plannedTrials(values: SettingsValues): number | null {
   return combos === null ? trials : Math.min(trials, combos);
 }
 
-export function validateSettings(values: SettingsValues): SettingsErrors {
+/**
+ * Classical models (scikit-learn) are fitted once: only the splits, Max. samples and the
+ * seed apply. `maxRows` is the most training rows the model is fitted on on this server.
+ */
+export interface ClassicalScope {
+  maxRows: number | null;
+}
+
+function validateSplits(values: SettingsValues, errors: SettingsErrors) {
+  const split = (value: number) => value >= 5 && value <= 50;
+  const set = (key: keyof SettingsValues, message: string | null) => {
+    if (message) {
+      errors[key] = message;
+    }
+  };
+  set('val_split', decimal(values.val_split, split, 'Between 5% and 50%', true));
+  if (values.test_enabled) {
+    set('test_split', decimal(values.test_split, split, 'Between 5% and 50%', true));
+    const val = parseField(values.val_split);
+    const test = parseField(values.test_split);
+    if (
+      !errors.val_split &&
+      !errors.test_split &&
+      typeof val === 'number' &&
+      typeof test === 'number' &&
+      val + test > LIMITS.held_out.max
+    ) {
+      errors.test_split = 'Validation and test together: at most 80%';
+    }
+  }
+}
+
+function validateClassical(values: SettingsValues, { maxRows }: ClassicalScope): SettingsErrors {
+  const errors: SettingsErrors = {};
+  validateSplits(values, errors);
+  const limit = { min: LIMITS.max_samples.min, max: maxRows ?? LIMITS.max_samples.max };
+  const samples = wholeNumber(values.max_samples, limit, false);
+  if (samples) {
+    const value = parseField(values.max_samples);
+    errors.max_samples =
+      maxRows !== null && typeof value === 'number' && value > maxRows
+        ? `At most ${maxRows.toLocaleString('en-US')} on this server`
+        : samples;
+  }
+  const seed = wholeNumber(values.seed, LIMITS.seed, false);
+  if (seed) {
+    errors.seed = seed;
+  }
+  return errors;
+}
+
+export function validateSettings(
+  values: SettingsValues,
+  { classical = null }: { classical?: ClassicalScope | null } = {}
+): SettingsErrors {
+  if (classical) {
+    return validateClassical(values, classical);
+  }
   const errors: SettingsErrors = {};
   const set = (key: keyof SettingsValues, message: string | null) => {
     if (message) {
@@ -265,22 +322,7 @@ export function validateSettings(values: SettingsValues): SettingsErrors {
       decimal(values.weight_decay, (wd) => wd >= 0 && wd <= 1, 'Between 0 and 1', false)
     );
   }
-  const split = (value: number) => value >= 5 && value <= 50;
-  set('val_split', decimal(values.val_split, split, 'Between 5% and 50%', true));
-  if (values.test_enabled) {
-    set('test_split', decimal(values.test_split, split, 'Between 5% and 50%', true));
-    const val = parseField(values.val_split);
-    const test = parseField(values.test_split);
-    if (
-      !errors.val_split &&
-      !errors.test_split &&
-      typeof val === 'number' &&
-      typeof test === 'number' &&
-      val + test > LIMITS.held_out.max
-    ) {
-      errors.test_split = 'Validation and test together: at most 80%';
-    }
-  }
+  validateSplits(values, errors);
   set('max_samples', wholeNumber(values.max_samples, LIMITS.max_samples, false));
   set('seed', wholeNumber(values.seed, LIMITS.seed, false));
   set('patience', wholeNumber(values.patience, LIMITS.patience, false));
@@ -331,11 +373,11 @@ const fraction = (percent: number) => Number((percent / 100).toFixed(4));
 /**
  * The training settings for the API. Built-in datasets (`builtin`) always test on their
  * official test images, so they need no test split. Settings varied by a search are left
- * out; the search sets them.
+ * out; the search sets them. A `classical` model only gets the settings that apply to it.
  */
 export function toConfig(
   values: SettingsValues,
-  { builtin = false }: { builtin?: boolean } = {}
+  { builtin = false, classical = false }: { builtin?: boolean; classical?: boolean } = {}
 ): Partial<TrainingConfig> {
   const number = (field: NumberField) => {
     const value = parseField(field);
@@ -345,6 +387,14 @@ export function toConfig(
   const split = number(values.val_split);
   const testSplit = number(values.test_split);
   const test = values.test_enabled && !builtin && testSplit !== null ? fraction(testSplit) : 0;
+  if (classical) {
+    return {
+      val_split: split === null ? undefined : fraction(split),
+      test_split: test,
+      max_samples: number(values.max_samples),
+      seed: number(values.seed),
+    };
+  }
   return {
     epochs: number(values.epochs) ?? undefined,
     batch_size: tuned.batch_size ? undefined : (number(values.batch_size) ?? undefined),

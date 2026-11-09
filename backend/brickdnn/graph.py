@@ -13,6 +13,12 @@ A graph is plain JSON::
 Extra keys (``position``, ``data`` …) are ignored, so the UI can store its own
 layout information in the same document. A node may carry an optional
 ``name`` that becomes the attribute name in the generated code.
+
+A connection carries what its source puts out: a tensor, or a kernel (the kernel bricks of
+Gaussian processes). A *classical* network (scikit-learn) consists of an Input layer, one
+classical model (Gaussian process or SVM) that takes the features straight from it and,
+for a Gaussian process, optionally kernel bricks that feed its kernel. Classical models
+and neural layers cannot be mixed (yet).
 """
 
 from __future__ import annotations
@@ -21,7 +27,23 @@ import heapq
 from dataclasses import dataclass, field
 from typing import Any
 
-from .layers import Layer, LayerError, Shape, get_layer_class
+from .layers import (
+    SVM_KERNELS,
+    ClassicalModel,
+    Kernel,
+    KernelExpr,
+    Layer,
+    LayerError,
+    Shape,
+    fmt_shape,
+    get_layer_class,
+)
+
+KERNEL_TARGETS = (
+    "Kernel bricks only connect to a Gaussian process (GaussianProcessRegressor or "
+    "GaussianProcessClassifier) or to KernelSum and KernelProduct."
+)
+NOT_MIXED = "Classical models and neural layers can't be mixed yet"
 
 MAX_NODES = 500
 MAX_EDGES = 2000
@@ -47,10 +69,18 @@ class NodeInfo:
     outputs: list[str] = field(default_factory=list)
     shape: Shape | None = None
     dtype: str | None = None
+    # Kernel bricks: the kernel built up to here; Gaussian processes: the kernel they fit.
+    kernel: KernelExpr | None = None
+    # True once the node was inferred without errors (its shape or kernel is known).
+    resolved: bool = False
+
+    @property
+    def output_kind(self) -> str | None:
+        return self.layer.output_kind if self.layer is not None else None
 
     @property
     def num_params(self) -> int | None:
-        if self.layer is None or self.shape is None:
+        if self.layer is None or not self.resolved:
             return None
         return self.layer.num_params()
 
@@ -68,6 +98,9 @@ class NodeInfo:
             "dtype": self.dtype,
             "num_params": self.num_params,
             "params": params,
+            "output_kind": self.output_kind,
+            "kernel": self.kernel.code() if self.kernel is not None else None,
+            "task": self.layer.task if isinstance(self.layer, ClassicalModel) else None,
         }
 
 
@@ -101,7 +134,38 @@ class Analysis:
         counts = [info.num_params for info in self.nodes.values()]
         if not counts or any(c is None for c in counts):
             return None
-        return sum(counts)
+        return sum(counts)  # type: ignore[arg-type]
+
+    @property
+    def family(self) -> str:
+        """``classical`` if the graph contains kernels or a classical model, else ``neural``."""
+        classical = any(
+            info.layer is not None and info.layer.family == "classical"
+            for info in self.nodes.values()
+        )
+        return "classical" if classical else "neural"
+
+    @property
+    def model(self) -> NodeInfo | None:
+        """The classical model of the graph (the first one if there are several)."""
+        for nid in self._ordered():
+            if isinstance(self.nodes[nid].layer, ClassicalModel):
+                return self.nodes[nid]
+        return None
+
+    def classical_dict(self) -> dict[str, Any] | None:
+        model = self.model
+        if model is None:
+            return None
+        layer = model.layer
+        assert isinstance(layer, ClassicalModel)
+        return {
+            "node": model.id,
+            "type": model.type,
+            "estimator": layer.estimator,
+            "task": layer.task,
+            "kernel": model.kernel.code() if model.kernel is not None else None,
+        }
 
     def error(self, message: str, node: str | None = None) -> None:
         self.errors.append(Issue(message, node))
@@ -119,6 +183,9 @@ class Analysis:
             "inputs": self.inputs,
             "outputs": self.outputs,
             "total_params": self.total_params if self.valid else None,
+            "family": self.family,
+            # Classical networks: {"node", "type", "estimator", "task", "kernel"}
+            "classical": self.classical_dict(),
         }
 
 
@@ -159,6 +226,7 @@ def analyze(graph: Any) -> Analysis:
 
     _topological_sort(result)
     _infer_shapes(result)
+    _check_classical(result)
     _check_structure(result)
     return result
 
@@ -243,6 +311,10 @@ def _infer_shapes(result: Analysis) -> None:
         layer = info.layer
         if layer is None:
             continue
+        sources = [result.nodes[s] for s in info.inputs]
+        if layer.family == "classical" or any(s.output_kind == "kernel" for s in sources):
+            _infer_classical(result, info, layer, sources)
+            continue
 
         n_inputs = len(info.inputs)
         if n_inputs < layer.min_inputs:
@@ -264,9 +336,8 @@ def _infer_shapes(result: Analysis) -> None:
                 )
             continue
 
-        sources = [result.nodes[s] for s in info.inputs]
         if any(src.shape is None for src in sources):
-            continue  # an upstream layer already reported an error
+            continue  # an upstream layer already reported an error (or is a classifier)
 
         bad = [src for src in sources if src.dtype not in layer.input_dtypes]
         if bad:
@@ -290,6 +361,145 @@ def _infer_shapes(result: Analysis) -> None:
             result.error(str(exc), nid)
             continue
         info.dtype = layer.output_dtype
+        info.resolved = True
+
+
+def _infer_classical(
+    result: Analysis, info: NodeInfo, layer: Layer, sources: list[NodeInfo]
+) -> None:
+    """Kernel bricks, classical models, and any brick that is fed a kernel."""
+    nid = info.id
+    kernels = [s for s in sources if s.output_kind == "kernel"]
+    tensors = [s for s in sources if s.output_kind == "tensor"]
+
+    if isinstance(layer, Kernel):
+        if layer.max_inputs == 0:
+            if sources:
+                result.error(
+                    f"{layer.label} has no inputs: a kernel is not fed with data. Connect it "
+                    "to a Gaussian process (or to KernelSum or KernelProduct) instead.",
+                    nid,
+                )
+                return
+        elif tensors:
+            other = tensors[0].layer.label if tensors[0].layer else tensors[0].type
+            result.error(
+                f"{layer.label} combines kernels: connect kernel bricks such as RBF or "
+                f"WhiteKernel to it, not {other}.",
+                nid,
+            )
+            return
+        elif len(kernels) < layer.min_inputs:
+            result.error(f"{layer.label} needs at least {layer.min_inputs} kernels.", nid)
+            return
+        if any(not s.resolved for s in kernels):
+            return  # an upstream kernel already reported an error
+        info.kernel = layer.kernel([s.kernel for s in kernels])  # type: ignore[misc]
+        info.resolved = True
+        return
+
+    if not isinstance(layer, ClassicalModel):  # an Input or neural layer fed a kernel
+        if layer.max_inputs == 0:
+            result.error("Input layers cannot have incoming connections.", nid)
+        else:
+            result.error(f"{layer.label} cannot take a kernel. {KERNEL_TARGETS}", nid)
+        return
+
+    if kernels and not layer.takes_kernel:
+        result.error(
+            f"{layer.label} chooses its kernel with its own Kernel setting "
+            f"({', '.join(SVM_KERNELS)}). {KERNEL_TARGETS}",
+            nid,
+        )
+        return
+    if len(kernels) > 1:
+        result.error(
+            "A Gaussian process takes one kernel. Combine several with KernelSum or KernelProduct.",
+            nid,
+        )
+        return
+    if not tensors:
+        result.error(f"{layer.label} has no features: connect the Input layer to it.", nid)
+        return
+    if len(tensors) > 1:
+        result.error(f"{layer.label} takes its features from one Input layer.", nid)
+        return
+    source = tensors[0]
+    if source.type != "Input":
+        result.error(
+            f"{layer.label} must take its features straight from the Input layer. "
+            f"{NOT_MIXED}: remove the layers between the Input and {layer.label}.",
+            nid,
+        )
+        return
+    if not source.resolved or any(not k.resolved for k in kernels):
+        return
+    assert source.shape is not None
+    if len(source.shape) != 1:
+        result.error(
+            f"{layer.label} needs a flat feature vector: set the Input shape to the number of "
+            f"features, e.g. 8 (it is {fmt_shape(source.shape)}).",
+            nid,
+        )
+        return
+    if source.dtype != "float":
+        result.error(
+            f"{layer.label} needs numeric features: set the data type of the Input layer to "
+            "'float'.",
+            nid,
+        )
+        return
+    info.shape = layer.setup(kernels[0].kernel if kernels else None)
+    info.kernel = layer.kernel
+    info.dtype = "float" if info.shape is not None else None
+    info.resolved = True
+
+
+def _check_classical(result: Analysis) -> None:
+    """Rules for the network as a whole: every kernel is used exactly once, one classical
+    model at most, nothing after it and no neural layers besides it."""
+    models: list[NodeInfo] = []
+    neural: list[NodeInfo] = []
+    for nid in result.order:
+        info = result.nodes[nid]
+        if isinstance(info.layer, Kernel):
+            if not info.outputs:
+                result.error("This kernel is not connected to a Gaussian process.", nid)
+            elif len(info.outputs) > 1:
+                result.error(
+                    "A kernel brick can only be connected once. Add another kernel brick for "
+                    "each further use.",
+                    nid,
+                )
+        elif isinstance(info.layer, ClassicalModel):
+            models.append(info)
+        elif info.layer is not None and info.layer.family == "neural":
+            neural.append(info)
+
+    for extra in models[1:]:
+        result.error(
+            "Only one classical model per network. Remove this one or build it in a network "
+            "of its own.",
+            extra.id,
+        )
+    if not models:
+        return
+    model = models[0]
+    label = model.layer.label  # type: ignore[union-attr]
+    if model.outputs:
+        result.error(
+            f"Nothing can follow {label}: a classical model ends the network, its output is "
+            f"the prediction. {NOT_MIXED}.",
+            model.id,
+        )
+    elif neural and not any(issue.node == model.id for issue in result.errors):
+        names = sorted({n.layer.label for n in neural if n.layer is not None})
+        shown = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
+        result.error(
+            f"{NOT_MIXED}, but this network also contains {shown}. Remove the neural layers: "
+            f"{label} takes its features straight from the Input layer.",
+            model.id,
+        )
 
 
 def _check_structure(result: Analysis) -> None:

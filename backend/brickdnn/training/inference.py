@@ -11,6 +11,10 @@ see compat.py) and the ``preprocessing`` that the training wrote into ``state.js
     {"kind": "image", "channels": 1, "height": 28, "width": 28, "layout": "chw",
      "mean": [0.1307], "std": [0.3081], "class_names": ["0", ...], ...}
     {"kind": "demo"}            # random demo data: inputs are used as they are
+
+Classical models (scikit-learn, ``plan["classical"]`` is set) predict in the units of the
+target column: their tabular preprocessing has no ``target_mean``/``target_std``, and
+classifiers report probabilities instead of raw scores (see :func:`read_outputs`).
 """
 
 from __future__ import annotations
@@ -58,6 +62,11 @@ def _numbers(value: Any, length: int | None = None) -> bool:
     )
 
 
+def is_classical(plan: Any) -> bool:
+    """True for a run of a classical model (scikit-learn), see compat.TrainingPlan."""
+    return isinstance(plan, dict) and isinstance(plan.get("classical"), dict)
+
+
 def input_specs(plan: Any) -> list[dict[str, Any]]:
     inputs = plan.get("inputs") if isinstance(plan, dict) else None
     return [i for i in inputs if isinstance(i, dict)] if isinstance(inputs, list) else []
@@ -92,8 +101,10 @@ def kind_of(plan: Any, preprocessing: Any) -> str:
             _numbers(preprocessing.get("mean"), n) and _positive(preprocessing.get("std"), n)
         ):
             raise unknown
-        if targets[0].get("kind") == "value" and not (
-            _numbers([preprocessing.get("target_mean"), preprocessing.get("target_std")])
+        if (
+            targets[0].get("kind") == "value"
+            and not is_classical(plan)
+            and not _numbers([preprocessing.get("target_mean"), preprocessing.get("target_std")])
         ):
             raise unknown
     elif kind == "image":
@@ -145,6 +156,12 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
             f"One row of {len(columns)} numbers per sample, the feature columns of the CSV file "
             f"in this order: {', '.join(columns)}. They are standardised with the mean and "
             "standard deviation of the training data (x - mean) / std."
+        )
+    if is_classical(plan):
+        n = input_specs(plan)[0]["shape"][0]
+        return (
+            f"Trained on random demo data, so its predictions mean nothing. One row of {n} "
+            "numbers per sample."
         )
     if kind == "image":
         c, h, w = preprocessing["channels"], preprocessing["height"], preprocessing["width"]
@@ -199,6 +216,8 @@ def usage_snippet(
 ) -> str:
     """Python code that loads the weights and predicts one sample like the training saw it."""
     kind = kind_of(plan, preprocessing)
+    if is_classical(plan):
+        return _classical_snippet(plan, preprocessing, weights_file)
     lines = [
         "import torch",
         f"from {module} import {class_name}  # model_code, saved as {module}.py",
@@ -269,6 +288,44 @@ def usage_snippet(
             "probabilities = output.softmax(dim=1)",
             "print([CLASS_NAMES[i] for i in probabilities.argmax(dim=1).tolist()])",
         ]
+    return "\n".join(lines) + "\n"
+
+
+def _classical_snippet(plan: dict[str, Any], preprocessing: dict[str, Any], path: str) -> str:
+    """Code that loads the fitted scikit-learn pipeline (joblib) and predicts one row."""
+    classical = plan["classical"]
+    estimator = classical.get("estimator") or "the model"
+    if preprocessing.get("kind") == "tabular":
+        columns = preprocessing["columns"]
+        example = _list(preprocessing["mean"], 4)  # the average row: a valid example
+        about = f"# Features in this order: {', '.join(columns)}"
+        rows = f"rows = [{example}]  # one list of {len(columns)} values per sample, as in the CSV"
+    else:
+        n = input_specs(plan)[0]["shape"][0]
+        about = "# Trained on random demo data: the predictions mean nothing."
+        rows = f"rows = [{_list([0.0] * n)}]  # one list of {n} values per sample"
+    lines = [
+        "import joblib",
+        "",
+        f'bundle = joblib.load("{path}")  # a pickle: only load files you trust',
+        f'model = bundle["model"]  # scikit-learn Pipeline: StandardScaler, then {estimator}',
+        "",
+        about,
+        rows,
+    ]
+    target = preprocessing.get("target") or "target"
+    if class_names(plan, preprocessing) is not None:
+        lines += [
+            "probabilities = model.predict_proba(rows)  # one column per bundle['class_names']",
+            'print([bundle["class_names"][i] for i in probabilities.argmax(axis=1)])',
+        ]
+    elif classical.get("type") == "GaussianProcessRegressor":
+        lines += [
+            "mean, std = model.predict(rows, return_std=True)",
+            f"print(mean.tolist(), std.tolist())  # predicted {target} and its uncertainty",
+        ]
+    else:
+        lines.append(f"print(model.predict(rows).tolist())  # predicted {target}")
     return "\n".join(lines) + "\n"
 
 
@@ -537,29 +594,43 @@ def _flat_numbers(value: Any) -> list[float | None]:
     raise ValueError("The network returned something that is not a number.")
 
 
-def _classes(scores: list[float | None], names: list[str], top_k: int) -> dict[str, Any]:
+def _classes(
+    scores: list[float | None], names: list[str], top_k: int, probabilities: bool = False
+) -> dict[str, Any]:
+    """The top classes; ``scores`` are raw scores (softmax) or already ``probabilities``."""
     if any(s is None for s in scores):
         return {"class": None, "index": None, "probability": None, "top": []}
     numbers = [float(s) for s in scores if s is not None]
-    peak = max(numbers)
-    exps = [math.exp(s - peak) for s in numbers]
-    total = sum(exps)
-    probabilities = [e / total for e in exps]
-    order = sorted(range(len(numbers)), key=lambda i: -probabilities[i])
+    if probabilities:
+        total = sum(numbers) or 1.0
+        probs = [max(p, 0.0) / total for p in numbers]
+    else:
+        peak = max(numbers)
+        exps = [math.exp(s - peak) for s in numbers]
+        total = sum(exps)
+        probs = [e / total for e in exps]
+    order = sorted(range(len(numbers)), key=lambda i: -probs[i])
     top = [
-        {"class": names[i], "index": i, "probability": round(probabilities[i], 4)}
-        for i in order[:top_k]
+        {"class": names[i], "index": i, "probability": round(probs[i], 4)} for i in order[:top_k]
     ]
     return {**top[0], "top": top}
 
 
 def read_outputs(
-    plan: Any, preprocessing: Any, outputs: Any, count: int, top_k: int = DEFAULT_TOP_K
+    plan: Any,
+    preprocessing: Any,
+    outputs: Any,
+    count: int,
+    top_k: int = DEFAULT_TOP_K,
+    probabilities: bool = False,
+    std: Any = None,
 ) -> list[dict[str, Any]]:
     """Turn the raw outputs of the network (one nested list per output, ``count`` samples
     each) into one prediction per sample: the classes with their probabilities (softmax,
-    as the training's cross-entropy loss reads them) or the predicted value. Raises
-    ``ValueError`` for outputs that do not fit the training plan."""
+    as the training's cross-entropy loss reads them; classical classifiers already give
+    ``probabilities``) or the predicted value (with ``std``, a Gaussian process's
+    predictive standard deviation per sample, as "std"). Raises ``ValueError`` for outputs
+    that do not fit the training plan."""
     kind = kind_of(plan, preprocessing)
     targets = plan["targets"]
     if not isinstance(outputs, list) or len(outputs) != len(targets):
@@ -575,13 +646,13 @@ def read_outputs(
                 scores = _flat_numbers(sample)
                 if len(scores) != len(names):
                     raise ValueError("The network returned an unexpected number of classes.")
-                results.append(_classes(scores, names, top_k))
+                results.append(_classes(scores, names, top_k, probabilities))
             elif kind == "tabular":
                 scores = _flat_numbers(sample)
                 if len(scores) != 1:
                     raise ValueError("The network returned an unexpected number of values.")
                 value = scores[0]
-                if value is not None:
+                if value is not None and preprocessing.get("target_std") is not None:
                     value = value * preprocessing["target_std"] + preprocessing["target_mean"]
                 results.append({"value": value})
             else:
@@ -590,6 +661,12 @@ def read_outputs(
                     value = value[0]
                 results.append({"value": value})
         per_output.append(results)
+    if std is not None:
+        spreads = _flat_numbers(std)
+        if len(per_output) != 1 or len(spreads) != count:
+            raise ValueError("The model returned an unexpected number of uncertainties.")
+        for result, spread in zip(per_output[0], spreads, strict=True):
+            result["std"] = spread
     if len(per_output) == 1:
         return per_output[0]
     return [{"outputs": [results[i] for results in per_output]} for i in range(count)]

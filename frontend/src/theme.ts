@@ -55,6 +55,8 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Normalization: 'cyan',
   Sequence: 'green',
   Merge: 'orange',
+  Kernels: 'pink',
+  'Classical models': 'grape',
 };
 
 export function categoryColor(category: string | undefined): string {

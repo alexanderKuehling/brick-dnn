@@ -6,7 +6,7 @@ import pytest
 
 from brickdnn import EXAMPLES, analyze
 
-from .helpers import chain
+from .helpers import CLASSICAL_EXAMPLES, chain
 
 
 def graph(nodes, edges):
@@ -20,7 +20,12 @@ def graph(nodes, edges):
 def test_examples_are_valid(example_id):
     result = analyze(EXAMPLES[example_id]["graph"])
     assert result.valid, result.errors
-    assert result.total_params > 0
+    if example_id in CLASSICAL_EXAMPLES:
+        assert result.family == "classical"
+        assert result.to_dict()["classical"]["node"] == result.outputs[0]
+    else:
+        assert result.family == "neural"
+        assert result.total_params > 0
 
 
 @pytest.mark.parametrize(

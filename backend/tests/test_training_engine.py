@@ -41,8 +41,8 @@ from brickdnn.training import state as st  # noqa: E402
 from brickdnn.training.engine import Reporter, TrainingJob, build_model, train  # noqa: E402
 from brickdnn.training.tuning import TuningConfig  # noqa: E402
 
+from .helpers import NEURAL_EXAMPLES, chain  # noqa: E402
 from .helpers import build_model as build_from_code  # noqa: E402
-from .helpers import chain  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parent.parent
 
@@ -150,7 +150,7 @@ def _check_stop_every_batch(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("example_id", sorted(EXAMPLES))
+@pytest.mark.parametrize("example_id", NEURAL_EXAMPLES)
 def test_build_model_matches_exported_code(example_id):
     graph = EXAMPLES[example_id]["graph"]
     model = build_model(graph)
@@ -175,7 +175,7 @@ def test_build_model_matches_exported_code(example_id):
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("example_id", sorted(EXAMPLES))
+@pytest.mark.parametrize("example_id", NEURAL_EXAMPLES)
 def test_demo_training_completes_for_every_example(example_id, tmp_path):
     graph = EXAMPLES[example_id]["graph"]
     result, rec = run_job(graph, random_info(), tmp_path, max_samples=64, val_split=0.05)

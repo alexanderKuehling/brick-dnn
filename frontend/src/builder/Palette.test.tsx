@@ -1,6 +1,7 @@
 import { render, screen, userEvent } from '@test-utils';
 import { vi } from 'vitest';
 import type { LayerCatalog } from '@/api/types';
+import { CLASSICAL_CATALOG } from './classicalFixtures';
 import { Palette } from './Palette';
 
 const layer = (type: string, category: string) => ({
@@ -25,6 +26,30 @@ describe('Palette', () => {
     await userEvent.type(screen.getByLabelText('Search layers'), 'lstm');
     expect(screen.queryByText('Linear')).not.toBeInTheDocument();
     expect(screen.getByText('LSTM')).toBeInTheDocument();
+  });
+
+  it('has no family headings without classical bricks', () => {
+    render(<Palette catalog={catalog} onAdd={() => {}} />);
+    expect(screen.queryByText('Neural network · PyTorch')).not.toBeInTheDocument();
+  });
+
+  it('separates neural layers from the classical bricks', async () => {
+    render(<Palette catalog={CLASSICAL_CATALOG} onAdd={() => {}} />);
+    const headings = screen.getAllByText(/ · (PyTorch|scikit-learn)$/).map((h) => h.textContent);
+    expect(headings).toEqual(['Neural network · PyTorch', 'Classical · scikit-learn']);
+    expect(screen.getByText('Kernels')).toBeInTheDocument();
+    expect(screen.getByText(/Combine them with Kernel sum and Kernel product/)).toBeInTheDocument();
+    expect(screen.getByText('Classical models')).toBeInTheDocument();
+    // Kernels have a diamond swatch like their handles.
+    const rbf = screen.getByRole('button', { name: 'RBF kernel' });
+    expect(rbf.querySelector('[data-kernel]')).not.toBeNull();
+    const svc = screen.getByRole('button', { name: 'Support vector classification' });
+    expect(svc.querySelector('[data-kernel]')).toBeNull();
+
+    // Searching keeps the heading of what is found.
+    await userEvent.type(screen.getByLabelText('Search layers'), 'white');
+    expect(screen.getByText('Classical · scikit-learn')).toBeInTheDocument();
+    expect(screen.queryByText('Neural network · PyTorch')).not.toBeInTheDocument();
   });
 
   it('adds a layer on click', async () => {

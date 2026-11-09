@@ -25,15 +25,21 @@ from .compat import TrainingPlan
 from .config import TrainingConfig
 from .datasets import (
     BUILTIN_DATASETS,
-    SPLIT_FILE,
     BuiltinDataset,
     DatasetError,
     DatasetInfo,
     list_image_files,
-    open_csv,
-    parse_number,
 )
 from .reporting import Reporter, StopTraining, TrainingError, short_error
+from .tabular import (
+    CHANGED,
+    csv_columns,
+    csv_rows,
+    held_out_size,
+    read_split,
+    split_sizes,
+    val_size_for,
+)
 
 Batch = tuple[list[torch.Tensor], list[torch.Tensor]]
 
@@ -165,28 +171,6 @@ def iterate_batches(
         yield source.batch(indices)
 
 
-def held_out_size(max_samples: int, share: float, train_share: float) -> int:
-    """Validation or test samples that go with ``max_samples`` training samples, so that
-    they keep the proportion ``share : train_share``."""
-    return max(1, round(max_samples * share / train_share))
-
-
-def val_size_for(max_samples: int, val_split: float) -> int:
-    """Validation samples that go with ``max_samples`` training samples (same proportion)."""
-    return held_out_size(max_samples, val_split, 1 - val_split)
-
-
-def split_sizes(n: int, val_split: float, test_split: float) -> tuple[int, int, int]:
-    """Numbers of training, validation and test samples (each part gets at least one)."""
-    need = 3 if test_split > 0 else 2
-    if n < need:
-        parts = "training + validation + test" if test_split > 0 else "training + validation"
-        raise TrainingError(f"The dataset needs at least {need} samples ({parts}).")
-    n_test = min(max(1, round(n * test_split)), n - 2) if test_split > 0 else 0
-    n_val = min(max(1, round(n * val_split)), n - n_test - 1)
-    return n - n_val - n_test, n_val, n_test
-
-
 def split_indices(
     n: int,
     val_split: float,
@@ -215,34 +199,9 @@ def split_indices(
 
 
 def read_split_file(path: Path, n: int, expected: list[int] | None = None) -> torch.Tensor:
-    """The split stored with a prepared CSV file (``split.bin`` next to it): one uint8 per
-    data row, 0 training, 1 validation, 2 test. ``expected`` are the [train, val, test]
-    counts from the dataset info."""
-    changed = TrainingError(
-        "The split of this dataset (split.bin) does not match its rows. "
-        "Create the dataset again in the Data tab."
-    )
-    try:
-        raw = (path.parent / SPLIT_FILE).read_bytes()
-    except OSError:
-        raise TrainingError(
-            "The split of this dataset (split.bin) is missing. Create the dataset again in the "
-            "Data tab."
-        ) from None
-    if len(raw) != n or n == 0:
-        raise changed
-    split = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-    if bool((split > 2).any()):
-        raise changed
-    counts = torch.bincount(split.long(), minlength=3).tolist()
-    if expected is not None and [int(c) for c in expected] != counts:
-        raise changed
-    if counts[0] == 0 or counts[1] == 0:
-        raise TrainingError(
-            "The split of this dataset needs training and validation rows. "
-            "Change the split in the Data tab and create the dataset again."
-        )
-    return split
+    """The split stored with a prepared CSV file as a uint8 tensor (see
+    :func:`.tabular.read_split`)."""
+    return torch.frombuffer(bytearray(read_split(path, n, expected)), dtype=torch.uint8)
 
 
 def predefined_split_indices(
@@ -708,7 +667,7 @@ def _read_csv_tensors(
     (float64: class indices or values). Returns them with the column names and delimiter."""
     rows_expected = info.num_samples or 0
     width = (info.num_features or 0) + 1
-    changed = TrainingError("The CSV file has changed since it was checked. Upload it again.")
+    changed = TrainingError(CHANGED)
     if rows_expected < 2 or width < 2:
         raise changed
     classification = plan.targets[0]["kind"] == "class"
@@ -716,16 +675,12 @@ def _read_csv_tensors(
     label_index = {name: i for i, name in enumerate(info.class_names or [])}
     features = torch.empty((rows_expected, width - 1), dtype=torch.float32)
     targets = torch.empty(rows_expected, dtype=torch.float64)
+    columns = csv_columns(info)
+    block: list[list[float]] = []
+    block_targets: list[float] = []
+    filled = 0
 
-    with open_csv(path) as (header, rows, delimiter):
-        decimal_comma = delimiter != ","
-        columns = list(info.columns)
-        if len(columns) != width:
-            columns = [f"column_{i + 1}" for i in range(width - 1)] + ["target"]
-        offset = 2 if header is not None else 1  # line number of the first data row
-        block: list[list[float]] = []
-        block_targets: list[float] = []
-        filled = 0
+    with csv_rows(path, info) as (delimiter, offset, rows):
 
         def store() -> None:
             nonlocal filled
@@ -743,23 +698,7 @@ def _read_csv_tensors(
             block.clear()
             block_targets.clear()
 
-        for index, row in enumerate(rows):
-            line = index + offset
-            if index >= rows_expected:
-                raise changed
-            if len(row) != width:
-                raise TrainingError(f"Line {line} has {len(row)} values, expected {width}.")
-            values = []
-            for col, cell in enumerate(row[:-1]):
-                value = parse_number(cell, decimal_comma)
-                if value is None:
-                    shown = cell.strip()[:30] or "(empty)"
-                    raise TrainingError(
-                        f"Line {line}, column '{columns[col]}': '{shown}' is not a number."
-                    )
-                values.append(value)
-            cell = row[-1].strip()
-            number = parse_number(cell, decimal_comma)
+        for line, values, cell, number in rows:
             if classification and info.target_kind == "text":
                 if cell not in label_index:
                     raise TrainingError(f"Line {line}: unknown class '{cell[:30]}'.")

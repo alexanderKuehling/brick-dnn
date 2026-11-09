@@ -88,6 +88,39 @@ describe('ParamField', () => {
     expect(screen.getByText('Enter whole numbers separated by commas.')).toBeInTheDocument();
   });
 
+  it('shows tiny floats in full', () => {
+    render(
+      <ParamField
+        param={{ ...base, label: 'Alpha', kind: 'float', default: 1e-10, min: 0 }}
+        value={1e-10}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByLabelText('Alpha')).toHaveValue('0.0000000001');
+  });
+
+  it('labels the options of selects', async () => {
+    const onChange = vi.fn();
+    render(
+      <ParamField
+        param={{
+          ...base,
+          name: 'hyperparameters',
+          label: 'Hyperparameters',
+          kind: 'select',
+          default: 'optimize',
+          options: ['optimize', 'custom bounds', 'fixed'],
+        }}
+        value="optimize"
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('combobox', { name: 'Hyperparameters' })).toHaveValue('Optimise');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Hyperparameters' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Custom bounds' }));
+    expect(onChange).toHaveBeenCalledWith('custom bounds');
+  });
+
   it('toggles booleans', async () => {
     const onChange = vi.fn();
     render(

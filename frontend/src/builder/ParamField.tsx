@@ -71,7 +71,8 @@ export function ParamField({ param, value, inferred, onChange }: ParamFieldProps
           max={param.max ?? undefined}
           step={isFloat ? (param.max !== null && param.max <= 1 ? 0.05 : 0.1) : 1}
           allowDecimal={isFloat}
-          decimalScale={isFloat ? 4 : undefined}
+          // Enough decimals for tiny values such as alpha 1e-10 or the bounds of kernels (1e-05).
+          decimalScale={isFloat ? 12 : undefined}
           onChange={(raw) => {
             const next = toNumber(raw);
             if (next !== undefined) {

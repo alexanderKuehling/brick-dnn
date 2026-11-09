@@ -1,9 +1,10 @@
-"""Train Brick DNN networks with PyTorch.
+"""Train Brick DNN networks with PyTorch, and classical models with scikit-learn.
 
 Everything importable from here works without PyTorch: settings, dataset metadata,
 compatibility checks and the run-directory file format. The modules that need
-PyTorch (``engine``, ``runner``, ``cli``, ``probe``) import it themselves; install it with
-``pip install "brickdnn[train]"`` (or ``pip install torch torchvision``).
+PyTorch (``engine``, ``cli``, ``probe``) import it themselves; install it with
+``pip install "brickdnn[train]"`` (or ``pip install torch torchvision``). Classical models
+(``classical_engine``) need scikit-learn instead: ``pip install "brickdnn[classic]"``.
 """
 
 from __future__ import annotations
@@ -36,6 +37,12 @@ def torchvision_installed() -> bool:
     return importlib.util.find_spec("torchvision") is not None
 
 
+def sklearn_installed() -> bool:
+    """True if scikit-learn (for classical models) can be imported (checked without
+    importing it)."""
+    return importlib.util.find_spec("sklearn") is not None
+
+
 __all__ = [
     "ACTIVE_STATUSES",
     "BUILTIN_DATASETS",
@@ -57,6 +64,7 @@ __all__ = [
     "inspect_csv",
     "inspect_image_folder",
     "random_info",
+    "sklearn_installed",
     "suggest_fixes",
     "torch_installed",
     "torchvision_installed",

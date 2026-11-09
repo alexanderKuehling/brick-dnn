@@ -17,8 +17,11 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis, analyze
-from ..layers import fmt_shape
+from ..layers import ClassicalModel, fmt_shape
+from .config import TrainingConfig, classical_max_rows
 from .datasets import BUILTIN_DATASETS, MAX_CLASSES, DatasetInfo
+from .reporting import TrainingError
+from .tabular import split_sizes
 
 MAX_IMAGE_SIDE = 1024
 # A flat Input takes images of an image folder only if they are at least this many pixels wide
@@ -41,6 +44,10 @@ class TrainingPlan:
     ``image``   for image data: ``{"channels": C, "height": H, "width": W,
                 "layout": "chw"|"hw"|"flat"}``. Images are converted to C channels and
                 resized to H×W; ``hw`` drops the channel axis, ``flat`` flattens C·H·W.
+    ``classical`` for classical models (scikit-learn), else None: ``{"node", "type",
+                "estimator", "label", "task", "kernel", "scale", "max_rows"}`` (``kernel``:
+                the starting kernel of a Gaussian process; ``max_rows``: the most training
+                rows it is fitted on, see config.classical_max_rows)
     """
 
     task: str  # classification | regression | demo
@@ -51,6 +58,7 @@ class TrainingPlan:
     num_classes: int | None = None
     class_names: list[str] | None = None
     notes: list[str] = field(default_factory=list)
+    classical: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -93,26 +101,37 @@ def _count(n: int | None, word: str) -> str:
     return f"{n:,} {word}" + ("" if n == 1 else "s")
 
 
-def check_compatibility(graph: Any, dataset: DatasetInfo) -> Compatibility:
+def check_compatibility(
+    graph: Any, dataset: DatasetInfo, config: TrainingConfig | None = None
+) -> Compatibility:
     """Check ``graph`` (a graph document or an :class:`Analysis`) against ``dataset``.
 
     For a graph document, ``fixes`` are suggested as well (an analysis cannot be changed).
+    ``config`` (optional) adds the checks that depend on the training settings, e.g. the
+    row limit of classical models against Max. samples.
     """
     if isinstance(graph, Analysis):
-        return _check(graph, dataset)
+        return _check(graph, dataset, config)
     analysis = analyze(graph)
-    result = _check(analysis, dataset)
+    result = _check(analysis, dataset, config)
     result.fixes = suggest_fixes(graph, dataset, analysis, result)
     return result
 
 
-def _check(analysis: Analysis, dataset: DatasetInfo) -> Compatibility:
+def _check(
+    analysis: Analysis, dataset: DatasetInfo, config: TrainingConfig | None = None
+) -> Compatibility:
     result = Compatibility()
     if not analysis.valid:
         result.errors.append("The network has problems. Fix the layers marked in red first.")
         return result
 
     inputs = _input_specs(analysis)
+    if analysis.family == "classical":
+        _check_classical(result, analysis, dataset, inputs, config)
+        if result.errors:
+            result.plan = None
+        return result
     if dataset.kind == "random":
         result.plan = _demo_plan(analysis, inputs)
         return result
@@ -488,7 +507,8 @@ def suggest_fixes(
     analysis = analysis or analyze(graph)
     if not analysis.valid or len(analysis.inputs) != 1 or len(analysis.outputs) != 1:
         return []
-    if result is not None and result.ok and _outputs_fit(analysis, dataset):
+    classical = analysis.family == "classical"
+    if result is not None and result.ok and (classical or _outputs_fit(analysis, dataset)):
         return []  # nothing to improve
 
     input_id = analysis.inputs[0]
@@ -505,6 +525,10 @@ def suggest_fixes(
             changes[input_id] = params
         trial = analyze(_with_params(graph, changes))
         if not trial.valid or len(trial.outputs) != 1:
+            continue
+        if classical:  # a classical model's output follows the data: only the Input matters
+            if _check(trial, dataset).ok:
+                return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
             continue
         out_shape = list(trial.nodes[trial.outputs[0]].shape or ())
         if len(out_shape) != 1:
@@ -630,3 +654,216 @@ def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[
         "previous": previous,
         "summary": summary,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Classical models (scikit-learn)
+# --------------------------------------------------------------------------- #
+
+# Demo data of classical classifiers has this many classes.
+CLASSICAL_DEMO_CLASSES = 3
+# How the row limits are described: (models, variable, cost)
+LIMITS = {
+    "gaussian_process": ("Gaussian processes", "BRICKDNN_GP_MAX_ROWS", "n³"),
+    "gaussian_process_classifier": (
+        "Gaussian process classifiers",
+        "BRICKDNN_GPC_MAX_ROWS",
+        "n³ for every class",
+    ),
+    "svm": ("Support vector machines", "BRICKDNN_SVM_MAX_ROWS", "n² or more"),
+}
+CLASSICAL_NOTE = (
+    "A classical model is fitted once, without epochs: the settings for epochs, batch size, "
+    "learning rate, optimizer, weight decay, device, early stopping and the kept weights are "
+    "not used."
+)
+
+
+def _check_classical(
+    result: Compatibility,
+    analysis: Analysis,
+    info: DatasetInfo,
+    inputs: list[dict[str, Any]],
+    config: TrainingConfig | None,
+) -> None:
+    node = analysis.model
+    assert node is not None and isinstance(node.layer, ClassicalModel)
+    layer = node.layer
+    max_rows = classical_max_rows(layer.limit)
+    models, variable, cost = LIMITS[layer.limit]
+    classical: dict[str, Any] = {
+        "node": node.id,
+        "type": node.type,
+        "estimator": layer.estimator,
+        "label": layer.label,
+        "task": layer.task,
+        "kernel": node.kernel.code() if node.kernel is not None else None,
+        "scale": layer.scale,
+        "max_rows": max_rows,
+    }
+    max_samples = config.max_samples if config is not None else None
+    if max_samples is not None and max_samples > max_rows:
+        result.errors.append(
+            f"Max. samples is {max_samples:,}, but {models.lower()} are fitted on at most "
+            f"{max_rows:,} training rows on this server ({variable}). Lower it, or leave it "
+            f"empty to fit on {max_rows:,} random training rows."
+        )
+    if info.kind == "random":
+        result.plan = _classical_demo_plan(layer, inputs, classical)
+        return
+    if info.kind in ("builtin", "images"):
+        result.errors.append(
+            f"{layer.label} is a classical model: it trains on tabular data (a CSV file or a "
+            f"dataset from the Data tab) or on demo data, not on images like {info.name}. "
+            "Build a neural network (e.g. a CNN) for images."
+        )
+        return
+    if info.kind != "csv":
+        result.errors.append(f"Unknown dataset kind '{info.kind}'.")
+        return
+
+    n = info.num_features or 0
+    in_shape = inputs[0]["shape"]
+    if in_shape != [n]:
+        cols = ", ".join(info.columns[:-1][:8]) + (" …" if n > 8 else "")
+        result.errors.append(
+            f"The Input expects shape {fmt_shape(tuple(in_shape))}, but the CSV file has "
+            f"{_count(n, 'feature column')} ({cols}). Set the Input shape to {n}."
+        )
+        return
+    target = info.columns[-1] if info.columns else "target"
+    rows = _count(info.num_samples, "row")
+    prepared = info.predefined_split is not None
+    if prepared:
+        result.warnings.append(_predefined_split_note(info.predefined_split or []))
+    notes = [
+        "Features are standardised (mean 0, standard deviation 1) with the statistics of the "
+        "training rows; the scaler is saved as part of the model.",
+        CLASSICAL_NOTE,
+    ]
+
+    if layer.task == "regression":
+        if info.target_kind == "text":
+            result.errors.append(
+                f"The target column '{target}' contains text labels ({info.num_classes or 0} "
+                f"classes), so this is a classification task: use GaussianProcessClassifier or "
+                f"SVC instead of {layer.label}."
+            )
+            return
+        if info.target_kind == "integer" and info.class_names and len(info.class_names) <= 10:
+            result.warnings.append(
+                f"The target column '{target}' only holds {len(info.class_names)} different "
+                f"values or classes ({_shown(info.class_names)}). {layer.label} predicts them "
+                "as numbers; for classification use GaussianProcessClassifier or SVC instead."
+            )
+        plan = TrainingPlan(
+            task="regression",
+            summary=f"Regression: predict '{target}' from {_count(n, 'feature')} ({rows}) "
+            f"with {layer.estimator}.",
+            inputs=inputs,
+            targets=[{"kind": "value", "shape": [1]}],
+            notes=notes,
+            classical=classical,
+        )
+    else:
+        if info.target_kind == "number":
+            result.errors.append(
+                f"The target column '{target}' contains decimal numbers, which is a regression "
+                f"task: use GaussianProcessRegressor or SVR instead of {layer.label}."
+            )
+            return
+        if not info.class_names:
+            result.errors.append(
+                f"This dataset was prepared for regression: its target '{target}' has no "
+                "classes. Prepare it for classification in the Data tab, or use "
+                "GaussianProcessRegressor or SVR."
+                if prepared
+                else f"The target column '{target}' has more than {MAX_CLASSES:,} different "
+                "values: it cannot be used for classification."
+            )
+            return
+        class_names = list(info.class_names)
+        if len(class_names) < 2:
+            result.errors.append(
+                f"The target column '{target}' holds only one class ('{class_names[0]}'). "
+                "Classification needs at least two."
+            )
+            return
+        # How the target column names the classes: text labels, whole numbers, or (prepared
+        # in the Data tab) class indices 0 … K-1 with the labels in class_names.
+        if info.target_kind == "text":
+            classical["class_targets"] = "labels"
+            note = f"Text labels are classes in alphabetical order: {_shown(class_names)}."
+        elif prepared:
+            classical["class_targets"] = "indices"
+            note = f"Classes in index order: {_shown(class_names)}."
+        else:
+            classical["class_targets"] = "values"
+            note = f"The classes are the values of the target column: {_shown(class_names)}."
+        k = len(class_names)
+        plan = TrainingPlan(
+            task="classification",
+            summary=f"Classification into {k} classes from {_count(n, 'feature')} ({rows}) "
+            f"with {layer.estimator}.",
+            inputs=inputs,
+            targets=[{"kind": "class", "num_classes": k}],
+            num_classes=k,
+            class_names=class_names,
+            notes=[*notes, note],
+            classical=classical,
+        )
+
+    n_train = _training_rows(info, config)
+    if n_train is not None and n_train > max_rows:
+        result.warnings.append(
+            f"{models} are fitted on at most {max_rows:,} training rows on this server "
+            f"({variable}; the time to fit grows with {cost}): {max_rows:,} random rows of the "
+            f"{n_train:,} training rows are used, and validation and test data shrink in "
+            "proportion."
+        )
+    result.plan = plan
+
+
+def _training_rows(info: DatasetInfo, config: TrainingConfig | None) -> int | None:
+    """Training rows of a CSV dataset with these settings (the defaults without)."""
+    config = config or TrainingConfig()
+    if info.predefined_split:
+        n_train = int(info.predefined_split[0])
+    else:
+        try:
+            n_train = split_sizes(info.num_samples or 0, config.val_split, config.test_split)[0]
+        except TrainingError:
+            return None
+    if config.max_samples is not None:
+        n_train = min(n_train, config.max_samples)
+    return n_train
+
+
+def _classical_demo_plan(
+    layer: ClassicalModel, inputs: list[dict[str, Any]], classical: dict[str, Any]
+) -> TrainingPlan:
+    notes = [
+        "Demo data checks whether the model can learn at all: random features and a hidden "
+        "rule. The numbers say nothing about real-world accuracy.",
+        CLASSICAL_NOTE,
+    ]
+    if layer.task == "regression":
+        return TrainingPlan(
+            task="demo",
+            summary="Demo data: random features and a hidden rule to learn (regression).",
+            inputs=inputs,
+            targets=[{"kind": "value", "shape": [1]}],
+            notes=notes,
+            classical=classical,
+        )
+    k = CLASSICAL_DEMO_CLASSES
+    return TrainingPlan(
+        task="demo",
+        summary=f"Demo data: random features and a hidden rule to learn ({k} classes).",
+        inputs=inputs,
+        targets=[{"kind": "class", "num_classes": k}],
+        num_classes=k,
+        class_names=[f"class {i}" for i in range(k)],
+        notes=notes,
+        classical={**classical, "class_targets": "indices"},
+    )

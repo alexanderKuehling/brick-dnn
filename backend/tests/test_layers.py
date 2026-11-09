@@ -85,7 +85,8 @@ def test_shape_inference(shape, dtype, layer_type, params, expected):
 
 def test_every_registered_layer_has_a_case():
     covered = {case[2] for case in CASES} | {"Input", "Add", "Concat"}
-    assert covered == set(REGISTRY)
+    # Kernels and classical models are covered in test_classical.py.
+    assert covered == {t for t, cls in REGISTRY.items() if cls.family != "classical"}
 
 
 def test_auto_params_are_filled_in():

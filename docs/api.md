@@ -12,7 +12,7 @@ need an account; saved networks, training and data preparation do.
 | GET    | `/api/layers/`    | `{"categories": [...], "layers": [LayerSpec, ...]}`           |
 | GET    | `/api/examples/`  | Example networks `[{id, name, description, graph}]`           |
 | POST   | `/api/analyze/`   | Validate a graph, infer shapes                                |
-| POST   | `/api/generate/`  | Generate PyTorch code                                         |
+| POST   | `/api/generate/`  | Generate PyTorch code (scikit-learn for classical models)     |
 
 ### `POST /api/analyze/`
 
@@ -39,6 +39,24 @@ including inferred `auto` parameters; parameters that have no effect with the ot
 and `outputs` list the Input layers and the layers without outgoing connections, also when
 the graph has errors.
 
+Every node also has `output_kind` (`tensor` or `kernel`: what its outgoing edges carry),
+`kernel` (kernel bricks and Gaussian processes: the kernel as scikit-learn code, otherwise
+`null`) and `task` (classical models: `regression` or `classification`). The top level adds
+`family` (`neural` or `classical`) and `classical` (`{"node", "type", "estimator", "task",
+"kernel"}` for a network with a classical model, else `null`). For example a Gaussian process
+without a kernel brick:
+
+```json
+"gp": { "type": "GaussianProcessRegressor", "output_shape": [1], "dtype": "float", "num_params": 3,
+        "params": { "alpha": 1e-10, "normalize_y": true, "n_restarts_optimizer": 0 },
+        "output_kind": "tensor", "task": "regression",
+        "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)" }
+```
+
+Classifiers have `output_shape` `null` (the classes come from the data), `SVR`/`SVC` have
+`num_params` `null`. See [graph-format.md](graph-format.md#classical-models) for the rules
+and the catalogue fields `family`, `output_kind` and `input_slots` of `GET /api/layers/`.
+
 ### `POST /api/generate/`
 
 ```json
@@ -51,6 +69,10 @@ the graph has errors.
 - `200 {"code": "...", "filename": "my_net.py"}`
 - `400 {"detail": "...", "analysis": {...}}` if the graph has errors
 - `?download=1` returns the file itself (`Content-Disposition: attachment`).
+
+For a classical model the code is a scikit-learn script (`make_model()`, `--csv`, `--save
+model.joblib`, `--predict`); `class_name` does not apply, and without `include_training`
+it keeps `--predict` to use a downloaded `.joblib` file.
 
 ```bash
 curl -X POST http://localhost:8080/api/generate/?download=1 \
@@ -224,17 +246,17 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits, `classical` |
 | GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
-| POST   | `/api/training/check/`                 | `{graph, dataset}`: does the network fit the data?  |
+| POST   | `/api/training/check/`                 | `{graph, dataset, config?}`: does the network fit the data? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
 | POST   | `/api/training/runs/`                  | Start a run `{name, graph, dataset, config, tuning?}` |
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept) |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
-| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`); with `?sig=…` from a download link without login |
+| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
@@ -296,20 +318,50 @@ Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features
 a fix for surplus class outputs can also come with `"ok": true`. See
 [training.md](training.md#adapting-the-network-to-the-data).
 
+The check also takes the `config` (optional) to check what depends on it, e.g. `max_samples`
+against the row limit of a classical model. For classical models, only the Input layer's
+`shape` is ever suggested (their output follows the data).
+
 `POST /api/training/runs/` answers incompatible combinations with explanations, e.g.
 `400 {"detail": "...", "errors": ["The network outputs 5 values, but MNIST has 10 classes. ..."],
 "warnings": []}`. Starting a run while another one is active gives `409`, and `503` when
-PyTorch is not installed or training is disabled.
+training is disabled or the library the network needs is missing (PyTorch for neural
+networks, scikit-learn for classical models).
+
+**Classical models** (Gaussian processes, SVMs, see [training.md](training.md#classical-models))
+train with scikit-learn and do not need PyTorch. `GET /api/training/` describes them separately,
+because `available` and `reason` are about PyTorch:
+
+```json
+"classical": {
+  "available": true, "reason": null, "sklearn_version": "1.9.1",
+  "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000 },
+  "tuning": false
+}
+```
+
+`max_rows` gives, per classical model type, the most training rows it is fitted on (larger
+training sets are subsampled). Only `val_split`, `test_split`, `max_samples` (at most
+`max_rows`) and `seed` of `config` apply;
+a `tuning` gives `400`. Their runs have `family` `"classical"` (otherwise `"neural"`) and
+`epochs` 1.
 
 A run's `status` is `starting`, `preparing` (loading or downloading data), `running`,
 `completed`, `stopped` or `failed`. `GET /api/training/runs/<id>/` includes `state` with the
 per-epoch `history` (`train_loss`, `val_loss`, `train_accuracy`, `val_accuracy`, `val_rmse`),
 the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weights are tested
 and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
-and the last log lines. Poll it about once per second while a run is active.
+and the last log lines. Poll it about once per second while a run is active. `state.family`
+is `neural` or `classical`; a classical run is fitted once: it has no `progress`, a single
+`history` entry when the fit is done (regression adds `val_r2`), `test` adds `r2`, and
+`state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
+`fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
+`support_vectors` and `train` (the metrics on the training rows), see
+[training.md](training.md#classical-models).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
-`test_loss`, `test_accuracy`, `test_rmse`), `tuning` (the normalised search settings or
+`test_loss`, `test_accuracy`, `test_rmse`; `val_r2` and `test_r2` for classical regression,
+`null` otherwise), `family`, `tuning` (the normalised search settings or
 `null`), `trials_done` and `best_trial` (`{trial, params, val_loss, val_accuracy, val_rmse,
 weights_epoch}`). In a search, `state.trials` lists every trial with its `params`, `status`,
 the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
@@ -351,12 +403,18 @@ also height × width) or in the shape of the Input layer, and need `input_scale`
 arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
 `top_k` (1–10, default 3) is the number of classes in `top`.
 
+Classical models take the same rows. Classifiers give their own class probabilities (an SVC
+calibrated with Platt scaling, a Gaussian process its predictive probabilities); a Gaussian
+process regressor adds `"std"`, its predictive standard deviation in the units of the target,
+to every prediction (`{"value": 101.3, "std": 0.4}`), and the answer a `std_note`.
+
 The inputs are checked and prepared like the training data from the run's
 `state.preprocessing`; the network then runs in a separate process (CPU, at most 30 seconds,
 `BRICKDNN_MAX_PREDICTIONS` at a time, default 1). Answers: `400 {"detail", "inputs"}` when the
 inputs do not fit (`inputs` describes what the network takes), `409` when the run has no
 weights or its preprocessing is unknown (e.g. it failed early), `503` when training is
-disabled, PyTorch is missing or other predictions are running (`Retry-After: 5`), `500` when the
+disabled, PyTorch (scikit-learn for classical models) is missing or other predictions are
+running (`Retry-After: 5`), `500` when the
 prediction itself fails or takes too long, `429` above the rate limit.
 
 ## Data preparation (login required)

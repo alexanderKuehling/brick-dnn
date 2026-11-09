@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt .
+# Includes scikit-learn (with SciPy, about 190 MB): classical models (Gaussian processes,
+# SVMs) train in the default image, without PyTorch.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Training needs PyTorch, which adds about 1 GB to the image. It is therefore optional:

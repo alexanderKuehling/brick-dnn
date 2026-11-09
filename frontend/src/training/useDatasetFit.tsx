@@ -22,6 +22,7 @@ import type { Analysis, CompatibilityFix, GraphDocument, LayerSpec, Params } fro
 import type { InputFit } from '@/builder/BuilderContext';
 import type { LayerFlowNode, LayerNodeData } from '@/builder/graph';
 import { canTrain, NO_SCOPE } from './access';
+import { canStartTraining, trainingFamily } from './classical';
 import {
   describeFixes,
   describeShape,
@@ -112,7 +113,8 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
     loggedIn &&
     !readOnly &&
     canTrain(training.scope ?? NO_SCOPE) &&
-    Boolean(status?.enabled && status.available);
+    // PyTorch for neural networks, scikit-learn for classical models.
+    Boolean(status && canStartTraining(status, trainingFamily(analysis)));
   const source: EffectiveSource | null =
     editable && status
       ? effectiveSource(status, data.source ?? DEFAULT_SOURCE, data.datasets)

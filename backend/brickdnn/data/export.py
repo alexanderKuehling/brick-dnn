@@ -40,7 +40,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ..codegen import BANNER
+from ..links import BANNER
 from .pipeline import (
     PipelineResult,
     class_labels,

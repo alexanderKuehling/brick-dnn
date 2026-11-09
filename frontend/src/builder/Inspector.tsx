@@ -11,6 +11,7 @@ import {
   Alert,
   Badge,
   Button,
+  Code,
   Divider,
   Fieldset,
   Group,
@@ -25,12 +26,58 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
+import type { Analysis, LayerSpec, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
 import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
-import { formatShape } from './format';
+import { formatOutput, formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
+import { inputSlots, isClassicalSpec, isKernelNode, kernelTerms, networkFamily } from './kinds';
 import { ParamField } from './ParamField';
+
+const GAUSSIAN_PROCESSES = ['GaussianProcessRegressor', 'GaussianProcessClassifier'];
+
+/** The parameters of a layer: weights; hyperparameters of kernels; nothing yet for SVMs. */
+function paramsStat(
+  spec: LayerSpec,
+  info: NodeAnalysis | undefined,
+  analysis: Analysis | null
+): { label: string; value: string } {
+  const count = info?.num_params;
+  if (!isClassicalSpec(spec)) {
+    return { label: 'Parameters', value: count?.toLocaleString('en-US') ?? '–' };
+  }
+  if (GAUSSIAN_PROCESSES.includes(spec.type)) {
+    // With kernel bricks, their hyperparameters are the ones the fit optimises.
+    const total = count === 0 && analysis?.valid ? analysis.total_params : count;
+    return { label: 'Fitted hyperparameters', value: total?.toLocaleString('en-US') ?? '–' };
+  }
+  if (count === null) {
+    return { label: 'Support vectors', value: 'after the fit' };
+  }
+  if (inputSlots(spec).length > 0) {
+    // A kernel sum or product has none of its own; the kernels it combines count theirs.
+    return { label: 'Fitted hyperparameters', value: 'in its kernels' };
+  }
+  return { label: 'Fitted hyperparameters', value: count?.toLocaleString('en-US') ?? '–' };
+}
+
+/** A kernel as scikit-learn code, one top-level term per line. */
+function KernelCode({ code, label }: { code: string; label: string }) {
+  return (
+    <Code
+      block
+      aria-label={label}
+      style={{
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+        fontSize: 'var(--mantine-font-size-xs)',
+      }}
+    >
+      {kernelTerms(code).join('\n')}
+    </Code>
+  );
+}
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -82,6 +129,10 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
   }
 
   const color = categoryColor(spec.category);
+  const kernel = isKernelNode(spec, info);
+  const params = paramsStat(spec, info, analysis);
+  const gaussianProcess = GAUSSIAN_PROCESSES.includes(spec.type);
+  const kernelCode = info?.kernel ?? null;
 
   return (
     <Stack p="md" gap="sm">
@@ -91,8 +142,9 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
             style={{
               width: 12,
               height: 12,
-              borderRadius: 3,
+              borderRadius: kernel ? 2 : 3,
               background: `var(--mantine-color-${color}-6)`,
+              transform: kernel ? 'rotate(45deg) scale(0.85)' : undefined,
             }}
           />
           <Title order={4}>{spec.label}</Title>
@@ -138,9 +190,24 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
       ))}
 
       <SimpleGrid cols={2} spacing="xs">
-        <Stat label="Output shape" value={formatShape(info?.output_shape)} />
-        <Stat label="Parameters" value={info?.num_params?.toLocaleString('en-US') ?? '–'} />
+        <Stat
+          label={kernel || info?.task === 'classification' ? 'Output' : 'Output shape'}
+          value={formatOutput(info, kernel)}
+        />
+        <Stat label={params.label} value={params.value} />
       </SimpleGrid>
+      {kernelCode && (kernel || gaussianProcess) && (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            {kernel
+              ? 'Kernel (scikit-learn)'
+              : info?.num_params
+                ? 'Default kernel (scikit-learn). Connect kernel bricks to the kernel input to choose your own.'
+                : 'Kernel (scikit-learn)'}
+          </Text>
+          <KernelCode code={kernelCode} label="Kernel as scikit-learn code" />
+        </Stack>
+      )}
       {inputFit && inputFit.nodeId === node.id && !readOnly && <DatasetFit fit={inputFit} />}
 
       {/* View only: the settings are shown, but every field is disabled. */}
@@ -228,6 +295,7 @@ function DatasetFit({ fit }: { fit: InputFit }) {
 
 function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.ReactNode[] }) {
   const { analysis, specs, readOnly, focusNode } = useBuilder();
+  const classical = networkFamily(analysis) === 'classical' ? (analysis?.classical ?? null) : null;
   const labelOf = (id: string | null) => {
     const node = nodes.find((n) => n.id === id);
     if (!node) {
@@ -261,10 +329,31 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
 
           {analysis.valid && (
             <SimpleGrid cols={1} spacing="xs">
-              <Stat
-                label="Trainable parameters"
-                value={analysis.total_params?.toLocaleString('en-US') ?? '–'}
-              />
+              {classical ? (
+                <>
+                  <Stat
+                    label="Classical model (scikit-learn)"
+                    value={specs[classical.type]?.label ?? classical.estimator}
+                  />
+                  <Stat
+                    label={
+                      analysis.total_params === null
+                        ? 'Parameters'
+                        : 'Hyperparameters the fit optimises'
+                    }
+                    value={
+                      analysis.total_params === null
+                        ? 'support vectors, after the fit'
+                        : analysis.total_params.toLocaleString('en-US')
+                    }
+                  />
+                </>
+              ) : (
+                <Stat
+                  label="Trainable parameters"
+                  value={analysis.total_params?.toLocaleString('en-US') ?? '–'}
+                />
+              )}
               {analysis.inputs.map((id) => (
                 <Stat
                   key={`in-${id}`}
@@ -276,9 +365,21 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
                 <Stat
                   key={`out-${id}`}
                   label={`Output · ${labelOf(id)}`}
-                  value={`batch × ${formatShape(analysis.nodes[id]?.output_shape)}`}
+                  value={
+                    formatOutput(analysis.nodes[id]) === 'classes from data'
+                      ? 'one class per sample'
+                      : `batch × ${formatShape(analysis.nodes[id]?.output_shape)}`
+                  }
                 />
               ))}
+              {classical?.kernel && (
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Kernel (starting values, optimised by the fit)
+                  </Text>
+                  <KernelCode code={classical.kernel} label="Kernel of the model" />
+                </Stack>
+              )}
             </SimpleGrid>
           )}
 
@@ -333,9 +434,23 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
           <List.Item>
             Fields marked <i>auto</i> are inferred from the incoming tensor.
           </List.Item>
-          <List.Item>
-            Use <b>Add</b> or <b>Concat</b> to merge branches (skip connections, multiple inputs).
-          </List.Item>
+          {classical ? (
+            <>
+              <List.Item>
+                Connect the <b>Input</b> straight to the model. Kernels flow along the dashed
+                connections into a <b>Kernel sum</b>, a <b>Kernel product</b> or the Gaussian
+                process.
+              </List.Item>
+              <List.Item>
+                Kernel values are starting values: the Gaussian process optimises them when it is
+                trained, unless they are fixed.
+              </List.Item>
+            </>
+          ) : (
+            <List.Item>
+              Use <b>Add</b> or <b>Concat</b> to merge branches (skip connections, multiple inputs).
+            </List.Item>
+          )}
           <List.Item>
             <Kbd>Del</Kbd> deletes the selection, <Kbd>Ctrl</Kbd> + <Kbd>S</Kbd> saves,{' '}
             <Kbd>Ctrl</Kbd> + <Kbd>E</Kbd> exports.

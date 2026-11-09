@@ -3,6 +3,40 @@
 ## Unreleased
 
 ### Added
+- **Classical models: Gaussian processes and support vector machines.** New bricks next to
+  the neural layers: kernels (`RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`,
+  `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum` and
+  `KernelProduct`) and classical models (`GaussianProcessRegressor`,
+  `GaussianProcessClassifier`, `SVR`, `SVC`). Connections carry a tensor or a kernel; the
+  analysis checks the rules (a model takes its features straight from the Input, one model per
+  network, no mixing with neural layers yet) and reports kernel expressions and the
+  hyperparameters the fit optimises. The export is a scikit-learn script (`make_model()`
+  returns `Pipeline(StandardScaler(), model)`; CSV fitting with metrics, `--save model.joblib`,
+  `--predict`). They train on CSV files, prepared datasets and demo data with scikit-learn,
+  fitted once instead of epoch by epoch, on at most `BRICKDNN_GP_MAX_ROWS` (5,000) training
+  rows for Gaussian process regression, `BRICKDNN_GPC_MAX_ROWS` (2,000) for Gaussian process
+  classification and `BRICKDNN_SVM_MAX_ROWS` (50,000) for SVMs; runs report the fitted
+  kernel and log marginal likelihood or the support vectors, save the fitted pipeline as a
+  `.joblib` file, and predict class probabilities or values with the Gaussian process's
+  uncertainty (REST, MCP and `brickdnn train`). Examples: Gaussian process regression, SVM
+  classifier, periodic Gaussian process. The catalogue (`GET /api/layers/`) tells each brick's
+  `family`, `output_kind` and `input_slots`; the analysis adds `output_kind`, `kernel` and
+  `task` per node and `family` and `classical` for the network; `GET /api/training/` adds
+  `classical`, runs `family`, and the run metrics `val_r2` and `test_r2`.
+  In the editor, the palette groups the bricks under *Neural network · PyTorch* and
+  *Classical · scikit-learn*, with own colours for kernels and classical models. Kernel
+  connections are dashed and end at the kernel input of a Gaussian process (one labelled input
+  per slot); a kernel into a data input, or data into a kernel input, is refused while
+  connecting, and clicking a kernel in the palette plugs it into the selected Gaussian process
+  or kernel sum. Nodes show their kernel (`RBF(ℓ=1.0)`, `Constant × RBF + White`, *default
+  kernel*) or SVM kernel and `C`; the inspector shows the kernel as scikit-learn code and
+  labels the options (*Optimise*, *Custom bounds*, *Fixed*), with the bounds only for custom
+  bounds. The toolbar counts the hyperparameters of a Gaussian process instead of parameters,
+  and the code view and export say scikit-learn. The training panel trains classical models
+  without PyTorch, shows only the splits, *Max. samples* (with the row limit) and the seed,
+  and shows a fitted run with its fit time, rows, fitted and starting kernel, log marginal
+  likelihood or support vectors and the scores (accuracy, or RMSE and R²) instead of loss
+  curves; the model downloads as `<run>.joblib` with a joblib snippet.
 - After the first training of a user that completes, a notification asks once (per browser)
   for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
@@ -119,6 +153,9 @@
   Database connections are not supported yet.
 
 ### Changed
+- The backend requires **scikit-learn** (for classical models; it brings SciPy and joblib),
+  which makes the Docker image about 190 MB larger. `brickdnn[train]` includes it, and the new
+  extra `brickdnn[classic]` installs only it.
 - Generated scripts start with a comment line that links to Brick DNN
   (`# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn`):
   the PyTorch code (also from the MCP tool and with the trained weights) and the pandas script

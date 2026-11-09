@@ -1,0 +1,10 @@
+/* A connection that carries a kernel (from a kernel brick): dashed, in the kernel colour. */
+.kernelEdge {
+  --xy-edge-stroke: var(--mantine-color-pink-5);
+  --xy-edge-stroke-selected: var(--mantine-color-pink-8);
+
+  :global(.react-flow__edge-path) {
+    stroke-dasharray: 6 4;
+    stroke-width: 1.5;
+  }
+}

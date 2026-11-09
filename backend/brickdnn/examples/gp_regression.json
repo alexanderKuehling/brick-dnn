@@ -1,0 +1,120 @@
+{
+  "id": "gp_regression",
+  "name": "Gaussian process regression (RBF + noise)",
+  "description": "A classical model (scikit-learn): predicts one number from 8 features with its uncertainty. The kernel is a scaled RBF plus white noise, whose hyperparameters are fitted to the data. Train it on a small CSV file (up to a few thousand rows).",
+  "order": 7,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            8
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "constant",
+        "type": "ConstantKernel",
+        "params": {
+          "constant_value": 1.0
+        },
+        "position": {
+          "x": 0,
+          "y": 160
+        }
+      },
+      {
+        "id": "rbf",
+        "type": "RBF",
+        "params": {
+          "length_scale": 1.0
+        },
+        "position": {
+          "x": 0,
+          "y": 320
+        }
+      },
+      {
+        "id": "scaled",
+        "type": "KernelProduct",
+        "params": {},
+        "position": {
+          "x": 280,
+          "y": 240
+        }
+      },
+      {
+        "id": "noise",
+        "type": "WhiteKernel",
+        "params": {
+          "noise_level": 0.1
+        },
+        "position": {
+          "x": 280,
+          "y": 400
+        }
+      },
+      {
+        "id": "kernel",
+        "type": "KernelSum",
+        "params": {},
+        "position": {
+          "x": 560,
+          "y": 320
+        }
+      },
+      {
+        "id": "gp",
+        "type": "GaussianProcessRegressor",
+        "params": {
+          "alpha": 1e-10,
+          "normalize_y": true,
+          "n_restarts_optimizer": 0
+        },
+        "position": {
+          "x": 840,
+          "y": 80
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-gp",
+        "source": "features",
+        "target": "gp"
+      },
+      {
+        "id": "e-constant-scaled",
+        "source": "constant",
+        "target": "scaled"
+      },
+      {
+        "id": "e-rbf-scaled",
+        "source": "rbf",
+        "target": "scaled"
+      },
+      {
+        "id": "e-scaled-kernel",
+        "source": "scaled",
+        "target": "kernel"
+      },
+      {
+        "id": "e-noise-kernel",
+        "source": "noise",
+        "target": "kernel"
+      },
+      {
+        "id": "e-kernel-gp",
+        "source": "kernel",
+        "target": "gp"
+      }
+    ]
+  }
+}
