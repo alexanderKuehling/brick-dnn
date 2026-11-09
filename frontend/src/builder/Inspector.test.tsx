@@ -1,8 +1,9 @@
 /** The Inspector of an Input layer and the dataset chosen for training. */
 import { render, screen, userEvent } from '@test-utils';
 import { vi } from 'vitest';
-import type { LayerSpec } from '@/api/types';
+import type { Analysis, LayerSpec, Params } from '@/api/types';
 import { BuilderContext, type BuilderContextValue, type InputFit } from './BuilderContext';
+import { GP_ANALYSIS, SPECS } from './classicalFixtures';
 import type { LayerFlowNode } from './graph';
 import { Inspector } from './Inspector';
 
@@ -98,5 +99,134 @@ describe('Inspector of an Input layer', () => {
     expect(screen.queryByText(/iris/)).not.toBeInTheDocument();
     renderInspector(null);
     expect(screen.queryByText(/iris/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Inspector of classical bricks', () => {
+  function renderBrick(
+    node: LayerFlowNode | null,
+    analysis: Analysis | null = GP_ANALYSIS,
+    updateNode = vi.fn()
+  ) {
+    const context: BuilderContextValue = {
+      specs: SPECS,
+      analysis,
+      errorsByNode: {},
+      warningsByNode: {},
+      readOnly: false,
+      updateNode,
+      deleteNode: vi.fn(),
+      duplicateNode: vi.fn(),
+      focusNode: vi.fn(),
+    };
+    const nodes = Object.entries(analysis?.nodes ?? {}).map(([id, info]) => ({
+      id,
+      type: 'layer' as const,
+      position: { x: 0, y: 0 },
+      data: { type: info.type, params: info.params ?? {} },
+    }));
+    return render(
+      <BuilderContext.Provider value={context}>
+        <Inspector node={node} nodes={nodes} />
+      </BuilderContext.Provider>
+    );
+  }
+  const rbf = (params: Params): LayerFlowNode => ({
+    id: 'rbf',
+    type: 'layer',
+    position: { x: 0, y: 0 },
+    data: { type: 'RBF', params },
+  });
+
+  it('shows the bounds of a kernel only with custom bounds', async () => {
+    const updateNode = vi.fn();
+    const { unmount } = renderBrick(
+      rbf({ length_scale: 1, hyperparameters: 'optimize' }),
+      GP_ANALYSIS,
+      updateNode
+    );
+    expect(screen.getByRole('combobox', { name: 'Hyperparameters' })).toHaveValue('Optimise');
+    expect(screen.queryByLabelText('Length scale: lower bound')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Hyperparameters' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Custom bounds' }));
+    expect(updateNode).toHaveBeenCalledWith('rbf', {
+      params: { length_scale: 1, hyperparameters: 'custom bounds' },
+    });
+    unmount();
+
+    renderBrick(rbf({ length_scale: 1, hyperparameters: 'custom bounds' }));
+    expect(screen.getByLabelText('Length scale: lower bound')).toHaveValue('0.00001');
+    expect(screen.getByLabelText('Length scale: upper bound')).toHaveValue('100000');
+  });
+
+  it('shows what a kernel brick puts out and its scikit-learn code', () => {
+    renderBrick(rbf({ length_scale: 1, hyperparameters: 'optimize' }));
+    expect(screen.getByText('Output')).toBeInTheDocument();
+    expect(screen.getByText('kernel')).toBeInTheDocument();
+    expect(screen.getByText('Fitted hyperparameters')).toBeInTheDocument();
+    expect(screen.getByLabelText('Kernel as scikit-learn code')).toHaveTextContent(
+      'RBF(length_scale=1.0)'
+    );
+  });
+
+  it('shows the kernel of a Gaussian process, one term per line', () => {
+    renderBrick({
+      id: 'gp',
+      type: 'layer',
+      position: { x: 0, y: 0 },
+      data: { type: 'GaussianProcessRegressor', params: {} },
+    });
+    const code = screen.getByLabelText('Kernel as scikit-learn code');
+    expect(code.textContent).toBe('RBF(length_scale=1.0)\n+ WhiteKernel(noise_level=0.1)');
+    // The connected kernel's hyperparameters are the ones the fit optimises.
+    expect(screen.getByText('Fitted hyperparameters').nextSibling).toHaveTextContent('2');
+  });
+
+  it('says that an SVM has no parameters to count before the fit', () => {
+    const analysis: Analysis = {
+      ...GP_ANALYSIS,
+      nodes: {
+        svc: {
+          type: 'SVC',
+          output_shape: null,
+          dtype: null,
+          num_params: null,
+          params: { kernel: 'rbf', C: 1 },
+          output_kind: 'tensor',
+          kernel: null,
+          task: 'classification',
+        },
+      },
+    };
+    renderBrick(
+      { id: 'svc', type: 'layer', position: { x: 0, y: 0 }, data: { type: 'SVC', params: {} } },
+      analysis
+    );
+    expect(screen.getByText('classes from data')).toBeInTheDocument();
+    expect(screen.getByText('after the fit')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Kernel as scikit-learn code')).not.toBeInTheDocument();
+  });
+
+  it('summarises a classical network', () => {
+    renderBrick(null);
+    expect(screen.getByText('Gaussian process regression')).toBeInTheDocument();
+    expect(screen.getByText('2 hyperparameters')).toBeInTheDocument();
+    expect(screen.getByLabelText('Kernel of the model')).toHaveTextContent('WhiteKernel');
+    expect(screen.queryByText('Trainable parameters')).not.toBeInTheDocument();
+    expect(screen.getByText(/Kernels flow along the dashed/)).toBeInTheDocument();
+  });
+
+  it('shows why neural layers and classical models cannot be mixed', () => {
+    const message =
+      "Classical models and neural layers can't be mixed yet, but this network also contains Linear.";
+    renderBrick(null, {
+      ...GP_ANALYSIS,
+      valid: false,
+      total_params: null,
+      errors: [{ node: 'gp', message }],
+    });
+    expect(screen.getByText('1 problem needs fixing before export.')).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 });
