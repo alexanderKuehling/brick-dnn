@@ -379,7 +379,12 @@ def _check_images(
             notes.append(f"{name} images are converted to grayscale.")
         elif nc == 1 and image["channels"] == 3:
             notes.append("The grayscale images are copied into 3 channels.")
-        sizes = f"{builtin.train_size:,} training and {builtin.val_size:,} validation images"
+        sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test images"
+        notes.append(
+            f"Validation data is taken from the {builtin.train_size:,} training images "
+            f"(validation split). The {builtin.test_size:,} official test images are the test "
+            "set: the kept weights are measured on them once, after training."
+        )
         notes.append(f"{name} is downloaded on first use (about {builtin.download_mb} MB).")
     else:
         mode = "RGB" if image["channels"] == 3 else "grayscale"

@@ -264,6 +264,14 @@ class Layer:
     def name_hint(self) -> str:
         return self.name_prefix
 
+    def param_visible(self, name: str) -> bool:
+        """False if the parameter's ``show_if`` condition is not met (it has no effect then)."""
+        param = next((p for p in self.params if p.name == name), None)
+        if param is None or param.show_if is None:
+            return True
+        other, value = param.show_if
+        return self.p.get(other) == value
+
     @property
     def output_dtype(self) -> str:
         return "float"

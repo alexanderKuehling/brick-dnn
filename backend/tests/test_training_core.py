@@ -57,6 +57,8 @@ def test_config_defaults():
         "device": "auto",
         "max_samples": None,
         "seed": None,
+        "patience": None,
+        "restore_best": True,
     }
     assert TrainingConfig.from_dict(config.to_dict()) == config
     assert not config.has_test
@@ -86,6 +88,14 @@ def test_config_parses_strings_and_normalises_choices():
     assert config.val_split == 0.2
 
 
+def test_config_early_stopping_and_best_weights():
+    config = TrainingConfig.from_dict({"patience": "5", "restore_best": False})
+    assert config.patience == 5 and config.restore_best is False
+    assert TrainingConfig.from_dict({"patience": "", "restore_best": "true"}).patience is None
+    assert TrainingConfig.from_dict({"restore_best": "False"}).restore_best is False
+    assert TrainingConfig.from_dict({"restore_best": None}).restore_best is True
+
+
 @pytest.mark.parametrize(
     "data,message",
     [
@@ -109,6 +119,10 @@ def test_config_parses_strings_and_normalises_choices():
         ({"device": "tpu"}, "Device must be one of: auto, cpu, cuda, mps."),
         ({"max_samples": 5}, "Max. samples must be between 10 and"),
         ({"seed": -1}, "Seed must be between 0 and"),
+        ({"patience": 0}, "Patience must be between 1 and 1,000."),
+        ({"patience": 2.5}, "Patience must be a whole number."),
+        ({"restore_best": 1}, "Restore best weights must be true or false."),
+        ({"restore_best": "yes"}, "Restore best weights must be true or false."),
     ],
 )
 def test_config_errors(data, message):
@@ -563,6 +577,7 @@ def test_builtin_datasets():
     assert set(BUILTIN_DATASETS) == {"mnist", "fashion_mnist", "cifar10"}
     data = BUILTIN_DATASETS["mnist"].to_dict()
     assert data["download_mb"] == 12 and data["train_size"] == 60_000
+    assert data["test_size"] == 10_000 and "val_size" not in data
     with pytest.raises(DatasetError, match="Unknown dataset 'imagenet'"):
         builtin_info("imagenet")
 
@@ -612,6 +627,14 @@ def test_image_examples_train_on_mnist(example_id, layout):
     assert result.plan.image["layout"] == layout
     assert result.plan.class_names == [str(i) for i in range(10)]
     assert any("downloaded on first use (about 12 MB)" in n for n in result.plan.notes)
+    assert result.plan.summary == (
+        "Classification into 10 classes (MNIST, 60,000 training and 10,000 test images)."
+    )
+    assert (
+        "Validation data is taken from the 60,000 training images (validation split). The "
+        "10,000 official test images are the test set: the kept weights are measured on them "
+        "once, after training." in result.plan.notes
+    )
 
 
 def test_mnist_into_rgb_network_is_resized_and_copied():

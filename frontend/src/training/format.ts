@@ -265,6 +265,40 @@ export function resultText(run: RunSummary): string | null {
   return run.tuning && run.best_trial ? `best trial ${run.best_trial.trial}, ${text}` : text;
 }
 
+/**
+ * Which weights a finished run keeps, e.g. "Weights from epoch 7 (lowest validation loss) ·
+ * stopped early after epoch 12". Null while the epochs are not over and for older runs.
+ */
+export function weightsNote(run: RunDetail): string | null {
+  const state = run.state;
+  const epoch = state?.weights_epoch;
+  if (typeof epoch !== 'number') {
+    return null;
+  }
+  const last = state?.history.at(-1)?.epoch ?? run.epochs_done;
+  const best = epoch !== last && run.config.restore_best !== false;
+  const parts = [`Weights from epoch ${epoch}${best ? ' (lowest validation loss)' : ''}`];
+  if (state?.stopped_early) {
+    parts.push(`stopped early after epoch ${last}`);
+  } else if (epoch !== last) {
+    parts.push(`${last} epochs trained`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * How the inputs were prepared (`state.preprocessing`) as a JSON file to download with the
+ * weights: normalisation statistics of the training data, image size or CSV columns and class
+ * names. Null for demo data and runs without it.
+ */
+export function preprocessingJson(run: RunDetail): string | null {
+  const pre = run.state?.preprocessing;
+  if (!pre || !pre.kind || pre.kind === 'demo') {
+    return null;
+  }
+  return `${JSON.stringify(pre, null, 2)}\n`;
+}
+
 // --------------------------------------------------------------------------
 // "How to use the weights" snippet
 // --------------------------------------------------------------------------

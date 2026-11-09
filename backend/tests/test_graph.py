@@ -159,3 +159,35 @@ def test_to_dict_is_json_friendly():
     assert data["nodes"]["flatten"]["output_shape"] == [3136]
     assert data["nodes"]["fc1"]["params"]["in_features"] == 3136
     assert data["total_params"] == 421_642
+
+
+def test_params_hidden_by_show_if_are_left_out():
+    def params(padding):
+        conv = {"out_channels": 4, "padding": padding, "padding_size": [2, 2]}
+        payload = chain(("Input", {"shape": [1, 8, 8]}), ("Conv2d", conv))
+        return analyze(payload).to_dict()["nodes"]["n1"]["params"]
+
+    assert "padding_size" not in params("same")
+    assert "padding_size" not in params("valid")
+    assert params("custom")["padding_size"] == [2, 2]
+    assert params("same")["padding"] == "same" and params("same")["in_channels"] == 1
+
+
+def test_invalid_graphs_report_the_resolved_inputs_and_outputs():
+    payload = chain(("Input", {"shape": [100]}), ("Linear", {"in_features": 50}))
+    data = analyze(payload).to_dict()
+    assert data["valid"] is False and data["errors"][0]["node"] == "n1"
+    assert data["inputs"] == ["n0"] and data["outputs"] == ["n1"]
+    assert data["nodes"]["n0"]["output_shape"] == [100]
+    assert data["nodes"]["n1"]["output_shape"] is None
+    assert data["total_params"] is None
+
+
+def test_inputs_and_outputs_when_parsing_fails():
+    payload = graph(
+        [("in", "Input", {"shape": [4]}), ("x", "NoSuchLayer", {}), ("fc", "Linear", {})],
+        [("in", "fc")],
+    )
+    data = analyze(payload).to_dict()
+    assert data["valid"] is False
+    assert data["inputs"] == ["in"] and data["outputs"] == ["x", "fc"]

@@ -115,7 +115,7 @@ STOP_TIMEOUT_SECONDS = 30
 STALE_GRACE_SECONDS = 15
 METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse")
 TEST_KEYS = {"test_loss": "loss", "test_accuracy": "accuracy", "test_rmse": "rmse"}
-TRIAL_KEYS = ("trial", "params", "val_loss", "val_accuracy", "val_rmse")
+TRIAL_KEYS = ("trial", "params", "val_loss", "val_accuracy", "val_rmse", "weights_epoch")
 
 # Training processes started by this server process, by run id. A daemon thread waits
 # for each of them so that finished processes do not linger as zombies.
@@ -650,9 +650,13 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
         last = history[-1] if isinstance(history[-1], dict) else {}
         epoch = last.get("epoch")
         run.epochs_done = epoch if isinstance(epoch, int) and epoch >= 0 else len(history)
+        # Once the weights are chosen: the metrics of the kept epoch (also what is tested).
+        kept = state.get("weights_epoch")
+        epochs = [e for e in history if isinstance(e, dict)]
+        entry = next((e for e in epochs if kept is not None and e.get("epoch") == kept), last)
         test = state.get("test") if isinstance(state.get("test"), dict) else {}
         run.metrics = {
-            **{key: last.get(key) for key in METRIC_KEYS},
+            **{key: entry.get(key) for key in METRIC_KEYS},
             **{key: test.get(name) for key, name in TEST_KEYS.items()},
         }
     elif isinstance(history, list):

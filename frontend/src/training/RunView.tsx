@@ -66,9 +66,11 @@ import {
   formatSetting,
   isActive,
   isClassification,
+  preprocessingJson,
   searchedSettings,
   searchLabel,
   SETTING_LABELS,
+  weightsNote,
   weightsSnippet,
 } from './format';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
@@ -199,6 +201,9 @@ export function RunView({
     : null;
 
   const charts = useMemo(() => chartSeries(history, classification), [history, classification]);
+  const keptEpoch = state?.weights_epoch ?? null;
+  const keptNote = run.has_weights ? weightsNote(run) : null;
+  const preprocessing = run.has_weights ? preprocessingJson(run) : null;
 
   // ---------------------------------------------------------------- actions
   const downloadWeights = async () => {
@@ -382,7 +387,7 @@ export function RunView({
               Values per epoch
             </ToggleButton>
             <Collapse expanded={tableOpened}>
-              <HistoryTable history={history} classification={classification} />
+              <HistoryTable history={history} classification={classification} kept={keptEpoch} />
             </Collapse>
           </div>
         </Stack>
@@ -428,6 +433,17 @@ export function RunView({
             Weights (.pt)
           </Button>
         )}
+        {preprocessing && (
+          <Button
+            variant="default"
+            leftSection={<IconDownload size={16} />}
+            onClick={() =>
+              downloadText(`${base}.preprocessing.json`, preprocessing, 'application/json')
+            }
+          >
+            Preprocessing (.json)
+          </Button>
+        )}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}
@@ -456,6 +472,11 @@ export function RunView({
           </Button>
         )}
       </Group>
+      {keptNote && (
+        <Text size="xs" c="dimmed" mt={-8}>
+          {keptNote}
+        </Text>
+      )}
 
       {run.has_weights && (
         <div>
@@ -464,7 +485,10 @@ export function RunView({
           </ToggleButton>
           <Collapse expanded={usageOpened}>
             <Text size="sm" c="dimmed" mb="xs">
-              Download the weights and the script, put both in one folder and load them in Python:
+              Download the weights and the script, put both in one folder and load them in Python
+              {preprocessing
+                ? '. New inputs need the same preprocessing as the training data; its values are also in the preprocessing download (.json).'
+                : ':'}
             </Text>
             <ScrollArea type="auto">
               <CodeView code={weightsSnippet(run, `${base}.py`, `${base}.pt`)} />
@@ -642,9 +666,12 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
 function HistoryTable({
   history,
   classification,
+  kept,
 }: {
   history: HistoryEntry[];
   classification: boolean;
+  /** The epoch whose weights are kept (shown in bold). */
+  kept: number | null;
 }) {
   return (
     <ScrollArea.Autosize mah={260} type="auto">
@@ -667,7 +694,7 @@ function HistoryTable({
         </Table.Thead>
         <Table.Tbody>
           {history.map((entry) => (
-            <Table.Tr key={entry.epoch}>
+            <Table.Tr key={entry.epoch} fw={entry.epoch === kept ? 700 : undefined}>
               <Table.Td>{entry.epoch}</Table.Td>
               <Table.Td>{formatMetric(entry.train_loss)}</Table.Td>
               <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>

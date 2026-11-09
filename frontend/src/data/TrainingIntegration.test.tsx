@@ -22,7 +22,7 @@ const PREPARED: Dataset = {
     builtin: null,
     sample_shape: null,
     train_size: null,
-    val_size: null,
+    test_size: null,
     num_features: 14,
     columns: [],
     has_header: true,

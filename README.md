@@ -48,8 +48,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   CIFAR-10, a CSV file or a folder of images, and watch loss and accuracy live. Training runs
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
   checks beforehand whether network and data fit and says what to change. Hold out a test set,
-  let a **hyperparameter search** find a good learning rate, batch size or optimizer, and
-  download the trained weights together with the matching script. See
+  stop early when the validation loss no longer improves (the weights of the best epoch are
+  kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer,
+  and download the trained weights together with the matching script. See
   [docs/training.md](docs/training.md).
 - **Data preparation and analysis** in the *Data* tab: import messy CSV files, join and append
   tables, fill missing values (median, KNN …), detect and clip outliers (IQR, z-score,
@@ -168,6 +169,7 @@ The exported file runs as is:
 ```bash
 python small_cnn_mnist.py                       # prints the model, runs a random batch
 python tabular_model.py --csv data.csv --epochs 20   # tabular models: train on a CSV file
+python tabular_model.py --predict new.csv             # … and predict new rows with model.pt
 ```
 
 <details>

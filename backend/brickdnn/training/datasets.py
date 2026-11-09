@@ -54,7 +54,7 @@ class BuiltinDataset:
     shape: tuple[int, int, int]  # (channels, height, width)
     class_names: tuple[str, ...]
     train_size: int
-    val_size: int
+    test_size: int  # the official test split
     download_mb: int
     mean: tuple[float, ...]
     std: tuple[float, ...]
@@ -68,7 +68,7 @@ class BuiltinDataset:
             "num_classes": len(self.class_names),
             "class_names": list(self.class_names),
             "train_size": self.train_size,
-            "val_size": self.val_size,
+            "test_size": self.test_size,
             "download_mb": self.download_mb,
         }
 
@@ -77,11 +77,11 @@ class BuiltinDataset:
             kind="builtin",
             name=self.name,
             builtin=self.id,
-            num_samples=self.train_size + self.val_size,
+            num_samples=self.train_size + self.test_size,
             sample_shape=list(self.shape),
             class_names=list(self.class_names),
             train_size=self.train_size,
-            val_size=self.val_size,
+            test_size=self.test_size,
         )
 
 
@@ -95,7 +95,7 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
             shape=(1, 28, 28),
             class_names=tuple(str(i) for i in range(10)),
             train_size=60_000,
-            val_size=10_000,
+            test_size=10_000,
             download_mb=12,
             mean=(0.1307,),
             std=(0.3081,),
@@ -118,7 +118,7 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
                 "Ankle boot",
             ),
             train_size=60_000,
-            val_size=10_000,
+            test_size=10_000,
             download_mb=30,
             mean=(0.2860,),
             std=(0.3530,),
@@ -141,7 +141,7 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
                 "truck",
             ),
             train_size=50_000,
-            val_size=10_000,
+            test_size=10_000,
             download_mb=170,
             mean=(0.4914, 0.4822, 0.4465),
             std=(0.2470, 0.2435, 0.2616),
@@ -177,7 +177,7 @@ class DatasetInfo:
     builtin: str | None = None
     sample_shape: list[int] | None = None  # (channels, height, width)
     train_size: int | None = None
-    val_size: int | None = None
+    test_size: int | None = None  # the official test split
     # csv
     num_features: int | None = None
     columns: list[str] = field(default_factory=list)  # feature columns + target column (last)

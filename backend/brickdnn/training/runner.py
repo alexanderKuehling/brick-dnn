@@ -143,6 +143,8 @@ class StateReporter(Reporter):
             "val_loss": None,
             "val_accuracy": None,
             "val_rmse": None,
+            "weights_epoch": None,
+            "stopped_early": False,
             "seconds": None,
         }
         with self._lock:
@@ -174,6 +176,13 @@ class StateReporter(Reporter):
                 progress=None,
             )
             self._write()
+
+    def weights_kept(self, result: dict[str, Any]) -> None:
+        print(f"Weights kept: {result}", flush=True)
+        self._update(
+            weights_epoch=result.get("weights_epoch"),
+            stopped_early=bool(result.get("stopped_early")),
+        )
 
     def test_end(self, result: dict[str, Any]) -> None:
         print(f"Test: {result}", flush=True)

@@ -43,8 +43,8 @@ interface SettingsFormProps {
   devices: TrainingDevice[];
   defaultDevice: string | null;
   /**
-   * Built-in datasets come with official test images: without a test set they validate on
-   * them, with one they are the test set and validation data comes from the training images.
+   * Built-in datasets come with official test images. They are always the test set;
+   * validation data comes from the training images.
    */
   builtin: boolean;
   /**
@@ -89,8 +89,7 @@ export function SettingsForm({
     : 'auto';
   const fixed = predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit : null;
   const fixedPercents = fixed ? splitPercents(fixed) : null;
-  const showValSplit = fixed !== null || !builtin || values.test_enabled;
-  const testEnabled = fixed ? fixed[2] > 0 : values.test_enabled;
+  const testEnabled = fixed ? fixed[2] > 0 : builtin || values.test_enabled;
 
   return (
     <Stack gap="sm">
@@ -155,21 +154,19 @@ export function SettingsForm({
           onChange={(value) => value && set('device')(value)}
           allowDeselect={false}
         />
-        {showValSplit && (
-          <NumberInput
-            label="Validation split"
-            value={fixedPercents ? fixedPercents[1] : values.val_split}
-            disabled={fixed !== null}
-            onChange={setNumber('val_split')}
-            min={LIMITS.val_split.min}
-            max={LIMITS.val_split.max}
-            step={5}
-            suffix="%"
-            allowNegative={false}
-            decimalScale={1}
-            error={fixed ? undefined : errors.val_split}
-          />
-        )}
+        <NumberInput
+          label="Validation split"
+          value={fixedPercents ? fixedPercents[1] : values.val_split}
+          disabled={fixed !== null}
+          onChange={setNumber('val_split')}
+          min={LIMITS.val_split.min}
+          max={LIMITS.val_split.max}
+          step={5}
+          suffix="%"
+          allowNegative={false}
+          decimalScale={1}
+          error={fixed ? undefined : errors.val_split}
+        />
       </SimpleGrid>
 
       <div>
@@ -179,11 +176,11 @@ export function SettingsForm({
             fixed
               ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
               : builtin
-                ? 'The final model is measured once on the official test images. Validation data then comes from the training images.'
+                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
                 : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
           }
           checked={testEnabled}
-          disabled={fixed !== null}
+          disabled={fixed !== null || builtin}
           onChange={(event) => set('test_enabled')(event.currentTarget.checked)}
         />
         {testEnabled && (fixed !== null || !builtin) && (
@@ -227,44 +224,64 @@ export function SettingsForm({
         Advanced settings
       </Button>
       <Collapse expanded={advanced}>
-        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
+        <Stack gap="sm">
+          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
+            <NumberInput
+              label="Weight decay"
+              value={tuned.weight_decay ? '' : values.weight_decay}
+              placeholder={tuned.weight_decay ? SEARCHED : undefined}
+              disabled={tuned.weight_decay}
+              onChange={setNumber('weight_decay')}
+              min={LIMITS.weight_decay.min}
+              max={LIMITS.weight_decay.max}
+              step={0.0001}
+              decimalScale={6}
+              allowNegative={false}
+              error={errors.weight_decay}
+            />
+            <NumberInput
+              label="Max. samples"
+              placeholder="All"
+              value={values.max_samples}
+              onChange={setNumber('max_samples')}
+              min={LIMITS.max_samples.min}
+              max={LIMITS.max_samples.max}
+              allowDecimal={false}
+              allowNegative={false}
+              thousandSeparator=","
+              error={errors.max_samples}
+            />
+            <NumberInput
+              label="Seed"
+              placeholder="Random"
+              value={values.seed}
+              onChange={setNumber('seed')}
+              min={LIMITS.seed.min}
+              max={LIMITS.seed.max}
+              allowDecimal={false}
+              allowNegative={false}
+              error={errors.seed}
+            />
+          </SimpleGrid>
           <NumberInput
-            label="Weight decay"
-            value={tuned.weight_decay ? '' : values.weight_decay}
-            placeholder={tuned.weight_decay ? SEARCHED : undefined}
-            disabled={tuned.weight_decay}
-            onChange={setNumber('weight_decay')}
-            min={LIMITS.weight_decay.min}
-            max={LIMITS.weight_decay.max}
-            step={0.0001}
-            decimalScale={6}
-            allowNegative={false}
-            error={errors.weight_decay}
-          />
-          <NumberInput
-            label="Max. samples"
-            placeholder="All"
-            value={values.max_samples}
-            onChange={setNumber('max_samples')}
-            min={LIMITS.max_samples.min}
-            max={LIMITS.max_samples.max}
+            label="Early stopping"
+            description="Stop when the validation loss has not improved for this many epochs"
+            placeholder="Off"
+            value={values.patience}
+            onChange={setNumber('patience')}
+            min={LIMITS.patience.min}
+            max={LIMITS.patience.max}
             allowDecimal={false}
             allowNegative={false}
-            thousandSeparator=","
-            error={errors.max_samples}
+            error={errors.patience}
           />
-          <NumberInput
-            label="Seed"
-            placeholder="Random"
-            value={values.seed}
-            onChange={setNumber('seed')}
-            min={LIMITS.seed.min}
-            max={LIMITS.seed.max}
-            allowDecimal={false}
-            allowNegative={false}
-            error={errors.seed}
+          <Checkbox
+            label="Keep the weights of the best epoch"
+            description="Test and save the weights with the lowest validation loss, not those of the last epoch."
+            checked={values.restore_best}
+            onChange={(event) => set('restore_best')(event.currentTarget.checked)}
           />
-        </SimpleGrid>
+        </Stack>
       </Collapse>
     </Stack>
   );
@@ -433,8 +450,8 @@ function SearchFields({ values, onChange, errors }: SearchFieldsProps) {
           {grid
             ? 'Every combination of the chosen values is trained.'
             : 'Learning rates are drawn evenly on a log scale.'}{' '}
-          All trials use the same data and starting weights; the lowest validation loss after the
-          last epoch wins.
+          All trials use the same data and starting weights; the trial with the lowest validation
+          loss wins.
         </Text>
       </Stack>
     </Paper>

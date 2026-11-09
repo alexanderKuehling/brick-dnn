@@ -102,7 +102,8 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
                       {dataset.description}
                     </Text>
                     <Text size="xs" c="dimmed">
-                      {(dataset.train_size + dataset.val_size).toLocaleString('en-US')} images ·{' '}
+                      {dataset.train_size.toLocaleString('en-US')} training and{' '}
+                      {dataset.test_size.toLocaleString('en-US')} test images ·{' '}
                       {dataset.num_classes} classes · {dataset.download_mb} MB download
                     </Text>
                   </div>
