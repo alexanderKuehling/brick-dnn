@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from brickdnn import EXAMPLES, GraphValidationError, analyze, generate_code
-from brickdnn.codegen import GeneratorOptions
+from brickdnn.codegen import PROJECT_URL, GeneratorOptions
 
 from .helpers import build_model, chain
 from .test_layers import CASES, single_layer_graph
@@ -99,6 +99,14 @@ def test_invalid_graph_raises():
     with pytest.raises(GraphValidationError) as excinfo:
         generate_code({"nodes": [], "edges": []})
     assert not excinfo.value.analysis.valid
+
+
+def test_first_line_links_to_brick_dnn():
+    for options in ({}, {"include_main": False}):
+        code = generate_code(EXAMPLES["mlp_mnist"]["graph"], options)
+        first, second = code.splitlines()[:2]
+        assert first == "# Built with Brick DNN: https://brickdnn.com, " + PROJECT_URL
+        assert second.startswith('"""NeuralNetwork: generated with Brick DNN.')
 
 
 def test_without_main():

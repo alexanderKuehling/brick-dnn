@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- After the first training of a user that completes, a notification asks once (per browser)
+  for a coffee: Brick DNN is free, *Buy me a coffee* links to the support page.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
   - *Legal pages:* an imprint, privacy policy and terms of use are Markdown files the
     operator puts into `BRICKDNN_LEGAL_DIR` (on the server `/srv/brick-dnn/legal`), shown at
@@ -117,6 +119,10 @@
   Database connections are not supported yet.
 
 ### Changed
+- Generated scripts start with a comment line that links to Brick DNN
+  (`# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn`):
+  the PyTorch code (also from the MCP tool and with the trained weights) and the pandas script
+  of the Data tab.
 - **Built-in datasets validate on their training images.** Without a test set, MNIST,
   Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
   `val_split`, so the images that chose the best epoch were also the reported result. Now

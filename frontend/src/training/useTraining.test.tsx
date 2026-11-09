@@ -3,7 +3,9 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { MantineProvider } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, type RunSummary } from '@/api';
+import { SUPPORT_URL } from '@/links';
 import { detail, STATUS, summary } from './fixtures';
+import { SUPPORT_HINT_KEY } from './supportHint';
 import { DETAIL_INTERVAL, LIST_INTERVAL, useTraining } from './useTraining';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -27,6 +29,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(notifications, 'show').mockImplementation(() => 'id');
   vi.mocked(api.training.status).mockResolvedValue(STATUS);
+  // The coffee hint after the first training has its own tests below.
+  localStorage.setItem(SUPPORT_HINT_KEY, 'shown');
 });
 
 afterEach(() => {
@@ -205,5 +209,64 @@ describe('useTraining', () => {
     const { message } = vi.mocked(notifications.show).mock.calls[0][0];
     const { container } = render(<MantineProvider>{message}</MantineProvider>);
     expect(container).toHaveTextContent('“Bob’s run” by bob');
+  });
+});
+
+describe('coffee hint after the first successful training', () => {
+  const titles = () => vi.mocked(notifications.show).mock.calls.map(([n]) => n.title);
+
+  beforeEach(() => localStorage.removeItem(SUPPORT_HINT_KEY));
+
+  it('asks once, also when the user watches the run', async () => {
+    vi.mocked(api.training.runs.list).mockResolvedValue([summary()]);
+    vi.mocked(api.training.runs.get)
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValue(detail({ status: 'completed', epochs_done: 10 }));
+    const { result } = renderHook(() => useTraining(true));
+    await flush();
+    act(() => result.current.openRun('r1'));
+    await wait(DETAIL_INTERVAL * 2);
+    expect(titles()).toEqual(['Your first training is done!']);
+    expect(localStorage.getItem(SUPPORT_HINT_KEY)).not.toBeNull();
+    const { message } = vi.mocked(notifications.show).mock.calls[0][0];
+    const { getByRole } = render(<MantineProvider>{message}</MantineProvider>);
+    expect(getByRole('link', { name: /buy me a coffee/i })).toHaveAttribute('href', SUPPORT_URL);
+
+    // Never again in this browser.
+    vi.mocked(notifications.show).mockClear();
+    vi.mocked(api.training.runs.list).mockResolvedValue([summary({ id: 'r2' })]);
+    vi.mocked(api.training.runs.get)
+      .mockResolvedValueOnce(detail({ id: 'r2' }))
+      .mockResolvedValue(detail({ id: 'r2', status: 'completed', epochs_done: 10 }));
+    act(() => result.current.openRun('r2'));
+    await wait(DETAIL_INTERVAL * 2);
+    expect(titles()).toEqual([]);
+  });
+
+  it('waits for a run that completes, not one that fails or is stopped', async () => {
+    vi.mocked(api.training.runs.list)
+      .mockResolvedValueOnce([summary({ id: 'a' }), summary({ id: 'b' })])
+      .mockResolvedValue([
+        summary({ id: 'a', status: 'failed' }),
+        summary({ id: 'b', status: 'stopped' }),
+      ]);
+    renderHook(() => useTraining(true));
+    await flush();
+    await wait(LIST_INTERVAL);
+    expect(titles()).toEqual(['Training failed', 'Training stopped']);
+    expect(localStorage.getItem(SUPPORT_HINT_KEY)).toBeNull();
+  });
+
+  it('is not shown for runs that others started in the network', async () => {
+    const network = summary({ id: 'bob', started_by: 'bob', project: 5 });
+    vi.mocked(api.training.runs.list)
+      .mockResolvedValueOnce([network])
+      .mockResolvedValue([{ ...network, status: 'completed' }]);
+    renderHook(() =>
+      useTraining(true, { username: 'ada', project: { id: 5, role: 'editor', shared: true } })
+    );
+    await flush();
+    await wait(LIST_INTERVAL);
+    expect(titles()).toEqual(['Training finished']);
   });
 });
