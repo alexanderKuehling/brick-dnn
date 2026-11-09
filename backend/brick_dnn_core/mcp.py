@@ -9,6 +9,7 @@ only gets the tools that change nothing.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
 from rest_framework import permissions, serializers
 from rest_framework.exceptions import ParseError
@@ -28,7 +30,7 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
-from brickdnn.training import ACTIVE_STATUSES
+from brickdnn.training import ACTIVE_STATUSES, DatasetError
 from brickdnn.training.config import TrainingConfig
 
 from . import history
@@ -52,7 +54,13 @@ from .serializers import (
     RunDetailSerializer,
     RunSummarySerializer,
 )
-from .shared_data import can_delete_run, can_stop_run, visible_datasets, visible_runs
+from .shared_data import (
+    can_delete_run,
+    can_stop_run,
+    editable_projects,
+    visible_datasets,
+    visible_runs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +295,67 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
+        "upload_dataset_max_mb": _megabytes(upload_limit()),
+    }
+
+
+def upload_limit() -> int:
+    """Largest CSV text for upload_dataset, in bytes."""
+    limit = int(float(settings.MCP_UPLOAD_MAX_MB) * 1024 * 1024)
+    return max(0, min(limit, training.max_upload_bytes()))
+
+
+def _megabytes(size: int) -> float:
+    return round(size / 1024**2, 2)
+
+
+class _UploadScope:
+    """Uploads over MCP count against the same rate limit as in the web app."""
+
+    throttle_scope = "uploads"
+
+
+def upload_dataset(request: Request, args: dict[str, Any]) -> Any:
+    _require_training()
+    name, text = args["name"], args["csv"]
+    if not isinstance(name, str) or not name.strip():
+        raise ToolError("'name' must be a short text, e.g. 'Iris flowers'.")
+    if len(name.strip()) > 120:
+        raise ToolError("The name can be at most 120 characters long.")
+    if not isinstance(text, str) or not text.strip():
+        raise ToolError("'csv' must be the content of the CSV file as text.")
+    data = text.encode("utf-8")
+    limit = upload_limit()
+    if len(data) > limit:
+        raise ToolError(
+            f"The CSV text has {_megabytes(len(data))} MB, but upload_dataset takes at most "
+            f"{_megabytes(limit)} MB. Upload larger files in the Brick DNN web app instead."
+        )
+    project = None
+    if args.get("project_id") is not None:
+        project_id = args["project_id"]
+        if isinstance(project_id, bool) or not isinstance(project_id, int):
+            raise ToolError("'project_id' must be the number of a project.")
+        project = editable_projects(request.user).filter(pk=project_id).first()
+        if project is None:
+            raise ToolError(
+                "Datasets can only be shared in projects the user owns or edits; "
+                "list_projects shows the user's role in each project."
+            )
+    if not ScopedRateThrottle().allow_request(request, _UploadScope()):
+        raise ToolError("Too many datasets were uploaded recently. Try again later.")
+    # The same path as an upload in the web app: stored, inspected and listed the same way.
+    upload = SimpleUploadedFile("dataset.csv", data, content_type="text/csv")
+    try:
+        dataset = training.save_upload(request.user, upload, name)
+    except DatasetError as exc:
+        raise ToolError(f"The CSV file cannot be used: {exc}") from None
+    if project is not None:
+        dataset.projects.add(project)
+    return {
+        "dataset": DatasetSerializer(dataset, context={"user": request.user}).data,
+        "reference": {"kind": "upload", "id": dataset.pk},
+        "next": "Pass the reference as dataset to check_training and start_training.",
     }
 
 
@@ -480,6 +549,28 @@ TOOLS: dict[str, Tool] = {
             "(config) and the hyperparameter search options (tuning).",
             get_training_options,
             {},
+        ),
+        Tool(
+            "upload_dataset",
+            "Upload a CSV dataset",
+            "Store a small CSV file as one of the user's training datasets (the text of the "
+            "file; get_training_options shows the size limit). Comma-, semicolon- or "
+            "tab-separated, optionally with a header row; every column except the last is a "
+            "numeric feature, the last column is the target: numbers for regression, class "
+            "labels or class indices for classification. At least 4 rows. It is checked like "
+            'an upload in the web app; train on it with {"kind": "upload", "id": <id>}.',
+            upload_dataset,
+            {
+                "name": {"type": "string", "maxLength": 120, "description": "Dataset name"},
+                "csv": {"type": "string", "description": "Content of the CSV file"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "Also share it in this project (owner or editor), so that "
+                    "its members can train on it",
+                },
+            },
+            ("name", "csv"),
+            writes=True,
         ),
         Tool(
             "check_training",
@@ -695,6 +786,10 @@ class McpView(APIView):
         version = request.headers.get("MCP-Protocol-Version")
         if version and version not in PROTOCOL_VERSIONS:
             return _json(_error(None, -32600, f"Unsupported protocol version: {version}"), 400)
+        limit = _body_limit()
+        if not _read_body(request, limit):
+            message = f"Request too large: MCP requests can have at most {_megabytes(limit)} MB."
+            return _json(_error(None, -32600, message), status=413)
         try:
             payload = request.data
         except ParseError as exc:
@@ -707,6 +802,39 @@ class McpView(APIView):
             return _json(answers) if answers else HttpResponse(status=202)
         answer = handle_message(request, payload)
         return _json(answer) if answer is not None else HttpResponse(status=202)
+
+
+def _body_limit() -> int | None:
+    """Largest MCP request in bytes: upload_dataset carries a CSV file as JSON text, which
+    escapes quotes and line breaks, so the usual limit for JSON requests is not enough."""
+    default = settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+    if default is None:
+        return None
+    return max(default, 2 * upload_limit() + 64 * 1024)
+
+
+def _read_body(request: Request, limit: int | None) -> bool:
+    """Read the body with the MCP limit instead of DATA_UPLOAD_MAX_MEMORY_SIZE. Called after
+    authentication, so only logged-in users can send large requests. False: too large.
+
+    Django checks DATA_UPLOAD_MAX_MEMORY_SIZE when ``request.body`` is first read; a body
+    that is already loaded is used as it is (by DRF's parsers too).
+    """
+    django_request = request._request
+    if limit is None or hasattr(django_request, "_body") or django_request._read_started:
+        return True
+    try:
+        length = int(django_request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > limit:
+        return False
+    body = django_request.read(limit + 1)
+    if len(body) > limit:
+        return False
+    django_request._body = body
+    django_request._stream = io.BytesIO(body)
+    return True
 
 
 def _origin_allowed(request: Request) -> bool:

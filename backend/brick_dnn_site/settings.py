@@ -176,6 +176,10 @@ TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.
 # None means [sys.executable, "-m", "brickdnn.training.runner"] (tests use a fake runner).
 TRAINING_RUNNER_COMMAND: list[str] | None = None
+# Largest CSV text that AI assistants can upload with the MCP tool upload_dataset, in MB (at
+# most BRICKDNN_MAX_UPLOAD_MB). The MCP endpoint accepts requests of about twice this size
+# (JSON escapes the text), unlike other JSON requests (DATA_UPLOAD_MAX_MEMORY_SIZE).
+MCP_UPLOAD_MAX_MB = float(os.environ.get("BRICKDNN_MCP_UPLOAD_MB", "5"))
 
 # Data preparation (the Data tab, needs pandas): imported CSV files and their tables live in
 # DATA_PREP_DIR. Uploads are limited by DATA_MAX_UPLOAD_MB.

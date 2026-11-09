@@ -27,7 +27,10 @@ from .test_training_api import (  # noqa: F401 (training_dir is a fixture)
 
 pytestmark = pytest.mark.django_db
 
-WRITING_TOOLS = {"delete_project", "delete_training_run", "delete_dataset"}
+IRIS = iris_csv().decode()
+
+DESTRUCTIVE_TOOLS = {"delete_project", "delete_training_run", "delete_dataset"}
+WRITING_TOOLS = {*DESTRUCTIVE_TOOLS, "upload_dataset"}
 
 
 @pytest.fixture
@@ -94,11 +97,13 @@ def test_read_only_tokens_do_not_get_the_writing_tools(team):
         t["name"]: t for t in rpc(mcp_client(users["ada"]), "tools/list").json()["result"]["tools"]
     }
     for name in WRITING_TOOLS:
-        assert full[name]["annotations"]["destructiveHint"] is True
+        assert full[name]["annotations"]["destructiveHint"] is (name in DESTRUCTIVE_TOOLS)
         assert full[name]["annotations"]["readOnlyHint"] is False
     project, _ = team
     assert "read-only" in error_of(client, "delete_project", id=project.pk)
     assert Project.objects.filter(pk=project.pk).exists()
+    assert "read-only" in error_of(client, "upload_dataset", name="Iris", csv=IRIS)
+    assert not Dataset.objects.exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -246,3 +251,117 @@ def test_rest_and_mcp_share_the_delete_code(team, training_dir, monkeypatch):
     client.force_authenticate(users["ada"])
     assert client.delete(f"/api/projects/{project.pk}/").status_code == 204
     assert notified == [project.pk]
+
+
+# --------------------------------------------------------------------------- #
+# upload_dataset
+# --------------------------------------------------------------------------- #
+
+
+def test_upload_dataset(team, mcps, training_dir):
+    result = ok(mcps["ada"], "upload_dataset", name="Iris flowers", csv=IRIS)
+    dataset = result["dataset"]
+    assert result["reference"] == {"kind": "upload", "id": dataset["id"]}
+    assert dataset["name"] == "Iris flowers" and dataset["kind"] == "csv"
+    assert dataset["mine"] is True and dataset["shared_in"] == []
+    assert dataset["info"]["num_features"] == 4
+    assert dataset["info"]["class_names"] == ["setosa", "versicolor", "virginica"]
+    assert (training_dir / "datasets" / str(dataset["id"]) / "data.csv").read_text() == IRIS
+
+    # It is listed like an upload in the web app and can be trained on.
+    options = ok(mcps["ada"], "get_training_options")
+    assert [d["id"] for d in options["your_datasets"]] == [dataset["id"]]
+    assert options["upload_dataset_max_mb"] == 5
+    graph = {
+        "nodes": [
+            {"id": "in", "type": "Input", "params": {"shape": [4]}},
+            {"id": "fc", "type": "Linear", "params": {"out_features": 3}},
+        ],
+        "edges": [{"source": "in", "target": "fc"}],
+    }
+    check = ok(mcps["ada"], "check_training", graph=graph, dataset=result["reference"])
+    assert check["ok"] is True and check["plan"]["task"] == "classification"
+
+
+def test_upload_dataset_into_a_project(team, mcps, training_dir):
+    project, _ = team
+    result = ok(mcps["bob"], "upload_dataset", name="Iris", csv=IRIS, project_id=project.pk)
+    assert result["dataset"]["shared_in"] == [{"id": project.pk, "name": "Shared"}]
+    # Members of the project see it.
+    seen = ok(mcps["cy"], "get_training_options")["your_datasets"]
+    assert [(d["name"], d["owner"], d["mine"]) for d in seen] == [("Iris", "bob", False)]
+
+    # Viewers and strangers cannot share in it; nothing is stored then.
+    for name in ("cy", "eve"):
+        text = error_of(mcps[name], "upload_dataset", name="X", csv=IRIS, project_id=project.pk)
+        assert "projects the user owns or edits" in text
+    assert "number" in error_of(mcps["bob"], "upload_dataset", name="X", csv=IRIS, project_id="1")
+    assert Dataset.objects.count() == 1
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ({"name": "Tiny", "csv": "a,b\n1,2\n"}, "at least 4 data rows"),
+        ({"name": "Text", "csv": "a,b\n1,x\nzz,2\n3,4\n5,6\n"}, "is not a number"),
+        ({"name": "One column", "csv": "a\n1\n2\n3\n4\n"}, "at least two columns"),
+        ({"name": "Empty", "csv": "  "}, "content of the CSV file"),
+        ({"name": "Not text", "csv": 5}, "content of the CSV file"),
+        ({"name": "", "csv": IRIS}, "'name'"),
+        ({"name": "x" * 121, "csv": IRIS}, "120 characters"),
+        ({"name": "Missing"}, "Missing argument: csv"),
+    ],
+)
+def test_upload_dataset_rejects_bad_csv(team, mcps, training_dir, arguments, message):
+    text = error_of(mcps["ada"], "upload_dataset", **arguments)
+    assert message in text, text
+    assert not Dataset.objects.exists()
+    assert not list((training_dir / "datasets").glob(".upload-*"))
+
+
+def test_upload_dataset_limits(team, mcps, training_dir, settings):
+    settings.MCP_UPLOAD_MAX_MB = 0.0001  # about 100 bytes
+    text = error_of(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
+    assert "at most 0.0 MB" in text and "web app" in text
+    # The training upload limit applies too.
+    settings.MCP_UPLOAD_MAX_MB = 5
+    settings.TRAINING_MAX_UPLOAD_MB = 0.0001
+    assert "at most" in error_of(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
+    assert ok(mcps["ada"], "get_training_options")["upload_dataset_max_mb"] == 0.0
+    assert not Dataset.objects.exists()
+
+
+def test_mcp_requests_may_carry_larger_csv_files(team, mcps, training_dir, settings):
+    """Up to MCP_UPLOAD_MAX_MB (5 MB) instead of the usual 1 MB for JSON requests."""
+    assert settings.DATA_UPLOAD_MAX_MEMORY_SIZE == 1024 * 1024
+    rows = ["a,b,c,target"] + [f"{i},{i % 7}.5,{i % 3},{i % 2}" for i in range(100_000)]
+    big = "\n".join(rows) + "\n"
+    assert 1.2 * 1024**2 < len(big) < 2 * 1024**2
+    result = ok(mcps["ada"], "upload_dataset", name="Big", csv=big)
+    assert result["dataset"]["info"]["num_samples"] == 100_000
+
+    # Larger requests are refused with a JSON-RPC error, before they are read.
+    settings.MCP_UPLOAD_MAX_MB = 0.1
+    response = rpc(
+        mcps["ada"],
+        "tools/call",
+        {"name": "upload_dataset", "arguments": {"name": "Big", "csv": big}},
+    )
+    assert response.status_code == 413
+    assert "at most 1.0 MB" in response.json()["error"]["message"]
+    # Other requests still work.
+    assert rpc(mcps["ada"], "ping").status_code == 200
+
+
+def test_upload_dataset_when_training_is_disabled_or_rate_limited(
+    team, mcps, training_dir, settings, monkeypatch
+):
+    from rest_framework.throttling import ScopedRateThrottle
+
+    settings.TRAINING_ENABLED = False
+    assert "disabled" in error_of(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
+    settings.TRAINING_ENABLED = True
+    monkeypatch.setitem(ScopedRateThrottle.THROTTLE_RATES, "uploads", "1/hour")
+    ok(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
+    assert "Too many" in error_of(mcps["ada"], "upload_dataset", name="Iris", csv=IRIS)
+    assert Dataset.objects.count() == 1
