@@ -44,7 +44,7 @@ Put Markdown files into `BRICKDNN_LEGAL_DIR`:
 
 | Setup | `BRICKDNN_LEGAL_DIR` | How to put the files there |
 | ----- | -------------------- | -------------------------- |
-| Server (`deploy/server/`) | `/srv/brick-dnn/legal` on the server, mounted read-only | `scp *.md root@SERVER:/srv/brick-dnn/legal/` |
+| Server (`deploy/server/`) | `/srv/brick-dnn/legal` on the server, then `deploy/sites/<domain>/legal` of the deployed checkout, both read-only | commit them to `deploy/sites/<domain>/legal/` (online with the next deploy), or `scp *.md root@SERVER:/srv/brick-dnn/legal/` (online at once, takes precedence) |
 | Docker Compose | `/data/legal` in the data volume | `docker compose exec backend mkdir -p /data/legal`, then `docker compose cp privacy.md backend:/data/legal/` |
 | Without Docker | `backend/data/legal` (`legal/` in `BRICKDNN_DATA_DIR`) | copy them there |
 

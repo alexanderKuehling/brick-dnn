@@ -105,6 +105,25 @@ def test_empty_and_oversized_files_are_ignored(legal_dir, monkeypatch):
     assert pages == {"imprint": False, "privacy": False, "terms": False}
 
 
+def test_several_folders_first_one_wins(settings, tmp_path):
+    # The server: files on the server first, then the texts of its domain in the repository.
+    server, site, missing = tmp_path / "server", tmp_path / "site", tmp_path / "missing"
+    settings.LEGAL_DIR = f"{server}:{missing}:{site}"
+    write(site, "imprint", IMPRINT)
+    write(site, "privacy", PRIVACY)
+    write(server, "privacy", "# Datenschutz\n\nVom Server.\n")
+    write(server, "imprint", "  \n")  # empty: the next folder's file counts
+    client = APIClient()
+    assert client.get("/api/legal/").data["pages"] == {
+        "imprint": True,
+        "privacy": True,
+        "terms": False,
+    }
+    assert client.get("/api/legal/imprint/").data["content"] == IMPRINT.strip()
+    assert "Vom Server." in client.get("/api/legal/privacy/").data["content"]
+    assert client.get("/api/legal/terms/").status_code == 404
+
+
 def test_markdown_is_returned_as_text(legal_dir):
     """The API hands out the Markdown as it is; the app renders it without raw HTML."""
     text = "# Hi\n\n<script>alert(1)</script>\n"
@@ -175,3 +194,30 @@ def test_terms_without_privacy_policy(legal_dir):
     assert register(APIClient(), accept_terms=True).status_code == 201
     profile = UserProfile.objects.get(user__username="ada")
     assert (profile.terms_version, profile.privacy_version) == (terms_version, "")
+
+
+def test_site_settings_are_defaults(tmp_path):
+    from brick_dnn_site.settings import load_site_settings
+
+    site = tmp_path / "settings.env"
+    site.write_text(
+        "# brickdnn.com\n"
+        "BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS = 180\n"
+        "BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS=730\n"
+        "DJANGO_SECRET_KEY=never-from-the-repository\n"
+        "not a setting\n",
+        encoding="utf-8",
+    )
+    environ = {
+        "BRICKDNN_SITE_ENV": str(site),
+        "BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS": "",  # unset in .env: the site's value
+        "BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS": "30",  # set in .env: wins
+    }
+    load_site_settings(environ)
+    assert environ["BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS"] == "180"
+    assert environ["BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS"] == "30"
+    assert "DJANGO_SECRET_KEY" not in environ
+
+    missing = {"BRICKDNN_SITE_ENV": str(tmp_path / "other-domain" / "settings.env")}
+    load_site_settings(missing)  # another domain has no file: nothing changes
+    assert missing == {"BRICKDNN_SITE_ENV": str(tmp_path / "other-domain" / "settings.env")}

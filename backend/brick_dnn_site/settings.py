@@ -26,6 +26,28 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+def load_site_settings(environ=os.environ) -> None:
+    """Defaults from the file ``BRICKDNN_SITE_ENV`` names: ``BRICKDNN_…=value`` lines kept in
+    the repository for one public server (``deploy/sites/<domain>/settings.env``, see
+    deploy/sites/README.md). A variable that is set and not empty in the environment wins."""
+    path = environ.get("BRICKDNN_SITE_ENV")
+    if not path:
+        return
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return  # no settings for this domain
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = (part.strip() for part in line.split("=", 1))
+        if name.startswith("BRICKDNN_") and not environ.get(name):
+            environ[name] = value
+
+
+load_site_settings()
+
 DEBUG = env_bool("DJANGO_DEBUG", False)
 DATA_DIR = Path(os.environ.get("BRICKDNN_DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)

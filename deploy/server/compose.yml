@@ -18,11 +18,15 @@ services:
       DJANGO_SECURE_COOKIES: "true"
       # PyTorch and NumPy: one thread per whole CPU of the backend, not one per CPU of the server.
       OMP_NUM_THREADS: ${BRICKDNN_BACKEND_THREADS:?see deploy/server/README.md}
-      # Imprint, privacy policy and terms of use: Markdown files in /srv/brick-dnn/legal on the
-      # server (setup.sh creates the folder), read-only for the app. See deploy/legal/.
-      BRICKDNN_LEGAL_DIR: /legal
+      # Imprint, privacy policy and terms of use (deploy/legal/): Markdown files in
+      # /srv/brick-dnn/legal on the server (setup.sh creates the folder), else the ones of this
+      # domain in the repository, deploy/sites/<BRICKDNN_DOMAIN>/legal/ (deployed with the code).
+      BRICKDNN_LEGAL_DIR: /legal:/sites/${BRICKDNN_DOMAIN:-none}/legal
+      # Settings of this domain kept in the repository (deploy/sites/README.md); .env wins.
+      BRICKDNN_SITE_ENV: /sites/${BRICKDNN_DOMAIN:-none}/settings.env
     volumes:
       - /srv/brick-dnn/legal:/legal:ro
+      - ./deploy/sites:/sites:ro
     # Django with all its trainings gets at most three quarters of the CPUs and the memory,
     # the rest stays free for Caddy and nginx: the site answers while a training runs.
     # No swap: a training that needs more memory is stopped instead of slowing everything down.
@@ -44,6 +48,10 @@ services:
 
   # Deletes old data once a day (docs/privacy.md); sleeps in between.
   cleanup:
+    environment:
+      BRICKDNN_SITE_ENV: /sites/${BRICKDNN_DOMAIN:-none}/settings.env
+    volumes:
+      - ./deploy/sites:/sites:ro
     cpus: "0.5"
     mem_limit: 256m
     memswap_limit: 256m
