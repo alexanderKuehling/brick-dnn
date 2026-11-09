@@ -43,6 +43,32 @@
   flex-shrink: 0;
   border-radius: 3px;
   background: var(--item-color);
+
+  /* Kernels: a diamond, like their handles on the canvas. */
+  &[data-kernel] {
+    width: 9px;
+    height: 9px;
+    margin-inline: 0.5px;
+    border-radius: 1px;
+    transform: rotate(45deg);
+  }
+}
+
+/* "Neural network · PyTorch" and "Classical · scikit-learn" above their categories. */
+.section {
+  margin-top: var(--mantine-spacing-md);
+  padding-top: 6px;
+  border-top: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  color: var(--mantine-color-text);
+
+  &:first-child {
+    margin-top: var(--mantine-spacing-xs);
+  }
+}
+
+.sectionTitle {
+  width: fit-content;
+  cursor: default;
 }
 
 .ghost {
