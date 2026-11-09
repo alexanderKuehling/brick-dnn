@@ -20,6 +20,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **API tokens and connected apps:** name, start of the token, SHA-256 hash, dates, the app's name, their monthly budget | database | revoked by the user, or with the account |
 | **Agent activity log:** every MCP tool call and API request made with a token or app: token or app name, start of the token, user agent, tool or route, outcome and error message, duration, ids and names of what it touched, summarised arguments (sizes and counts, never file contents, prediction inputs or secrets) | database | `BRICKDNN_AGENT_LOG_DAYS` (90) days, at most 20,000 entries per account; with the account. Kept when the token is revoked |
 | **Usage records:** the CPU time of each training run and prediction per calendar month, the part beyond the plan's allowance, which token or app caused it (with its name), the run's name; the account's plan, budgets and limits | database | with the account (they stay when a run, token or app is deleted: the month's total and later billing need them) |
+| **Paid plans** (only with [billing](billing.md)): the account's customer and subscription ids at Paddle, plan, status and dates; for every notification from Paddle its type, time and subscription id (not its content); overage charges (month, CPU hours, amount) | database | the account is deleted. Paddle keeps payment data and invoices itself |
 | **Rate-limit counters:** IP address (anonymous requests) or user id | file cache in `BRICKDNN_DATA_DIR/cache` | at most an hour |
 | **Live editing:** who is in a network, what they select or drag | Redis, in memory only | 30 seconds; never written to disk |
 | **Access log** (nginx): shortened IP address, time, path without query string, status, size, duration, user agent | Docker's container logs | at most 3 × 10 MB per container |
@@ -29,6 +30,8 @@ last training settings and data preparation and the colour scheme in `localStora
 sets no cookies (the Django admin at `/admin/` does, for the operator), loads nothing from
 other servers, has no analytics and sends no e-mails. AI assistants a user connects (MCP,
 OAuth or an API token) fetch data on the user's behalf; their provider is responsible for it.
+The one exception to "nothing from other servers" is Paddle's checkout on a server that sells
+plans, see [Paid plans](#paid-plans-paddle).
 
 The [online demo](../deploy/huggingface/README.md) is a static page without accounts: it
 stores nothing on a server, keeps the draft in the browser and loads Pyodide from
@@ -81,8 +84,9 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
 - **Download my data:** a ZIP file with `README.txt` and JSON files for the account, own
   networks with their history, memberships, own comments, API tokens (no secrets), connected
   apps, the agent activity log, data sources, preparations, datasets, training runs
-  (settings, metrics; not the weights) and the usage records with the plan and budgets
-  (`usage.json`), plus the uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
+  (settings, metrics; not the weights), the usage records with the plan and budgets
+  (`usage.json`) and, for accounts that bought a plan, `billing.json` (below), plus the
+  uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
   in total. Files beyond that are listed in `files.json` with a note. Nothing of other users
   is included (e.g. their comments on the user's networks).
 - **Delete the account**, with the password and the username typed again. Running trainings
@@ -93,6 +97,8 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
   personal data. Replies of others to a thread the user started go with the thread, as when
   the user deletes the thread. Networks of others the user worked on stay; their history
   keeps the versions without saying who saved them. All refresh tokens are blacklisted.
+  A subscription to a paid plan is cancelled at Paddle first, at once; if Paddle cannot be
+  reached, nothing is deleted and the user is asked to try again.
 
 ## Automatic deletion (optional)
 
@@ -141,11 +147,42 @@ account beyond 20,000. `--agent-log-days N` overrides the setting once.
 - gunicorn and Daphne only see nginx's internal address.
 - The app's pages and assets are sent with `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Content-Type-Options: nosniff` and `Permissions-Policy: camera=(), microphone=(),
-  geolocation=(), payment=(), usb=()`, next to `Content-Security-Policy: frame-ancestors
-  'none'` (`frontend/security-headers.conf`). Caddy adds HSTS.
+  geolocation=(), payment=(…), usb=()`, next to `Content-Security-Policy: frame-ancestors
+  'none'` (`frontend/security-headers.conf`). The payment sheet of the browser (Apple Pay,
+  Google Pay) is allowed for the frames of Paddle's checkout only, not for the app. Caddy
+  adds HSTS.
 
 The server itself logs, too (SSH logins with IP addresses in the systemd journal); limit the
 journal if you like (`SystemMaxUse=` in `/etc/systemd/journald.conf`).
+
+## Paid plans (Paddle)
+
+Only on a server that sells plans ([billing.md](billing.md)); without the Paddle settings none
+of this happens. Paddle (Paddle.com Market Ltd, United Kingdom) is the seller of the plans, the
+*merchant of record*: the contract of sale, the payment, the invoice and the tax are between
+the buyer and Paddle, which is a controller of its own for that, not a processor of the
+operator.
+
+- **What the server sends to Paddle:** when a user opens the checkout for the first time, the
+  account's e-mail address and its numeric id, to create a customer there. A changed e-mail
+  address is passed on. Nothing else about the account goes there.
+- **What the user gives Paddle directly:** payment data, country and postcode or billing
+  address, a tax number if any. None of it reaches this server; the operator sees the
+  purchase (e-mail address, country, amounts, status) in the Paddle dashboard.
+- **Third-party content:** Paddle.js (`cdn.paddle.com`) and the checkout frame are loaded
+  only when a user opens the checkout, or follows a payment link from Paddle to `/pricing`.
+  Looking at the pricing page or the account page loads nothing from Paddle. Paddle then
+  sees the IP address and browser and may set cookies of its own. The customer portal
+  ("Payment method and invoices") is a page at Paddle, opened in a new tab.
+- **What the server stores:** see the table above. `billing.json` in the data export holds
+  it; deleting the account deletes it and cancels the subscription. Paddle keeps its own
+  records (invoices, payments) for as long as it must.
+- **E-mails:** receipts, invoices and payment reminders are sent by Paddle, not by the app.
+- **Notifications:** Paddle calls `/api/billing/paddle/webhook/`; the access log shows these
+  requests like any other.
+
+The privacy policy has to say this (the template has a section), and the terms of use need a
+part on paid plans; see the checklist in [billing.md](billing.md#privacy-and-legal-texts).
 
 ## Left for the operator
 
