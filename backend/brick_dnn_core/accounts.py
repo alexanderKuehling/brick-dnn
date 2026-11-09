@@ -597,10 +597,33 @@ class UsagePermission(IsLoggedInUser):
         return super().has_permission(request, view)
 
 
+class AccountBudgetSerializer(serializers.Serializer):
+    """What users set for their own account; every field is optional."""
+
+    budget_cpu_minutes = serializers.FloatField(
+        min_value=0, max_value=10_000_000, allow_null=True, required=False
+    )
+    overage_enabled = serializers.BooleanField(required=False)
+    overage_cap_cpu_hours = serializers.FloatField(
+        min_value=0, max_value=1_000_000, allow_null=True, required=False
+    )
+
+    def validate_overage_enabled(self, value: bool) -> bool:
+        user = self.context["user"]
+        plan = budgets.plan_of(user)
+        if value and (plan.overage_price_per_cpu_hour is None or budgets.is_unlimited(user)):
+            raise serializers.ValidationError(
+                "Your plan has no compute beyond its monthly allowance."
+            )
+        return value
+
+
 class UsageView(AccountApiView):
-    """``GET``: this month's usage, limits and what is left (budgets.usage_summary; with an
-    API token also that token's or app's own budget). ``PATCH {"budget_cpu_minutes"}``: the
-    monthly budget for the own account (null: none)."""
+    """``GET``: this month's usage, the plan, its limits and what is left
+    (budgets.usage_summary; with an API token also that token's or app's own budget).
+    ``PATCH {"budget_cpu_minutes"?, "overage_enabled"?, "overage_cap_cpu_hours"?}``: the
+    monthly budget for the own account (null: none) and, with a plan that offers it, usage
+    beyond the allowance (to be billed) up to an own cap in CPU hours (null: no cap)."""
 
     permission_classes = [UsagePermission]
     unthrottled_methods = ("GET", "HEAD", "OPTIONS")
@@ -609,14 +632,12 @@ class UsageView(AccountApiView):
         return Response(usage_data(request))
 
     def patch(self, request: Request) -> Response:
-        from .serializers import BudgetSerializer
-
-        serializer = BudgetSerializer(data=request.data)
+        serializer = AccountBudgetSerializer(data=request.data, context={"user": request.user})
         serializer.is_valid(raise_exception=True)
-        UserProfile.objects.update_or_create(
-            user=request.user,
-            defaults={"budget_cpu_minutes": serializer.validated_data["budget_cpu_minutes"]},
-        )
+        if serializer.validated_data:
+            UserProfile.objects.update_or_create(
+                user=request.user, defaults=serializer.validated_data
+            )
         return Response(usage_data(request))
 
 

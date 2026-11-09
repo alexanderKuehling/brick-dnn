@@ -434,8 +434,28 @@ class UserProfile(models.Model):
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     terms_version = models.CharField(max_length=64, blank=True)
     privacy_version = models.CharField(max_length=64, blank=True)
-    # Limits of this account set by the operator (see budgets.py): empty = the server's
-    # setting (BRICKDNN_BUDGET_…), 0 = unlimited.
+    # The plan the limits come from (a key of BRICKDNN_PLANS; empty: the default plan) and
+    # whether the account has no limits at all (empty: only staff and superusers). Billing
+    # will set the plan; for now the operator does (Django admin, `manage.py set_plan`).
+    plan = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text="A plan of BRICKDNN_PLANS, e.g. free or plus. Empty: the default plan.",
+    )
+    unlimited = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Yes: no limits of the plan apply (usage is still measured). Empty: only staff "
+        "members and superusers are unlimited.",
+    )
+    # Paid plans: usage beyond the monthly allowance is allowed (and billed later) when the
+    # user switched it on, up to their own cap in CPU hours (empty: no cap).
+    overage_enabled = models.BooleanField(default=False)
+    overage_cap_cpu_hours = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(0)]
+    )
+    # Limits of this account set by the operator (see budgets.py): empty = those of its plan,
+    # 0 = unlimited.
     cpu_minutes_per_month = models.FloatField(
         null=True,
         blank=True,
@@ -501,6 +521,9 @@ class UsageRecord(models.Model):
     via = models.CharField(max_length=200, blank=True)
     kind = models.CharField(max_length=20, choices=KINDS)
     quantity = models.FloatField(default=0)
+    # The part of ``quantity`` beyond the monthly allowance of the plan, used with overage
+    # switched on (billed at the plan's overage price).
+    overage = models.FloatField(default=0)
     unit = models.CharField(max_length=20, choices=UNITS, default="cpu_second")
     run = models.ForeignKey(
         TrainingRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="usage_records"

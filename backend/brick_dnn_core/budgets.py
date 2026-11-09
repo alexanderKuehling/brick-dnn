@@ -10,16 +10,25 @@ caused it. Read-only actions (analysing a network, generating code, listing) nev
 **Storage** is not a monthly amount but what an account stores now: its imported files
 (Data tab), datasets and the files of its training runs, from the sizes in the database.
 
-**Limits** (settings ``BRICKDNN_BUDGET_…``, per account in the Django admin on the user
-profile; 0 or unset: unlimited):
+**Limits** come from the account's **plan** (``BRICKDNN_PLANS``, see :func:`plans`; without
+it one plan from ``BRICKDNN_BUDGET_…``, unlimited by default). A plan has
 
-- a monthly compute allowance per account;
+- a monthly compute allowance (CPU hours);
 - the most compute one training run may use;
-- a storage quota per account.
+- a storage quota;
+- how many trainings may run at the same time, and a queue priority (not used yet);
+- optionally a price per CPU hour beyond the allowance (*overage*), which users of the plan
+  can switch on for their account, with a cap of their own.
+
+:func:`set_plan` changes an account's plan (billing will call it), :func:`limits_for` gives
+the limits that apply. Accounts can be marked **unlimited** (:func:`set_unlimited`; staff and
+superusers are by default): they are still measured, but no limit of a plan applies. The
+operator can override single limits per account in the Django admin (user profile).
 
 Users can set a lower monthly budget for their own account and a monthly budget for each
-of their API tokens and connected apps (the budgets of agents). Every budget is in CPU
-minutes; with ``BRICKDNN_PRICE_PER_CPU_HOUR``, usage is also shown in money.
+of their API tokens and connected apps (the budgets of agents); these apply to unlimited
+accounts too. Every budget is in CPU minutes; with ``BRICKDNN_PRICE_PER_CPU_HOUR``, usage is
+also shown in money.
 
 **Enforcement.** A training only starts if every budget that applies (the account's, and
 that of the token or app starting it) has CPU time left, and the storage quota is not used
@@ -65,6 +74,8 @@ from .models import (
 )
 
 UNIT = "cpu_second"
+# Budgets that limit the whole account (not only a token or an app).
+ACCOUNT_KINDS = ("allowance", "overage", "own")
 # Usage of an active run is written to the ledger once this much has come together (and
 # always when the run ends), not on every look at the run.
 RECORD_STEP_SECONDS = 2.0
@@ -157,6 +168,157 @@ def _minutes_setting(value: float | None) -> float | None:
     return float(value) * 60
 
 
+# The plan of a server without BRICKDNN_PLANS (its limits are BRICKDNN_BUDGET_…).
+IMPLICIT_PLAN = "default"
+PLAN_FIELDS = {
+    "name": str,
+    "price": float,
+    "cpu_hours_per_month": float,
+    "storage_gb": float,
+    "cpu_minutes_per_run": float,
+    "concurrent_trainings": int,
+    "priority": int,
+    "overage_price_per_cpu_hour": float,
+}
+
+
+@dataclass(frozen=True)
+class Plan:
+    """A plan (subscription tier) and its limits; None (or 0 in the settings): unlimited.
+
+    ``price`` per month and ``overage_price_per_cpu_hour`` are in BRICKDNN_PRICE_CURRENCY and
+    only shown for now (billing comes later). ``priority`` is for the job queue (higher goes
+    first); nothing uses it yet."""
+
+    key: str
+    name: str
+    price: float | None = None
+    cpu_hours_per_month: float | None = None
+    storage_gb: float | None = None
+    cpu_minutes_per_run: float | None = None
+    concurrent_trainings: int | None = None
+    priority: int = 0
+    overage_price_per_cpu_hour: float | None = None
+
+    @property
+    def unlimited(self) -> bool:
+        return (
+            not any((self.cpu_hours_per_month, self.storage_gb, self.cpu_minutes_per_run))
+            and not self.concurrent_trainings
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """``Plan`` in frontend/src/api/types.ts."""
+        currency = settings.PRICE_CURRENCY
+        return {
+            "key": self.key,
+            "name": self.name,
+            "price": self.price,
+            "currency": currency if self.price is not None else None,
+            "cpu_hours_per_month": self.cpu_hours_per_month,
+            "storage_gb": self.storage_gb,
+            "cpu_minutes_per_run": self.cpu_minutes_per_run,
+            "concurrent_trainings": self.concurrent_trainings,
+            "priority": self.priority,
+            "overage_price_per_cpu_hour": self.overage_price_per_cpu_hour,
+        }
+
+
+def _plan(key: str, raw: Any) -> Plan:
+    from django.core.exceptions import ImproperlyConfigured
+
+    if not isinstance(raw, dict):
+        raise ImproperlyConfigured(f"BRICKDNN_PLANS: plan {key!r} must be an object.")
+    values: dict[str, Any] = {}
+    for field, kind in PLAN_FIELDS.items():
+        value = raw.get(field)
+        if value is None or value == "":
+            continue
+        try:
+            value = kind(value)
+        except (TypeError, ValueError):
+            raise ImproperlyConfigured(
+                f"BRICKDNN_PLANS: {field} of plan {key!r} must be a {kind.__name__}."
+            ) from None
+        # 0 means unlimited for the limits (and "free" for prices, which is kept).
+        if field not in ("name", "price", "priority") and value <= 0:
+            continue
+        values[field] = value
+    unknown = set(raw) - set(PLAN_FIELDS)
+    if unknown:
+        raise ImproperlyConfigured(
+            f"BRICKDNN_PLANS: unknown setting {sorted(unknown)[0]!r} in plan {key!r}."
+        )
+    values.setdefault("name", key.replace("_", " ").title())
+    return Plan(key=key, **values)
+
+
+def plans() -> dict[str, Plan]:
+    """The plans of this server by key, in the order of BRICKDNN_PLANS (an object of plans by
+    key). Without it: one plan with the limits of BRICKDNN_BUDGET_… (all unlimited unless
+    they are set)."""
+    raw = settings.PLANS
+    if not raw:
+        hours = settings.BUDGET_CPU_MINUTES_PER_MONTH / 60
+        return {
+            IMPLICIT_PLAN: _plan(
+                IMPLICIT_PLAN,
+                {
+                    "name": "Default",
+                    "cpu_hours_per_month": hours,
+                    "storage_gb": settings.BUDGET_STORAGE_MB / 1024,
+                    "cpu_minutes_per_run": settings.BUDGET_CPU_MINUTES_PER_RUN,
+                },
+            )
+        }
+    from django.core.exceptions import ImproperlyConfigured
+
+    if not isinstance(raw, dict) or not raw:
+        raise ImproperlyConfigured("BRICKDNN_PLANS must be an object of plans by key.")
+    return {str(key): _plan(str(key), value) for key, value in raw.items()}
+
+
+def default_plan() -> Plan:
+    """BRICKDNN_DEFAULT_PLAN, else the first plan."""
+    available = plans()
+    return available.get(settings.DEFAULT_PLAN) or next(iter(available.values()))
+
+
+def _profile(user) -> UserProfile | None:
+    return UserProfile.objects.filter(user=user).first()
+
+
+def plan_of(user, profile: UserProfile | None = None) -> Plan:
+    """The account's plan (the default plan if it has none, or one that no longer exists)."""
+    profile = profile if profile is not None else _profile(user)
+    key = profile.plan if profile is not None else ""
+    return plans().get(key) or default_plan()
+
+
+def is_unlimited(user, profile: UserProfile | None = None) -> bool:
+    """No limit of the plan applies: marked so, or (unless marked otherwise) a staff member
+    or superuser (BRICKDNN_STAFF_UNLIMITED)."""
+    profile = profile if profile is not None else _profile(user)
+    if profile is not None and profile.unlimited is not None:
+        return profile.unlimited
+    return bool(settings.STAFF_UNLIMITED and (user.is_staff or user.is_superuser))
+
+
+def set_plan(user, key: str) -> Plan:
+    """Give the account the plan ``key`` (a key of :func:`plans`, or "" for the default
+    plan). Takes effect at once, also for running trainings. Raises ``KeyError``."""
+    if key and key not in plans():
+        raise KeyError(key)
+    UserProfile.objects.update_or_create(user=user, defaults={"plan": key})
+    return plan_of(user)
+
+
+def set_unlimited(user, unlimited: bool | None) -> None:
+    """Mark the account as unlimited (True), limited by its plan (False) or the default for
+    its kind of account (None: unlimited for staff and superusers)."""
+    UserProfile.objects.update_or_create(user=user, defaults={"unlimited": unlimited})
+
+
 @dataclass(frozen=True)
 class Limits:
     """The limits of one account, in seconds and bytes (None: unlimited)."""
@@ -165,28 +327,68 @@ class Limits:
     own_seconds: float | None
     run_seconds: float | None
     storage_bytes: int | None
+    plan: Plan = Plan(IMPLICIT_PLAN, "Default")
+    unlimited: bool = False
+    concurrent_trainings: int | None = None
+    # Overage switched on (only with a plan that has an overage price): usage beyond the
+    # allowance is allowed up to the cap (None: no cap).
+    overage: bool = False
+    overage_cap_seconds: float | None = None
 
 
 def limits_for(user) -> Limits:
-    """The settings of the server, unless the account's profile overrides them (admin)."""
-    profile = UserProfile.objects.filter(user=user).first()
+    """The limits that apply to the account: those of its plan, unless the operator
+    overrides one (Django admin), none of them for an unlimited account. The user's own
+    monthly budget applies in any case."""
+    profile = _profile(user)
+    plan = plan_of(user, profile)
+    unlimited = is_unlimited(user, profile)
+    own = profile.budget_cpu_minutes if profile is not None else None
+    own_seconds = float(own) * 60 if own is not None else None
+    if unlimited:
+        return Limits(None, own_seconds, None, None, plan=plan, unlimited=True)
 
-    def setting(field: str, default: float) -> float:
+    def setting(field: str, default: float | None) -> float:
         override = getattr(profile, field) if profile is not None else None
-        return override if override is not None else default
+        value = override if override is not None else default
+        return value or 0.0
 
     monthly = _minutes_setting(
-        setting("cpu_minutes_per_month", settings.BUDGET_CPU_MINUTES_PER_MONTH)
+        setting("cpu_minutes_per_month", (plan.cpu_hours_per_month or 0) * 60)
     )
-    run = _minutes_setting(setting("cpu_minutes_per_run", settings.BUDGET_CPU_MINUTES_PER_RUN))
-    storage_mb = setting("storage_mb", settings.BUDGET_STORAGE_MB)
+    run = _minutes_setting(setting("cpu_minutes_per_run", plan.cpu_minutes_per_run))
+    storage_mb = setting("storage_mb", (plan.storage_gb or 0) * 1024)
     storage = int(storage_mb * 1024 * 1024) if storage_mb > 0 else None
-    own = profile.budget_cpu_minutes if profile is not None else None
+    overage = bool(
+        profile is not None
+        and profile.overage_enabled
+        and plan.overage_price_per_cpu_hour is not None
+        and monthly is not None
+    )
+    cap = profile.overage_cap_cpu_hours if overage and profile is not None else None
     return Limits(
         monthly_seconds=monthly,
-        own_seconds=float(own) * 60 if own is not None else None,
+        own_seconds=own_seconds,
         run_seconds=run,
         storage_bytes=storage,
+        plan=plan,
+        concurrent_trainings=plan.concurrent_trainings,
+        overage=overage,
+        overage_cap_seconds=cap * 3600 if cap is not None else None,
+    )
+
+
+def concurrency_refusal(user, active: int) -> str | None:
+    """Why the account cannot start another training while ``active`` of its trainings run
+    (its plan allows fewer at a time), or None."""
+    limits = limits_for(user)
+    allowed = limits.concurrent_trainings
+    if allowed is None or active < allowed:
+        return None
+    count = "1 training" if allowed == 1 else f"{allowed} trainings"
+    return (
+        f"Your plan ({limits.plan.name}) allows {count} at a time. Wait until your running "
+        "training finishes, or stop it."
     )
 
 
@@ -217,13 +419,23 @@ def minutes(seconds: float | None, digits: int = 2) -> float | None:
     return round(seconds / 60, digits) if seconds is not None else None
 
 
-def _min_text(seconds: float) -> str:
-    """``"12.5 CPU minutes"`` (with the price, if any)."""
+def _min_text(seconds: float, money: bool = False) -> str:
+    """``"12.5 CPU minutes"`` (with ``money``, also what they cost, if there is a price)."""
     value = seconds / 60
     number = f"{value:.1f}" if value >= 10 else f"{value:.2f}".rstrip("0").rstrip(".")
     text = f"{number or '0'} CPU minute{'' if number == '1' else 's'}"
     amount = cost(seconds)
-    return f"{text} ({_money(amount)})" if amount is not None else text
+    # Amounts below a cent would only clutter the messages.
+    if money and amount is not None and amount >= 0.005:
+        return f"{text} ({_money(amount)})"
+    return text
+
+
+def _iso(moment: datetime | None) -> str | None:
+    """``2026-12-01T00:00:00Z``, the same in the REST API and in MCP tool results."""
+    if moment is None:
+        return None
+    return moment.astimezone(dt_timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 # --------------------------------------------------------------------------- #
@@ -270,7 +482,9 @@ class Budget:
     @property
     def label(self) -> str:
         return {
-            "allowance": "the monthly compute allowance of this account",
+            "allowance": "the monthly compute allowance of this account"
+            + (f" ({self.name} plan)" if self.name else ""),
+            "overage": "the monthly allowance and the overage cap of this account",
             "own": "the monthly budget set for this account",
             "token": f"the monthly budget of the API token “{self.name}”",
             "app": f"the monthly budget of the connected app “{self.name}”",
@@ -278,8 +492,14 @@ class Budget:
 
     @property
     def how_to_raise(self) -> str:
+        higher = (
+            "Higher plans include more (see your account page)."
+            if len(plans()) > 1
+            else "Ask the operator of this server for a higher allowance."
+        )
         return {
-            "allowance": "Ask the operator of this server for a higher allowance.",
+            "allowance": higher,
+            "overage": "You can raise the overage cap on your account page.",
             "own": "You can raise it on your account page.",
             "token": "Its owner can raise it on the API tokens page.",
             "app": "Its owner can raise it on the API tokens page (connected apps).",
@@ -288,8 +508,8 @@ class Budget:
     def exhausted_message(self) -> str:
         resets = f" It resets on {_day(self.resets_at)} (UTC)." if self.resets_at else ""
         return (
-            f"{self.label[0].upper()}{self.label[1:]} is used up: {_min_text(self.used)} of "
-            f"{_min_text(self.limit)} this month.{resets} {self.how_to_raise}"
+            f"{self.label[0].upper()}{self.label[1:]} is used up: {_min_text(self.used, True)} of "
+            f"{_min_text(self.limit, True)} this month.{resets} {self.how_to_raise}"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -310,11 +530,18 @@ def compute_budgets(actor: Actor, period: date | None = None) -> list[Budget]:
     limits = limits_for(actor.user)
     budgets: list[Budget] = []
     account = None
-    for kind, limit in (("allowance", limits.monthly_seconds), ("own", limits.own_seconds)):
+    allowance = ("allowance", limits.monthly_seconds)
+    if limits.overage:
+        # Beyond the allowance up to the user's cap (no cap: no limit but their own budget).
+        cap = limits.overage_cap_seconds
+        allowance = ("overage", limits.monthly_seconds + cap if cap is not None else None)  # type: ignore[operator]
+    for kind, limit in (allowance, ("own", limits.own_seconds)):
         if limit is not None:
             if account is None:
                 account = used_seconds(actor.user, period=period)
-            budgets.append(Budget(kind, limit, account, resets_at=resets))
+            named = kind == "allowance" and limits.plan.key != IMPLICIT_PLAN
+            name = limits.plan.name if named else ""
+            budgets.append(Budget(kind, limit, account, name, resets_at=resets))
     token, connection = actor.token, actor.connection
     if token is not None and token.budget_cpu_minutes is not None:
         used = used_seconds(actor.user, token=token, period=period)
@@ -364,7 +591,7 @@ class StorageQuotaExceeded(BudgetError):
 def _exceeded(budget: Budget) -> BudgetExceeded:
     return BudgetExceeded(
         budget.exhausted_message(),
-        {"budget": budget.to_dict(), "resets_at": budget.resets_at},
+        {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
     )
 
 
@@ -391,6 +618,8 @@ class RunLimit:
     reason: str | None = None  # "budget" | "run_limit"
     message: str = ""
     budget: Budget | None = None
+    # For the per-run limit: "the most one training may use with the Free plan".
+    per_run: str = ""
 
     def job(self) -> dict[str, Any] | None:
         """``limits`` for job.json (see brickdnn.training.state)."""
@@ -430,28 +659,43 @@ def run_limit(actor: Actor, exclude: Any = None) -> RunLimit:
         reserved = _reserved(runs)
         available = budget.remaining - reserved
         if available < MIN_RUN_SECONDS:
-            if reserved <= 0:
+            if reserved <= 0 and budget.exhausted:
                 raise _exceeded(budget)
+            if reserved <= 0:
+                label = budget.label[0].upper() + budget.label[1:]
+                resets = (
+                    f" It resets on {_day(budget.resets_at)} (UTC)." if budget.resets_at else ""
+                )
+                raise BudgetExceeded(
+                    f"{label} is almost used up: {_min_text(budget.used, True)} of "
+                    f"{_min_text(budget.limit, True)} this month, too little is left for a training."
+                    f"{resets} {budget.how_to_raise}",
+                    {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
+                )
             raise BudgetExceeded(
                 f"What is left of {budget.label} ({_min_text(budget.remaining)}) is reserved by "
                 "trainings that are still running. Wait until they finish, or stop one.",
-                {"budget": budget.to_dict(), "resets_at": budget.resets_at},
+                {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
             )
         candidates.append((available, "budget", budget))
     if not candidates:
         return RunLimit(None)
     seconds, reason, budget = min(candidates, key=lambda item: item[0])
     if budget is None:
-        message = (
-            f"Stopped: this run used {_min_text(seconds)}, the most one training may use on "
-            "this server."
-        )
+        message = f"Stopped: this run used {_min_text(seconds)}, {_per_run(actor.user)}."
     else:
         message = (
             f"Stopped: the compute budget ran out ({budget.label}; "
             f"{_min_text(budget.remaining)} were left when the run started)."
         )
-    return RunLimit(seconds, reason, message, budget)
+    return RunLimit(seconds, reason, message, budget, _per_run(actor.user))
+
+
+def _per_run(user) -> str:
+    """ "the most one training may use with the Free plan" (or "on this server")."""
+    plan = plan_of(user)
+    where = "on this server" if plan.key == IMPLICIT_PLAN else f"with the {plan.name} plan"
+    return f"the most one training may use {where}"
 
 
 def estimate_verdict(estimate: Estimate | None, limit: RunLimit) -> tuple[str | None, str | None]:
@@ -459,7 +703,7 @@ def estimate_verdict(estimate: Estimate | None, limit: RunLimit) -> tuple[str | 
     if estimate is None or limit.seconds is None:
         return None, None
     what = (
-        "the most one training may use on this server"
+        limit.per_run
         if limit.reason == "run_limit"
         else f"what is left of {limit.budget.label}"
         if limit.budget
@@ -508,7 +752,7 @@ def estimate_data(actor: Actor, estimate: Estimate | None, exclude: Any = None) 
         "limit_reason": None,
         # What is left this month of the budgets that apply (null: none applies).
         "remaining_cpu_minutes": minutes(min(remaining)) if remaining else None,
-        "resets_at": period_end(period),
+        "resets_at": _iso(period_end(period)),
     }
     try:
         check_storage(actor.user)
@@ -559,8 +803,21 @@ def measured_cpu(run: TrainingRun, state: dict[str, Any] | None) -> float | None
     return None
 
 
-def _record(actor: Actor, kind: str, seconds: float, run: TrainingRun | None) -> UsageRecord:
+def overage_part(user, seconds: float) -> float:
+    """How much of ``seconds`` that the account uses now is beyond its plan's monthly
+    allowance, with overage switched on (0 otherwise). Call before counting them."""
+    limits = limits_for(user)
+    if not limits.overage or limits.monthly_seconds is None:
+        return 0.0
+    before = used_seconds(user)
+    return max(0.0, min(seconds, before + seconds - limits.monthly_seconds))
+
+
+def _record(
+    actor: Actor, kind: str, seconds: float, run: TrainingRun | None, overage: float = 0.0
+) -> UsageRecord:
     return UsageRecord.objects.create(
+        overage=overage,
         user=actor.user,
         source=actor.source,
         api_token=actor.token,
@@ -592,18 +849,19 @@ def record_run(run: TrainingRun, measured: float, final: bool = False) -> float:
             run.cpu_seconds = next(iter(current), previous)
             return 0.0
         period = period_of()
+        over = overage_part(run.owner, delta)
         rows = UsageRecord.objects.filter(run=run, kind="training", period=period).update(
-            quantity=F("quantity") + delta, updated_at=timezone.now()
+            quantity=F("quantity") + delta, overage=F("overage") + over, updated_at=timezone.now()
         )
         if not rows:
-            _record(Actor.of_run(run), "training", delta, run)
+            _record(Actor.of_run(run), "training", delta, run, over)
     run.cpu_seconds = measured
     return delta
 
 
 def record_prediction(actor: Actor, run: TrainingRun, seconds: float) -> None:
     if seconds > 0:
-        _record(actor, "prediction", seconds, run)
+        _record(actor, "prediction", seconds, run, overage_part(actor.user, seconds))
 
 
 def over_budget(run: TrainingRun) -> tuple[str, str] | None:
@@ -612,8 +870,7 @@ def over_budget(run: TrainingRun) -> tuple[str, str] | None:
     cap = limits_for(run.owner).run_seconds
     if cap is not None and run.cpu_seconds >= cap:
         return "run_limit", (
-            f"Stopped: this run used {_min_text(run.cpu_seconds)}, the most one training may "
-            "use on this server."
+            f"Stopped: this run used {_min_text(run.cpu_seconds)}, {_per_run(run.owner)}."
         )
     for budget in compute_budgets(Actor.of_run(run)):
         if budget.exhausted:
@@ -740,8 +997,16 @@ def usage_summary(actor: Actor) -> dict[str, Any]:
         .values("kind")
         .annotate(total=Sum("quantity"))
     }
-    account_limits = [s for s in (limits.monthly_seconds, limits.own_seconds) if s is not None]
+    account_limits = [
+        b.limit for b in compute_budgets(Actor(user), period) if b.kind in ACCOUNT_KINDS
+    ]
     limit = min(account_limits) if account_limits else None
+    overage_used = float(
+        UsageRecord.objects.filter(user=user, period=period).aggregate(n=Sum("overage"))["n"] or 0.0
+    )
+    plan = limits.plan
+    # Other plans are only mentioned when the server sells some (plans with prices).
+    offered = [p.to_dict() for p in plans().values() if p.price is not None]
     storage = storage_used(user)
     price, gb_price = cpu_price(), storage_price()
     caller = None
@@ -760,7 +1025,28 @@ def usage_summary(actor: Actor) -> dict[str, Any]:
     remaining = [b.remaining for b in compute_budgets(actor, period)]
     active = TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES)
     return {
-        "period": {"start": period, "resets_at": period_end(period)},
+        "period": {"start": period.isoformat(), "resets_at": _iso(period_end(period))},
+        "plan": plan.to_dict(),
+        # No limit of the plan applies (still measured); the own budgets do.
+        "unlimited": limits.unlimited,
+        "plans": offered if len(offered) > 1 else [],
+        "overage": {
+            "available": plan.overage_price_per_cpu_hour is not None and not limits.unlimited,
+            "enabled": limits.overage,
+            "price_per_cpu_hour": plan.overage_price_per_cpu_hour,
+            "currency": settings.PRICE_CURRENCY,
+            "cap_cpu_hours": (
+                round(limits.overage_cap_seconds / 3600, 3)
+                if limits.overage_cap_seconds is not None
+                else None
+            ),
+            "used_cpu_minutes": minutes(overage_used),
+            "cost": (
+                round(overage_used / 3600 * plan.overage_price_per_cpu_hour, 4)
+                if plan.overage_price_per_cpu_hour is not None
+                else None
+            ),
+        },
         "compute": {
             "unit": "cpu_minutes",
             "used": minutes(used),
@@ -818,6 +1104,12 @@ def export_records(user) -> dict[str, Any]:
     """usage.json of the account's data export: the ledger and the limits."""
     limits = limits_for(user)
     return {
+        "plan": limits.plan.key,
+        "unlimited": limits.unlimited,
+        "overage_enabled": limits.overage,
+        "overage_cap_cpu_hours": (
+            limits.overage_cap_seconds / 3600 if limits.overage_cap_seconds is not None else None
+        ),
         "limits": {
             "cpu_minutes_per_month": minutes(limits.monthly_seconds),
             "own_monthly_budget_cpu_minutes": minutes(limits.own_seconds),
@@ -829,6 +1121,7 @@ def export_records(user) -> dict[str, Any]:
                 "month": record.period.isoformat()[:7],
                 "kind": record.kind,
                 "quantity": record.quantity,
+                "overage": record.overage,
                 "unit": record.unit,
                 "source": record.source,
                 "via": record.via or None,

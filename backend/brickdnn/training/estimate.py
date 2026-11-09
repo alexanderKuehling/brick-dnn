@@ -31,7 +31,7 @@ from .datasets import DatasetInfo
 from .tabular import held_out_size, split_sizes
 
 # Calibrated with the examples on a 4-core Xeon server with PyTorch 2 and scikit-learn 1:
-# the estimates were 0.7 to 2.2 times the measured CPU time (Gaussian processes vary most).
+# the estimates were 0.4 to 2.2 times the measured CPU time (Gaussian processes vary most).
 # Arithmetic of a training per CPU second (all threads count, so more threads do not help).
 FLOPS_PER_CPU_SECOND = 25e9
 # CPU time of one optimizer step besides its arithmetic (Python, autograd, the optimizer).

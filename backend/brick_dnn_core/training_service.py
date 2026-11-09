@@ -680,6 +680,9 @@ def start_run(
             raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
         if active >= settings.TRAINING_MAX_RUNS:
             raise TrainingBusy(BUSY_MESSAGE)
+        mine = TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES).count()
+        if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
+            raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
         run = TrainingRun.objects.create(
             owner=user,
             project=project,

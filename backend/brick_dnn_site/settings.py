@@ -6,6 +6,7 @@ All deployment-specific values come from environment variables, see
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from datetime import timedelta
@@ -220,17 +221,38 @@ def env_number(name: str, default: float = 0.0) -> float:
         raise ImproperlyConfigured(f"{name} must be a number, not {value!r}.") from exc
 
 
+def env_json(name: str):
+    """JSON from the environment; empty or unset: None."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be JSON: {exc}") from exc
+
+
 # Budgets and cost limits per account (brick_dnn_core.budgets, docs/training.md). Compute is
-# CPU time of trainings and predictions, counted per calendar month (UTC). 0 or unset:
-# unlimited (the default, e.g. for a server of your own). Per account in the Django admin
-# (user profiles); users can set lower budgets for their account and their API tokens.
+# CPU time of trainings and predictions, counted per calendar month (UTC).
+#
+# An account's limits come from its plan. BRICKDNN_PLANS defines the plans as JSON, e.g.
+#   {"free": {"name": "Free", "price": 0, "cpu_hours_per_month": 0.5, "storage_gb": 1,
+#             "cpu_minutes_per_run": 15, "concurrent_trainings": 1, "priority": 0}, ...}
+# (see docs/training.md; a missing or 0 limit is unlimited), BRICKDNN_DEFAULT_PLAN the plan of
+# accounts that have none set (Django admin, `manage.py set_plan`). Without BRICKDNN_PLANS
+# there is one plan with the limits below; 0 or unset: unlimited (the default, e.g. for a
+# server of your own). Users can set lower budgets for their account and their API tokens.
+PLANS = env_json("BRICKDNN_PLANS")
+DEFAULT_PLAN = os.environ.get("BRICKDNN_DEFAULT_PLAN", "").strip()
 BUDGET_CPU_MINUTES_PER_MONTH = env_number("BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH")
 # The most CPU time one training may use; it is stopped like after a stop request.
 BUDGET_CPU_MINUTES_PER_RUN = env_number("BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN")
 # What an account may store: uploads, data sources, datasets and the files of its runs.
 BUDGET_STORAGE_MB = env_number("BRICKDNN_BUDGET_STORAGE_MB")
+# Accounts of staff members and superusers have no limits unless the admin says otherwise.
+STAFF_UNLIMITED = env_bool("BRICKDNN_STAFF_UNLIMITED", True)
 # Optional prices, to show costs in money (and for billing later). 0 or unset: no price,
-# usage is shown in CPU minutes and MB.
+# usage is shown in CPU minutes and MB. Plans have prices of their own (per month).
 PRICE_PER_CPU_HOUR = env_number("BRICKDNN_PRICE_PER_CPU_HOUR")
 PRICE_PER_GB_MONTH = env_number("BRICKDNN_PRICE_PER_GB_MONTH")
 PRICE_CURRENCY = os.environ.get("BRICKDNN_PRICE_CURRENCY", "").strip().upper() or "EUR"

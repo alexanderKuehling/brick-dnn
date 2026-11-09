@@ -136,6 +136,9 @@ def controlled(training_dir, settings, tmp_path):
 @pytest.fixture
 def limits(settings):
     """No limits unless a test sets them (as on a server of your own)."""
+    settings.PLANS = None
+    settings.DEFAULT_PLAN = ""
+    settings.STAFF_UNLIMITED = True
     settings.BUDGET_CPU_MINUTES_PER_MONTH = 0
     settings.BUDGET_CPU_MINUTES_PER_RUN = 0
     settings.BUDGET_STORAGE_MB = 0
@@ -828,7 +831,8 @@ def test_usage_api(ada, limits, controlled):
     assert sources[("token", "agent")]["id"] == token.pk
     assert sources[("app", "Claude")]["used_cpu_minutes"] == 1
     assert sources[("web", "Web app")]["used_cpu_minutes"] == 2.5
-    assert data["period"]["resets_at"] == budgets.period_end(budgets.period_of())
+    resets = budgets.period_end(budgets.period_of())
+    assert data["period"]["resets_at"] == resets.isoformat().replace("+00:00", "Z")
     assert data["storage"]["limit_bytes"] == 100 * 1024 * 1024
     assert data["storage"]["used_bytes"] == data["storage"]["by_kind"]["datasets"] > 0
     prices = data["prices"]
