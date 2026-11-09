@@ -21,8 +21,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from . import live
-from .models import Project, ProjectMember
+from . import history, live
+from .models import Comment, Project, ProjectMember
 from .serializers import ProjectSerializer
 
 User = get_user_model()
@@ -72,7 +72,12 @@ class VersionConflict(Exception):
 
 
 def update_project(
-    project: Project, user, data: dict[str, Any], expected_version: Any = None
+    project: Project,
+    user,
+    data: dict[str, Any],
+    expected_version: Any = None,
+    history_kind: str = "auto",
+    history_label: str = "",
 ) -> Project:
     """Change name, description or graph. Raises :class:`VersionConflict` and
     ``serializers.ValidationError``. The caller checks that ``user`` may edit."""
@@ -83,6 +88,7 @@ def update_project(
         serializer = ProjectSerializer(current, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated = serializer.save(version=current.version + 1, updated_by=user)
+        history.record(updated, user, history_kind, history_label)
         # People editing it live get the new state (after the commit, so they can load it).
         transaction.on_commit(lambda: live.notify_replaced(updated, user))
     for attr in ("member_role", "has_members"):
@@ -93,13 +99,15 @@ def update_project(
 
 def copy_project(project: Project, user) -> Project:
     name = project.name if project.name.endswith("(copy)") else f"{project.name} (copy)"
-    return Project.objects.create(
+    copy = Project.objects.create(
         owner=user,
         name=name[:120],
         description=project.description,
         graph=project.graph,
         updated_by=user,
     )
+    history.record(copy, user)
+    return copy
 
 
 class ProjectAccess(permissions.IsAuthenticated):
@@ -191,6 +199,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer = ProjectSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         project = serializer.save(owner=request.user, updated_by=request.user)
+        history.record(project, request.user)
         return Response(project_data(project, request.user), status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, pk=None, partial: bool = False) -> Response:
@@ -308,6 +317,94 @@ class ProjectViewSet(viewsets.ModelViewSet):
             project.share_token = None
         project.save(update_fields=["link_access", "share_token"])
         return Response({"link_access": project.link_access, "share_token": project.share_token})
+
+    # History ----------------------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def versions(self, request: Request, pk=None) -> Response:
+        """``GET``: the history, newest first. ``POST {label}``: name the current state."""
+        project = self.get_object()
+        if request.method == "GET":
+            entries = project.history.select_related("created_by")
+            return Response([history.version_data(entry) for entry in entries])
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        data = request.data if isinstance(request.data, dict) else {}
+        label = history.clean_label(data.get("label"))
+        entry = history.record(project, request.user, "named", label)
+        return Response(history.version_data(entry), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "patch"], url_path=r"versions/(?P<version_id>\d+)")
+    def version_detail(self, request: Request, pk=None, version_id=None) -> Response:
+        project = self.get_object()
+        entry = project.history.select_related("created_by").filter(pk=version_id).first()
+        if entry is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == "GET":
+            return Response(history.version_data(entry, with_graph=True))
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        data = request.data if isinstance(request.data, dict) else {}
+        entry.label = history.clean_label(data.get("label"))
+        entry.kind = "named"  # named versions are kept
+        entry.save(update_fields=["label", "kind"])
+        live.notify_history(project.pk)
+        return Response(history.version_data(entry))
+
+    @action(detail=True, methods=["post"], url_path=r"versions/(?P<version_id>\d+)/restore")
+    def restore(self, request: Request, pk=None, version_id=None) -> Response:
+        """Make an old version the current state (itself a new entry in the history)."""
+        project = self.get_object()
+        if not can_edit(request.user, project):
+            return Response({"detail": "View only."}, status=status.HTTP_403_FORBIDDEN)
+        entry = project.history.filter(pk=version_id).first()
+        if entry is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        when = entry.label or f"version {entry.version}"
+        project = update_project(
+            project,
+            request.user,
+            {"name": entry.name, "description": entry.description, "graph": entry.graph},
+            history_kind="restore",
+            history_label=f"Restored {when}"[:120],
+        )
+        return Response(project_data(project, request.user))
+
+    # Comments ---------------------------------------------------------------
+
+    @action(detail=True, methods=["get", "post"])
+    def comments(self, request: Request, pk=None) -> Response:
+        """``GET``: all comments, oldest first (``?node=<id>`` for one layer).
+        ``POST {text, node_id?, parent?}``: comment (every role, viewers too)."""
+        project = self.get_object()
+        if request.method == "GET":
+            comments = project.comments.select_related("author", "resolved_by")
+            node = request.query_params.get("node")
+            if node is not None:
+                comments = comments.filter(node_id=node)
+            return Response([history.comment_data(c) for c in comments])
+        data = request.data if isinstance(request.data, dict) else {}
+        comment = history.create_comment(project, request.user, data)
+        return Response(history.comment_data(comment), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"comments/(?P<comment_id>\d+)")
+    def comment(self, request: Request, pk=None, comment_id=None) -> Response:
+        project = self.get_object()
+        comment: Comment | None = (
+            project.comments.select_related("author", "resolved_by").filter(pk=comment_id).first()
+        )
+        if comment is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        role = role_of(request.user, project)
+        try:
+            if request.method == "DELETE":
+                history.delete_comment(comment, request.user, role)
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            data = request.data if isinstance(request.data, dict) else {}
+            comment = history.update_comment(comment, request.user, role, data)
+        except PermissionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return Response(history.comment_data(comment))
 
 
 def _find_user(identifier: Any):

@@ -31,6 +31,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES
 from brickdnn.training.config import TrainingConfig
 
+from . import history
 from . import training_service as training
 from .api_tokens import uses_api_token
 from .models import ApiToken, Dataset, Project, TrainingRun
@@ -233,6 +234,7 @@ def save_project(request: Request, args: dict[str, Any]) -> Any:
         if not serializer.is_valid():
             raise ToolError(json.dumps(serializer.errors))
         project = serializer.save(owner=request.user, updated_by=request.user)
+        history.record(project, request.user)
         return _summary(project, request.user)
 
     project = _project(request, args)

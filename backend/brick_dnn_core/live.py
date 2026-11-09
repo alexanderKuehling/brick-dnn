@@ -20,8 +20,10 @@ Protocol (JSON messages over ``/api/ws/projects/<id>/``), client → server:
 
 Server → client: ``hello``, ``ops`` (applied ops with ``version``, ``by`` and the sender's
 ``client_id`` and ``id``), ``rejected`` (none of the ops could be applied), ``replaced`` (the
-whole project changed, e.g. saved through the REST API or MCP), ``presence``, ``joined``,
-``left``, ``access`` (the user's role changed or was removed), ``deleted``, ``error``, ``pong``.
+whole project changed, e.g. saved through the REST API or MCP, or a version was restored),
+``presence``, ``joined``, ``left``, ``access`` (the user's role changed or was removed),
+``comment`` (``action``: created, updated or deleted, and the ``comment``), ``history`` (the
+version history changed), ``deleted``, ``error``, ``pong``.
 """
 
 from __future__ import annotations
@@ -252,6 +254,9 @@ def apply_ops(project_id: int, user, ops: list[Any]) -> tuple[int, list[dict[str
         project.version += 1
         project.updated_by = user
         project.save(update_fields=["graph", *meta, "version", "updated_by", "updated_at"])
+        from .history import record
+
+        record(project, user)
         return project.version, applied
 
 
@@ -298,6 +303,15 @@ def notify_access(project_id: int, user_id: int, role: str | None) -> None:
 
 def notify_deleted(project_id: int) -> None:
     _send(project_id, {"type": "project.deleted"})
+
+
+def notify_history(project_id: int) -> None:
+    """The history changed (a new or updated entry): open history panels reload it."""
+    _send(project_id, {"type": "project.history"})
+
+
+def notify_comment(project_id: int, action: str, comment: dict[str, Any]) -> None:
+    _send(project_id, {"type": "project.comment", "action": action, "comment": comment})
 
 
 def _user_ref(user) -> dict[str, Any]:
@@ -507,6 +521,12 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"type": "access", "role": self.role})
         if self.role is None:
             await self.close(code=CLOSE_FORBIDDEN)
+
+    async def project_history(self, event: dict[str, Any]) -> None:
+        await self.send_json({"type": "history"})
+
+    async def project_comment(self, event: dict[str, Any]) -> None:
+        await self.send_json({**event, "type": "comment"})
 
     async def project_deleted(self, event: dict[str, Any]) -> None:
         await self.send_json({"type": "deleted"})

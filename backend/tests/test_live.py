@@ -300,3 +300,35 @@ def test_rest_saves_and_access_changes_reach_live_editors(setup):
         await next_of(a, "deleted")
 
     async_to_sync(run)()
+
+
+@pytestmark_db
+def test_comments_and_history_reach_live_editors(setup):
+    project, ada, bob, _ = setup
+
+    async def run():
+        b, _ = await joined(project.pk, bob)
+
+        def comment():
+            client = APIClient()
+            client.force_authenticate(ada)
+            client.post(
+                f"/api/projects/{project.pk}/comments/",
+                {"text": "Hi", "node_id": "n1"},
+                format="json",
+            )
+
+        from channels.db import database_sync_to_async
+
+        await database_sync_to_async(comment)()
+        message = await next_of(b, "comment")
+        assert message["action"] == "created" and message["comment"]["text"] == "Hi"
+
+        await b.send_json_to(
+            {"type": "ops", "id": "m", "ops": [{"op": "set_meta", "name": "Changed"}]}
+        )
+        await next_of(b, "history")
+        await b.disconnect()
+
+    async_to_sync(run)()
+    assert project.history.first().name == "Changed"
