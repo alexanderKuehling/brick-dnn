@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.1.0 (unreleased)
+## 1.1.0 (2026-11-09)
+
+Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in
+and API tokens), a *Data* tab for preparing and analysing CSV data, training with test sets
+and hyperparameter search, PostgreSQL/Supabase, one-command server deployment, an online
+demo without a server, and an editor that works on phones.
 
 ### Added
 - **API tokens and an MCP server.** Create personal API tokens (full access or read only,
@@ -13,6 +18,13 @@
   registration, a consent page in the web app (full or read-only access), PKCE, short-lived
   access tokens only valid for MCP, rotating refresh tokens and revocation. Connected apps
   are listed on the *API tokens* page and can be disconnected there.
+- **Phones and tablets.** Every page works on phones down to 320px: a page menu in the header,
+  finger-sized buttons and handles, a full-screen code view, Data tab and training views that
+  fit, and safe areas for the iPhone notch and home indicator. Pinching zooms the network,
+  not the page, and the page no longer zooms in by itself when a field gets focus or on a
+  double tap (iOS).
+- Layers can be dragged out of the palette onto the canvas with the mouse and on touch
+  screens (pull sideways or long-press; the palette drawer closes on phones).
 - **PostgreSQL and Supabase.** Set `DATABASE_URL=postgresql://…` to keep accounts, networks,
   datasets and runs in PostgreSQL instead of the SQLite file (default). Supabase connection
   strings work as copied from the dashboard: encrypted connections, transaction pooler
@@ -45,7 +57,8 @@
 - Training uses the split of prepared datasets (`DatasetInfo.predefined_split`).
 - **Online demo without a server.** `npm run build:demo` builds the editor as static files: the
   code generator runs in the browser with Pyodide, accounts and training are switched off.
-  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space.
+  `deploy/huggingface/deploy.sh` publishes it as a free static Hugging Face Space; the
+  *Deploy demo* workflow does this after every successful CI run on `main`.
 - `brickdnn.service`: the public endpoints (layers, examples, analyze, generate) as plain
   functions, shared by the Django API and the online demo.
 - **Local training.** A *Train* button in the editor trains the current network on the machine
@@ -79,6 +92,8 @@
   is now required for development.
 - Updated backend dependencies (Django 5.2.18, Django REST framework 3.18) and CI actions.
 - Dependabot groups updates per ecosystem.
+- CI tests the backend on Python 3.12 and 3.13 (3.10 is no longer tested).
+- GitHub releases are created from this changelog when a version tag is pushed.
 
 ## 1.0.0 (2026-10-27)
 

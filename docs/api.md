@@ -8,7 +8,7 @@ need an account; saved networks, training and data preparation do.
 | Method | Path              | Description                                                   |
 | ------ | ----------------- | ------------------------------------------------------------- |
 | GET    | `/api/`           | Index of endpoints and version                                |
-| GET    | `/api/health/`    | `{"status": "ok", "version": "1.0.0"}`                        |
+| GET    | `/api/health/`    | `{"status": "ok", "version": "1.1.0"}`                        |
 | GET    | `/api/layers/`    | `{"categories": [...], "layers": [LayerSpec, ...]}`           |
 | GET    | `/api/examples/`  | Example networks `[{id, name, description, graph}]`           |
 | POST   | `/api/analyze/`   | Validate a graph, infer shapes                                |

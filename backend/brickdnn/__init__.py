@@ -20,7 +20,7 @@ from .examples import EXAMPLES, get_example
 from .graph import Analysis, GraphValidationError, analyze
 from .layers import REGISTRY, Layer, LayerError, Param, layer_specs, register
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "EXAMPLES",

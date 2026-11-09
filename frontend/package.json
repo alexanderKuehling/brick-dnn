@@ -1,7 +1,7 @@
 {
   "name": "brick-dnn-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Drag-and-drop editor for neural networks that exports PyTorch code.",
   "license": "Apache-2.0",
