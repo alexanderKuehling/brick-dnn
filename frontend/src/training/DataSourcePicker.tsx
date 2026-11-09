@@ -25,6 +25,8 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Dataset, TrainingStatus } from '@/api';
+import { UploadProgress } from '@/components/UploadProgress';
+import type { UploadBytes } from '@/components/useUploadProgress';
 import { isOwnDataset } from './access';
 import { datasetDetails, formatSplit } from './format';
 import type { SourceChoice, SourceTab } from './settings';
@@ -39,9 +41,12 @@ interface DataSourcePickerProps {
   onReloadDatasets: () => void;
   /** Name of the file being uploaded. */
   uploading: string | null;
+  /** How much of it is sent; null for the first moment of an upload. */
+  uploadProgress: UploadBytes | null;
   uploadError: string | null;
   onDismissUploadError: () => void;
   onUpload: (file: File) => void;
+  onCancelUpload: () => void;
   /** Only offered for the user's own datasets. */
   onDelete: (dataset: Dataset) => void;
 }
@@ -127,9 +132,11 @@ function Uploads({
   datasetsError,
   onReloadDatasets,
   uploading,
+  uploadProgress,
   uploadError,
   onDismissUploadError,
   onUpload,
+  onCancelUpload,
   onDelete,
 }: DataSourcePickerProps) {
   // Reset the file input after each pick, so the same file can be chosen again (e.g. after
@@ -169,11 +176,8 @@ function Uploads({
 
       <DataTabHint />
 
-      {uploading && (
-        <Group gap="xs" wrap="nowrap">
-          <Loader size="xs" />
-          <Text size="sm">Uploading and checking “{uploading}” …</Text>
-        </Group>
+      {uploading && uploadProgress && (
+        <UploadProgress bytes={uploadProgress} fileName={uploading} onCancel={onCancelUpload} />
       )}
       {uploadError && (
         <Alert color="red" title="Upload failed" withCloseButton onClose={onDismissUploadError}>

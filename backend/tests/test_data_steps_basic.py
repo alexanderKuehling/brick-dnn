@@ -95,6 +95,30 @@ def test_cast_text_to_numbers_reports_lost_values():
     assert "'free'" in result.summary
 
 
+def test_cast_text_with_units_and_thousands_separators_to_numbers():
+    source = table(
+        {
+            "price": ["$1,234.50", "$12", "-5 °C", "45 %", "ca. 3", "N/A", None, "12.5.2024"],
+            "euro": ["1.234,50 €", "12 €", "0,5 €", "€ 7", None, "3-4 €", "kg", "-2,25"],
+        },
+        kinds={"price": "categorical", "euro": "categorical"},
+    )
+    result = check_code(
+        source, "cast", {"columns": ["price"], "to": "numeric", "strip_units": True}
+    )
+    assert values(result.table, "price") == [1234.5, 12.0, -5.0, 45.0, 3.0, None, None, None]
+    assert "2 values could not be converted" in result.summary
+    comma = check_code(
+        source,
+        "cast",
+        {"columns": ["euro"], "to": "numeric", "decimal_comma": True, "strip_units": True},
+    )
+    assert values(comma.table, "euro") == [1234.5, 12.0, 0.5, 7.0, None, None, None, -2.25]
+    # without the option, units make the values missing as before
+    plain = check_code(source, "cast", {"columns": ["price"], "to": "numeric"})
+    assert values(plain.table, "price") == [None] * 8
+
+
 def test_cast_numbers_are_exact():
     text = ["19014.449957082357", "0.1", "1e-05", "-3"]
     source = table({"x": text}, kinds={"x": "categorical"})

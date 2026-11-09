@@ -226,3 +226,198 @@ describe('requests', () => {
     await expect(api.training.status()).rejects.toMatchObject({ status: 0 });
   });
 });
+
+/** Stands in for XMLHttpRequest; the test answers the requests it records. */
+class FakeXhr {
+  static requests: FakeXhr[] = [];
+  method = '';
+  url = '';
+  headers: Record<string, string> = {};
+  body: unknown = null;
+  status = 0;
+  responseText = '';
+  responseHeaders = '';
+  aborted = false;
+  upload: {
+    onprogress: ((event: ProgressEvent) => void) | null;
+    onload: ((event: ProgressEvent) => void) | null;
+  } = { onprogress: null, onload: null };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+
+  setRequestHeader(name: string, value: string) {
+    this.headers[name] = value;
+  }
+
+  send(body: unknown) {
+    this.body = body;
+    FakeXhr.requests.push(this);
+  }
+
+  getAllResponseHeaders() {
+    return this.responseHeaders;
+  }
+
+  abort() {
+    this.aborted = true;
+    this.onabort?.();
+  }
+
+  progress(loaded: number, total: number, done = false) {
+    const event = { lengthComputable: true, loaded, total } as ProgressEvent;
+    (done ? this.upload.onload : this.upload.onprogress)?.(event);
+  }
+
+  respond(status: number, body: unknown, contentType = 'application/json') {
+    this.status = status;
+    this.responseText = typeof body === 'string' ? body : JSON.stringify(body);
+    this.responseHeaders = `content-type: ${contentType}\r\nx-request: 1\r\n`;
+    this.onload?.();
+  }
+}
+
+/** The next request sent with XMLHttpRequest (sending waits for a token refresh first). */
+async function nextXhr(count = 1): Promise<FakeXhr> {
+  await vi.waitFor(() => expect(FakeXhr.requests).toHaveLength(count));
+  return FakeXhr.requests[count - 1];
+}
+
+describe('uploads with progress', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  const csv = () => new File(['a,b\n1,2\n'], 'iris.csv', { type: 'text/csv' });
+
+  beforeEach(() => {
+    FakeXhr.requests = [];
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('XMLHttpRequest', FakeXhr);
+    setTokens({ access: 'old-access', refresh: 'refresh-token' });
+  });
+
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+    setTokens(null);
+  });
+
+  it('reports the bytes sent and returns the answer', async () => {
+    const progress = vi.fn();
+    const result = api.data.sources.upload(csv(), { name: 'Iris' }, { onUploadProgress: progress });
+    const xhr = await nextXhr();
+
+    expect(xhr.method).toBe('POST');
+    expect(xhr.url).toBe('/api/data/sources/');
+    // The browser sets the multipart Content-Type with its boundary.
+    expect(xhr.headers).toEqual({ Accept: 'application/json', Authorization: 'Bearer old-access' });
+    expect(xhr.body).toBeInstanceOf(FormData);
+    expect((xhr.body as FormData).get('name')).toBe('Iris');
+
+    xhr.progress(100, 400);
+    xhr.progress(400, 400, true);
+    expect(progress.mock.calls).toEqual([
+      [100, 400],
+      [400, 400],
+    ]);
+    xhr.respond(201, { id: 3, name: 'Iris' });
+    await expect(result).resolves.toEqual({ id: 3, name: 'Iris' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the token once and repeats the upload after 401', async () => {
+    fetchMock.mockResolvedValueOnce(json({ access: 'new-access' }));
+    const progress = vi.fn();
+    const result = api.training.datasets.upload(csv(), undefined, { onUploadProgress: progress });
+    (await nextXhr()).respond(401, { detail: 'Token expired' });
+
+    const retry = await nextXhr(2);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/token/refresh/');
+    expect(retry.headers.Authorization).toBe('Bearer new-access');
+    expect(retry.body).toBeInstanceOf(FormData);
+    retry.progress(50, 50, true);
+    retry.respond(201, { id: 4 });
+    await expect(result).resolves.toEqual({ id: 4 });
+    expect(progress).toHaveBeenCalledWith(50, 50);
+    expect(getTokens()?.access).toBe('new-access');
+  });
+
+  it('refreshes an expiring token before the upload', async () => {
+    setTokens({ access: jwt(Date.now() / 1000 + 30), refresh: 'refresh-token' });
+    fetchMock.mockResolvedValueOnce(json({ access: 'fresh-access' }));
+    const result = api.training.datasets.upload(csv(), 'Iris', { onUploadProgress: vi.fn() });
+    const xhr = await nextXhr();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/token/refresh/');
+    expect(xhr.headers.Authorization).toBe('Bearer fresh-access');
+    xhr.respond(201, { id: 5 });
+    await expect(result).resolves.toEqual({ id: 5 });
+  });
+
+  it('cancels the upload when the signal is aborted', async () => {
+    const controller = new AbortController();
+    const transfer = { signal: controller.signal, onUploadProgress: vi.fn() };
+    const result = api.data.sources.upload(csv(), {}, transfer);
+    const xhr = await nextXhr();
+    controller.abort();
+
+    expect(xhr.aborted).toBe(true);
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    // With an aborted signal, nothing is sent.
+    await expect(api.data.sources.upload(csv(), {}, transfer)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(FakeXhr.requests).toHaveLength(1);
+  });
+
+  it('turns error answers into ApiErrors', async () => {
+    const upload = () => api.data.sources.upload(csv(), {}, { onUploadProgress: vi.fn() });
+    const tooLarge = { detail: 'The file is too large. Uploads are limited to 200 MB.' };
+
+    let result = upload();
+    (await nextXhr()).respond(413, tooLarge);
+    const error = await result.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 413, message: tooLarge.detail, data: tooLarge });
+
+    // The HTML page of a proxy: the message follows the status.
+    result = upload();
+    (await nextXhr(2)).respond(413, '<html>Request Entity Too Large</html>', 'text/html');
+    await expect(result).rejects.toMatchObject({
+      status: 413,
+      message: 'The file is too large for the server.',
+    });
+
+    result = upload();
+    (await nextXhr(3)).respond(400, { file: ['The CSV file is empty.'] });
+    await expect(result).rejects.toMatchObject({
+      status: 400,
+      message: 'File: The CSV file is empty.',
+    });
+
+    result = upload();
+    (await nextXhr(4)).respond(201, '<html>Bad gateway</html>', 'text/html');
+    await expect(result).rejects.toMatchObject({
+      message: 'The server sent an unexpected response.',
+    });
+  });
+
+  it('reports an unreachable server', async () => {
+    const result = api.training.datasets.upload(csv(), undefined, { onUploadProgress: vi.fn() });
+    (await nextXhr()).onerror?.();
+    await expect(result).rejects.toMatchObject({
+      status: 0,
+      message: 'Cannot reach the Brick DNN server. Is the backend running?',
+    });
+  });
+
+  it('uses fetch for requests without a file', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: true }));
+    await request('/api/thing/', { method: 'POST', body: { a: 1 }, onUploadProgress: vi.fn() });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(FakeXhr.requests).toHaveLength(0);
+  });
+});

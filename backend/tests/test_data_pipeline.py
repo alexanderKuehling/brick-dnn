@@ -559,7 +559,7 @@ def test_readiness_warnings():
     rare = table({"x": np.arange(10.0), "y": ["a"] * 9 + ["b"]})
     rare = rare.with_split(np.array([TRAIN] * 8 + [VAL, TEST], dtype=np.int8))
     check = readiness(rare, settings, "classification")
-    assert any("fewer than 2 training rows (b)" in i["message"] for i in check["issues"])
+    assert any("fewer than 5 training rows (b: 0)" in i["message"] for i in check["issues"])
 
 
 def test_readiness_without_validation_rows():

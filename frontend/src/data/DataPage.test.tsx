@@ -264,7 +264,7 @@ describe('DataPage', () => {
     expect(api.data.sources.upload).toHaveBeenCalledWith(
       file,
       { delimiter: ';', name: 'customers' },
-      expect.any(AbortSignal)
+      { signal: expect.any(AbortSignal), onUploadProgress: expect.any(Function) }
     );
     await waitFor(() =>
       expect(api.data.preps.create).toHaveBeenCalledWith({ name: 'customers', source: 1 })
@@ -313,11 +313,18 @@ describe('DataPage', () => {
 
   /** Starts an import whose upload only finishes when `finish` is called. */
   async function startSlowImport() {
-    const upload: { finish?: (source: DataSource) => void; signal?: AbortSignal } = {};
-    vi.mocked(api.data.sources.upload).mockImplementation((_file, _options, signal) => {
-      upload.signal = signal;
-      return new Promise((resolve) => {
+    const upload: {
+      finish?: (source: DataSource) => void;
+      fail?: (error: Error) => void;
+      signal?: AbortSignal;
+      progress?: (sent: number, total: number) => void;
+    } = {};
+    vi.mocked(api.data.sources.upload).mockImplementation((_file, _options, transfer) => {
+      upload.signal = transfer?.signal;
+      upload.progress = transfer?.onUploadProgress;
+      return new Promise((resolve, reject) => {
         upload.finish = resolve;
+        upload.fail = reject;
       });
     });
     vi.mocked(api.data.preps.create).mockResolvedValue({ ...PREP, id: 13, name: 'orders' });
@@ -328,11 +335,42 @@ describe('DataPage', () => {
     const file = new File(['a;b\n1;2\n'], 'orders.csv', { type: 'text/csv' });
     await userEvent.upload(dialog.querySelector('input[type=file]') as HTMLInputElement, file);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Import' }));
-    expect(await within(dialog).findByText(/Reading “orders.csv”/)).toBeInTheDocument();
+    expect(await within(dialog).findByText('Uploading “orders.csv” …')).toBeInTheDocument();
     return { dialog, upload, view };
   }
 
   const ORDERS: DataSource = { ...OTHER_SOURCE, id: 3, name: 'orders' };
+  const MB = 1024 * 1024;
+
+  it('shows the progress of the upload, then that the server reads the file', async () => {
+    const { dialog, upload } = await startSlowImport();
+    const bar = within(dialog).getByRole('progressbar', { name: 'Upload of “orders.csv”' });
+    expect(bar).toHaveAttribute('aria-valuenow', '0');
+
+    act(() => upload.progress?.(12.3 * MB, 48 * MB));
+    await waitFor(() => expect(bar).toHaveAttribute('aria-valuenow', '25'));
+    expect(within(dialog).getByText('12.3 MB of 48.0 MB')).toBeInTheDocument();
+    expect(within(dialog).getByText('25%')).toBeInTheDocument();
+    expect(bar).toHaveAttribute('aria-valuetext', '25%, 12.3 MB of 48.0 MB');
+
+    // Everything sent: the bar has no value while the server reads the file.
+    act(() => upload.progress?.(48 * MB, 48 * MB));
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Reading and checking the CSV …');
+    expect(bar).not.toHaveAttribute('aria-valuenow');
+    expect(bar).toHaveAttribute('aria-valuetext', 'Reading and checking the CSV …');
+    expect(within(dialog).queryByText('25%')).not.toBeInTheDocument();
+
+    await act(async () => upload.finish?.(ORDERS));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('hides the progress when the import fails', async () => {
+    const { dialog, upload } = await startSlowImport();
+    await act(async () => upload.fail?.(new ApiError(0, null, 'Cannot reach the server.')));
+    expect(await within(dialog).findByText('Cannot reach the server.')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Import' })).toBeEnabled();
+  });
 
   it('cancels a running import and ignores its late answer', async () => {
     const { dialog, upload } = await startSlowImport();

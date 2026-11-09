@@ -65,6 +65,20 @@ export function formatBytes(bytes: number | null | undefined): string {
   return unit === 0 ? `${value} bytes` : `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
+/** Progress of an upload, both in the unit of the total: "12.3 MB of 48.0 MB". */
+export function formatBytesOf(sent: number, total: number): string {
+  const units = ['bytes', 'KB', 'MB', 'GB'];
+  let scale = 1;
+  let unit = 0;
+  while (total / scale >= 1024 && unit < units.length - 1) {
+    scale *= 1024;
+    unit += 1;
+  }
+  const format = (bytes: number) =>
+    `${unit === 0 ? bytes : (bytes / scale).toFixed(1)} ${units[unit]}`;
+  return `${format(sent)} of ${format(total)}`;
+}
+
 /** 42 → "42 s", 192 → "3 min 12 s", 3900 → "1 h 5 min". */
 export function formatDuration(seconds: number | null | undefined): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
