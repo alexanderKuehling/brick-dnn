@@ -676,8 +676,10 @@ TOOLS: dict[str, Tool] = {
             "get_training_run",
             "Show a training run",
             "One training run with its settings, its history of metrics per epoch and its "
-            "status. Classical models have one entry (the fit) and state.classical with the "
-            "fitted kernel, log marginal likelihood or support vectors.",
+            "status. Regressions report the RMSE (in the units of the target) and R² "
+            "(val_rmse, val_r2; test_rmse, test_r2 in metrics). Classical models have one "
+            "entry (the fit) and state.classical with the fitted kernel, log marginal "
+            "likelihood or support vectors.",
             get_training_run,
             {"id": {"type": "string"}},
             ("id",),

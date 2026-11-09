@@ -122,14 +122,66 @@ def _capitalized(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def _metrics_text(name: str, loss: float, accuracy: float | None, rmse: float | None) -> str:
-    """``"validation accuracy 97.1%"`` or ``"test loss 0.123, RMSE 4.5"``."""
+def _metrics_text(
+    name: str, loss: float, accuracy: float | None, rmse: float | None, r2: float | None
+) -> str:
+    """``"validation accuracy 97.1%"`` or ``"test loss 0.123, RMSE 4.5, R² 0.912"``."""
     if accuracy is not None:
         return f"{name} accuracy {accuracy * 100:.1f}%"
     text = f"{name} loss {loss:.4g}"
     if rmse is not None:
         text += f", RMSE {rmse:.4g}"
+    if r2 is not None:
+        text += f", R² {r2:.3f}"
     return text
+
+
+class _R2:
+    """R² (coefficient of determination) of the value outputs, summed up batch by batch.
+
+    Per output column it keeps the residual sum of squares and the sum of squares of the
+    targets around their mean in this split (merged batch by batch, Chan et al.), so
+    ``1 - SS_res / SS_tot`` measures against the split's own mean, not the training
+    variance. Targets and predictions are standardised alike (shifted and scaled by the
+    same numbers), which leaves R² unchanged: it is the R² in the units of the data.
+    """
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.mean = self.spread = self.residual = torch.zeros(0, dtype=torch.float64)
+        self.low = self.high = torch.zeros(0, dtype=torch.float64)
+
+    def add(self, outputs: list[torch.Tensor], targets: list[torch.Tensor]) -> None:
+        """One batch: the predictions and targets of every value output."""
+        n = len(targets[0])
+        if n == 0:
+            return
+        y = torch.cat([t.detach().cpu().double().reshape(n, -1) for t in targets], dim=1)
+        pred = torch.cat([o.detach().cpu().double().reshape(n, -1) for o in outputs], dim=1)
+        mean = y.mean(dim=0)
+        spread = ((y - mean) ** 2).sum(dim=0)
+        residual = ((y - pred) ** 2).sum(dim=0)
+        low, high = y.min(dim=0).values, y.max(dim=0).values
+        if self.count == 0:
+            self.mean, self.spread, self.residual = mean, spread, residual
+            self.low, self.high = low, high
+        else:
+            total = self.count + n
+            delta = mean - self.mean
+            self.spread = self.spread + spread + delta**2 * (self.count * n / total)
+            self.mean = self.mean + delta * (n / total)
+            self.residual = self.residual + residual
+            self.low, self.high = torch.minimum(self.low, low), torch.maximum(self.high, high)
+        self.count += n
+
+    def value(self) -> float | None:
+        """The mean R² over the output columns (a uniform average, like scikit-learn's
+        default). None without samples, if the targets of a column are all equal in this
+        split (R² is undefined then), and if it is not a finite number."""
+        if self.count == 0 or not bool((self.high > self.low).all()):
+            return None
+        r2 = float((1 - self.residual / self.spread).mean())
+        return r2 if math.isfinite(r2) else None
 
 
 class _Run:
@@ -234,11 +286,17 @@ class _Run:
         kept = self._kept_entry()
         assert kept is not None
         text = _metrics_text(
-            "validation", kept["val_loss"], kept["val_accuracy"], kept.get("val_rmse")
+            "validation",
+            kept["val_loss"],
+            kept["val_accuracy"],
+            kept.get("val_rmse"),
+            kept.get("val_r2"),
         )
         if self.test_result is not None:
             test = self.test_result
-            text += "; " + _metrics_text("test", test["loss"], test["accuracy"], test["rmse"])
+            text += "; " + _metrics_text(
+                "test", test["loss"], test["accuracy"], test["rmse"], test["r2"]
+            )
         return text
 
     def _summary(self) -> str:
@@ -489,7 +547,8 @@ class _Run:
             self.reporter.status("running", self._epoch_message(epoch))
             started = time.perf_counter()
             train_loss, train_acc = self._train_epoch(epoch)
-            val_loss, val_acc, val_rmse = self._validate(epoch)
+            validated = self._validate(epoch)
+            val_loss, val_acc = validated["loss"], validated["accuracy"]
             entry: dict[str, Any] = {
                 "epoch": epoch,
                 "train_loss": train_loss,
@@ -499,7 +558,8 @@ class _Run:
                 "seconds": round(time.perf_counter() - started, 3),
             }
             if self.regression:
-                entry["val_rmse"] = val_rmse
+                entry["val_rmse"] = validated["rmse"]
+                entry["val_r2"] = validated["r2"]
             self.history.append(entry)
             if self.best is None or val_loss < self.best["val_loss"]:
                 self.best = {"epoch": epoch, "val_loss": val_loss, "val_accuracy": val_acc}
@@ -570,17 +630,21 @@ class _Run:
         seen = max(seen, 1)
         return loss_sum / seen, (correct / seen if self.accuracy else None)
 
-    def _validate(self, epoch: int) -> tuple[float, float | None, float | None]:
-        val_loss, accuracy, rmse = self._evaluate(self.data.val)
-        if not math.isfinite(val_loss):
-            raise self._not_finite(val_loss, epoch)
-        return val_loss, accuracy, rmse
+    def _validate(self, epoch: int) -> dict[str, Any]:
+        result = self._evaluate(self.data.val)
+        if not math.isfinite(result["loss"]):
+            raise self._not_finite(result["loss"], epoch)
+        return result
 
-    def _evaluate(self, source: Source) -> tuple[float, float | None, float | None]:
-        """Loss, accuracy (single classification output) and RMSE (CSV regression)."""
+    def _evaluate(self, source: Source) -> dict[str, Any]:
+        """``{"loss", "accuracy", "rmse", "r2"}`` on ``source``: the accuracy for a single
+        classification output, RMSE (in the units of the data) and R² for a regression,
+        otherwise None."""
         assert self.model is not None
         self.model.eval()
         loss_sum, seen, correct = 0.0, 0, 0
+        r2 = _R2() if self.regression else None
+        values = [i for i, t in enumerate(self.plan.targets) if t["kind"] == "value"]
         with torch.no_grad():
             for inputs, targets in iterate_batches(source, self.config.batch_size):
                 self._check_stop()
@@ -590,20 +654,26 @@ class _Run:
                 seen += n
                 if self.accuracy:
                     correct += self._correct(outputs, targets)
+                if r2 is not None:
+                    r2.add([outputs[i] for i in values], [targets[i] for i in values])
         seen = max(seen, 1)
         loss = loss_sum / seen
         rmse = None
         if self.regression and self.data.target_std is not None and math.isfinite(loss):
             rmse = math.sqrt(loss) * self.data.target_std
-        return loss, (correct / seen if self.accuracy else None), rmse
+        return {
+            "loss": loss,
+            "accuracy": correct / seen if self.accuracy else None,
+            "rmse": rmse,
+            "r2": r2.value() if r2 is not None else None,
+        }
 
     def _test(self) -> None:
         """Measure the kept weights once on the test set (if there is one)."""
         if self.data.test is None:
             return
         self.reporter.status("running", "Testing the final model …")
-        loss, accuracy, rmse = self._evaluate(self.data.test)
-        self.test_result = {"loss": loss, "accuracy": accuracy, "rmse": rmse}
+        self.test_result = self._evaluate(self.data.test)
         self.reporter.test_end(dict(self.test_result))
 
 
@@ -673,6 +743,7 @@ class _Search(_Run):
             "val_loss": None,
             "val_accuracy": None,
             "val_rmse": None,
+            "val_r2": None,
             "weights_epoch": None,
             "stopped_early": False,
             "seconds": None,
@@ -731,6 +802,7 @@ class _Search(_Run):
             val_loss=kept.get("val_loss"),
             val_accuracy=kept.get("val_accuracy"),
             val_rmse=kept.get("val_rmse"),
+            val_r2=kept.get("val_r2"),
             weights_epoch=self.weights_epoch,
             stopped_early=self.stopped_early,
             seconds=round(time.perf_counter() - started, 3),

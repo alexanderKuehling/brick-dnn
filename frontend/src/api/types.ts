@@ -705,6 +705,8 @@ export interface TrialEntry {
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
+  /** Regression only (missing in older runs). */
+  val_r2?: number | null;
   /** The epoch whose weights the trial keeps (missing in older runs). */
   weights_epoch?: number | null;
   /** Ended by early stopping. */
@@ -719,6 +721,8 @@ export interface BestTrial {
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
+  /** Regression only (missing in older runs). */
+  val_r2?: number | null;
   weights_epoch?: number | null;
 }
 
@@ -727,7 +731,7 @@ export interface TestResult {
   loss: number | null;
   accuracy: number | null;
   rmse: number | null;
-  /** Classical regression only. */
+  /** Coefficient of determination: regression only (missing in older runs). */
   r2?: number | null;
 }
 
@@ -744,7 +748,10 @@ export interface RunMetrics {
   test_loss?: number | null;
   test_accuracy?: number | null;
   test_rmse?: number | null;
-  /** Coefficient of determination: classical regression only (null otherwise). */
+  /**
+   * Coefficient of determination: regression only, null otherwise and when the targets of the
+   * split are all equal (missing in older runs).
+   */
   val_r2?: number | null;
   test_r2?: number | null;
 }
@@ -788,7 +795,10 @@ export interface RunSummary {
   family?: 'neural' | 'classical';
 }
 
-/** One finished epoch. Accuracies are null for regression, which reports val_rmse instead. */
+/**
+ * One finished epoch. Accuracies are null for regression, which reports val_rmse and val_r2
+ * instead.
+ */
 export interface HistoryEntry {
   epoch: number;
   train_loss: number | null;
@@ -796,7 +806,7 @@ export interface HistoryEntry {
   train_accuracy?: number | null;
   val_accuracy?: number | null;
   val_rmse?: number | null;
-  /** Classical regression only. */
+  /** Coefficient of determination; null when the validation targets are all equal. */
   val_r2?: number | null;
   seconds?: number | null;
 }

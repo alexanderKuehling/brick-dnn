@@ -78,7 +78,7 @@ class Reporter:
         both describe the best trial."""
 
     def test_end(self, result: dict[str, Any]) -> None:
-        """``{"loss", "accuracy", "rmse"}`` of the kept weights on the test set."""
+        """``{"loss", "accuracy", "rmse", "r2"}`` of the kept weights on the test set."""
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         """Terminal status (completed | stopped | failed) and the result for the user."""
