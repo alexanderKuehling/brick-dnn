@@ -238,6 +238,33 @@ export interface ShareLink {
   share_token: string | null;
 }
 
+/** A project as other objects refer to it. */
+export interface ProjectRef {
+  id: number;
+  name: string;
+}
+
+export type ProjectDataKind = 'dataset' | 'prep';
+
+/** A training dataset or data preparation shared in a project. */
+export interface ProjectDataItem {
+  id: number;
+  name: string;
+  /** Username of the owner. */
+  owner: string;
+  created_at: string;
+  /** Datasets only. */
+  kind?: 'csv' | 'images';
+  /** Datasets only. */
+  size_bytes?: number;
+}
+
+/** GET /api/projects/<id>/data/: what is shared in a project, by name. */
+export interface ProjectData {
+  datasets: ProjectDataItem[];
+  preps: ProjectDataItem[];
+}
+
 /** A network opened through its share link (no login needed). */
 export interface SharedNetwork {
   name: string;
@@ -330,6 +357,12 @@ export interface Dataset {
   info: DatasetInfo;
   /** The data preparation (Data tab) this dataset was created from, if any. */
   prepared_from?: { id: number; name: string } | null;
+  /** Username of the owner: datasets shared in the user's projects belong to others. */
+  owner: string;
+  /** Owned by the current user (only they can delete it and share it further). */
+  mine: boolean;
+  /** Projects it is shared in (those the current user can see), by name. */
+  shared_in: ProjectRef[];
 }
 
 export type DatasetRef =
@@ -519,6 +552,10 @@ export interface RunSummary {
   total_params: number | null;
   created_at: string;
   finished_at: string | null;
+  /** The project (saved network) it was started in; its members see it. */
+  project: number | null;
+  /** Username of who started it. */
+  started_by: string;
 }
 
 /** One finished epoch. Accuracies are null for regression, which reports val_rmse instead. */
@@ -591,6 +628,8 @@ export interface RunInput {
   config: Partial<TrainingConfig>;
   /** A hyperparameter search instead of a single training. */
   tuning?: TuningInput;
+  /** Train in this project (owner or editor of it): its members see the run. */
+  project?: number;
 }
 
 // --------------------------------------------------------------------------
@@ -785,6 +824,15 @@ export interface DataPrep {
   datasets: { id: number; name: string; created_at: string }[];
   created_at: string;
   updated_at: string;
+  /** Username of the owner. */
+  owner: string;
+  /**
+   * owner: may do everything · editor (shared in a project the user edits): may change the
+   * steps and settings (not the source) and export · viewer: may look, preview and download.
+   */
+  role: ProjectRole;
+  /** Projects it is shared in (those the current user can see), by name. */
+  shared_in: ProjectRef[];
 }
 
 export type DataPrepInput = Pick<DataPrep, 'name' | 'source'> &

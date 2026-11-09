@@ -27,6 +27,8 @@ import type {
   PreviewRequest,
   PreviewResult,
   Project,
+  ProjectData,
+  ProjectDataKind,
   ProjectMember,
   ProjectMembers,
   RunDetail,
@@ -151,6 +153,25 @@ const serverApi = {
           auth: true,
         }),
     },
+    /** Training datasets and data preparations shared in a project. */
+    data: {
+      /** Any role. */
+      list: (projectId: number, signal?: AbortSignal) =>
+        request<ProjectData>(`/api/projects/${projectId}/data/`, { auth: true, signal }),
+      /** Owners and editors of the project share one of their own items there. */
+      add: (projectId: number, kind: ProjectDataKind, id: number) =>
+        request<ProjectData>(`/api/projects/${projectId}/data/`, {
+          method: 'POST',
+          body: { kind, id },
+          auth: true,
+        }),
+      /** Stop sharing an item there (its owner or the project's owner). */
+      remove: (projectId: number, kind: ProjectDataKind, id: number) =>
+        request<void>(`/api/projects/${projectId}/data/${kind}/${id}/`, {
+          method: 'DELETE',
+          auth: true,
+        }),
+    },
     /** Owner only: turn the view link on or off, or replace it (the old one stops working). */
     setLink: (projectId: number, enabled: boolean, regenerate = false) =>
       request<ShareLink>(`/api/projects/${projectId}/link/`, {
@@ -176,6 +197,7 @@ const serverApi = {
     /** What the server can do (public, no login needed). */
     status: (signal?: AbortSignal) => request<TrainingStatus>('/api/training/', { signal }),
     datasets: {
+      /** The user's own datasets and the ones shared in their projects (`mine`, `owner`). */
       list: (signal?: AbortSignal) =>
         request<Dataset[]>('/api/training/datasets/', { auth: true, signal }),
       upload: (file: File, name?: string) => {
@@ -201,14 +223,17 @@ const serverApi = {
         signal,
       }),
     runs: {
+      /** The user's runs and the runs of the projects they can open, newest first. */
       list: (signal?: AbortSignal) =>
         request<RunSummary[]>('/api/training/runs/', { auth: true, signal }),
       get: (id: string, signal?: AbortSignal) =>
         request<RunDetail>(`/api/training/runs/${id}/`, { auth: true, signal }),
       create: (data: RunInput) =>
         request<RunDetail>('/api/training/runs/', { method: 'POST', body: data, auth: true }),
+      /** Who started it and the owner and editors of its project; others get HTTP 403. */
       stop: (id: string) =>
         request<RunDetail>(`/api/training/runs/${id}/stop/`, { method: 'POST', auth: true }),
+      /** Who started it and the owner of its project; others get HTTP 403. */
       remove: (id: string) =>
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
@@ -258,14 +283,17 @@ const serverApi = {
         request<void>(`/api/data/sources/${id}/`, { method: 'DELETE', auth: true }),
     },
     preps: {
+      /** Own preparations and the ones shared in the user's projects (`role`, `owner`). */
       list: (signal?: AbortSignal) =>
         request<DataPrep[]>('/api/data/preps/', { auth: true, signal }),
       get: (id: number, signal?: AbortSignal) =>
         request<DataPrep>(`/api/data/preps/${id}/`, { auth: true, signal }),
       create: (data: DataPrepInput) =>
         request<DataPrep>('/api/data/preps/', { method: 'POST', body: data, auth: true }),
+      /** Owner and editors (who cannot change the source). Viewers get HTTP 403. */
       update: (id: number, data: Partial<DataPrepInput>) =>
         request<DataPrep>(`/api/data/preps/${id}/`, { method: 'PATCH', body: data, auth: true }),
+      /** Owner only (others get HTTP 404). */
       remove: (id: number) =>
         request<void>(`/api/data/preps/${id}/`, { method: 'DELETE', auth: true }),
       /** Run the (possibly unsaved) pipeline and return reports, profile and a sample. */

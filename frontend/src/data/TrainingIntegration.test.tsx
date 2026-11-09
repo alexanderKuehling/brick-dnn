@@ -36,6 +36,9 @@ const PREPARED: Dataset = {
     predefined_split: [840, 180, 180],
   },
   prepared_from: { id: 10, name: 'Churn model data' },
+  owner: 'ada',
+  mine: true,
+  shared_in: [],
 };
 
 const UPLOADED: Dataset = {

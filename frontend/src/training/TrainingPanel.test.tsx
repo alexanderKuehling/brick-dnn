@@ -56,6 +56,9 @@ const IRIS: Dataset = {
     subdir: null,
     num_classes: 3,
   },
+  owner: 'ada',
+  mine: true,
+  shared_in: [],
 };
 
 function Panel() {

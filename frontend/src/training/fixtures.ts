@@ -1,6 +1,7 @@
 /** Test data for the training panel (only imported by tests). */
 import type {
   Analysis,
+  Dataset,
   GraphDocument,
   RunDetail,
   RunSummary,
@@ -101,6 +102,8 @@ export function summary(overrides: Partial<RunSummary> = {}): RunSummary {
     total_params: 101770,
     created_at: '2026-10-28T10:00:00Z',
     finished_at: null,
+    project: null,
+    started_by: 'ada',
     ...overrides,
   };
 }
@@ -254,6 +257,41 @@ export function searchDetail(overrides: Partial<RunDetail> = {}): RunDetail {
       trials,
       best_trial: 3,
     },
+    ...overrides,
+  };
+}
+
+/** An uploaded CSV dataset of the user. */
+export function dataset(overrides: Partial<Dataset> = {}): Dataset {
+  const name = overrides.name ?? 'iris';
+  return {
+    id: 7,
+    name,
+    kind: 'csv',
+    size_bytes: 4551,
+    created_at: '2026-10-28T10:00:00Z',
+    info: {
+      kind: 'csv',
+      name,
+      num_samples: 150,
+      builtin: null,
+      sample_shape: null,
+      train_size: null,
+      val_size: null,
+      num_features: 4,
+      columns: ['a', 'b', 'c', 'd', 'species'],
+      has_header: true,
+      delimiter: ',',
+      target_kind: 'text',
+      target_range: null,
+      class_names: ['setosa', 'versicolor', 'virginica'],
+      class_counts: null,
+      subdir: null,
+      num_classes: 3,
+    },
+    owner: 'ada',
+    mine: true,
+    shared_in: [],
     ...overrides,
   };
 }
