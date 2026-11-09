@@ -29,6 +29,8 @@ interface TargetSplitCardProps {
   columns: ColumnInfo[];
   task: 'classification' | 'regression' | null;
   splitCounts: number[] | null;
+  /** Shown, not changed (a preparation shared with the user to look at). */
+  readOnly?: boolean;
 }
 
 const TASKS: { value: PrepTask; label: string }[] = [
@@ -48,6 +50,7 @@ export function TargetSplitCard({
   columns,
   task,
   splitCounts,
+  readOnly = false,
 }: TargetSplitCardProps) {
   const { split } = settings;
   const kinds = new Map(columns.map((column) => [column.name, column.kind]));
@@ -156,8 +159,9 @@ export function TargetSplitCard({
           placeholder="Choose a column"
           data={data}
           value={target}
-          searchable
-          clearable
+          readOnly={readOnly}
+          searchable={!readOnly}
+          clearable={!readOnly}
           nothingFoundMessage="No matching column"
           renderOption={renderOption}
           leftSection={target && kinds.has(target) ? <KindIcon kind={kinds.get(target)!} /> : null}
@@ -178,6 +182,7 @@ export function TargetSplitCard({
             aria-label="Task"
             data={TASKS}
             value={settings.task}
+            readOnly={readOnly}
             onChange={(next) => onSettingsChange({ ...settings, task: next as PrepTask })}
           />
         </Input.Wrapper>
@@ -191,6 +196,8 @@ export function TargetSplitCard({
             max={90}
             step={5}
             suffix=" %"
+            readOnly={readOnly}
+            hideControls={readOnly}
             decimalScale={1}
             allowNegative={false}
             clampBehavior="none"
@@ -204,6 +211,8 @@ export function TargetSplitCard({
             max={90}
             step={5}
             suffix=" %"
+            readOnly={readOnly}
+            hideControls={readOnly}
             decimalScale={1}
             allowNegative={false}
             clampBehavior="none"
@@ -222,6 +231,8 @@ export function TargetSplitCard({
             max={MAX_SEED}
             allowDecimal={false}
             allowNegative={false}
+            readOnly={readOnly}
+            hideControls={readOnly}
             error={seedValid(seedDraft) ? undefined : 'Enter a whole number ≥ 0.'}
             onChange={(raw) => {
               setSeedDraft(raw);
@@ -242,7 +253,7 @@ export function TargetSplitCard({
                 label="Stratify"
                 description="Same class shares in every part"
                 checked={split.stratify && !regression}
-                disabled={regression}
+                disabled={regression || readOnly}
                 onChange={(event) =>
                   onSettingsChange({
                     ...settings,

@@ -7,6 +7,7 @@ import { formatCount, formatPercent } from '@/components/charts/format';
 import { MissingMatrix } from '@/components/charts/MissingMatrix';
 import { StatTile } from '@/components/charts/StatTile';
 import { formatPercentTick } from '@/components/chartScale';
+import { usePrepAccess } from '../prepAccess';
 import { sampleNote } from './sampleData';
 import { WarningList } from './WarningList';
 
@@ -28,6 +29,7 @@ export function MissingView({
   onAddStep,
   onShowColumn,
 }: MissingViewProps) {
+  const { readOnly } = usePrepAccess();
   const [allBars, setAllBars] = useState(false);
   const [allColumns, setAllColumns] = useState(false);
   const withMissing = useMemo(
@@ -85,7 +87,7 @@ export function MissingView({
         />
       </SimpleGrid>
 
-      {(numeric.length > 0 || categorical.length > 0) && (
+      {!readOnly && (numeric.length > 0 || categorical.length > 0) && (
         <Group gap="xs">
           {numeric.length > 0 && (
             <Button

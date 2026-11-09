@@ -12,6 +12,7 @@ import {
   type StepCatalog,
   type StepReport,
 } from '@/api';
+import { prepRole } from './prepAccess';
 import { insertStep, mergeReports } from './steps';
 
 /** Wait this long after the last change before running the preview again (ms). */
@@ -50,6 +51,11 @@ export interface DataPrepController {
   /** The preparation does not exist (any more). */
   notFound: boolean;
   reload: () => void;
+  /**
+   * Shared with the user to look at (viewer): the setters do nothing and nothing is saved,
+   * previews and downloads still work.
+   */
+  readOnly: boolean;
 
   /** Local state, saved automatically. Empty / null until loaded. */
   name: string;
@@ -165,6 +171,8 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
   const discarded = useRef(new Set<number>());
   const previewed = useRef<number | null>(null);
   const mounted = useRef(true);
+  /** Preparations the user may only look at: they are never saved. */
+  const viewOnly = useRef(new Set<number>());
   /** Every step id of the open preparation so far: new steps never reuse one. */
   const usedIds = useRef(new Set<string>());
   /** Steps added by `addStep` that no preview has run yet: step key → id. */
@@ -196,6 +204,11 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
         const initial = { name: loaded.name, steps: loaded.steps, settings: loaded.settings };
         loaded.steps.forEach((step) => usedIds.current.add(step.id));
         savedKeys.current.set(prepId, draftKey(initial));
+        if (prepRole(loaded) === 'viewer') {
+          viewOnly.current.add(prepId);
+        } else {
+          viewOnly.current.delete(prepId);
+        }
         discarded.current.delete(prepId);
         setPrep(loaded);
         setDraft(initial);
@@ -238,7 +251,11 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
       const task = async () => {
         const current = latest.current?.id === id ? latest.current : fallback;
         const key = draftKey(current.draft);
-        if (discarded.current.has(id) || savedKeys.current.get(id) === key) {
+        if (
+          discarded.current.has(id) ||
+          viewOnly.current.has(id) ||
+          savedKeys.current.get(id) === key
+        ) {
           return null;
         }
         if (active.current === id) {
@@ -433,7 +450,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
   uptoNow.current = upto;
 
   const change = useCallback((update: (current: Draft) => Draft) => {
-    if (draftNow.current) {
+    if (draftNow.current && !viewOnly.current.has(active.current ?? -1)) {
       draftNow.current = update(draftNow.current);
       draftNow.current.steps.forEach((step) => usedIds.current.add(step.id));
       setDraft(draftNow.current);
@@ -471,7 +488,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
   const addStep = useCallback(
     (step: NewStep): string | null => {
       const current = draftNow.current;
-      if (!catalog || !current) {
+      if (!catalog || !current || viewOnly.current.has(active.current ?? -1)) {
         return null;
       }
       const after = uptoNow.current;
@@ -527,6 +544,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
     loadError: loadError?.message ?? null,
     notFound: Boolean(loadError?.notFound),
     reload,
+    readOnly: prep !== null && prepRole(prep) === 'viewer',
     name: draft?.name ?? '',
     steps: draft?.steps ?? NO_STEPS,
     settings: draft?.settings ?? null,
