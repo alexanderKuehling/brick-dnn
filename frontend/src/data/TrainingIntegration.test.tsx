@@ -60,9 +60,11 @@ function renderPicker() {
         datasetsError={null}
         onReloadDatasets={vi.fn()}
         uploading={null}
+        uploadProgress={null}
         uploadError={null}
         onDismissUploadError={vi.fn()}
         onUpload={vi.fn()}
+        onCancelUpload={vi.fn()}
         onDelete={vi.fn()}
       />
     </MemoryRouter>

@@ -244,9 +244,11 @@ export function SetupView({
         datasetsError={data.datasetsError}
         onReloadDatasets={reloadDatasets}
         uploading={data.uploading}
+        uploadProgress={data.uploadProgress}
         uploadError={data.uploadError}
         onDismissUploadError={data.dismissUploadError}
         onUpload={data.upload}
+        onCancelUpload={data.cancelUpload}
         onDelete={deleteDataset}
       />
 

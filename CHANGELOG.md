@@ -48,6 +48,9 @@
 - **Early stopping**: `patience` (in the editor under *Advanced settings*, `--patience` on the
   command line) ends a training when the validation loss has not improved for that many
   epochs. Off by default.
+- **Upload progress.** Importing a CSV file in the Data tab and uploading a training dataset
+  show a progress bar with the percentage and the megabytes sent, then a striped bar while the
+  server reads and checks the file. A training upload can be cancelled while it is sent.
 
 ### Changed
 - **Built-in datasets validate on their training images.** Without a test set, MNIST,
