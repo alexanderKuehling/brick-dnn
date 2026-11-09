@@ -646,6 +646,26 @@ def test_image_folder_grayscale_and_lazy_loading(tmp_path, monkeypatch):
 
 
 @needs_pil
+@pytest.mark.parametrize("lazy", [False, True])
+def test_image_folder_into_a_flat_input(tmp_path, monkeypatch, lazy):
+    """An MLP takes the images flattened: 3·12·12 = 432 values are RGB images of 12×12."""
+    make_png_folder(tmp_path / "pets")
+    info = inspect_image_folder(tmp_path / "pets")
+    if lazy:
+        monkeypatch.setattr(data, "PRELOAD_BYTES", 0)
+    graph = chain(
+        ("Input", {"shape": [432]}),
+        ("Linear", {"out_features": 8}),
+        ("Activation", {"function": "relu"}),
+        ("Linear", {"out_features": 2}),
+    )
+    result, rec = run_job(graph, info, tmp_path, path=tmp_path / "pets", batch_size=4)
+    assert result.status == "completed", result.message
+    pre = rec.info["preprocessing"]
+    assert (pre["channels"], pre["height"], pre["width"], pre["layout"]) == (3, 12, 12, "flat")
+
+
+@needs_pil
 def test_image_folder_max_samples_also_limits_validation(tmp_path):
     make_png_folder(tmp_path / "pets", per_class=15)
     info = inspect_image_folder(tmp_path / "pets")

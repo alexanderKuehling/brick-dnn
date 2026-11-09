@@ -1,7 +1,7 @@
 import { render, screen, userEvent, within } from '@test-utils';
 import { vi } from 'vitest';
 import type { Readiness } from '@/api/types';
-import { READINESS } from '../fixtures';
+import { READINESS, SANITY_ISSUES } from '../fixtures';
 import { ReadinessPanel, type ReadinessPanelProps } from './ReadinessPanel';
 import classes from './ReadinessPanel.module.css';
 
@@ -35,7 +35,7 @@ describe('ReadinessPanel', () => {
     setup();
     expect(screen.getByText('Not ready for training yet')).toBeInTheDocument();
     expect(screen.getByText(/4 problems must be fixed first/)).toBeInTheDocument();
-    expect(screen.getByText('churn')).toBeInTheDocument();
+    expect(screen.getByTitle('churn')).toBeInTheDocument();
     expect(screen.getByText('Classification')).toBeInTheDocument();
     expect(screen.getByText('840 / 180 / 180')).toBeInTheDocument();
     expect(screen.getByText('0: no')).toBeInTheDocument();
@@ -105,8 +105,10 @@ describe('ReadinessPanel', () => {
       ready: false,
       issues: [
         {
+          code: 'step_failed',
           severity: 'error',
           column: null,
+          columns: [],
           message: "Step 2 (Clip values) failed: 'city' is a categorical column.",
           fix: null,
         },
@@ -144,6 +146,53 @@ describe('ReadinessPanel', () => {
     expect(classes.fix).toBeTruthy();
     expect(button).toHaveClass(classes.fix);
     expect(button.querySelector('.mantine-Button-label')).toHaveClass(classes.fixLabel);
+  });
+
+  it('lists warnings and suggestions of the sanity checks with their kind and columns', () => {
+    setup({ ...READY, issues: [...READY.issues, ...SANITY_ISSUES] });
+    expect(
+      screen.getByText(
+        'The data can be used for training. Have a look at the 3 warnings and 4 suggestions below.'
+      )
+    ).toBeInTheDocument();
+    const warnings = screen.getByRole('heading', { name: 'Worth a look' }).parentElement!;
+    const leak = within(warnings).getAllByRole('listitem')[1];
+    expect(leak).toHaveTextContent(/^Warning: Possible target leakage/);
+    expect(within(leak).getByText('Target leakage')).toBeInTheDocument();
+    expect(within(leak).getByText('churn_label')).toBeInTheDocument();
+    expect(within(leak).getByRole('button', { name: 'Drop churn_label' })).toBeInTheDocument();
+    const overlap = within(warnings).getAllByRole('listitem')[2];
+    expect(within(overlap).getByText('Train/test overlap')).toBeInTheDocument();
+
+    // Suggestions: the first three, the rest on request; many columns are counted.
+    const hints = screen.getByRole('heading', { name: 'Suggestions' }).parentElement!;
+    expect(within(hints).getAllByRole('listitem')).toHaveLength(3);
+    const redundant = within(hints).getAllByRole('listitem')[1];
+    expect(redundant).toHaveAttribute('data-severity', 'info');
+    expect(redundant).toHaveTextContent(/^Suggestion: 8 features are almost copies/);
+    expect(
+      within(redundant).getByText('age_months, income_eur, p1, p2, p3, p4 +2 more')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Scales')).not.toBeInTheDocument();
+  });
+
+  it('shows long lists of suggestions on request and adds their fixes', async () => {
+    const { onAddStep } = setup({ ...READY, issues: SANITY_ISSUES });
+    const hints = screen.getByRole('heading', { name: 'Suggestions' }).parentElement!;
+    const more = within(hints).getByRole('button', { name: 'Show 1 more' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(more);
+    expect(within(hints).getAllByRole('listitem')).toHaveLength(4);
+    expect(within(hints).getByText('Scales')).toBeInTheDocument();
+    await userEvent.click(within(hints).getByRole('button', { name: 'Standardise 2 columns' }));
+    expect(onAddStep).toHaveBeenCalledWith({
+      type: 'scale',
+      params: { columns: ['income', 'age'], method: 'standard' },
+    });
+    // Only errors are fixed all at once.
+    expect(screen.queryByRole('button', { name: /Fix all/ })).not.toBeInTheDocument();
+    await userEvent.click(within(hints).getByRole('button', { name: 'Show fewer' }));
+    expect(within(hints).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('handles data without problems and without a target', () => {

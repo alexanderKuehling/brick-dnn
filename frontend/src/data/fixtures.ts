@@ -13,6 +13,7 @@ import type {
   DataStatus,
   PreviewResult,
   Readiness,
+  ReadinessIssue,
   StepCatalog,
   StepReport,
 } from '@/api/types';
@@ -816,8 +817,10 @@ export const READINESS: Readiness = {
   split_counts: [840, 180, 180],
   issues: [
     {
+      code: 'missing_values',
       severity: 'error',
       column: 'age',
+      columns: ['age', 'income'],
       message: '2 feature columns have missing values (age, income).',
       fix: {
         type: 'impute',
@@ -826,8 +829,10 @@ export const READINESS: Readiness = {
       },
     },
     {
+      code: 'categorical_features',
       severity: 'error',
       column: 'city',
+      columns: ['city', 'plan'],
       message: '2 feature columns are categorical (city, plan). Networks need numbers.',
       fix: {
         type: 'encode',
@@ -836,14 +841,18 @@ export const READINESS: Readiness = {
       },
     },
     {
+      code: 'text_features',
       severity: 'error',
       column: 'notes',
+      columns: ['notes'],
       message: 'notes is free text and cannot be used as a feature.',
       fix: { type: 'drop_columns', params: { columns: ['notes'] }, label: 'Drop notes' },
     },
     {
+      code: 'date_features',
       severity: 'error',
       column: 'signup',
+      columns: ['signup'],
       message: 'signup is a date. Split it into numbers first.',
       fix: {
         type: 'datetime_features',
@@ -852,13 +861,89 @@ export const READINESS: Readiness = {
       },
     },
     {
+      code: 'imbalanced',
       severity: 'warning',
-      column: null,
+      column: 'churn',
+      columns: ['churn'],
       message: 'The classes are imbalanced (2.7 : 1).',
       fix: null,
     },
   ],
 };
+
+/** Warnings and hints of the sanity checks (target leakage, duplicates, redundant columns …). */
+export const SANITY_ISSUES: ReadinessIssue[] = [
+  {
+    code: 'leakage',
+    severity: 'warning',
+    column: 'churn_label',
+    columns: ['churn_label'],
+    message:
+      'Possible target leakage: each value of churn_label belongs to one class in 100 % of the ' +
+      'training rows. If churn_label is derived from churn or only known after it, drop it – ' +
+      'new data would not have it.',
+    fix: { type: 'drop_columns', params: { columns: ['churn_label'] }, label: 'Drop churn_label' },
+  },
+  {
+    code: 'split_overlap',
+    severity: 'warning',
+    column: null,
+    columns: [],
+    message:
+      '14 validation/test rows (7.4 %) are exact copies of training rows, so the validation ' +
+      'and test scores are too optimistic (30 duplicate rows in all).',
+    fix: {
+      type: 'drop_duplicates',
+      params: { columns: [], keep: 'first' },
+      label: 'Remove duplicates',
+    },
+  },
+  {
+    code: 'near_constant',
+    severity: 'info',
+    column: 'flag',
+    columns: ['flag'],
+    message:
+      'flag has the same value in 99.5 % of the training rows; it carries almost no information.',
+    fix: { type: 'drop_columns', params: { columns: ['flag'] }, label: 'Drop flag' },
+  },
+  {
+    code: 'redundant',
+    severity: 'info',
+    column: 'age_months',
+    columns: ['age_months', 'income_eur', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
+    message: '8 features are almost copies of others (age_months ≈ age (r ≈ 1); …).',
+    fix: {
+      type: 'drop_columns',
+      params: { columns: ['age_months', 'income_eur', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'] },
+      label: 'Drop 8 columns',
+    },
+  },
+  {
+    code: 'skewed',
+    severity: 'info',
+    column: 'income',
+    columns: ['income'],
+    message: 'income is strongly skewed (skewness 3.2): a few large values dominate it.',
+    fix: {
+      type: 'transform',
+      params: { columns: ['income'], function: 'log1p' },
+      label: 'Log-transform income (log1p)',
+    },
+  },
+  {
+    code: 'scales',
+    severity: 'info',
+    column: 'income',
+    columns: ['income', 'age'],
+    message: 'The features have very different scales.',
+    fix: {
+      type: 'scale',
+      params: { columns: ['income', 'age'], method: 'standard' },
+      label: 'Standardise 2 columns',
+    },
+  },
+];
 
 const COLUMNS = SAMPLE.columns.map(({ name, kind }) => ({ name, kind }));
 

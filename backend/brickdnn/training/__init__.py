@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 
-from .compat import Compatibility, TrainingPlan, check_compatibility
+from .compat import Compatibility, TrainingPlan, check_compatibility, suggest_fixes
 from .config import DEVICES, OPTIMIZERS, ConfigError, TrainingConfig
 from .datasets import (
     BUILTIN_DATASETS,
@@ -57,6 +57,7 @@ __all__ = [
     "inspect_csv",
     "inspect_image_folder",
     "random_info",
+    "suggest_fixes",
     "torch_installed",
     "torchvision_installed",
 ]

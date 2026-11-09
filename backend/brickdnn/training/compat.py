@@ -3,19 +3,31 @@
 :func:`check_compatibility` is used twice: by the API before a run starts (so the UI can
 show what is wrong and how to fix it) and by the training engine, which follows the
 resulting :class:`TrainingPlan` when it prepares the data.
+
+Given a graph document (not an :class:`Analysis`), the result also lists ``fixes``: the
+changes to the Input layer and the last layer that make the network fit the data, which the
+UI can apply with one click (see :func:`suggest_fixes`).
 """
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis, analyze
 from ..layers import fmt_shape
-from .datasets import BUILTIN_DATASETS, DatasetInfo
+from .datasets import BUILTIN_DATASETS, MAX_CLASSES, DatasetInfo
 
 MAX_IMAGE_SIDE = 1024
+# A flat Input takes images of an image folder only if they are at least this many pixels wide
+# (otherwise e.g. 4 features would count as 2×2 grayscale images).
+MIN_FLAT_SIDE = 8
+# Input shape suggested for image folders when nothing better is known (images are resized).
+DEFAULT_IMAGE_SHAPE = [3, 64, 64]
+# Layers between the last Linear layer and the output that keep the number of features.
+_PASS_THROUGH = ("Activation", "Dropout")
 
 
 @dataclass
@@ -50,9 +62,12 @@ class TrainingPlan:
 
 @dataclass
 class Compatibility:
+    """``fixes``: suggested parameter changes, see :func:`suggest_fixes`."""
+
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     plan: TrainingPlan | None = None
+    fixes: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -64,6 +79,7 @@ class Compatibility:
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "plan": self.plan.to_dict() if self.plan and self.ok else None,
+            "fixes": copy.deepcopy(self.fixes),
         }
 
 
@@ -78,8 +94,19 @@ def _count(n: int | None, word: str) -> str:
 
 
 def check_compatibility(graph: Any, dataset: DatasetInfo) -> Compatibility:
-    """Check ``graph`` (a graph document or an :class:`Analysis`) against ``dataset``."""
-    analysis = graph if isinstance(graph, Analysis) else analyze(graph)
+    """Check ``graph`` (a graph document or an :class:`Analysis`) against ``dataset``.
+
+    For a graph document, ``fixes`` are suggested as well (an analysis cannot be changed).
+    """
+    if isinstance(graph, Analysis):
+        return _check(graph, dataset)
+    analysis = analyze(graph)
+    result = _check(analysis, dataset)
+    result.fixes = suggest_fixes(graph, dataset, analysis, result)
+    return result
+
+
+def _check(analysis: Analysis, dataset: DatasetInfo) -> Compatibility:
     result = Compatibility()
     if not analysis.valid:
         result.errors.append("The network has problems. Fix the layers marked in red first.")
@@ -309,6 +336,17 @@ def _check_csv(
     )
 
 
+def _square_image(values: int) -> tuple[int, int] | None:
+    """``(channels, side)`` if ``values`` is the size of a flattened square RGB image
+    (3·side²) or grayscale image (side²) of at least MIN_FLAT_SIDE pixels, else None.
+    At most one of the two fits: 3·a² = b² has no solution in whole numbers."""
+    for channels in (3, 1):
+        side = math.isqrt(values // channels)
+        if channels * side * side == values and MIN_FLAT_SIDE <= side <= MAX_IMAGE_SIDE:
+            return channels, side
+    return None
+
+
 def _check_images(
     result: Compatibility,
     info: DatasetInfo,
@@ -350,6 +388,11 @@ def _check_images(
             c, h, w = builtin.shape
             image = {"channels": c, "height": h, "width": w, "layout": "flat"}
             notes.append(f"Each image is flattened to {native:,} values.")
+    elif rank == 1 and (square := _square_image(in_shape[0])) is not None:
+        # A flat Input (e.g. followed by a Linear layer): square RGB or grayscale images.
+        c, side = square
+        image = {"channels": c, "height": side, "width": side, "layout": "flat"}
+        notes.append(f"Each image is flattened to {in_shape[0]:,} values ({_x([c, side, side])}).")
     elif rank == 1:
         result.errors.append(
             "For image data, set the Input shape to channels, height, width, "
@@ -404,3 +447,186 @@ def _check_images(
         class_names=class_names,
         notes=notes,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Suggested fixes
+# --------------------------------------------------------------------------- #
+
+
+def suggest_fixes(
+    graph: Any,
+    dataset: DatasetInfo,
+    analysis: Analysis | None = None,
+    result: Compatibility | None = None,
+) -> list[dict[str, Any]]:
+    """Changes to the Input layer and the last layer that make ``graph`` fit ``dataset``.
+
+    Returns ``[{"node", "type", "params", "previous", "summary"}, ...]``: ``params`` are the
+    parameters to set on the layer ``node`` (``previous`` their current values), e.g.
+    ``{"node": "in", "type": "Input", "params": {"shape": [4]}, "previous": {"shape": [784]},
+    "summary": "Input shape 784 → 4"}``. Only two layers are ever changed:
+
+    - the Input layer: ``shape`` (and ``dtype`` "float") as the data is fed. Shapes that work
+      are kept; otherwise the dataset's own shape, flat (``[C·H·W]``) when the Input already
+      is flat, e.g. because a Linear layer follows it;
+    - the last Linear layer (also behind activations or dropout): ``out_features`` = one per
+      class for classification, 1 for regression. Surplus class outputs are corrected too,
+      also when the network fits otherwise (then only a warning explains them).
+
+    Every suggestion is checked: applied together, the changes make the network fit the data.
+    When there is no such change (e.g. a CNN on CSV data, or a Linear layer with a fixed number
+    of input features after the Input), nothing is suggested and the errors explain the rest.
+    ``analysis`` and ``result`` (of ``graph``) save work when they are known already.
+    """
+    if dataset.kind not in ("builtin", "csv", "images"):
+        return []
+    if isinstance(graph, dict) and isinstance(graph.get("graph"), dict):
+        graph = graph["graph"]  # a saved project file
+    if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
+        return []
+    analysis = analysis or analyze(graph)
+    if not analysis.valid or len(analysis.inputs) != 1 or len(analysis.outputs) != 1:
+        return []
+    if result is not None and result.ok and _outputs_fit(analysis, dataset):
+        return []  # nothing to improve
+
+    input_id = analysis.inputs[0]
+    current = list(analysis.nodes[input_id].shape or ())
+    dtype = analysis.nodes[input_id].dtype
+    for shape in _input_candidates(dataset, current):
+        changes: dict[str, dict[str, Any]] = {}
+        params: dict[str, Any] = {}
+        if shape != current:
+            params["shape"] = shape
+        if dtype != "float":
+            params["dtype"] = "float"
+        if params:
+            changes[input_id] = params
+        trial = analyze(_with_params(graph, changes))
+        if not trial.valid or len(trial.outputs) != 1:
+            continue
+        out_shape = list(trial.nodes[trial.outputs[0]].shape or ())
+        if len(out_shape) != 1:
+            continue
+        wanted = _wanted_outputs(dataset, out_shape[0])
+        if wanted != out_shape[0]:
+            last = _last_linear(trial)
+            if last is None:
+                continue
+            changes[last] = {"out_features": wanted}
+            trial = analyze(_with_params(graph, changes))
+        if not trial.valid or not _check(trial, dataset).ok:
+            continue
+        return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
+    return []
+
+
+def _outputs_fit(analysis: Analysis, dataset: DatasetInfo) -> bool:
+    shape = list(analysis.nodes[analysis.outputs[0]].shape or ())
+    return len(shape) == 1 and _wanted_outputs(dataset, shape[0]) == shape[0]
+
+
+def _wanted_outputs(info: DatasetInfo, current: int) -> int:
+    """How many values the network should output for ``info`` (it outputs ``current`` now)."""
+    if info.kind in ("builtin", "images"):
+        return info.num_classes or current
+    if info.predefined_split is not None:
+        # Made in the Data tab: class names are only stored for classification.
+        return len(info.class_names) if info.class_names else 1
+    if info.target_kind == "text":
+        return info.num_classes or current
+    if info.target_kind == "integer" and current > 1:
+        # Trained as classification by class index (with 1 output: as a regression).
+        low, high = info.target_range or [0, 0]
+        classes = math.floor(high) + 1
+        return classes if low >= 0 and classes <= MAX_CLASSES else 1
+    return 1
+
+
+def _input_candidates(info: DatasetInfo, current: list[int]) -> list[list[int]]:
+    """Input shapes to try, best first; the current one comes first (kept if it works)."""
+    candidates = [current]
+    if info.kind == "csv":
+        candidates.append([info.num_features or 0])
+    elif info.kind == "builtin":
+        builtin = BUILTIN_DATASETS.get(info.builtin or "")
+        if builtin is None:
+            return candidates
+        native = list(builtin.shape)
+        flat = [math.prod(native)]
+        if len(current) == 3 and max(current[1:]) <= MAX_IMAGE_SIDE:
+            candidates.append([native[0], *current[1:]])  # keep the size, fix the channels
+        if len(current) == 2:
+            candidates.append(native[1:])
+        candidates += [flat, native] if len(current) == 1 else [native, flat]
+    else:
+        # Image folders: the images (of any size) are resized to the Input.
+        flat = [math.prod(DEFAULT_IMAGE_SHAPE)]
+        if len(current) in (2, 3):
+            size = current[-2:]
+            if max(size) > MAX_IMAGE_SIDE:
+                size = [max(1, s * MAX_IMAGE_SIDE // max(size)) for s in size]
+            if len(current) == 2:
+                candidates.append(size)
+            else:
+                channels = current[0] if current[0] in (1, 3) else 3
+                candidates += [[channels, *size], [1, *size]]
+        candidates += (
+            [flat, DEFAULT_IMAGE_SHAPE] if len(current) == 1 else [DEFAULT_IMAGE_SHAPE, flat]
+        )
+    unique: list[list[int]] = []
+    for shape in candidates:
+        if shape and shape not in unique and all(s > 0 for s in shape):
+            unique.append(shape)
+    return unique
+
+
+def _last_linear(analysis: Analysis) -> str | None:
+    """The Linear layer that decides how many values the (single) output has."""
+    nid = analysis.outputs[0]
+    while analysis.nodes[nid].type != "Linear":
+        info = analysis.nodes[nid]
+        if info.type not in _PASS_THROUGH or len(info.inputs) != 1:
+            return None
+        nid = info.inputs[0]
+        if len(analysis.nodes[nid].outputs) != 1:
+            return None  # another branch uses it as well
+    return nid
+
+
+def _with_params(graph: dict[str, Any], changes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """A copy of the graph document with ``changes`` merged into the layers' params."""
+    nodes = []
+    for raw in graph["nodes"]:
+        node_id = str(raw.get("id")) if isinstance(raw, dict) else None
+        if node_id is not None and node_id in changes:
+            params = raw.get("params")
+            merged = {**(params if isinstance(params, dict) else {}), **changes[node_id]}
+            raw = {**raw, "params": merged}
+        nodes.append(raw)
+    return {**graph, "nodes": nodes}
+
+
+def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[str, Any]:
+    info = analysis.nodes[nid]
+    assert info.layer is not None
+    previous = {
+        k: list(v) if isinstance(v, tuple) else v for k, v in info.layer.p.items() if k in params
+    }
+    if info.type == "Input":
+        parts = []
+        if "shape" in params:
+            parts.append(f"Input shape {_x(previous['shape'])} → {_x(params['shape'])}")
+        if "dtype" in params:
+            parts.append(f"Input data type {previous['dtype']} → {params['dtype']}")
+        summary = ", ".join(parts)
+    else:
+        summary = f"Outputs of the last layer {previous['out_features']} → {params['out_features']}"
+    return {
+        "node": nid,
+        "type": info.type,
+        "params": params,
+        "previous": previous,
+        "summary": summary,
+    }

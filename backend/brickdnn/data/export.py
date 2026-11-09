@@ -102,7 +102,7 @@ def write_training_dataset(
     "task", "class_names": [...] | None}``.
     """
     settings = clean_settings(settings)
-    check = readiness(table, settings, task)
+    check = readiness(table, settings, task, checks=False)
     if not check["ready"]:
         first = next(i for i in check["issues"] if i["severity"] == "error")
         raise DataError(first["message"])

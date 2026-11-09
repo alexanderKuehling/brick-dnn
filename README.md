@@ -21,6 +21,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 license" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/PyTorch-code%20generator-ee4c2c" alt="PyTorch" />
+  <a href="https://buymeacoffee.com/alexanderkzw"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
 </p>
 
 ![Brick DNN editor with a CNN for MNIST](docs/images/builder.png)
@@ -365,6 +366,11 @@ Have fun!
 
 Bug reports, layer requests and pull requests are very welcome.
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+## Support
+
+Brick DNN is free and open source. If it helps you, you can
+[buy me a coffee](https://buymeacoffee.com/alexanderkzw) ☕ — thank you!
 
 ## History
 

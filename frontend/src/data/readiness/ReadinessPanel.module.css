@@ -26,12 +26,30 @@
   &[data-severity='warning'] {
     border-left: 3px solid var(--mantine-color-yellow-filled);
   }
+
+  &[data-severity='info'] {
+    border-left: 3px solid var(--mantine-color-blue-filled);
+  }
 }
 
 .message {
   flex: 1 1 220px;
   min-width: 0;
   padding-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  row-gap: 2px;
+}
+
+.kind {
+  flex-shrink: 0;
+}
+
+/* Column names can be long (one-hot columns such as "city=Frankfurt am Main"). */
+.columns {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 

@@ -1082,3 +1082,33 @@ def test_a_failed_step_makes_the_data_not_ready(auth_client, prep):
     assert readiness["ready"] is False
     assert readiness["issues"][0]["severity"] == "error"
     assert readiness["issues"][0]["message"].startswith("Step 1 (Drop columns) failed:")
+    assert readiness["issues"][0]["code"] == "step_failed"
+    assert readiness["issues"][0]["columns"] == []
+
+
+def test_preview_lists_the_sanity_checks(auth_client):
+    # 40 customers, each twice: rows of the validation/test part copy training rows
+    lines = churn_csv().decode().splitlines()
+    content = ("\n".join(lines + lines[1:]) + "\n").encode()
+    source = import_csv(auth_client, "twice.csv", content).data
+    prep = create_prep(auth_client, source["id"], settings={"target": "churn"}).data
+    readiness = preview(auth_client, prep["id"]).data["readiness"]
+    assert readiness["ready"] is True, readiness["issues"]
+    issues = {i["code"]: i for i in readiness["issues"]}
+    assert issues["split_overlap"]["severity"] == "warning"
+    assert issues["split_overlap"]["columns"] == []
+    assert issues["split_overlap"]["fix"]["type"] == "drop_duplicates"
+    # income grows with the customer number: one of them is enough
+    assert set(issues["redundant"]["columns"]) <= {"customer", "income"}
+    assert all(i["severity"] in ("warning", "info") for i in readiness["issues"])
+
+    # Oversampling repeats training rows on purpose: no note about duplicates, and no
+    # "Remove duplicates" fix after it (it would undo the oversampling).
+    steps = [step("s1", "balance_classes", method="oversample")]
+    readiness = preview(auth_client, prep["id"], steps=steps).data["readiness"]
+    issues = {i["code"]: i for i in readiness["issues"]}
+    assert "duplicate_rows" not in issues
+    assert issues["split_overlap"]["fix"] is None
+    assert issues["split_overlap"]["message"].endswith(
+        "Remove duplicates before balancing the classes."
+    )

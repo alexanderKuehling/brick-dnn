@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { IconCheck, IconTarget } from '@tabler/icons-react';
 import {
+  Anchor,
   Group,
   Input,
   NumberInput,
@@ -31,6 +32,10 @@ interface TargetSplitCardProps {
   splitCounts: number[] | null;
   /** Shown, not changed (a preparation shared with the user to look at). */
   readOnly?: boolean;
+  /** Adds a "Join another table" step; missing when no join can be added. */
+  onAddJoin?: () => void;
+  /** Why no join can be added (e.g. no other table imported yet). */
+  joinUnavailable?: string | null;
 }
 
 const TASKS: { value: PrepTask; label: string }[] = [
@@ -51,6 +56,8 @@ export function TargetSplitCard({
   task,
   splitCounts,
   readOnly = false,
+  onAddJoin,
+  joinUnavailable = null,
 }: TargetSplitCardProps) {
   const { split } = settings;
   const kinds = new Map(columns.map((column) => [column.name, column.kind]));
@@ -155,7 +162,28 @@ export function TargetSplitCard({
 
         <Select
           label="Target column"
-          description="The column to predict; all other columns are features."
+          description={
+            <>
+              The column to predict; all other columns are features.
+              {!readOnly && (
+                <>
+                  {' '}
+                  Is it in another table?{' '}
+                  {onAddJoin ? (
+                    <>
+                      <Anchor component="button" type="button" size="xs" onClick={onAddJoin}>
+                        Add a join step
+                      </Anchor>{' '}
+                      to bring it in through a column both tables share, such as an id.
+                    </>
+                  ) : (
+                    (joinUnavailable ??
+                    'Bring it in with a “Join another table” step through a column both tables share.')
+                  )}
+                </>
+              )}
+            </>
+          }
           placeholder="Choose a column"
           data={data}
           value={target}

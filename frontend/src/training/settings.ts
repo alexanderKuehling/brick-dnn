@@ -1,11 +1,15 @@
 import type {
+  BuiltinDataset,
+  Dataset,
   DatasetRef,
   Optimizer,
   TrainingConfig,
+  TrainingStatus,
   TuningInput,
   TuningMethod,
   TuningSpace,
 } from '@/api/types';
+import { isOwnDataset } from './access';
 
 /**
  * A number field as typed. NumberInput reports unfinished input such as "0.00" or "12." as a
@@ -415,6 +419,47 @@ export function datasetRef(choice: SourceChoice): DatasetRef | null {
     return choice.builtin ? { kind: 'builtin', id: choice.builtin } : null;
   }
   return choice.upload !== null ? { kind: 'upload', id: choice.upload } : null;
+}
+
+/** The data source as it is used for training (see `effectiveSource`). */
+export interface EffectiveSource {
+  choice: SourceChoice;
+  /** null: no dataset to use (yet), e.g. while the uploads are loading. */
+  ref: DatasetRef | null;
+  builtin: BuiltinDataset | null;
+  upload: Dataset | null;
+  /** Name of the dataset in use; null for demo data or none. */
+  name: string | null;
+}
+
+/**
+ * A remembered upload may have been deleted, a built-in dataset may be unavailable. Without a
+ * (valid) choice, the first built-in dataset and the newest own upload are used.
+ */
+export function effectiveSource(
+  status: TrainingStatus,
+  choice: SourceChoice,
+  datasets: Dataset[] | null
+): EffectiveSource {
+  const available = status.builtin_datasets.filter((d) => d.available);
+  const builtin = available.find((d) => d.id === choice.builtin) ?? available[0] ?? null;
+  const upload =
+    datasets?.find((d) => d.id === choice.upload) ??
+    datasets?.find(isOwnDataset) ??
+    datasets?.[0] ??
+    null;
+  const effective: SourceChoice = {
+    ...choice,
+    builtin: builtin ? builtin.id : null,
+    upload: upload ? upload.id : null,
+  };
+  const name =
+    choice.tab === 'builtin'
+      ? (builtin?.name ?? null)
+      : choice.tab === 'upload'
+        ? (upload?.name ?? null)
+        : null;
+  return { choice: effective, ref: datasetRef(effective), builtin, upload, name };
 }
 
 // --------------------------------------------------------------------------

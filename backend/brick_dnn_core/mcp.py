@@ -611,7 +611,8 @@ TOOLS: dict[str, Tool] = {
             "check_training",
             "Check a network against a dataset",
             "Check whether a network fits a dataset (input shape and dtype, output size, loss) "
-            "before training. Returns ok, errors, warnings and the task.",
+            "before training. Returns ok, errors, warnings, the plan (task, classes) and "
+            "fixes: the params to set on the Input layer and the last layer to make it fit.",
             check_training,
             {"graph": GRAPH_SCHEMA, "dataset": DATASET_SCHEMA},
             ("graph", "dataset"),
