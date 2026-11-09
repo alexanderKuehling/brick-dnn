@@ -6,6 +6,10 @@ SIGTERM or SIGINT stop the run after the current batch; a classical model that i
 fitted cannot be interrupted, so the process then ends right away without saving it. The
 process always ends with a terminal status in ``state.json``. It runs with a lower
 priority than the web server that started it (see :func:`lower_priority`).
+
+The runner measures its own CPU time (``usage`` in state.json), so that whoever reads the
+state can count it, and stops like after a stop request once it has used the CPU time in
+the ``limits`` of the job (a budget or the most one run may use), also if nobody watches it.
 """
 
 from __future__ import annotations
@@ -26,8 +30,10 @@ from .reporting import Reporter, TrainingError
 from .state import (
     HEARTBEAT_SECONDS,
     MAX_LOG_LINES,
+    cpu_seconds,
     initial_state,
     read_job,
+    stop_request,
     stop_requested,
     weights_file,
     write_state,
@@ -46,11 +52,27 @@ NICE = 10
 OOM_SCORE_ADJ = 1000
 
 
+def job_limits(raw: Any) -> dict[str, Any] | None:
+    """``limits`` of job.json: ``{"cpu_seconds", "reason", "message"}``, or None."""
+    if not isinstance(raw, dict):
+        return None
+    limit = raw.get("cpu_seconds")
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not limit > 0:
+        return None
+    reason = raw.get("reason")
+    return {
+        "cpu_seconds": float(limit),
+        "reason": reason if reason in ("budget", "run_limit") else "run_limit",
+        "message": str(raw.get("message") or ""),
+    }
+
+
 class StateReporter(Reporter):
     """Mirrors the engine's progress into ``state.json``.
 
     All changes and writes happen under one lock; a heartbeat thread refreshes
-    ``updated_at`` (and flushes throttled changes) while the run is alive.
+    ``updated_at`` and ``usage`` (and flushes throttled changes) while the run is alive.
+    ``limits`` (see :func:`job_limits`): stop once this much CPU time is used.
     """
 
     def __init__(
@@ -59,10 +81,14 @@ class StateReporter(Reporter):
         epochs: int = 0,
         heartbeat: float = 1.0,
         family: str = "neural",
+        limits: dict[str, Any] | None = None,
     ):
         self.run_dir = Path(run_dir)
         self.state: dict[str, Any] = initial_state(epochs, family)
         self.stop_signal = False
+        self.limits = job_limits(limits)
+        self.limit_reached = False
+        self._started = time.monotonic()
         self._lock = threading.Lock()
         self._last_write = 0.0
         self._dirty = False
@@ -80,6 +106,11 @@ class StateReporter(Reporter):
         """Write state.json (call with the lock held)."""
         now = time.time()
         self.state["updated_at"] = now
+        self.state["usage"] = {
+            "cpu_seconds": round(cpu_seconds(), 3),
+            "wall_seconds": round(time.monotonic() - self._started, 3),
+            "limit_cpu_seconds": self.limits["cpu_seconds"] if self.limits else None,
+        }
         try:
             write_state(self.run_dir, self.state)
         except OSError as exc:
@@ -99,11 +130,27 @@ class StateReporter(Reporter):
     def _heartbeat(self, interval: float) -> None:
         refresh = min(HEARTBEAT_SECONDS / 2, 2.0)
         while not self._done.wait(interval):
+            self._check_limit()
             with self._lock:
                 if self._done.is_set():
                     return
                 if self._dirty or time.time() - self._last_write >= refresh:
                     self._write()
+
+    def _check_limit(self) -> bool:
+        """True (and remembered) once the CPU time of ``limits`` is used up."""
+        if not self.limit_reached and self.limits is not None:
+            self.limit_reached = cpu_seconds() >= self.limits["cpu_seconds"]
+        return self.limit_reached
+
+    def _stop_reason(self) -> tuple[str, str]:
+        """Why the run stopped: ("user" | "budget" | "run_limit", start of the message)."""
+        if self.limit_reached and self.limits is not None:
+            return self.limits["reason"], self.limits["message"]
+        request = stop_request(self.run_dir)
+        if request is not None:
+            return request["reason"], request["message"]
+        return "user", ""
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -203,6 +250,10 @@ class StateReporter(Reporter):
         self._update(test=result, progress=None)
 
     def finish(self, status: str, message: str, weights: bool) -> None:
+        reason = None
+        if status == "stopped":
+            reason, why = self._stop_reason()
+            message = f"{why} {message}" if why else message
         print(f"{status}: {message}", flush=True)
         with self._lock:
             self._done.set()
@@ -213,12 +264,13 @@ class StateReporter(Reporter):
                 progress=None,
                 trial=None,
                 finished_at=time.time(),
+                stop_reason=reason,
             )
             self._write()
         self._thread.join(timeout=5)
 
     def should_stop(self) -> bool:
-        return self.stop_signal or stop_requested(self.run_dir)
+        return self.stop_signal or stop_requested(self.run_dir) or self._check_limit()
 
     @property
     def finished(self) -> bool:
@@ -246,7 +298,8 @@ def run(run_dir: str | Path) -> dict[str, Any]:
     if family == "neural" and job_data and isinstance(job_data.get("config"), dict):
         value = job_data["config"].get("epochs")
         epochs = value if isinstance(value, int) else 0
-    reporter = StateReporter(run_dir, epochs, family=family)
+    limits = job_data.get("limits") if job_data else None
+    reporter = StateReporter(run_dir, epochs, family=family, limits=limits)
     _install_signal_handlers(reporter)
     try:
         if family == "classical":

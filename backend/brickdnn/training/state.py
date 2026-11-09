@@ -3,8 +3,13 @@
 Every run lives in its own directory::
 
     job.json      what to train: graph, dataset, plan, settings   (written by the API / CLI)
+                  and optionally ``limits``: {"cpu_seconds": 1800, "reason": "run_limit",
+                  "message": "..."}, the CPU time after which the runner stops by itself
+                  (reason "budget" or "run_limit"; the message starts its final message)
     state.json    live progress, replaced atomically              (written by the runner)
-    STOP          created to ask the runner to stop after the current batch
+    STOP          created to ask the runner to stop after the current batch; it holds
+                  {"reason": "budget", "message": "..."} when the server stops the run for
+                  another reason than the user's request
     weights.pt    model.state_dict() after training or stopping   (written by the runner)
     model.joblib  instead of weights.pt for classical models (scikit-learn): the fitted
                   pipeline saved with joblib, see brickdnn.classical for its format
@@ -53,6 +58,11 @@ Every run lives in its own directory::
                                      #  class_names} (statistics of the training part only)
                                      # or {"kind": "demo"}
       "log": ["Downloading MNIST …", "..."],               # last 200 lines
+      "usage": {"cpu_seconds": 12.5,   # CPU time of the runner (all its threads) and of
+                "wall_seconds": 8.1,   # its finished child processes, time since the start;
+                "limit_cpu_seconds": 1800},  # refreshed with every write (null: no limit)
+      "stop_reason": null,           # stopped runs: "user", "budget" (a monthly budget is
+                                     # used up) or "run_limit" (the most one run may use)
 
       # Hyperparameter search only (null / empty for normal runs):
       # Classical models only (null for neural networks), see below
@@ -202,6 +212,8 @@ def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
         "trials": [],
         "best_trial": None,
         "classical": None,
+        "usage": {"cpu_seconds": 0.0, "wall_seconds": 0.0, "limit_cpu_seconds": None},
+        "stop_reason": None,
     }
 
 
@@ -236,12 +248,38 @@ def write_job(run_dir: str | Path, job: dict[str, Any]) -> None:
     write_json_atomic(Path(run_dir) / JOB_FILE, job)
 
 
-def request_stop(run_dir: str | Path) -> None:
-    (Path(run_dir) / STOP_FILE).touch()
+def request_stop(
+    run_dir: str | Path, reason: str | None = None, message: str | None = None
+) -> None:
+    """Ask the runner to stop. ``reason`` ("budget", "run_limit") and ``message`` (the start
+    of its final message) say why when it is not the user's request."""
+    path = Path(run_dir) / STOP_FILE
+    if reason is None:
+        path.touch()
+    else:
+        write_json_atomic(path, {"reason": reason, "message": message or ""})
 
 
 def stop_requested(run_dir: str | Path) -> bool:
     return (Path(run_dir) / STOP_FILE).exists()
+
+
+def stop_request(run_dir: str | Path) -> dict[str, str] | None:
+    """Why the run was asked to stop: ``{"reason", "message"}`` (reason "user" for an empty
+    STOP file), None if it was not."""
+    path = Path(run_dir) / STOP_FILE
+    if not path.exists():
+        return None
+    data = read_json(path)
+    if isinstance(data, dict) and isinstance(data.get("reason"), str):
+        return {"reason": data["reason"], "message": str(data.get("message") or "")}
+    return {"reason": "user", "message": ""}
+
+
+def cpu_seconds() -> float:
+    """CPU time (user + system, all threads) of this process and its finished children."""
+    times = os.times()
+    return times.user + times.system + times.children_user + times.children_system
 
 
 def is_stale(state: dict[str, Any] | None, now: float | None = None) -> bool:
