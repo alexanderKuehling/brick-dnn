@@ -2,14 +2,17 @@
 
 Brick DNN can train the network you built **on the machine that runs the backend**, with
 PyTorch. You start and watch the training in the editor; nothing is computed in the browser.
-The same engine is available on the command line as `brickdnn train`.
+The same engine is available on the command line as `brickdnn train`. Classical models
+(Gaussian processes and support vector machines) are fitted with scikit-learn instead, see
+[Classical models](#classical-models).
 
 ![Finished training of a small CNN on MNIST with loss and accuracy curves](images/training.png)
 
 ## Setup
 
 Training needs PyTorch and torchvision in the backend environment. Everything else in Brick DNN
-works without them.
+works without them. Classical models only need scikit-learn, which is part of the backend's
+requirements (and of the default Docker image), so they train even without PyTorch.
 
 ```bash
 # local development setup (see the README)
@@ -223,6 +226,75 @@ separate process, like a training. AI assistants get the weights with `get_weigh
 a download link valid for 15 minutes, the model code, the preprocessing and a snippet like the
 one above (see [mcp.md](mcp.md#downloading-the-weights)).
 
+## Classical models
+
+Besides neural networks, Brick DNN builds and trains classical models for tabular data
+(the bricks are described in [graph-format.md](graph-format.md#classical-models)):
+
+| Model | Task | Brick |
+| ----- | ---- | ----- |
+| Gaussian process regression | predicts a number with its uncertainty | `GaussianProcessRegressor` + optional kernel bricks |
+| Gaussian process classification | classes with probabilities | `GaussianProcessClassifier` + optional kernel bricks |
+| Support vector regression | predicts a number | `SVR` |
+| Support vector classification | classes with probabilities (Platt scaling) | `SVC` |
+
+Connect the Input (shape: the number of feature columns) straight to the model; a Gaussian
+process may also take a kernel built from kernel bricks (`RBF`, `Matern`, `RationalQuadratic`,
+`ExpSineSquared`, `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum`
+and `KernelProduct`). Their hyperparameters are starting values that the fit optimises. The
+examples *Gaussian process regression (RBF + noise)*, *SVM classifier* and *Periodic Gaussian
+process* are good starting points.
+
+They are trained with scikit-learn by the same runner process, with the same run view,
+history and API, but **fitted once instead of epoch by epoch**:
+
+- **Data**: CSV files, datasets from the *Data* tab (with their split) and demo data
+  (1,000 random rows with a hidden rule; 3 classes for classifiers). Images and the
+  built-in datasets give a compatibility error. Regression models need a numeric target;
+  classifiers take text labels, whole numbers (each value is a class) or the classes of a
+  prepared dataset. The check explains mismatches, e.g. *"The target column 'species'
+  contains text labels (3 classes), so this is a classification task: use
+  GaussianProcessClassifier or SVC instead of Support vector regression."*
+- **Split and scaling**: the same rules as for neural networks (validation split, test split,
+  the split of a prepared dataset, *Max. samples*, *Seed*); the random split uses NumPy's
+  generator, so the rows differ from a neural run with the same seed. The model is a
+  `Pipeline` of a `StandardScaler` and the estimator, and the scaler learns from the
+  training rows only.
+- **Settings**: only validation split, test split, max. samples and seed apply. Epochs,
+  batch size, learning rate, optimizer, weight decay, device, early stopping and the kept
+  weights do not, and the hyperparameter search is not available (a Gaussian process
+  optimises its kernel hyperparameters itself).
+- **Size limits**: fitting a Gaussian process takes O(n³) time and O(n²) memory, an SVM
+  between O(n²) and O(n³). Gaussian processes are fitted on at most 5,000 training rows
+  (`BRICKDNN_GP_MAX_ROWS`), SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`). Larger training
+  sets are subsampled like with *Max. samples* (validation and test shrink in proportion),
+  which the check warns about and the log says; a larger *Max. samples* is refused.
+- **What is reported**: the status says what happens ("Fitting the Gaussian process on 4,000
+  rows …"); there is no progress during the fit. Afterwards the run has one history entry
+  (epoch 1): the training and validation loss (cross-entropy of the predicted probabilities,
+  or the mean squared error of the standardised target, like for neural networks), the
+  accuracy or the RMSE and R², the test result if there is a test set, the fit time, the
+  fitted kernel and log marginal likelihood of a Gaussian process (one kernel per class for
+  a classifier with more than two classes) or the number of support vectors of an SVM, and
+  warnings of the fit in the log (e.g. a hyperparameter that ended at its bound).
+- **Stopping**: scikit-learn cannot be interrupted, so stopping during the fit ends the
+  training process at once and nothing is saved.
+- **The model**: the fitted pipeline is saved with joblib as `model.joblib` (download:
+  `<run name>.joblib`), with `model.preprocessing.json` next to it. It is a dictionary
+  `{"format": "brickdnn-sklearn-1", "model": <Pipeline>, "task", "columns", "target",
+  "class_names"}`, the same as the exported script's `--save`, so the script predicts with
+  it: `python my_gp.py --predict new.csv --save my-gp.joblib`. In Python:
+
+  ```python
+  import joblib
+
+  bundle = joblib.load("my-gp.joblib")  # a pickle: only load files you trust
+  mean, std = bundle["model"].predict([[3.0, 120.0]], return_std=True)
+  ```
+
+- **Predictions** on the server (REST and MCP) work like for neural networks; classifiers
+  return their own probabilities, a Gaussian process regressor also its standard deviation.
+
 ## Command line
 
 The `brickdnn` package trains without the web UI:
@@ -235,7 +307,11 @@ brickdnn train --example tabular_regression --data houses.csv   # CSV file
 brickdnn train my_cnn.json --data ./pets/ --epochs 20           # image folder (or a .zip)
 brickdnn train --example lstm_sentiment --data demo             # demo data
 brickdnn train my_cnn.json --data houses.csv --test-split 0.2   # hold out 20 % as a test set
+brickdnn train --example gp_regression --data houses.csv        # a classical model: houses.joblib
 ```
+
+Classical models only need scikit-learn (`pip install "brickdnn[classic]"`; `[train]`
+includes it) and save the fitted model as `<name>.joblib`.
 
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,
 `--test-split`, `--device`, `--max-samples`, `--seed`, `--patience N` (early stopping),
@@ -308,6 +384,8 @@ The REST endpoints are documented in [api.md](api.md#training-login-required).
 | `BRICKDNN_PREDICT_RATE` | `120/hour` | Rate limit for predictions |
 | `BRICKDNN_MCP_UPLOAD_MB` | `5` | Largest CSV file AI assistants can upload over MCP |
 | `BRICKDNN_INSTALL_TORCH` | `false` | Docker build: install PyTorch (CPU) into the backend image |
+| `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process is fitted on at most (more are subsampled) |
+| `BRICKDNN_SVM_MAX_ROWS` | `50000` | Training rows an SVM is fitted on at most (more are subsampled) |
 
 On a public server, keep in mind that every registered user can use the server's CPU/GPU for
 training and predictions; disable registration or training if that is not wanted.
@@ -318,6 +396,12 @@ training and predictions; disable registration or training if that is not wanted
   Docker image with `BRICKDNN_INSTALL_TORCH=true`) and restart the backend.
 - **"Could not download MNIST"**: the server needs internet access once per dataset.
 - **Loss becomes NaN**: lower the learning rate. In a search, only that trial fails.
+- **"scikit-learn is not installed on the server"**: run
+  `pip install -r requirements.txt` (or `pip install scikit-learn`) in the backend
+  environment and restart it.
+- **A Gaussian process takes very long or runs out of memory**: set *Max. samples*, or lower
+  `BRICKDNN_GP_MAX_ROWS`. A fit that fails with a matrix that is not positive definite needs
+  a larger `alpha` or a `WhiteKernel` in its kernel.
 - **Out of memory**: lower the batch size, the image size or the network size. On a server
   with limits ([deploy/server](../deploy/server/README.md#cpu-and-memory-the-site-comes-first))
   such a run often only says "The training process stopped unexpectedly".

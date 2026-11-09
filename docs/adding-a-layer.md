@@ -55,6 +55,11 @@ class GroupNorm(Layer):
   set `has_module = False` and only produce forward code (see `Add`, `Reshape`).
 - Multi-input layers set `min_inputs`/`max_inputs` (`None` = unlimited).
 - Layers that take integer token ids set `input_dtypes = ("long",)`.
+- Kernel bricks and classical models (scikit-learn) work differently: they subclass `Kernel`
+  (set `sklearn_name` and `hyper`, the hyperparameters) or `ClassicalModel` (set `task`,
+  `estimator`, `module`, `scale` and implement `estimator_args`) at the end of
+  [`layers.py`](../backend/brickdnn/layers.py), and are tested in
+  [`test_classical.py`](../backend/tests/test_classical.py).
 
 ## Tests
 

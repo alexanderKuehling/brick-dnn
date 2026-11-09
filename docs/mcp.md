@@ -1,8 +1,9 @@
 # MCP server, OAuth and API tokens
 
 Brick DNN has a built-in [MCP](https://modelcontextprotocol.io) server, so AI assistants such
-as Claude can build networks, check them, generate PyTorch code, save them in your account,
-train them on your server, predict with the trained networks and hand you their weights. The
+as Claude can build networks (and classical models: Gaussian processes, SVMs), check them,
+generate PyTorch or scikit-learn code, save them in your account, train them on your server,
+predict with the trained networks and hand you their weights. The
 server is at `https://<your domain>/api/mcp/`
 (Streamable HTTP). Assistants sign in with **OAuth**, like "Sign in with …" on other sites;
 scripts and clients without OAuth use personal **API tokens**.
@@ -86,10 +87,10 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 
 | Tool                    | Access | Destructive | What it does                                                    |
 | ----------------------- | ------ | ----------- | --------------------------------------------------------------- |
-| `list_layer_types`      | read   |             | All layer types with their parameters                           |
+| `list_layer_types`      | read   |             | All layer types with their parameters, kernel bricks and classical models |
 | `list_examples`         | read   |             | Example networks with their graphs                              |
 | `analyze_network`       | read   |             | Validate a graph, infer shapes and parameter counts, explain errors |
-| `generate_pytorch_code` | read   |             | PyTorch script for a valid graph                                |
+| `generate_pytorch_code` | read   |             | PyTorch script for a valid graph (scikit-learn for a classical model) |
 | `list_projects`         | read   |             | Your saved networks and the ones shared with you                |
 | `get_project`           | read   |             | One saved network with its graph                                |
 | `save_project`          | full   | yes         | Create a network or update one (owner, editors)                 |
@@ -97,7 +98,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `get_training_options`  | read   |             | Whether training is available, datasets, default settings, search, upload limit |
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
-| `check_training`        | read   |             | Does a network fit a dataset? With `fixes` for the Input and last layer |
+| `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer |
 | `start_training`        | full   |             | Train in the background                                         |
 | `list_training_runs`    | read   |             | Your training runs with status and metrics                      |
 | `get_training_run`      | read   |             | One run with its metrics per epoch                              |
@@ -107,6 +108,16 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `predict`               | read   |             | Run a trained network on up to 64 samples                       |
 
 Read-only tokens and apps allowed read-only access only see the read tools. Networks use the [graph format](graph-format.md).
+
+**Classical models.** The same tools work for Gaussian processes and support vector machines
+([graph-format.md](graph-format.md#classical-models)): the instructions and
+`list_layer_types` explain the kernel bricks (`RBF`, `WhiteKernel`, … combined with
+`KernelSum` and `KernelProduct`) and the models; `analyze_network` reports the kernel
+expression; `generate_pytorch_code` returns a scikit-learn script; `get_training_options`
+says under `classical` whether they can be trained and on how many rows at most;
+`start_training` fits them once (only `val_split`, `test_split`, `max_samples` and `seed`
+apply, no `tuning`); `get_training_run` shows the fitted kernel or the support vectors in
+`state.classical` (see [training.md](training.md#classical-models)).
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and
 validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login-required)).
@@ -148,13 +159,17 @@ password while it is valid. Along with it come `model_code` (the `NeuralNetwork`
 weights belong to), `preprocessing` as recorded by the training (feature order and
 standardisation, or image size, channels and normalisation, and the class names), `inputs`
 (the same in words) and `how_to_use`, a Python snippet that loads the weights and predicts.
+For a classical model the file is the fitted scikit-learn pipeline (`.joblib`, see
+[training.md](training.md#classical-models)), `model_code` is its `make_model()` and the
+snippet loads the file with joblib.
 
 ### Predictions
 
 `predict {run_id, inputs, input_scale?, top_k?}` runs the trained network of a finished or
 stopped run on the server and answers one prediction per sample: for classification the
 `class`, its `index` and `probability` and the `top` classes (`top_k`, default 3, at most
-10); for regression the `value` in the units of the target column.
+10); for regression the `value` in the units of the target column. Classical models take
+the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
 
 | Trained on | `inputs` (at most 64 samples)                                       | `input_scale` |
 | ---------- | ------------------------------------------------------------------- | ------------- |

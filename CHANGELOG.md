@@ -3,6 +3,25 @@
 ## Unreleased
 
 ### Added
+- **Classical models: Gaussian processes and support vector machines.** New bricks next to
+  the neural layers: kernels (`RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`,
+  `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum` and
+  `KernelProduct`) and classical models (`GaussianProcessRegressor`,
+  `GaussianProcessClassifier`, `SVR`, `SVC`). Connections carry a tensor or a kernel; the
+  analysis checks the rules (a model takes its features straight from the Input, one model per
+  network, no mixing with neural layers yet) and reports kernel expressions and the
+  hyperparameters the fit optimises. The export is a scikit-learn script (`make_model()`
+  returns `Pipeline(StandardScaler(), model)`; CSV fitting with metrics, `--save model.joblib`,
+  `--predict`). They train on CSV files, prepared datasets and demo data with scikit-learn,
+  fitted once instead of epoch by epoch, at most `BRICKDNN_GP_MAX_ROWS` (5,000) training rows
+  for Gaussian processes and `BRICKDNN_SVM_MAX_ROWS` (50,000) for SVMs; runs report the fitted
+  kernel and log marginal likelihood or the support vectors, save the fitted pipeline as a
+  `.joblib` file, and predict class probabilities or values with the Gaussian process's
+  uncertainty (REST, MCP and `brickdnn train`). Examples: Gaussian process regression, SVM
+  classifier, periodic Gaussian process. The catalogue (`GET /api/layers/`) tells each brick's
+  `family`, `output_kind` and `input_slots`; the analysis adds `output_kind`, `kernel` and
+  `task` per node and `family` and `classical` for the network; `GET /api/training/` adds
+  `classical`, runs `family`, and the run metrics `val_r2` and `test_r2`.
 - **Privacy basics for public servers** ([docs/privacy.md](docs/privacy.md)).
   - *Legal pages:* an imprint, privacy policy and terms of use are Markdown files the
     operator puts into `BRICKDNN_LEGAL_DIR` (on the server `/srv/brick-dnn/legal`), shown at
@@ -100,6 +119,9 @@
   server reads and checks the file. A training upload can be cancelled while it is sent.
 
 ### Changed
+- The backend requires **scikit-learn** (for classical models; it brings SciPy and joblib),
+  which makes the Docker image about 190 MB larger. `brickdnn[train]` includes it, and the new
+  extra `brickdnn[classic]` installs only it.
 - **Built-in datasets validate on their training images.** Without a test set, MNIST,
   Fashion-MNIST and CIFAR-10 used to validate on their official test images and ignore
   `val_split`, so the images that chose the best epoch were also the reported result. Now
