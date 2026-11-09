@@ -8,6 +8,7 @@ automatically once all CI checks have passed (`.github/workflows/deploy-server.y
 ```text
 GitHub Actions ──ssh deploy@SERVER <commit>──▶ brickdnn-deploy: git checkout, docker compose up
 Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api──▶ Django (backend) ──▶ Supabase / SQLite
+                                                   ──/api/ws/──▶ Daphne (realtime) ◀─ Redis ─▶ Django
 ```
 
 ## One-time setup
@@ -78,6 +79,7 @@ answers while they run, the containers get different shares of the server:
 | Container | Gets |
 | --- | --- |
 | `backend`: Django with all its trainings | at most 3/4 of the CPUs and of the memory, no swap |
+| `realtime` (live editing, Daphne) and `redis` | small fixed limits: half a CPU and 256 MB, 64 MB |
 | `caddy` and `frontend` (nginx) | the other quarter, shared with the system; the CPU first when it is busy, killed last |
 
 - Every deploy computes the limits from the size of the server, so they follow a resize

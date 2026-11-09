@@ -254,9 +254,11 @@ frontend/  React + Mantine + React Flow (TypeScript)
    │  every edit → POST /api/analyze/ (debounced) → shapes and errors on the canvas
    │  export     → POST /api/generate/
    │  training   → POST /api/training/runs/, then polls the run once per second
+   │  live editing of shared networks → WebSocket /api/ws/projects/<id>/
    ▼
-backend/   Django REST API: accounts (JWT), saved networks, datasets, training runs
+backend/   Django REST API: accounts (JWT), saved and shared networks, datasets, training runs
    │          starts one process per training run, reads its progress from state.json
+   │          live editing: Django Channels (served by Daphne), Redis between the processes
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
    ├── brickdnn/training/   PyTorch training engine (optional), used by the runner and the CLI
@@ -272,12 +274,13 @@ brick-dnn/
 │   ├── brickdnn/            code generator (standalone package + CLI)
 │   │   ├── training/        training engine, runner process, `brickdnn train`
 │   │   └── data/            data preparation: import, steps, analysis, export
-│   ├── brick_dnn_core/      Django app: API views, Project model
+│   ├── brick_dnn_core/      Django app: API views, models, sharing, live editing, MCP, OAuth
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
 ├── frontend/
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
+│       ├── sharing/         share dialog, networks shared by link
 │       ├── training/        training panel: data, settings, live progress, history
 │       ├── data/            Data tab: pipeline editor, data table, analysis views
 │       ├── api/             typed API client
