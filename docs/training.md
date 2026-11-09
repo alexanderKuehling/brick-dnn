@@ -391,6 +391,120 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 
 The REST endpoints are documented in [api.md](api.md#training-login-required).
 
+## Usage and budgets
+
+Trainings and predictions use **compute**, measured as CPU time (all threads of the process).
+The runner measures its own CPU time and writes it into `state.json` (`usage`) with every
+update, so the server counts it whichever of its processes looks at the run; predictions
+report theirs when they end. Runs that end without a report (an old runner, a crash right at
+the start) count their wall time × the CPU threads of a training (`OMP_NUM_THREADS`, else the
+number of CPUs). Analysing networks, generating code, checks and listings are never counted.
+GPU time is not measured separately: a run on a GPU counts the CPU time of its process.
+
+The counted usage goes into a ledger (`UsageRecord`, one row per run and calendar month, which
+grows while the run is active, and one per prediction), with the API token or connected app
+that started it. **Storage** is what an account stores now: imported tables (Data tab),
+training datasets and the files of training runs (weights and log, measured when a run ends).
+
+### Plans and limits
+
+An account's limits come from its **plan**. `BRICKDNN_PLANS` defines the plans as JSON, an
+object of plans by key; `BRICKDNN_DEFAULT_PLAN` is the plan of accounts without one:
+
+```json
+{"free": {"name": "Free", "price": 0, "cpu_hours_per_month": 0.5, "storage_gb": 1,
+          "cpu_minutes_per_run": 15, "concurrent_trainings": 1, "priority": 0},
+ "starter": {"name": "Starter", "price": 5, "cpu_hours_per_month": 10, "storage_gb": 5,
+             "cpu_minutes_per_run": 60, "concurrent_trainings": 1, "priority": 1,
+             "overage_price_per_cpu_hour": 0.4}}
+```
+
+| Key | Meaning (missing or 0: unlimited) |
+| --- | --- |
+| `name`, `price` | Shown on the account page; `price` per month in `BRICKDNN_PRICE_CURRENCY` (display only, there is no payment yet) |
+| `cpu_hours_per_month` | Compute allowance per calendar month (UTC) |
+| `storage_gb` | Storage quota |
+| `cpu_minutes_per_run` | The most compute one training may use |
+| `concurrent_trainings` | Trainings of the account that may run at the same time |
+| `priority` | For the planned job queue (higher goes first); not used yet |
+| `overage_price_per_cpu_hour` | Offer compute beyond the allowance at this price (see below) |
+
+Without `BRICKDNN_PLANS` there is one plan whose limits are `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH`,
+`BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN` and `BRICKDNN_BUDGET_STORAGE_MB` — all unset by default,
+so a server of your own has **no limits** unless you configure them. brickdnn.com's plans are
+in [`deploy/sites/brickdnn.com/settings.env`](../deploy/sites/brickdnn.com/settings.env):
+
+| Plan | Price (EUR/month incl. VAT) | Compute | Storage | Per training | At a time | Priority |
+| ---- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Free | 0 | 0.5 CPU hours | 1 GB | 15 CPU min | 1 | 0 |
+| Starter | 5 | 10 CPU hours | 5 GB | 60 CPU min | 1 | 1 |
+| Plus | 14 | 30 CPU hours | 20 GB | 3 CPU hours | 1 | 2 |
+| Pro | 45 | 120 CPU hours | 100 GB | 8 CPU hours | 2 | 3 |
+
+The paid plans offer compute beyond the allowance at 0.40 EUR per CPU hour (*overage*). It is
+off for every account until its user switches it on on the account page (optionally with a cap
+in CPU hours); the ledger marks the part of the usage beyond the allowance (`overage`), to be
+billed at the end of the month once billing exists. Without the switch a run stops when the
+allowance is used up.
+
+**Changing plans and unlimited accounts.** The operator sets an account's plan in the Django
+admin (*User profiles*: plan, *unlimited*, and overrides of single limits) or on the server:
+
+```bash
+python manage.py set_plan --list                 # the plans
+python manage.py set_plan ada                    # ada's plan and the limits that apply
+python manage.py set_plan ada --plan plus        # another plan (--plan default: the default)
+python manage.py set_plan ada --unlimited        # no limits of the plan
+python manage.py set_plan ada --limited          # the plan's limits again, also for staff
+```
+
+(in Docker: `docker compose exec backend python manage.py set_plan …`). The admin list of
+profiles filters by plan and *limits* and has the bulk actions *Make unlimited* and *Back to
+the limits of their plan*. A change takes effect at once, also for running trainings. **Staff
+members and superusers are unlimited** unless marked otherwise (`BRICKDNN_STAFF_UNLIMITED=false`
+switches that off). Unlimited accounts are still measured and see their usage; budgets their
+users set themselves (for the account or a token) still apply. Billing will call
+`budgets.set_plan(user, key)`; `budgets.limits_for(user)` gives the limits that apply.
+
+**Budgets of users and agents.** On the account page users can set a monthly budget for their
+whole account, and on the API tokens page one for each API token and each connected app (an
+agent cannot raise its own budget: only a website login can change budgets). With
+`BRICKDNN_PRICE_PER_CPU_HOUR` (and `BRICKDNN_PRICE_PER_GB_MONTH`), usage is also shown in
+money.
+
+### Enforcement
+
+- **Before a training starts** (web, REST, MCP), every budget that applies — the plan's
+  allowance, the account's own budget, the budget of the token or app starting it — must have
+  CPU time left, the storage quota must not be used up and the plan must allow another training
+  at a time. Otherwise the start is refused (HTTP 403 with `code` `budget_exceeded` or
+  `storage_quota_exceeded`, 409 for trainings at a time) with what is used, the limit, when it
+  resets and how to get more.
+- The run gets what is left as its **limit** (at most the plan's limit per training), written
+  into `job.json`; the runner stops by itself when it has used it, like after a stop request:
+  the weights of the best epoch so far are kept (a classical model being fitted cannot be
+  interrupted and is not saved). Its message says why, and `usage.stop_reason` is `budget` or
+  `run_limit`. Active runs reserve their limits, and starts are serialised by the start lock,
+  so two trainings started at once cannot both spend the rest of a budget.
+- **During a run**, every look at it (the panel polls it every second) counts the CPU time used
+  since and stops the run when a budget is used up, e.g. after the user lowered a budget or the
+  plan changed.
+- **The estimate.** The training check (`POST /api/training/check/` with the settings, MCP
+  `check_training`, the training panel) estimates the CPU time of the planned run: the
+  arithmetic of one forward pass is estimated from the layers (a layer's weights × the
+  positions they are applied to; one operation per value for layers without weights), a
+  training step costs about three passes, plus a cost per step, per sample and for the start.
+  Gaussian processes cost about n³ per optimizer step for n training rows, SVMs about n². It
+  was calibrated with the examples on a 4-core Xeon and was within 0.4–2.5× of the measured
+  CPU time; it is labelled as a rough estimate with a range (a third to three times the
+  estimate). A run whose estimate exceeds what it may use gets a warning; one where even the
+  low end exceeds it is refused (`estimate_too_high`).
+- **Predictions** need compute left; **uploads**, imports in the Data tab and datasets made
+  from a preparation need room in the storage quota.
+
+`GET /api/account/usage/` (and the MCP tool `get_usage`) shows this month's usage, the plan,
+limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -407,9 +521,19 @@ The REST endpoints are documented in [api.md](api.md#training-login-required).
 | `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process regression is fitted on at most (more are subsampled) |
 | `BRICKDNN_GPC_MAX_ROWS` | `2000` | Training rows a Gaussian process classifier is fitted on at most (more are subsampled) |
 | `BRICKDNN_SVM_MAX_ROWS` | `50000` | Training rows an SVM is fitted on at most (more are subsampled) |
+| `BRICKDNN_PLANS` | unset | The plans and their limits as JSON (see [Plans and limits](#plans-and-limits)) |
+| `BRICKDNN_DEFAULT_PLAN` | the first plan | The plan of accounts without one |
+| `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH` | `0` (unlimited) | Without plans: compute per account and calendar month |
+| `BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN` | `0` (unlimited) | Without plans: the most compute one training may use |
+| `BRICKDNN_BUDGET_STORAGE_MB` | `0` (unlimited) | Without plans: storage per account |
+| `BRICKDNN_STAFF_UNLIMITED` | `true` | Staff members and superusers have no limits (unless marked otherwise) |
+| `BRICKDNN_PRICE_PER_CPU_HOUR` | unset | Show compute in money at this price |
+| `BRICKDNN_PRICE_PER_GB_MONTH` | unset | Show storage in money at this price |
+| `BRICKDNN_PRICE_CURRENCY` | `EUR` | Currency of the prices and plans |
 
 On a public server, keep in mind that every registered user can use the server's CPU/GPU for
-training and predictions; disable registration or training if that is not wanted.
+training and predictions: configure [plans](#plans-and-limits), or disable registration or
+training if that is not wanted.
 
 ## Troubleshooting
 
