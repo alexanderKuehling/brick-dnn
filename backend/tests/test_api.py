@@ -116,7 +116,7 @@ def test_generate_invalid_options(client):
 def test_register_login_me_logout(client):
     response = client.post(
         "/api/auth/register/",
-        {"username": "grace", "password": "a-long-enough-password"},
+        {"username": "grace", "email": "grace@example.com", "password": "a-long-enough-password"},
         format="json",
     )
     assert response.status_code == 201
@@ -147,7 +147,9 @@ def test_register_login_me_logout(client):
 
 def test_register_rejects_weak_password(client):
     response = client.post(
-        "/api/auth/register/", {"username": "bob", "password": "123"}, format="json"
+        "/api/auth/register/",
+        {"username": "bob", "email": "bob@example.com", "password": "123"},
+        format="json",
     )
     assert response.status_code == 400
     assert "password" in str(response.data).lower()
@@ -156,17 +158,39 @@ def test_register_rejects_weak_password(client):
 def test_register_rejects_duplicate_username(client, user):
     response = client.post(
         "/api/auth/register/",
-        {"username": "ada", "password": "another-long-password"},
+        {"username": "ada", "email": "new@example.com", "password": "another-long-password"},
         format="json",
     )
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("email", [None, "", "not-an-address"])
+def test_register_needs_an_email_address(client, email):
+    body = {"username": "grace", "password": "a-long-enough-password"}
+    if email is not None:
+        body["email"] = email
+    response = client.post("/api/auth/register/", body, format="json")
+    assert response.status_code == 400
+    assert "email" in response.data
+
+
+def test_register_rejects_a_used_email_address(client):
+    body = {"username": "grace", "email": "Grace@Example.com", "password": "a-long-password-1"}
+    assert client.post("/api/auth/register/", body, format="json").status_code == 201
+    response = client.post(
+        "/api/auth/register/",
+        {"username": "grace2", "email": "grace@example.COM", "password": "a-long-password-2"},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert "exists already" in str(response.data["email"][0])
 
 
 def test_registration_can_be_disabled(client, settings):
     settings.ALLOW_REGISTRATION = False
     response = client.post(
         "/api/auth/register/",
-        {"username": "eve", "password": "a-long-enough-password"},
+        {"username": "eve", "email": "eve@example.com", "password": "a-long-enough-password"},
         format="json",
     )
     assert response.status_code == 403

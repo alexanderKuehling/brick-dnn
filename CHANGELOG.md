@@ -9,6 +9,11 @@
   the version, so nobody overwrites someone else's changes unnoticed (`409` with the current
   state). The MCP tools list shared networks and respect the roles.
 
+### Changed
+- An e-mail address is required to create an account, and each address can be used by one
+  account only (people are invited to shared networks by e-mail, too). Existing accounts
+  without one keep working.
+
 ## 1.1.0 (2026-11-09)
 
 Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in
