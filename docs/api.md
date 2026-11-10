@@ -411,6 +411,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
+| GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
+| POST   | `/api/training/runs/<id>/explain/`     | Explain the trained model `{method, sample? \| input?, input_scale?, target?, layer?, node?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
 (`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
@@ -675,6 +677,37 @@ weights or its preprocessing is unknown (e.g. it failed early), `503` when train
 disabled, PyTorch (scikit-learn for classical models) is missing or other predictions are
 running (`Retry-After: 5`), `500` when the
 prediction itself fails or takes too long, `429` above the rate limit.
+
+### Explanations
+
+**Explanations** of a trained model (see [explain.md](explain.md)): `GET
+/api/training/runs/<id>/explain/` answers `{"family", "kind": "image"|"tabular"|"demo"|null,
+"unavailable", "demo", "methods": [{"id", "label", "available", "reason"}]}`. `POST` computes
+one method:
+
+```json
+{ "method": "tabular", "sample": 3, "target": 1 }
+{ "method": "image", "input": [[0, 0, …], …], "input_scale": "raw", "layer": "conv2" }
+```
+
+| `method`      | Needs a sample | Answer                                                                 |
+| ------------- | -------------- | ---------------------------------------------------------------------- |
+| `samples`     | –              | `samples`: validation samples (`index`, a thumbnail `png` or the row's `values`, `label`, `predicted`, `probability`, `correct`) |
+| `image`       | yes            | `image` (PNG), `prediction`, `target`, and `saliency`, `gradcam` (with `layer` and the `layers` to choose from), `occlusion`: each a `png` overlay and a coarse `grid` (0–1), or `unavailable` |
+| `tabular`     | yes            | `prediction`, `base_value` (for the mean training row), `value`, `features`: `{name, value, shapley, integrated_gradients?}`, largest first |
+| `permutation` | –              | `metric` (`accuracy` or `r2`), `baseline`, `rows`, `repeats`, `features`: `{name, mean, std}` |
+| `boundary`    | –              | `features`, `x`/`y` ranges, `png` (the 64×64 grid), `classes` and `colors` or `value_range`, a 16×16 `grid`, `points` (training rows), `std` for Gaussian process regression |
+| `activations` | yes (demo runs: no) | `nodes`: per brick `{id, type, name, shape, stats, histogram, view}`; `view` is `maps` (a PNG of the first 16 feature maps), `matrix`, `vector` or `scalar` |
+| `weights`     | –              | `filters` of the first Conv2d (a PNG) and `layers` with a `histogram` and `norm` per parameter |
+
+The sample is `sample` (the `index` of a validation sample) or `input` (one sample like an
+entry of a prediction's `inputs`, with `input_scale`). `target` is the class to explain
+(default: the predicted one), `layer` the brick for Grad-CAM, `node` restricts `activations`
+to one brick. The answer also has `notes`, `seconds`, `cached` and `run`. Everyone who can see
+the run may ask. It runs like a prediction (same process, time limit, slots and rate limit;
+the CPU time counts as a prediction); answers are cached per run, and a cached answer
+(`"cached": true`) costs nothing and does not count against the rate limit. Errors as for
+predictions; `409` also when the method does not work for the run (the `reason` of `GET`).
 
 ## Data preparation (login required)
 

@@ -126,6 +126,8 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
 | `predict`               | read   |             | Run a trained network on up to 64 samples                       |
+| `explain_prediction`    | read   |             | Explain a trained model: saliency/Grad-CAM/occlusion, Shapley values, permutation importance, decision boundary |
+| `get_layer_activations` | read   |             | The output of every brick of a trained network for one sample (shape, statistics, values) |
 
 Read-only tokens and apps allowed read-only access only see the read tools. Networks use the [graph format](graph-format.md).
 
@@ -346,6 +348,31 @@ process, like a training (CPU, lower priority, 30 seconds at most, one predictio
 the server by default: `BRICKDNN_MAX_PREDICTIONS`). Everyone who can see the run may predict,
 also with read-only access. The same is available as
 [`POST /api/training/runs/<id>/predict/`](api.md#training-login-required).
+
+### Explanations
+
+`explain_prediction {run_id, method, sample?, input?, input_scale?, target?, layer?, images?}`
+explains what a trained model does, computed on the server like a prediction (it uses compute
+and counts against the rate limit of predictions; asking the same again is answered from a
+cache). See [explain.md](explain.md) for what each method shows and its limits.
+
+| `method`      | For                       | Answer (compact)                                            |
+| ------------- | ------------------------- | ----------------------------------------------------------- |
+| `samples`     | all with a dataset        | Validation samples with the model's prediction, right or wrong; pick one by its `index` |
+| `image`       | image classifiers         | The predicted classes and three maps as coarse grids (at most 14×14, 0–1): `saliency` (SmoothGrad), `gradcam` (at `layer`, default the last Conv2d) and `occlusion` (drop of the probability) |
+| `tabular`     | models trained on a CSV   | Per feature its value and Shapley value against the mean training row (they add up to `value − base_value`); networks also `integrated_gradients`; Gaussian processes the `std` |
+| `permutation` | models trained on a CSV   | Drop of accuracy or R² on validation rows per shuffled feature, mean and std |
+| `boundary`    | exactly 2 input features  | The predicted class or value on a 16×16 grid (row 0: the largest value of the second feature), the ranges and up to 40 training points |
+
+The sample is `sample` (the `index` of a validation sample from `samples`) or `input` (one
+sample like an entry of `predict`'s `inputs`, with `input_scale` for images). `target` picks
+the class to explain (default: the predicted one). Pictures are left out unless `images` is
+true, and then only while all of them together stay below 60,000 characters.
+
+`get_layer_activations {run_id, sample?, input?, input_scale?, node?, images?}` shows the
+output of every brick (or of one, `node`) of a neural network for one sample: its shape, mean,
+std, min, max and share of zeros, for vectors the first 32 values, for feature maps the mean
+of each of the first 16 channels. A run on demo data takes a random input.
 
 ## Activity log
 
