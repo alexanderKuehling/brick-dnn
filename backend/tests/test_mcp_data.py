@@ -414,7 +414,7 @@ def test_create_data_prep_checks_the_readiness(ada, prep):
     assert preparation["settings"] == {
         "target": "sales",
         "task": "auto",
-        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True},
+        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True, "group_by": None},
     }
     assert preparation["steps"] == [] and preparation["datasets"] == []
     readiness = check["readiness"]
@@ -462,6 +462,7 @@ def test_create_data_prep_with_steps_split_and_without_target(ada):
         "test": 0.0,
         "seed": 7,
         "stratify": True,
+        "group_by": None,
     }
     # New steps get ids and the defaults of their type, like steps added in the web app.
     first, second = preparation["steps"]
@@ -617,7 +618,13 @@ def test_update_data_prep_settings_and_name(ada, prep):
     prep_id = prep["preparation"]["id"]
     result = ok(ada, "update_data_prep", id=prep_id, split={"test": 0.3}, name="Renamed")
     settings = result["preparation"]["settings"]
-    assert settings["split"] == {"val": 0.15, "test": 0.3, "seed": 42, "stratify": True}
+    assert settings["split"] == {
+        "val": 0.15,
+        "test": 0.3,
+        "seed": 42,
+        "stratify": True,
+        "group_by": None,
+    }
     assert settings["target"] == "sales" and result["preparation"]["name"] == "Renamed"
     result = ok(ada, "update_data_prep", id=prep_id, target="promo", task="classification")
     readiness = result["check"]["readiness"]
@@ -1069,3 +1076,36 @@ def test_from_a_csv_file_to_predictions(team, training_dir, settings):
     # Or a new row given by its prepared feature values.
     row = {name: test_rows[0][name] for name in features}
     assert len(ok(mcp, "predict", run_id=run["id"], inputs=[row])["predictions"]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Row structure: the summary in previews, the split by groups and its fix
+# --------------------------------------------------------------------------- #
+
+
+def test_row_analysis_summary_and_group_split(ada):
+    from .test_data_rows import people_frame
+
+    frame, _, fake = people_frame(60)
+    source = imported(ada, frame.to_csv(index=False), filename="scans.csv")
+    prep = created(ada, source["id"], target="age")
+    prep_id = prep["preparation"]["id"]
+    preview = ok(ada, "preview_data_prep", id=prep_id, sample_rows=0)
+    rows = preview["row_analysis"]
+    assert rows["atypical_rows"] == int(fake.sum()) and rows["groups"] > 10
+    assert rows["features"]["used"] == "partnered"
+    assert len(rows["nn_ratio_histogram"]["counts"]) == 11
+    warnings = {i["code"]: i for i in preview["readiness"]["warnings"]}
+    twins = warnings["near_twins"]
+    assert twins["fix"]["settings"] == {"split": {"group_by": "group"}}
+    # The fix adds the step and splits by its column.
+    result = ok(ada, "apply_readiness_fix", id=prep_id, fix_id=twins["fix_id"])
+    assert result["applied"][0]["type"] == "find_groups"
+    saved = ok(ada, "get_data_prep", id=prep_id)
+    assert saved["settings"]["split"]["group_by"] == "group"
+    preview = ok(ada, "preview_data_prep", id=prep_id, sample_rows=0)
+    assert preview["split_groups"]["group_by"] == "group"
+    assert preview["split_groups"]["mixed"] == 0
+    # group_by can also be set directly.
+    updated = ok(ada, "update_data_prep", id=prep_id, split={"group_by": None})
+    assert updated["preparation"]["settings"]["split"]["group_by"] is None

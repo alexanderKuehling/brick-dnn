@@ -234,7 +234,7 @@ class DataPrepViewSet(
         )
 
     def get_throttles(self):
-        if self.action in ("preview", "download"):
+        if self.action in ("preview", "download", "rows", "similar"):
             return self.scoped_throttle("data")
         if self.action == "export":
             return self.scoped_throttle("uploads")
@@ -261,6 +261,25 @@ class DataPrepViewSet(
         prep = self.get_object()
         try:
             return Response(data.preview(prep, request.data))
+        except data.DataInputError as exc:
+            return _bad_request(exc)
+
+    @action(detail=True, methods=["post"])
+    def rows(self, request: Request, pk=None) -> Response:
+        """Row statistics of the (unsaved) pipeline's result: typicality, nearest
+        neighbours, groups of near twins, a projection (Analysis → Rows)."""
+        prep = self.get_object()
+        try:
+            return Response(data.row_analysis(prep, request.data))
+        except data.DataInputError as exc:
+            return _bad_request(exc)
+
+    @action(detail=True, methods=["post"])
+    def similar(self, request: Request, pk=None) -> Response:
+        """The nearest rows of one row of the row analysis and a column comparison."""
+        prep = self.get_object()
+        try:
+            return Response(data.similar_rows(prep, request.data))
         except data.DataInputError as exc:
             return _bad_request(exc)
 
