@@ -219,7 +219,8 @@ part on paid plans; see the checklist in [billing.md](billing.md#privacy-and-leg
 - With e-mail: sign the data processing agreement of the e-mail provider and name it in the
   privacy policy (the templates have a placeholder), see [email.md](email.md).
 - Decide on the deletion periods (or none) and state them in the texts. Mention backups
-  (Hetzner backups keep seven, Supabase its own) and how long they keep deleted data.
+  (Hetzner backups keep seven, Supabase its own, `manage.py backup` up to 7 daily and 4 weekly
+  ones: deleted data stays in them for up to five weeks) and how long they keep deleted data.
 - Keep a short record of processing activities (Art. 30) and of the technical and
   organisational measures; this page is a starting point.
 - Have a plan for data breaches: report to the supervisory authority within 72 hours

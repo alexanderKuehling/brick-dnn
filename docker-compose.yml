@@ -44,6 +44,17 @@ x-training: &training
   # training process with about 1.8 GB). The backend checks it, the worker enforces it.
   BRICKDNN_SEGMENTATION_MEMORY_MB: ${BRICKDNN_SEGMENTATION_MEMORY_MB:-}
 
+# Backups (deploy/server/README.md, "Backups"): the cleanup service runs `manage.py backup`
+# once a day if BRICKDNN_BACKUP_DIR is set (e.g. /data/backups, in the data volume); the
+# backend reports a failed or old backup in /api/health/.
+x-backup: &backup
+  BRICKDNN_BACKUP_DIR: ${BRICKDNN_BACKUP_DIR:-}
+  BRICKDNN_BACKUP_KEEP_DAILY: ${BRICKDNN_BACKUP_KEEP_DAILY:-}
+  BRICKDNN_BACKUP_KEEP_WEEKLY: ${BRICKDNN_BACKUP_KEEP_WEEKLY:-}
+  BRICKDNN_BACKUP_FILES: ${BRICKDNN_BACKUP_FILES:-}
+  BRICKDNN_BACKUP_MAX_FILES_MB: ${BRICKDNN_BACKUP_MAX_FILES_MB:-}
+  BRICKDNN_BACKUP_MAX_AGE_HOURS: ${BRICKDNN_BACKUP_MAX_AGE_HOURS:-}
+
 # Paid plans with Paddle (docs/billing.md); all unset: off. The backend sells and manages the
 # subscriptions, the cleanup service checks them once a day and bills overage. The API key and
 # the webhook secret only come from .env; the others can also be in the settings of the domain.
@@ -90,7 +101,7 @@ services:
     # worker) whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: [*retention, *budgets, *paddle, *training, *email]
+      <<: [*retention, *budgets, *paddle, *training, *email, *backup]
       # Staff accounts need two-factor authentication for the Django admin (docs/email.md).
       BRICKDNN_REQUIRE_2FA_FOR_STAFF: ${BRICKDNN_REQUIRE_2FA_FOR_STAFF:-}
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
@@ -114,6 +125,10 @@ services:
       BRICKDNN_NUM_PROXIES: 1
       # Live editing: the backend tells the realtime service about saves through Redis.
       REDIS_URL: redis://redis:6379/0
+      # /api/health/ (docs/api.md): "degraded" below this much free space (MB) in /data, and the
+      # secret of the X-Health-Token header that shows the details of the checks.
+      BRICKDNN_HEALTH_MIN_FREE_MB: ${BRICKDNN_HEALTH_MIN_FREE_MB:-}
+      BRICKDNN_HEALTH_TOKEN: ${BRICKDNN_HEALTH_TOKEN:-}
     volumes:
       - brickdnn-data:/data
     depends_on:
@@ -183,8 +198,9 @@ services:
     restart: unless-stopped
 
   # Once a day: deletes old data if BRICKDNN_DELETE_* is set (with e-mail, after warning the
-  # owners of inactive accounts), and expired logins; with paid
-  # plans (docs/billing.md) it also checks the subscriptions and bills overage. The same
+  # owners of inactive accounts), and expired logins; with paid plans (docs/billing.md) it also
+  # checks the subscriptions and bills overage, and with BRICKDNN_BACKUP_DIR it makes a backup
+  # (manage.py backup) after both. The same
   # image; it sleeps most of the time. The first run is ten minutes after a start (the backend
   # migrates the database first). `docker compose logs cleanup` shows what it did.
   cleanup:
@@ -195,9 +211,9 @@ services:
     command:
       - sh
       - -c
-      - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; sleep 86400; done"
+      - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; python manage.py backup; sleep 86400; done"
     environment:
-      <<: [*retention, *budgets, *paddle, *email]
+      <<: [*retention, *budgets, *paddle, *email, *backup]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
