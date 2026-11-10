@@ -1,11 +1,14 @@
 """Dataset descriptions and file inspection (no PyTorch needed).
 
-Four kinds of data can be used for training:
+Five kinds of data can be used for training:
 
 ``random``   demo data generated to fit the network, with a hidden rule it can learn
-``builtin``  MNIST, Fashion-MNIST or CIFAR-10 (downloaded on first use, needs torchvision)
+``builtin``  MNIST, Fashion-MNIST or CIFAR-10 (downloaded on first use, needs torchvision),
+             or Shapes (generated images with a class for every pixel, see shapes.py)
 ``csv``      a CSV file: every column but the last is a feature, the last one is the target
 ``images``   a folder (or ZIP file) with one sub-folder of images per class
+``segmentation``  a folder (or ZIP file) with images and one mask per image, see
+             segmentation.py
 
 The functions here only read metadata (columns, classes, counts) so that the API can
 check a dataset against a network before any training starts. Loading the actual
@@ -45,6 +48,11 @@ class DatasetError(ValueError):
 # Built-in datasets
 # --------------------------------------------------------------------------- #
 
+# Shapes (shapes.py): statistics of its 400 training images, checked by the tests.
+SHAPES_MEAN = (0.5543, 0.5558, 0.5453)
+SHAPES_STD = (0.1913, 0.1936, 0.1981)
+SHAPES_PIXEL_SHARE = (0.8585, 0.0572, 0.0477, 0.0365)
+
 
 @dataclass(frozen=True)
 class BuiltinDataset:
@@ -58,12 +66,19 @@ class BuiltinDataset:
     download_mb: int
     mean: tuple[float, ...]
     std: tuple[float, ...]
+    # classification (one label per image) or segmentation (one label per pixel)
+    task: str = "classification"
+    # Generated on the fly instead of downloaded with torchvision.
+    generated: bool = False
+    # Segmentation: the share of the pixels of each class.
+    class_pixel_share: tuple[float, ...] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "task": self.task,
             "sample_shape": list(self.shape),
             "num_classes": len(self.class_names),
             "class_names": list(self.class_names),
@@ -73,7 +88,7 @@ class BuiltinDataset:
         }
 
     def info(self) -> DatasetInfo:
-        return DatasetInfo(
+        info = DatasetInfo(
             kind="builtin",
             name=self.name,
             builtin=self.id,
@@ -83,6 +98,14 @@ class BuiltinDataset:
             train_size=self.train_size,
             test_size=self.test_size,
         )
+        if self.task == "segmentation":
+            info.task = "segmentation"
+            info.segmentation = {
+                "mask_format": "indices",
+                "ignore_index": None,
+                "class_pixel_share": list(self.class_pixel_share or ()),
+            }
+        return info
 
 
 BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
@@ -146,6 +169,22 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
             mean=(0.4914, 0.4822, 0.4465),
             std=(0.2470, 0.2435, 0.2616),
         ),
+        BuiltinDataset(
+            id="shapes",
+            name="Shapes",
+            description="Segmentation: circles, squares and triangles on noisy backgrounds, "
+            "with a class for every pixel. Generated, RGB 64×64.",
+            shape=(3, 64, 64),
+            class_names=("background", "circle", "square", "triangle"),
+            train_size=400,
+            test_size=100,
+            download_mb=0,
+            mean=SHAPES_MEAN,
+            std=SHAPES_STD,
+            task="segmentation",
+            generated=True,
+            class_pixel_share=SHAPES_PIXEL_SHARE,
+        ),
     )
 }
 
@@ -170,12 +209,13 @@ class DatasetInfo:
     Stored as JSON by the API (``to_dict``/``from_dict``) and written into every job file.
     """
 
-    kind: str  # random | builtin | csv | images
+    kind: str  # random | builtin | csv | images | segmentation
     name: str
     num_samples: int | None = None
     # builtin
     builtin: str | None = None
-    sample_shape: list[int] | None = None  # (channels, height, width)
+    # (channels, height, width); segmentation folders: of the most common image size
+    sample_shape: list[int] | None = None
     train_size: int | None = None
     test_size: int | None = None  # the official test split
     # csv
@@ -192,7 +232,18 @@ class DatasetInfo:
     subdir: str | None = None  # folder (relative to the dataset dir) holding the class folders
     # csv made in the Data tab: [train, validation, test] rows of the split stored in
     # split.bin next to the CSV file. Training uses it instead of val_split / test_split.
+    # Segmentation folders with train/, val/ (and test/) folders: their image counts.
     predefined_split: list[int] | None = None
+    # "segmentation" for data with a class for every pixel (the built-in Shapes and
+    # segmentation folders); None for one label or value per sample.
+    task: str | None = None
+    # Segmentation: how the masks are read and what was found (see segmentation.py):
+    # {"mask_format": "binary" | "indices" | "levels" | "colors", "mask_values": [...] | None,
+    #  "ignore_index": 255 | None, "ignored_share", "class_pixel_share": [share per class],
+    #  "image_sizes": {"most_common": [w, h], "min", "max", "different"},
+    #  "unmatched_images", "unmatched_masks", "unmatched_examples", "mask_size_mismatches",
+    #  "mask_size_examples"}
+    segmentation: dict[str, Any] | None = None
 
     @property
     def num_classes(self) -> int | None:
@@ -456,6 +507,11 @@ def inspect_image_folder(path: str | Path, name: str | None = None) -> DatasetIn
     )
 
 
+# Small text files that are extracted with the images: the class names of a segmentation
+# dataset (see segmentation.py).
+EXTRA_FILES = ("classes.txt", "classes.json")
+
+
 def extract_image_zip(
     zip_path: str | Path,
     dest: str | Path,
@@ -465,13 +521,15 @@ def extract_image_zip(
 ) -> int:
     """Safely extract the images of a ZIP file into ``dest`` and return their number.
 
-    Only image files are extracted. Absolute paths, ``..`` components and symbolic links
+    Only image files are extracted (and classes.txt / classes.json, which name the classes
+    of a segmentation dataset). Absolute paths, ``..`` components and symbolic links
     are rejected, hidden files and ``__MACOSX`` folders are skipped, and the number of
     files and the uncompressed size are limited (also when the ZIP lies about sizes).
     """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    count = 0
+    count = 0  # images
+    files = 0  # everything that is extracted
     total = 0
     try:
         with zipfile.ZipFile(zip_path) as archive:
@@ -484,13 +542,15 @@ def extract_image_zip(
                     raise DatasetError(f"The ZIP file contains an unsafe path: '{name[:80]}'.")
                 if any(_hidden(part) for part in parts):
                     continue
-                if PurePosixPath(name).suffix.lower() not in IMAGE_EXTENSIONS:
+                extra = PurePosixPath(name).name.lower() in EXTRA_FILES
+                if not extra and PurePosixPath(name).suffix.lower() not in IMAGE_EXTENSIONS:
                     continue
                 if stat.S_ISLNK(member.external_attr >> 16):
                     raise DatasetError("The ZIP file contains symbolic links.")
-                count += 1
-                if count > max_files:
+                files += 1
+                if files > max_files:
                     raise DatasetError(f"The ZIP file contains more than {max_files:,} images.")
+                count += 0 if extra else 1
                 target = dest.joinpath(*parts)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(member) as src, target.open("wb") as out:

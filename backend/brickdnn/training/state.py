@@ -16,6 +16,8 @@ Every run lives in its own directory::
     weights.preprocessing.json   ``preprocessing`` of the state, saved with the weights
                   (not for demo data): what new inputs need to be prepared the same way
                   (classical models: model.preprocessing.json)
+    previews/     segmentation only: index.json and small PNG files that show what the
+                  kept weights predict for a few validation images (see previews.py)
     output.log    stdout/stderr of the runner process             (for debugging)
 
 ``state.json`` looks like this::
@@ -28,7 +30,7 @@ Every run lives in its own directory::
       "finished_at": null,
       "device": "mps", "device_label": "Apple GPU (MPS)",
       "family": "neural",            # neural (PyTorch) | classical (scikit-learn)
-      "task": "classification",      # classification | regression | demo
+      "task": "classification",      # classification | regression | segmentation | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
       "train_size": 48000, "val_size": 12000,
       "test_size": 10000,            # null without a test set
@@ -41,10 +43,13 @@ Every run lives in its own directory::
       ],                             # accuracies are null for regression; regression runs
                                      # add "val_rmse" (root mean squared error, original units)
                                      # and "val_r2" (coefficient of determination; null if
-                                     # the validation targets are all equal)
+                                     # the validation targets are all equal); segmentation
+                                     # runs add "val_iou" and "val_dice" (means over the
+                                     # classes that occur) and "val_pixel_accuracy"
       "progress": {"epoch": 2, "step": 120, "steps": 938, "loss": 0.21,
                    "samples_per_second": 5400.0},          # null outside of an epoch
       "best": {"epoch": 1, "val_loss": 0.15, "val_accuracy": 0.95},  # lowest val_loss
+                                     # (segmentation: also "val_iou" of that epoch)
       "weights_epoch": 1,            # the epoch whose weights are tested and saved: the
                                      # best one (restore_best) or the last one; null until
                                      # the epochs are over, and if the saved weights are not
@@ -52,7 +57,9 @@ Every run lives in its own directory::
       "stopped_early": false,        # true if early stopping (patience) ended the training
       "test": {"loss": 0.16, "accuracy": 0.95, "rmse": null, "r2": null},  # kept weights
                                      # on the test set (rmse and r2: regression only); null
-                                     # without a test set or before the end
+                                     # without a test set or before the end. Segmentation
+                                     # adds "iou", "dice", "pixel_accuracy" and the lists
+                                     # "class_iou" and "class_dice" (see "segmentation")
       "weights": false,              # true once weights.pt exists
       "preprocessing": {...},        # how inputs were prepared, needed to reuse the weights:
                                      # {"kind": "image", channels, height, width, layout,
@@ -67,9 +74,12 @@ Every run lives in its own directory::
       "stop_reason": null,           # stopped runs: "user", "budget" (a monthly budget is
                                      # used up) or "run_limit" (the most one run may use)
 
-      # Hyperparameter search only (null / empty for normal runs):
       # Classical models only (null for neural networks), see below
       "classical": {...},
+      # Segmentation only (null otherwise), set once the weights are saved, see below
+      "segmentation": {...},
+
+      # Hyperparameter search only (null / empty for normal runs):
 
       "tuning": {"method": "random", "trials": 10,        # see tuning.py
                  "space": {"learning_rate": {"min": 0.0001, "max": 0.01}}},
@@ -81,6 +91,8 @@ Every run lives in its own directory::
          "val_accuracy": 0.95, "val_rmse": null, "val_r2": null, "weights_epoch": 8,
          "stopped_early": false, "seconds": 120.5}
       ],                             # status: running | completed | failed | stopped;
+                                     # segmentation adds "val_iou", "val_dice" and
+                                     # "val_pixel_accuracy";
                                      # the metrics are those of the epoch whose weights the
                                      # trial keeps (weights_epoch); while it runs and for
                                      # failed or stopped trials, those of its last epoch
@@ -112,6 +124,25 @@ both families can be compared. The details are in ``classical``::
         "support_vectors": null,       # support vector machines: their number once fitted
         "train": {"loss": 0.1, "accuracy": null, "rmse": 0.3, "r2": 0.97}  # training rows
       }
+
+A segmentation (``task`` "segmentation") has a class for every pixel. Its accuracies are
+null; IoU and Dice are computed from all pixels of a split together, per class, and averaged
+over the classes that occur in its masks or predictions. Once the weights are saved, the
+results of the kept weights per class and the preview images are in ``segmentation``::
+
+      "segmentation": {
+        "loss": "cross_entropy",       # or "cross_entropy_dice"
+        "binary": false,               # true: one output channel (two classes)
+        "ignore_index": null,          # 255 if the masks mark pixels to ignore
+        "class_names": ["background", "circle"], "colors": ["#20242c", "#e5534b"],
+        "validation": {"epoch": 7, "iou": 0.81, "dice": 0.89, "pixel_accuracy": 0.97,
+                       "class_iou": [0.98, 0.64], "class_dice": [0.99, 0.78]},
+                                       # null if the kept weights are not those of a
+                                       # finished epoch; a class entry is null for a class
+                                       # that occurs neither in the masks nor the predictions
+        "test": {...},                 # the same on the test set (without "epoch"), or null
+        "previews": {"count": 8, "epoch": 7, "split": "validation"}   # previews/, or null
+      }
 """
 
 from __future__ import annotations
@@ -131,6 +162,8 @@ STOP_FILE = "STOP"
 WEIGHTS_FILE = "weights.pt"
 CLASSICAL_WEIGHTS_FILE = "model.joblib"
 LOG_FILE = "output.log"
+PREVIEW_DIR = "previews"
+PREVIEW_INDEX_FILE = "index.json"
 
 # A run that waits in the queue of the server for a free worker. Only the server sets it: a
 # runner starts with "starting" and never reports "queued".
@@ -221,6 +254,7 @@ def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
         "trials": [],
         "best_trial": None,
         "classical": None,
+        "segmentation": None,
         "usage": {"cpu_seconds": 0.0, "wall_seconds": 0.0, "limit_cpu_seconds": None},
         "stop_reason": None,
     }

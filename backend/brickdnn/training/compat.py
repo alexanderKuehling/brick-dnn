@@ -18,7 +18,7 @@ from typing import Any
 
 from ..graph import Analysis, analyze
 from ..layers import ClassicalModel, fmt_shape
-from .config import TrainingConfig, classical_max_rows
+from .config import TrainingConfig, classical_max_rows, segmentation_memory_bytes
 from .datasets import BUILTIN_DATASETS, MAX_CLASSES, DatasetInfo
 from .reporting import TrainingError
 from .tabular import split_sizes
@@ -31,6 +31,23 @@ MIN_FLAT_SIDE = 8
 DEFAULT_IMAGE_SHAPE = [3, 64, 64]
 # Layers between the last Linear layer and the output that keep the number of features.
 _PASS_THROUGH = ("Activation", "Dropout")
+# Segmentation: the largest Input (height and width) a network is trained on. Every layer
+# keeps its output for all pixels of a batch, so memory and CPU time grow with the area.
+MAX_SEGMENTATION_SIDE = 512
+# Input sizes suggested for segmentation folders, largest first (images are resized).
+SEGMENTATION_SIDES = (128, 64)
+# Layers that decide the number of output channels of a segmentation network.
+_OUTPUT_CONVS = ("Conv2d", "ConvTranspose2d")
+# Memory of a training step, in bytes per value that the layers output: 4 for the value
+# (float32), and about as much again for gradients and the work space of the convolutions
+# (measured with a U-Net on a CPU: 1.4 to 1.7 times the outputs of all layers).
+_BYTES_PER_VALUE = 4 * 1.6
+# Weights, their gradients and the two moments of Adam.
+_BYTES_PER_PARAM = 4 * 4
+SEGMENTATION_HINT = (
+    "A network with one output per pixel is trained on a segmentation dataset (images with "
+    "masks), e.g. the built-in Shapes."
+)
 
 
 @dataclass
@@ -39,8 +56,11 @@ class TrainingPlan:
 
     ``inputs``  one entry per Input layer: ``{"shape": [...], "dtype": "float"|"long",
                 "vocab": int|None}`` (``vocab`` = smallest Embedding vocabulary fed by it)
-    ``targets`` one entry per output: ``{"kind": "class", "num_classes": K}`` (cross-entropy)
-                or ``{"kind": "value", "shape": [...]}`` (mean squared error)
+    ``targets`` one entry per output: ``{"kind": "class", "num_classes": K}`` (cross-entropy),
+                ``{"kind": "value", "shape": [...]}`` (mean squared error) or, for
+                segmentation, ``{"kind": "mask", "num_classes": K, "binary": bool}`` (a class
+                for every pixel; ``binary``: the network outputs one channel, the score of
+                class 1)
     ``image``   for image data: ``{"channels": C, "height": H, "width": W,
                 "layout": "chw"|"hw"|"flat"}``. Images are converted to C channels and
                 resized to H×W; ``hw`` drops the channel axis, ``flat`` flattens C·H·W.
@@ -48,9 +68,12 @@ class TrainingPlan:
                 "estimator", "label", "task", "kernel", "scale", "max_rows"}`` (``kernel``:
                 the starting kernel of a Gaussian process; ``max_rows``: the most training
                 rows it is fitted on, see config.classical_max_rows)
+    ``segmentation`` for segmentation, else None: ``{"binary": bool, "ignore_index": 255 |
+                None, "sample_bytes": int, "fixed_bytes": int}`` (the estimated memory of a
+                training step is ``fixed_bytes + batch size × sample_bytes``)
     """
 
-    task: str  # classification | regression | demo
+    task: str  # classification | regression | segmentation | demo
     summary: str
     inputs: list[dict[str, Any]]
     targets: list[dict[str, Any]]
@@ -59,6 +82,7 @@ class TrainingPlan:
     class_names: list[str] | None = None
     notes: list[str] = field(default_factory=list)
     classical: dict[str, Any] | None = None
+    segmentation: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -135,7 +159,7 @@ def _check(
     if dataset.kind == "random":
         result.plan = _demo_plan(analysis, inputs)
         return result
-    if dataset.kind not in ("builtin", "csv", "images"):
+    if dataset.kind not in ("builtin", "csv", "images", "segmentation"):
         result.errors.append(f"Unknown dataset kind '{dataset.kind}'.")
         return result
 
@@ -161,13 +185,21 @@ def _check(
 
     in_shape = list(analysis.nodes[analysis.inputs[0]].shape or ())
     out_shape = list(analysis.nodes[analysis.outputs[0]].shape or ())
-    if dataset.kind == "csv":
+    if is_segmentation(dataset):
+        _check_segmentation(result, analysis, dataset, inputs, in_shape, out_shape, config)
+    elif dataset.kind == "csv":
         _check_csv(result, dataset, inputs, in_shape, out_shape)
     else:
         _check_images(result, dataset, inputs, in_shape, out_shape)
     if result.errors:
         result.plan = None
     return result
+
+
+def is_segmentation(dataset: DatasetInfo) -> bool:
+    """True for data with a class for every pixel: segmentation folders and the built-in
+    Shapes."""
+    return dataset.kind == "segmentation" or dataset.task == "segmentation"
 
 
 def _input_specs(analysis: Analysis) -> list[dict[str, Any]]:
@@ -221,9 +253,10 @@ def _check_classes(
     """The output must be (K,) with K >= num_classes. Returns K or None."""
     hint = f"The last layer should output {num_classes} values (e.g. Linear with {num_classes} outputs)."
     if len(out_shape) != 1:
+        per_pixel = f" {SEGMENTATION_HINT}" if len(out_shape) == 3 else ""
         result.errors.append(
             f"The network outputs shape {fmt_shape(tuple(out_shape))}, but {what} needs one "
-            f"score per class. {hint}"
+            f"score per class. {hint}{per_pixel}"
         )
         return None
     k = out_shape[0]
@@ -271,9 +304,10 @@ def _check_csv(
             f"{_count(n, 'feature column')} ({cols}). Set the Input shape to {n}."
         )
     if len(out_shape) != 1:
+        per_pixel = f" {SEGMENTATION_HINT}" if len(out_shape) == 3 else ""
         result.errors.append(
             f"The network outputs shape {fmt_shape(tuple(out_shape))}. For CSV data it must "
-            "output 1 value (regression) or one value per class (classification)."
+            f"output 1 value (regression) or one value per class (classification).{per_pixel}"
         )
     if result.errors:
         return
@@ -469,6 +503,255 @@ def _check_images(
 
 
 # --------------------------------------------------------------------------- #
+# Segmentation
+# --------------------------------------------------------------------------- #
+
+
+def _memory(size: float) -> str:
+    return f"{size / 1024**3:.1f} GB" if size >= 1024**3 else f"{size / 1024**2:.0f} MB"
+
+
+def segmentation_memory(analysis: Analysis) -> tuple[int, int]:
+    """``(fixed_bytes, sample_bytes)``: the estimated memory of a training step is
+    ``fixed_bytes + batch size × sample_bytes`` (rough, for CPU training)."""
+    values = sum(math.prod(info.shape) for info in analysis.nodes.values() if info.shape)
+    return int(_BYTES_PER_PARAM * analysis.total_params), int(_BYTES_PER_VALUE * values)
+
+
+def segmentation_memory_error(
+    segmentation: dict[str, Any], image: dict[str, Any], batch_size: int
+) -> str | None:
+    """Why a batch of ``batch_size`` images does not fit into memory (None if it does)."""
+    fixed = int(segmentation.get("fixed_bytes") or 0)
+    sample = int(segmentation.get("sample_bytes") or 0)
+    limit = segmentation_memory_bytes()
+    needed = fixed + batch_size * sample
+    if needed <= limit or sample <= 0:
+        return None
+    fits = (limit - fixed) // sample
+    size = f"{image['height']}×{image['width']}"
+    text = (
+        f"A batch of {batch_size} images of {size} pixels needs about {_memory(needed)} of "
+        f"memory in this network, but a training may use {_memory(limit)} on this server. "
+    )
+    if fits >= 1:
+        return text + f"Set the batch size to {fits} or less, or make the Input smaller."
+    return text + "Make the Input smaller or use fewer channels in the layers."
+
+
+def _shrink_hint(analysis: Analysis) -> str:
+    """What usually makes the output of a segmentation network smaller than its input."""
+    valid = [
+        info.id
+        for info in analysis.nodes.values()
+        if info.type == "Conv2d"
+        and info.layer is not None
+        and info.layer.p.get("padding") == "valid"
+        and max(info.layer.p.get("kernel_size") or (1,)) > 1
+    ]
+    pools = sum(1 for info in analysis.nodes.values() if "Pool" in info.type)
+    hints = []
+    if valid:
+        hints.append(
+            f"convolutions with 'valid' padding cut off the border (e.g. '{valid[0]}': use "
+            "'same' padding)"
+        )
+    if pools:
+        hints.append(
+            "every pooling layer needs an upsampling layer (ConvTranspose2d or Upsample) that "
+            f"undoes it, and the Input height and width must be divisible by {2**pools} "
+            f"({pools} pooling layer{'s' if pools != 1 else ''})"
+        )
+    if not hints:
+        hints.append("use 'same' padding and stride 1, or upsample again")
+    return "Check: " + "; ".join(hints) + "."
+
+
+def _check_segmentation(
+    result: Compatibility,
+    analysis: Analysis,
+    info: DatasetInfo,
+    inputs: list[dict[str, Any]],
+    in_shape: list[int],
+    out_shape: list[int],
+    config: TrainingConfig | None,
+) -> None:
+    builtin = BUILTIN_DATASETS.get(info.builtin or "") if info.kind == "builtin" else None
+    if info.kind == "builtin" and builtin is None:
+        result.errors.append(f"Unknown built-in dataset '{info.builtin}'.")
+        return
+    name = info.name
+    class_names = list(info.class_names or [])
+    n = len(class_names)
+    native = list(info.sample_shape or [3, 64, 64])
+    example = ", ".join(str(v) for v in (native if builtin is not None else [native[0], 64, 64]))
+    image: dict[str, Any] | None = None
+    if len(in_shape) != 3:
+        result.errors.append(
+            f"{name} is a segmentation dataset: the Input takes whole images. Set the Input "
+            f"shape to channels, height, width, e.g. {example}."
+        )
+    elif in_shape[0] not in (1, 3):
+        result.errors.append(
+            f"The Input has {in_shape[0]} channels, but images have 1 (grayscale) or 3 (RGB). "
+            "Set the Input shape to 1, height, width or 3, height, width."
+        )
+    elif max(in_shape[1:]) > MAX_SEGMENTATION_SIDE:
+        limit = MAX_SEGMENTATION_SIDE
+        result.errors.append(
+            f"Segmentation trains on images of at most {limit}×{limit} pixels, but the Input "
+            f"is {in_shape[1]}×{in_shape[2]}. Set a smaller Input size: the images and masks "
+            "are resized to it."
+        )
+    else:
+        c, h, w = in_shape
+        image = {"channels": c, "height": h, "width": w, "layout": "chw"}
+
+    channels_hint = (
+        f"The last layer should output {n} channels (e.g. Conv2d with {n} output channels "
+        "and kernel size 1)."
+    )
+    k: int | None = None
+    if len(out_shape) != 3:
+        per_image = " (one answer per image)" if len(out_shape) == 1 else ""
+        result.errors.append(
+            f"{name} is a segmentation dataset: every pixel has a class, so the network must "
+            f"output one score per class for every pixel, e.g. shape ({n}, height, width). "
+            f"This network outputs shape {fmt_shape(tuple(out_shape))}{per_image}. Use a "
+            "network that ends with a convolution and keeps the image size, e.g. the U-Net "
+            "example."
+        )
+    else:
+        k = out_shape[0]
+        if image is not None and out_shape[1:] != in_shape[1:]:
+            result.errors.append(
+                f"The network outputs {out_shape[1]}×{out_shape[2]} values for an image of "
+                f"{in_shape[1]}×{in_shape[2]} pixels, but segmentation needs one output per "
+                f"pixel: the output must be as high and wide as the Input. "
+                f"{_shrink_hint(analysis)}"
+            )
+        if k == 1 and n != 2:
+            result.errors.append(
+                f"The network outputs 1 value per pixel, which fits two classes, but {name} "
+                f"has {n} classes. {channels_hint}"
+            )
+        elif 1 < k < n:
+            result.errors.append(
+                f"The network outputs {k} channels, but {name} has {n} classes. {channels_hint}"
+            )
+        elif k > n:
+            result.warnings.append(
+                f"The network outputs {k} channels, but {name} has only {n} classes. The extra "
+                "channels are never the right answer."
+            )
+    if result.errors or image is None or k is None:
+        return
+
+    last = analysis.nodes[analysis.outputs[0]]
+    if (
+        last.type == "Activation"
+        and last.layer is not None
+        and last.layer.p.get("function") in ("sigmoid", "softmax", "tanh")
+    ):
+        result.warnings.append(
+            f"The network ends with a {last.layer.p['function']} activation, but the loss "
+            "expects raw scores (logits) and applies the sigmoid or softmax itself. Remove "
+            "the last activation."
+        )
+
+    details = info.segmentation or {}
+    binary = k == 1
+    size = f"{image['height']}×{image['width']}"
+    mode = "RGB" if image["channels"] == 3 else "grayscale"
+    notes = []
+    if builtin is not None:
+        nc, nh, nw = builtin.shape
+        if (nh, nw) != (image["height"], image["width"]):
+            result.warnings.append(
+                f"{name} images ({nh}×{nw}) are resized to {size}; masks are resized with "
+                "nearest neighbour."
+            )
+        if nc == 3 and image["channels"] == 1:
+            notes.append(f"{name} images are converted to grayscale.")
+        notes.append(
+            f"{name} is generated on the server, nothing is downloaded. Validation data is "
+            f"taken from its {builtin.train_size:,} training images (validation split); the "
+            f"{builtin.test_size:,} test images are the test set: the kept weights are "
+            "measured on them once, after training."
+        )
+        sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test images"
+    else:
+        notes.append(
+            f"Images are converted to {mode} and resized to {size}; masks are resized with "
+            "nearest neighbour."
+        )
+        sizes = _count(info.num_samples, "image") + " with masks"
+        if info.predefined_split is not None:
+            train, val, test = [*info.predefined_split, 0, 0, 0][:3]
+            parts = (
+                f"{train:,} training, {val:,} validation and {test:,} test images"
+                if test
+                else f"{train:,} training and {val:,} validation images, no test set"
+            )
+            result.warnings.append(
+                f"Uses the split of the folders ({parts}); the validation and test split "
+                "settings are ignored."
+            )
+        from .segmentation import describe
+
+        result.warnings.extend(describe(info))
+    if binary:
+        notes.append(
+            f"One output channel: its score says how likely a pixel is '{class_names[1]}' "
+            "(binary cross-entropy on logits)."
+        )
+    ignore = details.get("ignore_index")
+    if ignore is not None:
+        notes.append(
+            f"Pixels with the mask value {ignore} are ignored: they count neither for the "
+            "loss nor for the metrics."
+        )
+    notes.append(
+        "After every epoch the validation images are measured: mean IoU and Dice (the mean "
+        "over the classes that occur) and pixel accuracy. The kept epoch is the one with the "
+        "lowest validation loss."
+    )
+    shares = [s for s in details.get("class_pixel_share") or [] if isinstance(s, (int, float))]
+    loss = config.loss if config is not None else "cross_entropy"
+    if shares and loss == "cross_entropy" and max(shares) > 0.97:
+        result.warnings.append(
+            f"{max(shares):.0%} of the pixels are '{class_names[shares.index(max(shares))]}'. "
+            "The loss 'Cross-entropy + Dice' helps the other classes to be learned."
+        )
+
+    classes = n if binary else k
+    class_names += [f"class {i}" for i in range(len(class_names), classes)]
+    fixed, sample = segmentation_memory(analysis)
+    segmentation = {
+        "binary": binary,
+        "ignore_index": ignore,
+        "fixed_bytes": fixed,
+        "sample_bytes": sample,
+    }
+    if config is not None:
+        error = segmentation_memory_error(segmentation, image, config.batch_size)
+        if error is not None:
+            result.errors.append(error)
+            return
+    result.plan = TrainingPlan(
+        task="segmentation",
+        summary=f"Segmentation into {n} classes at {size} pixels ({name}, {sizes}).",
+        inputs=inputs,
+        targets=[{"kind": "mask", "num_classes": classes, "binary": binary}],
+        image=image,
+        num_classes=classes,
+        class_names=class_names,
+        notes=notes,
+        segmentation=segmentation,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Suggested fixes
 # --------------------------------------------------------------------------- #
 
@@ -491,14 +774,16 @@ def suggest_fixes(
       is flat, e.g. because a Linear layer follows it;
     - the last Linear layer (also behind activations or dropout): ``out_features`` = one per
       class for classification, 1 for regression. Surplus class outputs are corrected too,
-      also when the network fits otherwise (then only a warning explains them).
+      also when the network fits otherwise (then only a warning explains them);
+    - for segmentation datasets instead the last Conv2d or ConvTranspose2d layer:
+      ``out_channels`` = one per class (one channel is kept for two classes).
 
     Every suggestion is checked: applied together, the changes make the network fit the data.
     When there is no such change (e.g. a CNN on CSV data, or a Linear layer with a fixed number
     of input features after the Input), nothing is suggested and the errors explain the rest.
     ``analysis`` and ``result`` (of ``graph``) save work when they are known already.
     """
-    if dataset.kind not in ("builtin", "csv", "images"):
+    if dataset.kind not in ("builtin", "csv", "images", "segmentation"):
         return []
     if isinstance(graph, dict) and isinstance(graph.get("graph"), dict):
         graph = graph["graph"]  # a saved project file
@@ -508,6 +793,8 @@ def suggest_fixes(
     if not analysis.valid or len(analysis.inputs) != 1 or len(analysis.outputs) != 1:
         return []
     classical = analysis.family == "classical"
+    if is_segmentation(dataset) and not classical:
+        return _segmentation_fixes(graph, dataset, analysis, result)
     if result is not None and result.ok and (classical or _outputs_fit(analysis, dataset)):
         return []  # nothing to improve
 
@@ -544,6 +831,82 @@ def suggest_fixes(
             continue
         return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
     return []
+
+
+def _segmentation_fixes(
+    graph: dict[str, Any],
+    dataset: DatasetInfo,
+    analysis: Analysis,
+    result: Compatibility | None,
+) -> list[dict[str, Any]]:
+    """Fixes for a segmentation dataset: the Input shape (channels, height, width; a size
+    the network keeps from Input to output) and the output channels of the last
+    convolution (one per class; one channel is kept for two classes)."""
+    classes = dataset.num_classes or 0
+    input_id = analysis.inputs[0]
+    current = list(analysis.nodes[input_id].shape or ())
+    dtype = analysis.nodes[input_id].dtype
+
+    def wanted(channels: int) -> int:
+        return 1 if channels == 1 and classes == 2 else classes
+
+    out_shape = list(analysis.nodes[analysis.outputs[0]].shape or ())
+    fits = len(out_shape) == 3 and wanted(out_shape[0]) == out_shape[0]
+    if fits and ((result is not None and result.ok) or _check(analysis, dataset).ok):
+        return []  # nothing to improve (a batch that is too large is not for the layers)
+    for shape in _segmentation_candidates(dataset, current):
+        changes: dict[str, dict[str, Any]] = {}
+        params: dict[str, Any] = {}
+        if shape != current:
+            params["shape"] = shape
+        if dtype != "float":
+            params["dtype"] = "float"
+        if params:
+            changes[input_id] = params
+        trial = analyze(_with_params(graph, changes))
+        if not trial.valid or len(trial.outputs) != 1:
+            continue
+        out_shape = list(trial.nodes[trial.outputs[0]].shape or ())
+        if len(out_shape) != 3:
+            continue
+        if wanted(out_shape[0]) != out_shape[0]:
+            last = _last_layer(trial, _OUTPUT_CONVS)
+            if last is None:
+                continue
+            changes[last] = {"out_channels": wanted(out_shape[0])}
+            trial = analyze(_with_params(graph, changes))
+        if not trial.valid or not _check(trial, dataset).ok:
+            continue
+        return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
+    return []
+
+
+def _segmentation_candidates(info: DatasetInfo, current: list[int]) -> list[list[int]]:
+    """Input shapes to try for a segmentation dataset, best first: the current one, the
+    current size with the channels of the images, then the size of the images (folders:
+    scaled down to SEGMENTATION_SIDES and to multiples of 32, which pooling layers divide)."""
+    native = list(info.sample_shape or [3, 64, 64])
+    if len(native) != 3 or native[0] not in (1, 3):
+        native = [3, 64, 64]
+    channels = native[0]
+    candidates = [current]
+    if len(current) == 3 and max(current[1:]) <= MAX_SEGMENTATION_SIDE:
+        keep = current[0] if current[0] in (1, 3) else channels
+        candidates += [[keep, *current[1:]], [channels, *current[1:]]]
+    sizes = []
+    if info.kind == "builtin":
+        sizes.append(native[1:])
+    longest = max(native[1:])
+    for side in SEGMENTATION_SIDES:
+        scale = min(1.0, side / longest)
+        sizes.append([max(32, int(s * scale) // 32 * 32) for s in native[1:]])
+    sizes += [[side, side] for side in SEGMENTATION_SIDES]
+    candidates += [[channels, *size] for size in sizes]
+    unique: list[list[int]] = []
+    for shape in candidates:
+        if shape and shape not in unique and all(s > 0 for s in shape):
+            unique.append(shape)
+    return unique
 
 
 def _outputs_fit(analysis: Analysis, dataset: DatasetInfo) -> bool:
@@ -608,8 +971,14 @@ def _input_candidates(info: DatasetInfo, current: list[int]) -> list[list[int]]:
 
 def _last_linear(analysis: Analysis) -> str | None:
     """The Linear layer that decides how many values the (single) output has."""
+    return _last_layer(analysis, ("Linear",))
+
+
+def _last_layer(analysis: Analysis, types: tuple[str, ...]) -> str | None:
+    """The layer of one of ``types`` that decides the size of the (single) output: the
+    output itself, or the layer before the activations and dropout that end the network."""
     nid = analysis.outputs[0]
-    while analysis.nodes[nid].type != "Linear":
+    while analysis.nodes[nid].type not in types:
         info = analysis.nodes[nid]
         if info.type not in _PASS_THROUGH or len(info.inputs) != 1:
             return None
@@ -645,6 +1014,11 @@ def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[
         if "dtype" in params:
             parts.append(f"Input data type {previous['dtype']} → {params['dtype']}")
         summary = ", ".join(parts)
+    elif "out_channels" in params:
+        summary = (
+            f"Output channels of the last layer {previous['out_channels']} → "
+            f"{params['out_channels']}"
+        )
     else:
         summary = f"Outputs of the last layer {previous['out_features']} → {params['out_features']}"
     return {
@@ -711,7 +1085,7 @@ def _check_classical(
     if info.kind == "random":
         result.plan = _classical_demo_plan(layer, inputs, classical)
         return
-    if info.kind in ("builtin", "images"):
+    if info.kind in ("builtin", "images", "segmentation"):
         result.errors.append(
             f"{layer.label} is a classical model: it trains on tabular data (a CSV file or a "
             f"dataset from the Data tab) or on demo data, not on images like {info.name}. "
