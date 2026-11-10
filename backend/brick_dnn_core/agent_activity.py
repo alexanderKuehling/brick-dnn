@@ -739,6 +739,20 @@ def _delete_dataset(user, args, result) -> Described:
     return Described(f"delete {phrase_of(ref, 'dataset')}", targets=[ref] if ref else [])
 
 
+def _get_approval(user, args, result) -> Described:
+    number = valid_id(args.get("id"))
+    data = result if isinstance(result, Mapping) else {}
+    status = data.get("status")
+    return Described(
+        f"check approval request #{number}" if number else "check an approval request",
+        result=f": {status}" if isinstance(status, str) else "",
+    )
+
+
+def _list_approvals(user, args, result) -> Described:
+    return Described("list its approval requests")
+
+
 TOOL_DESCRIPTIONS: dict[str, Callable[[Any, Mapping, Any], Described]] = {
     "list_layer_types": _list_layer_types,
     "list_examples": _list_examples,
@@ -759,6 +773,8 @@ TOOL_DESCRIPTIONS: dict[str, Callable[[Any, Mapping, Any], Described]] = {
     "predict": _predict,
     "delete_training_run": _delete_run,
     "delete_dataset": _delete_dataset,
+    "get_approval": _get_approval,
+    "list_approvals": _list_approvals,
 }
 
 
@@ -901,6 +917,69 @@ REFS: dict[str, Callable[..., dict[str, Any] | None]] = {
 }
 
 
+# Data tab tools ----------------------------------------------------------- #
+
+
+def _found(result: Any, *keys: str) -> Mapping:
+    """The object an answer is about: the answer itself or the first of ``keys`` in it."""
+    if not isinstance(result, Mapping):
+        return {}
+    for key in keys:
+        if isinstance(result.get(key), Mapping):
+            return result[key]
+    return result
+
+
+def _data_tool(verb: str, kind: str, *, key: str = "id", answer: tuple[str, ...] = ()):
+    def describe(user, args, result) -> Described:
+        data = _found(result, *answer)
+        ref = REFS[kind](user, data.get("id", args.get(key)), data.get("name"))
+        return Described(f"{verb} {phrase_of(ref, kind)}", targets=[ref] if ref else [])
+
+    return describe
+
+
+def _import_data(user, args, result) -> Described:
+    data = _found(result, "source")
+    ref = source_ref(user, data.get("id"), data.get("name") or args.get("name"))
+    if ref:
+        what = phrase_of(ref, "data_source")
+    else:
+        what = "a data file from a link" if args.get("url") else "a data file"
+    return Described(f"import {what}", targets=[ref] if ref else [])
+
+
+def _create_upload_link(user, args, result) -> Described:
+    purpose = args.get("purpose")
+    what = f" for {clean_text(purpose, MAX_SHORT)}" if isinstance(purpose, str) else ""
+    return Described(f"create an upload link{what}")
+
+
+TOOL_DESCRIPTIONS.update(
+    {
+        "get_dataset": _data_tool("look at", "dataset", answer=("dataset",)),
+        "create_upload_link": _create_upload_link,
+        "list_data_sources": lambda user, args, result: Described("list its data files"),
+        "get_data_source": _data_tool("look at", "data_source", answer=("source",)),
+        "import_data": _import_data,
+        "list_data_preps": lambda user, args, result: Described("list its data preparations"),
+        "get_data_prep": _data_tool("look at", "data_prep", answer=("preparation", "prep")),
+        "list_prep_steps": lambda user, args, result: Described(
+            "look up the data preparation steps"
+        ),
+        "preview_data_prep": _data_tool("preview", "data_prep"),
+        "get_data_prep_script": _data_tool("get the script of", "data_prep"),
+        "create_data_prep": _data_tool("create", "data_prep", answer=("preparation", "prep")),
+        "update_data_prep": _data_tool("change", "data_prep", answer=("preparation", "prep")),
+        "apply_readiness_fix": _data_tool("apply a suggested fix to", "data_prep"),
+        "export_training_dataset": _data_tool("create a training dataset from", "data_prep"),
+        "delete_data_prep": _data_tool("delete", "data_prep", answer=("preparation", "prep")),
+        "delete_data_source": _data_tool("delete", "data_source", answer=("source",)),
+        "get_usage": lambda user, args, result: Described("look up its usage and budget"),
+    }
+)
+
+
 def _route_kind(route: str) -> str | None:
     return next(
         (kind for prefix, kind in ROUTE_KINDS.items() if route.startswith(f"{prefix}-")), None
@@ -983,6 +1062,12 @@ class _Call:
     finished_at: datetime
     # (user) -> (what it did, the summarised arguments)
     describe: Callable[[Any], tuple[Described, dict[str, Any]]]
+    # Approvals (approvals.py): "pending" for a call that waits for the user, its request,
+    # and the summary and targets to show instead of the described ones.
+    outcome: str | None = None
+    approval_id: int | None = None
+    summary: str | None = None
+    targets: list[dict[str, Any]] | None = None
 
 
 def _pending(request) -> list[_Call]:
@@ -1007,8 +1092,14 @@ def record_tool_call(
     result: Any = None,
     error: str | None = None,
     writes: bool = False,
+    outcome: str | None = None,
+    approval: int | None = None,
+    summary: str | None = None,
+    targets: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Queue an entry for an MCP tool call. ``error``: the message the assistant got."""
+    """Queue an entry for an MCP tool call. ``error``: the message the assistant got.
+    ``outcome``, ``approval``, ``summary``, ``targets``: for a call that waits for the
+    user's approval (approvals.py)."""
     try:
         token = request.auth
         if not enabled() or not isinstance(token, ApiToken):
@@ -1027,6 +1118,10 @@ def record_tool_call(
                 duration_ms=round((time.monotonic() - started) * 1000),
                 finished_at=timezone.now(),
                 describe=lambda user: (describe_tool(user, name, args, result), summarize(args)),
+                outcome=outcome,
+                approval_id=approval,
+                summary=summary,
+                targets=targets,
             )
         )
     except Exception:
@@ -1108,7 +1203,8 @@ def _build(call: _Call) -> AgentAction:
     token = call.token
     described, arguments = call.describe(token.owner)
     ok = call.error is None
-    targets = [ref for ref in described.targets if ref]
+    given = call.targets if call.targets is not None else described.targets
+    targets = [ref for ref in given if ref]
     project_id = next(
         (ref["id"] for ref in targets if ref["kind"] == "project" and isinstance(ref["id"], int)),
         described.project_id,
@@ -1126,15 +1222,67 @@ def _build(call: _Call) -> AgentAction:
         tool=call.tool,
         method=call.method,
         writes=call.writes,
-        outcome="ok" if ok else "error",
+        outcome=call.outcome or ("ok" if ok else "error"),
         error="" if ok else clean_text(call.error, MAX_ERROR),
         status_code=call.status_code,
         duration_ms=max(0, min(call.duration_ms, 2**31 - 1)),
-        summary=clean_text(described.summary(ok), MAX_SUMMARY),
+        summary=clean_text(call.summary or described.summary(ok), MAX_SUMMARY),
         arguments=arguments,
         targets=targets,
         project_id=valid_id(project_id),
+        approval_id=call.approval_id,
     )
+
+
+def record_approval(
+    approval,
+    outcome: str,
+    summary: str,
+    *,
+    error: str = "",
+    duration_ms: int = 0,
+    result: Any = None,
+) -> None:
+    """Write an entry for a decision on an approval request (approvals.py) right away:
+    ``approved`` (approved and done), ``error`` (approved, but it failed) or ``denied``."""
+    if not enabled():
+        return
+    try:
+        details = approval.details or {}
+        targets = [ref for ref in details.get("targets") or [] if isinstance(ref, dict)]
+        if outcome == "approved" and approval.action in TOOL_DESCRIPTIONS:
+            described = describe_tool(approval.owner, approval.action, approval.arguments, result)
+            known = {(ref["kind"], str(ref["id"])) for ref in targets}
+            targets += [
+                ref
+                for ref in described.targets
+                if ref and (ref["kind"], str(ref["id"])) not in known
+            ]
+        project_id = next(
+            (r["id"] for r in targets if r["kind"] == "project" and isinstance(r["id"], int)),
+            None,
+        )
+        token = approval.api_token if approval.agent_kind == "token" else None
+        AgentAction.objects.create(
+            owner_id=approval.owner_id,
+            source="mcp",
+            agent_kind=approval.agent_kind,
+            agent_id=approval.agent_id,
+            agent_name=clean_text(approval.agent_name, 200),
+            token_prefix=token.prefix[:20] if token is not None else "",
+            tool=clean_text(approval.tool, 64),
+            writes=approval.action != "get_weights_download",
+            outcome=outcome,
+            error=clean_text(error, MAX_ERROR) if error else "",
+            duration_ms=max(0, min(duration_ms, 2**31 - 1)),
+            summary=clean_text(summary, MAX_SUMMARY),
+            arguments=summarize(approval.arguments),
+            targets=targets,
+            project_id=valid_id(project_id),
+            approval_id=approval.pk,
+        )
+    except Exception:
+        logger.exception("Could not write an approval to the agent activity log")
 
 
 def _write(calls: list[_Call]) -> None:
@@ -1238,6 +1386,7 @@ def entry_data(entry: AgentAction) -> dict[str, Any]:
         "arguments": entry.arguments,
         "targets": entry.targets,
         "project": entry.project_id,
+        "approval": entry.approval_id,
     }
 
 
@@ -1275,7 +1424,7 @@ def filter_entries(entries: QuerySet[AgentAction], params) -> QuerySet[AgentActi
     outcome = params.get("outcome")
     if outcome:
         if outcome not in dict(AgentAction.OUTCOMES):
-            raise ValidationError({"outcome": "Use ok or error."})
+            raise ValidationError({"outcome": "Use ok, error, pending, approved or denied."})
         entries = entries.filter(outcome=outcome)
     source = params.get("source")
     if source:
@@ -1333,12 +1482,16 @@ class AgentActivityView(APIView):
         if before is not None:
             entries = entries.filter(id__lt=before)
         page = list(entries.order_by("-id")[: limit + 1])
+        from .approvals import pending_for
+
         return Response(
             {
                 "results": [entry_data(entry) for entry in page[:limit]],
                 "has_more": len(page) > limit,
                 "latest_id": latest,
                 "retention_days": settings.AGENT_LOG_DAYS,
+                # Requests that wait for the user's approval (approvals.py), with each poll.
+                "approvals": pending_for(request.user),
             }
         )
 

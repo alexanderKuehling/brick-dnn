@@ -517,7 +517,8 @@ export interface AgentAction {
   method: string;
   /** Changes something rather than only reading. */
   writes: boolean;
-  outcome: 'ok' | 'error';
+  /** pending: waited for the user's approval; approved: approved and done; denied. */
+  outcome: AgentOutcome;
   /** What the agent was told went wrong ("" when it worked). */
   error: string;
   /** REST requests: the HTTP status. */
@@ -529,12 +530,16 @@ export interface AgentAction {
   targets: AgentTarget[];
   /** The network it was about, if any. */
   project: number | null;
+  /** The approval request it belongs to, if any. Missing on older servers. */
+  approval?: number | null;
 }
+
+export type AgentOutcome = 'ok' | 'error' | 'pending' | 'approved' | 'denied';
 
 export interface AgentActivityQuery {
   agent?: AgentKey;
   tool?: string;
-  outcome?: 'ok' | 'error';
+  outcome?: AgentOutcome;
   project?: number;
   /** Older entries than this id (the next page). */
   before?: number;
@@ -552,6 +557,88 @@ export interface AgentActivityPage {
   latest_id: number;
   /** How long entries are kept; 0: this server keeps no log. */
   retention_days: number;
+  /** Requests waiting for the user's approval, with every poll. Missing on older servers. */
+  approvals?: PendingApprovals;
+}
+
+// --------------------------------------------------------------------------
+// Approvals: actions of agents that wait for the user's OK
+// --------------------------------------------------------------------------
+
+/** What a token or app may do without asking. */
+export interface ApprovalRule {
+  /** Trainings estimated above this many CPU minutes ask (0: every one; null: none). */
+  training_cpu_minutes: number | null;
+  /** Sharing in projects and links that work without logging in ask. */
+  publishing: boolean;
+  /** Deleting networks, runs, datasets and data asks. */
+  deleting: boolean;
+}
+
+export interface ApprovalRules {
+  /** What new tokens and apps get. */
+  default: ApprovalRule;
+  builtin_default: ApprovalRule;
+  /** By "token:<id>" and "app:<id>". */
+  agents: Partial<Record<AgentKey, ApprovalRule>>;
+  gated_tools: Record<ApprovalCategory, string[]>;
+  expiry_hours: number;
+}
+
+export type ApprovalCategory = 'training' | 'publishing' | 'deleting';
+export type ApprovalStatus = 'pending' | 'approved' | 'executed' | 'failed' | 'denied' | 'expired';
+
+export interface ApprovalEstimate {
+  cpu_minutes: number | null;
+  low_cpu_minutes: number | null;
+  high_cpu_minutes: number | null;
+  cost: number | null;
+  currency: string | null;
+}
+
+export interface ApprovalRequest {
+  id: number;
+  status: ApprovalStatus;
+  category: ApprovalCategory;
+  /** The tool the agent called, and what the server does once approved. */
+  tool: string;
+  action: string;
+  agent: AgentRef & { active: boolean };
+  /** 'Start training “GP 1” on dataset “houses.csv” (#3)'. */
+  summary: string;
+  /** Why it needs approval. */
+  reason: string;
+  estimate: ApprovalEstimate | null;
+  limit_cpu_minutes: number | null;
+  /** Trainings: the network ("5 layers (…), 4 connections") and the data. */
+  network: string | null;
+  dataset: string | null;
+  /** Publishing: what would become visible, and to whom. */
+  exposes: string | null;
+  warning: string | null;
+  targets: AgentTarget[];
+  arguments: Record<string, AgentArgument>;
+  created_at: string;
+  expires_at: string;
+  decided_at: string | null;
+  finished_at: string | null;
+  /** The user's message with a denial. */
+  message: string;
+  /** Why it failed once approved. */
+  error: string;
+  /** What was done once approved. */
+  done: string | null;
+}
+
+export interface PendingApprovals {
+  pending_count: number;
+  /** Newest first. */
+  pending: ApprovalRequest[];
+}
+
+export interface ApprovalList {
+  results: ApprovalRequest[];
+  pending_count: number;
 }
 
 /** A token or app that acted, for filters and the API tokens page. */

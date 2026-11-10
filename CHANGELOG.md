@@ -30,6 +30,19 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Approvals for agents.** Per API token and connected app you decide what an agent may do
+  on its own: start trainings up to N estimated CPU minutes (above that, or always with 0, it
+  asks), publish (a weights link that works without logging in, sharing a dataset or data
+  preparation in a project) and, optionally, delete. Such a call does nothing yet: the agent
+  gets the id of an approval request (not an error) and follows it with the new MCP tools
+  `get_approval` and `list_approvals`. Waiting requests show at the top of *Agent activity*
+  (with the estimate, the agent, network and dataset, and what would become visible) and as a
+  count in the account menu; *Approve* does it right away on the server as that agent, with
+  its budgets checked again, and stores the result (e.g. the run) for `get_approval`; *Deny*
+  takes a message for the agent. Requests expire after 24 hours. New tokens and apps get the
+  account's default (unless changed: trainings above 15 CPU minutes and publishing ask);
+  existing ones ask for nothing until you set a rule. The REST API refuses what a token's rule
+  covers. See docs/mcp.md (*Approvals*) and `/api/approvals/` in docs/api.md.
 - **E-mail, password reset and confirmed addresses.** With an SMTP provider configured
   (`BRICKDNN_EMAIL_HOST`, `_PORT`, `_USER`, `_PASSWORD` (secret, `.env` only), `_FROM`,
   `_REPLY_TO`; off without them) the app sends e-mail in one plain-text + HTML layout, in a

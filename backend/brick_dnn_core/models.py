@@ -679,7 +679,15 @@ class AgentAction(models.Model):
 
     SOURCES = [("mcp", "MCP tool"), ("api", "REST API")]
     AGENT_KINDS = [("token", "API token"), ("app", "Connected app")]
-    OUTCOMES = [("ok", "Done"), ("error", "Failed")]
+    OUTCOMES = [
+        ("ok", "Done"),
+        ("error", "Failed"),
+        # Approvals (approvals.py): the call waits for the user, who approved it (and it was
+        # done) or denied it.
+        ("pending", "Waiting for approval"),
+        ("approved", "Approved and done"),
+        ("denied", "Denied"),
+    ]
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="agent_actions"
@@ -723,6 +731,9 @@ class AgentAction(models.Model):
         blank=True,
         related_name="+",
     )
+    # The approval request (ApprovalRequest.pk) the entry belongs to, if any: by number, so
+    # that the entry outlives the request.
+    approval_id = models.PositiveBigIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["-id"]
@@ -858,3 +869,122 @@ class OverageCharge(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} {self.period:%Y-%m}: {self.amount} {self.currency} ({self.status})"
+
+
+class ApprovalRule(models.Model):
+    """What an API token or a connected app may do without asking its owner (approvals.py).
+
+    A rule with neither token nor app is the account's default, which new tokens and apps
+    get a copy of. Tokens and apps without a rule (those from before approvals existed) never
+    ask.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="approval_rules"
+    )
+    api_token = models.OneToOneField(
+        ApiToken,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="approval_rule",
+    )
+    connection = models.OneToOneField(
+        OAuthConnection,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="approval_rule",
+    )
+    # Trainings estimated above this many CPU minutes need approval (0: every training;
+    # null: none).
+    training_cpu_minutes = models.FloatField(null=True, blank=True)
+    # Sharing in projects and public links need approval.
+    publishing = models.BooleanField(default=False)
+    # Deleting networks, runs, datasets and data need approval.
+    deleting = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner"],
+                condition=models.Q(api_token__isnull=True, connection__isnull=True),
+                name="one_default_approval_rule",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(api_token__isnull=True) | models.Q(connection__isnull=True),
+                name="approval_rule_token_or_app",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        who = self.api_token or self.connection or "default"
+        return f"Approvals of {who} ({self.owner})"
+
+
+class ApprovalRequest(models.Model):
+    """An action of an AI agent that waits for its owner's approval (approvals.py): the
+    arguments to do it with, and once decided what came of it."""
+
+    STATUSES = [
+        ("pending", "Waiting for approval"),
+        # Approved; the server is doing it right now.
+        ("approved", "Approved, being done"),
+        ("executed", "Approved and done"),
+        ("failed", "Approved, but it failed"),
+        ("denied", "Denied"),
+        ("expired", "Expired"),
+    ]
+    CATEGORIES = [
+        ("training", "Training above the limit"),
+        ("publishing", "Sharing or a public link"),
+        ("deleting", "Deleting"),
+    ]
+    AGENT_KINDS = AgentAction.AGENT_KINDS
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="approval_requests"
+    )
+    agent_kind = models.CharField(max_length=5, choices=AGENT_KINDS)
+    api_token = models.ForeignKey(
+        ApiToken, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    connection = models.ForeignKey(
+        OAuthConnection, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # The token or app at the time (they may be revoked later).
+    agent_id = models.PositiveBigIntegerField()
+    agent_name = models.CharField(max_length=200)
+    # The MCP tool the agent called, and what the server does once approved: the tool itself,
+    # or a part of it (e.g. "share_dataset" after upload_dataset stored the file).
+    tool = models.CharField(max_length=64)
+    action = models.CharField(max_length=64)
+    category = models.CharField(max_length=12, choices=CATEGORIES)
+    # The validated arguments of the action, as the agent sent them (never file contents).
+    arguments = models.JSONField(default=dict)
+    # A hash of the action and its arguments: the same call again finds the waiting request.
+    fingerprint = models.CharField(max_length=64, blank=True)
+    # What it would do, for people: 'start training “GP 1” on dataset “Iris” (#3)'.
+    summary = models.CharField(max_length=300)
+    # Why it needs approval, the estimate, what it would make visible, its targets.
+    details = models.JSONField(default=dict)
+    status = models.CharField(max_length=10, choices=STATUSES, default="pending")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    decided_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    # The user's message with a denial (the agent reads it).
+    message = models.CharField(max_length=500, blank=True)
+    # What the action returned once done (e.g. the run), or why it failed.
+    result = models.JSONField(null=True, blank=True)
+    error = models.CharField(max_length=1000, blank=True)
+
+    class Meta:
+        ordering = ["-id"]
+        indexes = [
+            models.Index(fields=["owner", "status"], name="approval_owner_status"),
+        ]
+
+    def __str__(self) -> str:
+        return f"#{self.pk} {self.agent_name} ({self.owner}): {self.summary} [{self.status}]"

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type AgentAction, type AgentActivityQuery, type AgentKey } from '@/api';
+import {
+  api,
+  type AgentAction,
+  type AgentActivityPage,
+  type AgentActivityQuery,
+  type AgentKey,
+  type ApprovalRequest,
+} from '@/api';
+import { getPendingCount, setPendingCount } from '@/approvals/pending';
 
 /** How often the page asks for new entries while it is visible. */
 export const POLL_INTERVAL = 3000;
@@ -28,6 +36,10 @@ export interface AgentActivity {
   /** Entries that arrived while the page was open (they animate in). */
   fresh: ReadonlySet<number>;
   live: LiveState;
+  /** Requests waiting for the user's approval (with every poll); null while loading. */
+  approvals: ApprovalRequest[] | null;
+  /** A request was decided on the page: it leaves the list at once. */
+  decided: (approval: ApprovalRequest) => void;
 }
 
 function toQuery(filters: ActivityFilters): AgentActivityQuery {
@@ -64,12 +76,32 @@ export function useAgentActivity(
   const [loadingMore, setLoadingMore] = useState(false);
   const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set());
   const [live, setLive] = useState<LiveState>('live');
+  const [approvals, setApprovals] = useState<ApprovalRequest[] | null>(null);
   const [request, setRequest] = useState(0);
+  // Requests decided here, until the server's list no longer has them.
+  const gone = useRef(new Set<number>());
   // The newest entry of the user the page knows about (the next `after`).
   const cursor = useRef(0);
   // Answers for an earlier query (or before a reload) are dropped.
   const generation = useRef(0);
   const ready = entries !== null;
+
+  const takeApprovals = useCallback((page: AgentActivityPage) => {
+    if (!page.approvals) {
+      return; // an older server
+    }
+    const waiting = page.approvals.pending.filter((item) => !gone.current.has(item.id));
+    setApprovals(waiting);
+    setPendingCount(
+      page.approvals.pending_count - (page.approvals.pending.length - waiting.length)
+    );
+  }, []);
+
+  const decided = useCallback((approval: ApprovalRequest) => {
+    gone.current.add(approval.id);
+    setApprovals((list) => list?.filter((item) => item.id !== approval.id) ?? null);
+    setPendingCount(Math.max(0, getPendingCount() - 1));
+  }, []);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -87,6 +119,7 @@ export function useAgentActivity(
         setRetentionDays(page.retention_days);
         setHasMore(page.has_more);
         setEntries(page.results);
+        takeApprovals(page);
       })
       .catch((err: Error) => {
         if (!controller.signal.aborted && current === generation.current) {
@@ -94,7 +127,7 @@ export function useAgentActivity(
         }
       });
     return () => controller.abort();
-  }, [query, request]);
+  }, [query, request, takeApprovals]);
 
   const reload = useCallback(() => setRequest((n) => n + 1), []);
 
@@ -128,6 +161,7 @@ export function useAgentActivity(
           return;
         }
         setLive('live');
+        takeApprovals(page);
         if (page.has_more) {
           reload(); // more new entries than one page: start over
           return;
@@ -166,7 +200,7 @@ export function useAgentActivity(
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [ready, query, interval, reload]);
+  }, [ready, query, interval, reload, takeApprovals]);
 
   const loadMore = useCallback(() => {
     const oldest = entries?.[entries.length - 1];
@@ -197,6 +231,8 @@ export function useAgentActivity(
     reload,
     fresh,
     live,
+    approvals,
+    decided,
   };
 }
 
