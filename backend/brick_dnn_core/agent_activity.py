@@ -917,6 +917,69 @@ REFS: dict[str, Callable[..., dict[str, Any] | None]] = {
 }
 
 
+# Data tab tools ----------------------------------------------------------- #
+
+
+def _found(result: Any, *keys: str) -> Mapping:
+    """The object an answer is about: the answer itself or the first of ``keys`` in it."""
+    if not isinstance(result, Mapping):
+        return {}
+    for key in keys:
+        if isinstance(result.get(key), Mapping):
+            return result[key]
+    return result
+
+
+def _data_tool(verb: str, kind: str, *, key: str = "id", answer: tuple[str, ...] = ()):
+    def describe(user, args, result) -> Described:
+        data = _found(result, *answer)
+        ref = REFS[kind](user, data.get("id", args.get(key)), data.get("name"))
+        return Described(f"{verb} {phrase_of(ref, kind)}", targets=[ref] if ref else [])
+
+    return describe
+
+
+def _import_data(user, args, result) -> Described:
+    data = _found(result, "source")
+    ref = source_ref(user, data.get("id"), data.get("name") or args.get("name"))
+    if ref:
+        what = phrase_of(ref, "data_source")
+    else:
+        what = "a data file from a link" if args.get("url") else "a data file"
+    return Described(f"import {what}", targets=[ref] if ref else [])
+
+
+def _create_upload_link(user, args, result) -> Described:
+    purpose = args.get("purpose")
+    what = f" for {clean_text(purpose, MAX_SHORT)}" if isinstance(purpose, str) else ""
+    return Described(f"create an upload link{what}")
+
+
+TOOL_DESCRIPTIONS.update(
+    {
+        "get_dataset": _data_tool("look at", "dataset", answer=("dataset",)),
+        "create_upload_link": _create_upload_link,
+        "list_data_sources": lambda user, args, result: Described("list its data files"),
+        "get_data_source": _data_tool("look at", "data_source", answer=("source",)),
+        "import_data": _import_data,
+        "list_data_preps": lambda user, args, result: Described("list its data preparations"),
+        "get_data_prep": _data_tool("look at", "data_prep", answer=("prep",)),
+        "list_prep_steps": lambda user, args, result: Described(
+            "look up the data preparation steps"
+        ),
+        "preview_data_prep": _data_tool("preview", "data_prep"),
+        "get_data_prep_script": _data_tool("get the script of", "data_prep"),
+        "create_data_prep": _data_tool("create", "data_prep", answer=("prep",)),
+        "update_data_prep": _data_tool("change", "data_prep", answer=("prep",)),
+        "apply_readiness_fix": _data_tool("apply a suggested fix to", "data_prep"),
+        "export_training_dataset": _data_tool("create a training dataset from", "data_prep"),
+        "delete_data_prep": _data_tool("delete", "data_prep", answer=("prep",)),
+        "delete_data_source": _data_tool("delete", "data_source", answer=("source",)),
+        "get_usage": lambda user, args, result: Described("look up its usage and budget"),
+    }
+)
+
+
 def _route_kind(route: str) -> str | None:
     return next(
         (kind for prefix, kind in ROUTE_KINDS.items() if route.startswith(f"{prefix}-")), None
