@@ -10,6 +10,8 @@
   `project_id`), `list_layer_types` one line per parameter (`types` for full specs),
   `list_examples` names and descriptions (`id` for a graph), and `check_training` and the
   data tools cap long lists with their totals. A run with 200 epochs went from 71 KB to 1 KB.
+- The MCP tool `predict` answers without the class indices (the class names say the same) and
+  with at most 10 warnings; the REST API is unchanged.
 - gunicorn's access log leaves out query strings, so signed download and upload links are not
   logged.
 - **With Docker Compose, trainings are queued and trained by a worker container** (see
@@ -27,6 +29,21 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Predictions in the web app.** The run view of a finished or stopped run has *Try the
+  model: predict*: for tables a form with one field per column (number fields, the known
+  categories, date pickers) that *Use a sample* fills with a validation row and its actual
+  value, plus pasted or uploaded CSV rows (up to 500, results downloadable as CSV); for images
+  an upload or drop field, and a drawing pad for MNIST-like grayscale sets. Classification
+  shows the top classes with their probabilities, regression the value (± the standard
+  deviation of a Gaussian process). Viewers of shared projects can use it too.
+  `GET /api/training/runs/<id>/predict-form/` describes a run's inputs for it.
+- **Predictions from raw rows.** Runs trained on a dataset exported from the Data tab predict
+  rows in the columns of the imported table (`input_format: "raw"` in the REST API and the MCP
+  tool `predict`, the default in the web app): the server prepares them exactly like the
+  training rows with the values the preparation learned (stored with the dataset at the export,
+  joined tables included), so a new date or store name can be sent as it is. Steps that only
+  change rows are skipped, filters warn, and problems are reported per row and column. Datasets
+  exported earlier need to be exported again for this.
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public
