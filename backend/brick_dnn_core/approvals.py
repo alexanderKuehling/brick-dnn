@@ -213,11 +213,14 @@ def _int(value: Any) -> int | None:
 
 
 def _people(project: Project, user) -> str:
-    """'3 other people' who can see what is shared in ``project``."""
+    """Who can see what is shared in ``project``: '3 other people now and anyone added
+    later'."""
     others = ProjectMember.objects.filter(project=project).exclude(user=user).count()
     if project.owner_id != user.pk:
         others += 1
-    return activity.count(others, "other person", "other people")
+    if others == 0:
+        return "nobody else yet, but anyone added later"
+    return f"{activity.count(others, 'other person', 'other people')} now and anyone added later"
 
 
 def _editable_project(user, project_id: Any) -> Project | None:

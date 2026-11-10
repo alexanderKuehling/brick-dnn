@@ -471,7 +471,7 @@ def test_uploads_are_kept_private_until_sharing_is_approved(ada, web, team, trai
     assert stored.arguments == {"dataset_id": dataset.pk, "project_id": team.pk}
     assert "setosa" not in json.dumps(stored.arguments)  # no file contents
     assert stored.summary == f"share dataset “Iris” (#{dataset.pk}) in network “Team” (#{team.pk})"
-    assert "1 other person" in stored.details["exposes"]
+    assert "(1 other person now and anyone added later)" in stored.details["exposes"]
     (entry,) = log(ada)
     assert entry.outcome == "pending" and entry.approval_id == stored.pk
     assert "project_id" not in entry.arguments
