@@ -1,0 +1,145 @@
+.pixelated {
+  image-rendering: pixelated;
+}
+
+.thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  min-width: 0;
+
+  & img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
+    image-rendering: pixelated;
+    background: var(--mantine-color-dark-9);
+    border-radius: 2px;
+  }
+
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+
+  &[data-wrong] img {
+    outline: 2px solid var(--mantine-color-red-5);
+    outline-offset: -2px;
+  }
+
+  &[data-active] {
+    border-color: var(--mantine-primary-color-filled);
+  }
+}
+
+.row {
+  cursor: pointer;
+
+  &[data-active] {
+    background-color: var(--mantine-primary-color-light) !important;
+  }
+}
+
+.drawPad {
+  width: 196px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  touch-action: none;
+  cursor: crosshair;
+  border-radius: var(--mantine-radius-sm);
+  background: #000;
+}
+
+/* An image with a heatmap on top. */
+.overlay {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--aspect, 1);
+  background: var(--mantine-color-dark-9);
+  border-radius: var(--mantine-radius-sm);
+  overflow: hidden;
+
+  & img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    image-rendering: pixelated;
+  }
+}
+
+.smoothHeat {
+  image-rendering: auto !important;
+}
+
+/* Bars around a zero line (attributions). */
+.barTrack {
+  position: relative;
+  height: 14px;
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  border-radius: 2px;
+}
+
+.bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 2px;
+}
+
+.zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--mantine-color-dimmed);
+}
+
+.whisker {
+  position: absolute;
+  top: 6px;
+  height: 2px;
+  background: var(--mantine-color-text);
+  opacity: 0.6;
+}
+
+.brick {
+  display: block;
+  width: 100%;
+  padding: 6px var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-sm);
+  border-left: 3px solid transparent;
+
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+
+  &[data-active] {
+    border-left-color: var(--mantine-primary-color-filled);
+    background-color: var(--mantine-primary-color-light);
+  }
+}
+
+.maps {
+  width: 100%;
+  max-width: 480px;
+  image-rendering: pixelated;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.filters {
+  width: 100%;
+  max-width: 360px;
+  image-rendering: pixelated;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.plot {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  display: block;
+}
