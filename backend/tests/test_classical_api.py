@@ -200,7 +200,7 @@ def test_mcp_flow_with_a_gaussian_process(user, real_processes, tmp_path):
         assert time.monotonic() < deadline, run["message"]
         time.sleep(0.25)
     assert run["status"] == "completed", run["message"]
-    assert run["state"]["classical"]["kernel"] and run["metrics"]["val_r2"] is not None
+    assert run["classical"]["kernel"] and run["metrics"]["val_r2"] is not None
 
     result, text = call(
         mcp, "predict", run_id=run_id, inputs=[dict.fromkeys([f"f{i}" for i in range(8)], 0)]

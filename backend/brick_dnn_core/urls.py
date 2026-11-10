@@ -11,6 +11,7 @@ from . import (
     mcp,
     oauth,
     projects,
+    upload_links,
     views,
 )
 
@@ -83,6 +84,8 @@ urlpatterns = [
     # POST to the URL as given, and Django cannot redirect a POST to add the slash.
     path("mcp/", mcp.McpView.as_view(), name="mcp"),
     path("mcp", mcp.McpView.as_view(), name="mcp-no-slash"),
+    # Uploads with a signed one-time link (MCP tool create_upload_link), without logging in.
+    path("uploads/", upload_links.UploadLinkView.as_view(), name="upload-link"),
     # OAuth sign-in for MCP clients (the consent page itself is /oauth/authorize in the UI).
     path("oauth/register/", oauth.RegisterClientView.as_view(), name="oauth-register"),
     path("oauth/authorize/", oauth.AuthorizeView.as_view(), name="oauth-authorize"),

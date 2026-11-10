@@ -144,7 +144,9 @@ account beyond 20,000. `--agent-log-days N` overrides the setting once.
   query string (signed download links stay out of the log) and no referrer.
 - **Caddy** writes no access log; its error log (e.g. failed TLS handshakes) contains full IP
   addresses and is limited like the others.
-- gunicorn and Daphne only see nginx's internal address.
+- gunicorn and Daphne only see nginx's internal address; gunicorn's access log keeps the
+  time, method, path without query string, status, size and duration (signed download and
+  upload links stay out of it, too).
 - The app's pages and assets are sent with `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Content-Type-Options: nosniff` and `Permissions-Policy: camera=(), microphone=(),
   geolocation=(), payment=(…), usb=()`, next to `Content-Security-Policy: frame-ancestors
