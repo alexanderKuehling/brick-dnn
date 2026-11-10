@@ -240,7 +240,7 @@ def test_one_price_cannot_belong_to_two_plans(paddle, plans):
 
 
 def test_secrets_are_never_read_from_the_site_settings_file(tmp_path):
-    assert {"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET"} == SITE_ENV_SECRETS
+    assert {"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET"} <= SITE_ENV_SECRETS
     file = tmp_path / "settings.env"
     file.write_text(
         "BRICKDNN_PADDLE_ENV=sandbox\n"

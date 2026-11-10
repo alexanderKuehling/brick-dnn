@@ -19,7 +19,7 @@ vi.mock('@/api', async (importOriginal) => {
   };
 });
 
-function renderPage(path = '/verify-email?token=signed') {
+function renderPage(path = '/verify-email#token=signed') {
   return render(
     <AuthProvider>
       <MemoryRouter initialEntries={[path]}>

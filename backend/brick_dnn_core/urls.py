@@ -46,6 +46,11 @@ urlpatterns = [
     # Forgotten passwords: a link by e-mail (recovery.py; only with e-mail set up).
     path("auth/password-reset/", recovery.PasswordResetView.as_view(), name="password-reset"),
     path(
+        "auth/password-reset/check/",
+        recovery.PasswordResetCheckView.as_view(),
+        name="password-reset-check",
+    ),
+    path(
         "auth/password-reset/confirm/",
         recovery.PasswordResetConfirmView.as_view(),
         name="password-reset-confirm",

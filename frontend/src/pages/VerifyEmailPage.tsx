@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconAlertCircle, IconCircleCheck } from '@tabler/icons-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Alert, Button, Center, Loader, Stack } from '@mantine/core';
 import { api, ApiError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { AuthLayout } from './AuthLayout';
+import { useLinkParams } from './linkParams';
 
 type Result = { ok: true; email: string } | { ok: false; message: string; otherAccount: boolean };
 
 /**
- * /verify-email?token=…: the link from the e-mail. Only the account the link was sent to can
+ * /verify-email#token=…: the link from the e-mail. Only the account the link was sent to can
  * confirm its address, so the page is shown after logging in (RequireAuth).
  */
 export function VerifyEmailPage() {
-  const [params] = useSearchParams();
+  const params = useLinkParams();
   const token = params.get('token') ?? '';
   const { user, logout } = useAuth();
   const [result, setResult] = useState<Result | null>(null);
