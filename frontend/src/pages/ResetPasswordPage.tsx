@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { IconAlertCircle, IconCircleCheck } from '@tabler/icons-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Alert, Anchor, Button, Center, Loader, PasswordInput, Stack, Text } from '@mantine/core';
 import { fieldError } from '@/account/fieldError';
 import { api, ApiError } from '@/api';
 import { AuthLayout } from './AuthLayout';
+import { useLinkParams } from './linkParams';
 
 type LinkState = { checked: false } | { checked: true; valid: boolean; username: string | null };
 
-/** /reset-password?uid=…&token=…: the link from the e-mail; choose a new password. */
+/** /reset-password#uid=…&token=…: the link from the e-mail; choose a new password. */
 export function ResetPasswordPage() {
-  const [params] = useSearchParams();
+  const params = useLinkParams();
   const uid = params.get('uid') ?? '';
   const token = params.get('token') ?? '';
   const [link, setLink] = useState<LinkState>({ checked: false });

@@ -31,7 +31,7 @@ def links(message) -> list[str]:
 
 
 def query_value(url: str, name: str) -> str:
-    match = re.search(rf"[?&]{name}=([^&\s]+)", url)
+    match = re.search(rf"[?&#]{name}=([^&\s]+)", url)
     assert match, url
     return match.group(1)
 

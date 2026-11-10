@@ -40,8 +40,14 @@ def ask_for_reset(login_name: str, client: APIClient | None = None):
 
 
 def link_parts(message) -> tuple[str, str]:
-    url = next(link for link in links(message) if "/reset-password?" in link)
+    url = next(link for link in links(message) if "/reset-password#" in link)
     return query_value(url, "uid"), query_value(url, "token")
+
+
+def check_link(uid: str, token: str):
+    return APIClient().post(
+        "/api/auth/password-reset/check/", {"uid": uid, "token": token}, format="json"
+    )
 
 
 def reset(uid: str, token: str, password: str = NEW_PASSWORD):
@@ -53,7 +59,7 @@ def reset(uid: str, token: str, password: str = NEW_PASSWORD):
 
 
 def verify_token(message) -> str:
-    url = next(link for link in links(message) if "/verify-email?" in link)
+    url = next(link for link in links(message) if "/verify-email#" in link)
     return query_value(url, "token")
 
 
@@ -190,8 +196,7 @@ def test_reset_end_to_end(legacy, email_on):
     assert len(email_on) == 1 and email_on[0].to == ["ada@example.com"]
     uid, token = link_parts(email_on[0])
 
-    check = APIClient().get(f"/api/auth/password-reset/confirm/?uid={uid}&token={token}")
-    assert check.data == {"valid": True, "username": "ada"}
+    assert check_link(uid, token).data == {"valid": True, "username": "ada"}
     weak = reset(uid, token, "123")
     assert weak.status_code == 400 and "new_password" in weak.data  # as at sign-up
     done = reset(uid, token)
@@ -208,10 +213,7 @@ def test_reset_end_to_end(legacy, email_on):
     assert refresh(old_tokens["refresh"]).status_code == 401
     # The link worked once; it proved the address, too.
     assert reset(uid, token, "yet-another-password").status_code == 400
-    assert (
-        APIClient().get(f"/api/auth/password-reset/confirm/?uid={uid}&token={token}").data["valid"]
-        is False
-    )
+    assert check_link(uid, token).data["valid"] is False
     assert recovery.is_verified(User.objects.get(username="ada"))
 
 

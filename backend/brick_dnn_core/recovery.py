@@ -131,7 +131,8 @@ def send_verification(user, request=None) -> bool:
 
     if not user.email or not mail.enabled():
         return False
-    url = mail.link(f"/verify-email?token={verification_token(user)}", request)
+    # In the fragment: browsers do not send it, so it stays out of the server's access logs.
+    url = mail.link(f"/verify-email#token={verification_token(user)}", request)
     return notices.verify_email(user, url, request)
 
 
@@ -248,7 +249,8 @@ def _reset_allowed(user) -> bool:
 def reset_link(user, request=None) -> str:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
-    return mail.link(f"/reset-password?uid={uid}&token={token}", request)
+    # In the fragment, like the verification link: never sent to (or logged by) the server.
+    return mail.link(f"/reset-password#uid={uid}&token={token}", request)
 
 
 def request_reset(login: str, request=None) -> bool:
@@ -304,24 +306,37 @@ class PasswordResetView(APIView):
         return Response({"detail": RESET_SENT})
 
 
-class ResetConfirmSerializer(serializers.Serializer):
+class ResetLinkSerializer(serializers.Serializer):
     uid = serializers.CharField(max_length=40)
     token = serializers.CharField(max_length=100)
+
+
+class ResetConfirmSerializer(ResetLinkSerializer):
     new_password = serializers.CharField(write_only=True)
 
 
-class PasswordResetConfirmView(APIView):
-    """``GET ?uid=&token=``: ``{"valid", "username"}``. ``POST {"uid", "token",
-    "new_password"}``: set the new password; all logins of the account end."""
+class PasswordResetCheckView(APIView):
+    """``POST {"uid", "token"}``: ``{"valid", "username"}``, whether the link still works (a
+    POST, so that the token stays out of access logs)."""
 
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth"
 
-    def get(self, request: Request) -> Response:
-        user = user_from_link(request.query_params.get("uid"), request.query_params.get("token"))
+    def post(self, request: Request) -> Response:
+        serializer = ResetLinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = user_from_link(serializer.validated_data["uid"], serializer.validated_data["token"])
         return Response(
             {"valid": user is not None, "username": user.get_username() if user else None}
         )
+
+
+class PasswordResetConfirmView(APIView):
+    """``POST {"uid", "token", "new_password"}``: set the new password; all logins of the
+    account end."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
 
     def post(self, request: Request) -> Response:
         serializer = ResetConfirmSerializer(data=request.data)

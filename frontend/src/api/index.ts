@@ -118,8 +118,12 @@ const serverApi = {
         method: 'POST',
         body: { login },
       }),
+    /** Whether a link still works (a POST: the token stays out of access logs). */
     check: (uid: string, token: string) =>
-      request<PasswordResetLink>(`/api/auth/password-reset/confirm/${queryString({ uid, token })}`),
+      request<PasswordResetLink>('/api/auth/password-reset/check/', {
+        method: 'POST',
+        body: { uid, token },
+      }),
     confirm: (uid: string, token: string, newPassword: string) =>
       request<{ detail: string; username: string }>('/api/auth/password-reset/confirm/', {
         method: 'POST',

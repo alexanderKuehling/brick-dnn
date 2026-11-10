@@ -85,7 +85,7 @@ describe('reset password', () => {
         new ApiError(400, { new_password: ['This password is too common.'] }, 'x')
       )
       .mockResolvedValueOnce({ detail: 'Changed.', username: 'ada' });
-    renderAt('/reset-password?uid=MQ&token=abc-123');
+    renderAt('/reset-password#uid=MQ&token=abc-123');
     expect(await screen.findByText('ada')).toBeInTheDocument();
     expect(api.passwordReset.check).toHaveBeenCalledWith('MQ', 'abc-123');
 
@@ -128,7 +128,7 @@ describe('reset password', () => {
     vi.mocked(api.passwordReset.confirm).mockRejectedValue(
       new ApiError(400, { detail: 'This link is invalid or has expired.' }, 'x')
     );
-    renderAt('/reset-password?uid=MQ&token=t');
+    renderAt('/reset-password#uid=MQ&token=t');
     await userEvent.type(await screen.findByLabelText(/^New password/), 'password1');
     await userEvent.type(screen.getByLabelText(/Repeat/), 'password1');
     await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
