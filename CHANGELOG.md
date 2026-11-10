@@ -27,6 +27,13 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **A guide for new users.** On the first visit, the builder walks through five short steps
+  (the palette, connecting layers, the analysis badge and the properties, code and export,
+  training with a built-in dataset) with Mantine's `Tour`: keyboard and screen reader
+  friendly, at phone width it points at the phone's buttons, *Skip* or Escape end it. It is
+  remembered per browser and opens again with the *?* button of the toolbar or *File* →
+  *Guide to the builder*; the online demo shows it too. An empty canvas offers cards to start
+  from an example (MLP on MNIST, CNN, U-Net, Gaussian process).
 - **Kernel hyperparameters at a bound.** After a Gaussian process fit, Brick DNN finds the
   optimised kernel hyperparameters that ended at one of their bounds (scikit-learn only logs a
   `ConvergenceWarning`) and stores them in `state.classical.at_bounds` with the brick, the
