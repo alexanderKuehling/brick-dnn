@@ -8,6 +8,14 @@ everything they own). Both are off by default. Entries of the activity log of AI
 deleted after ``BRICKDNN_AGENT_LOG_DAYS`` days (default 90, see agent_activity.py). See
 docs/privacy.md.
 
+With e-mail set up (mail.py), accounts with an e-mail address are warned before they are
+deleted: ``BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS`` (default 14 and 3) days before, with a link
+to log in, which keeps the account. Such an account is only deleted once a warning went out
+at least the smallest of these periods ago (and after its last use), so nobody is deleted
+without notice: an account that is overdue when e-mail is switched on is warned first and
+deleted that many days later; if sending fails, it is kept. Accounts without an address, and
+all accounts while the server sends no e-mail, are deleted as before.
+
 The purge never asks training processes for their state: Docker Compose runs it in a
 container of its own, which cannot see them (they would look dead). It skips everything an
 active run uses instead.
@@ -123,6 +131,9 @@ class PurgeResult:
     training_runs: int = 0
     tokens: int = 0
     agent_actions: int = 0
+    # Deletion warnings sent, and inactive accounts kept because they were not warned yet.
+    warned: int = 0
+    not_warned_yet: int = 0
     lines: list[str] = field(default_factory=list)
 
     @property
@@ -162,7 +173,17 @@ def purge(
 
     if inactive_accounts_days > 0:
         cutoff = now - timedelta(days=inactive_accounts_days)
-        for user in inactive_users(cutoff):
+        warn_days = warning_days(inactive_accounts_days)
+        if warn_days:
+            _warn_inactive(now, inactive_accounts_days, warn_days, dry_run, say, result)
+        for user in inactive_users(cutoff).select_related("profile"):
+            if warn_days and user.email and not _warned_in_time(user, now, warn_days):
+                result.not_warned_yet += 1
+                say(
+                    f"Keeping account #{user.pk} until it was warned: last active "
+                    f"{_day(user.last_seen)}"
+                )
+                continue
             say(f"{verb} account #{user.pk}: last active {_day(user.last_seen)}")
             result.accounts += 1
             if not dry_run:
@@ -210,6 +231,74 @@ def purge(
     # Housekeeping that needs no setting: logins that have expired anyway.
     result.tokens = _expired_tokens(now, dry_run)
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Warning inactive accounts before they are deleted
+# --------------------------------------------------------------------------- #
+
+
+def warning_days(inactive_days: int) -> list[int]:
+    """How many days before the deletion accounts are warned, largest first; empty while
+    the server sends no e-mail."""
+    from . import mail
+
+    if not mail.enabled():
+        return []
+    return sorted(
+        {days for days in settings.INACTIVE_ACCOUNT_WARNING_DAYS if 0 < days < inactive_days},
+        reverse=True,
+    )
+
+
+def _warned_at(user) -> datetime | None:
+    """The last warning of the current period of inactivity, if any."""
+    profile = getattr(user, "profile", None)  # None if the account has no profile
+    warned = profile.deletion_warned_at if profile is not None else None
+    if warned is None or (user.last_seen is not None and warned <= user.last_seen):
+        return None  # none, or one from before the account was used again
+    return warned
+
+
+def _warned_in_time(user, now: datetime, warn_days: list[int]) -> bool:
+    warned = _warned_at(user)
+    return warned is not None and now >= warned + timedelta(days=warn_days[-1])
+
+
+def _warn_inactive(
+    now: datetime,
+    inactive_days: int,
+    warn_days: list[int],
+    dry_run: bool,
+    say: Callable[[str], None],
+    result: PurgeResult,
+) -> None:
+    from . import notices
+
+    soonest = now - timedelta(days=inactive_days - warn_days[0])
+    candidates = inactive_users(soonest).exclude(email="").select_related("profile")
+    for user in candidates:
+        due = user.last_seen + timedelta(days=inactive_days)
+        passed = [days for days in warn_days if now >= due - timedelta(days=days)]
+        if not passed:
+            continue
+        warned = _warned_at(user)
+        if warned is not None and warned >= due - timedelta(days=min(passed)):
+            continue  # this warning went out already
+        delete_on = max(due, now + timedelta(days=warn_days[-1]))
+        if dry_run:
+            say(f"Would warn account #{user.pk} of its deletion on {_day(delete_on)}")
+            result.warned += 1
+            continue
+        if not notices.deletion_warning(user, delete_on.date(), inactive_days):
+            say(f"Could not warn account #{user.pk}: the e-mail was not sent")
+            continue
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user, defaults={"last_active_at": user.last_seen}
+        )
+        UserProfile.objects.filter(pk=profile.pk).update(deletion_warned_at=now)
+        say(f"Warned account #{user.pk} of its deletion on {_day(delete_on)}")
+        result.warned += 1
 
 
 def _expired_tokens(now: datetime, dry_run: bool) -> int:

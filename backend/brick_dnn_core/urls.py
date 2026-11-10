@@ -11,6 +11,8 @@ from . import (
     mcp,
     oauth,
     projects,
+    recovery,
+    two_factor,
     upload_links,
     views,
 )
@@ -34,7 +36,20 @@ urlpatterns = [
     path("generate/", views.generate, name="generate"),
     path("auth/register/", views.RegisterView.as_view(), name="register"),
     path("auth/token/", views.LoginView.as_view(), name="token"),
+    # The second step of a login with two-factor authentication (two_factor.py).
+    path(
+        "auth/token/two-factor/",
+        two_factor.TwoFactorLoginView.as_view(),
+        name="token-two-factor",
+    ),
     path("auth/token/refresh/", accounts.RefreshView.as_view(), name="token-refresh"),
+    # Forgotten passwords: a link by e-mail (recovery.py; only with e-mail set up).
+    path("auth/password-reset/", recovery.PasswordResetView.as_view(), name="password-reset"),
+    path(
+        "auth/password-reset/confirm/",
+        recovery.PasswordResetConfirmView.as_view(),
+        name="password-reset-confirm",
+    ),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("auth/me/", views.me, name="me"),
     # The own account: e-mail, password, data export, deletion (website login only).
@@ -42,6 +57,33 @@ urlpatterns = [
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
+    # Confirming the e-mail address with the link from the e-mail, sending the link again.
+    path("auth/account/email/verify/", recovery.VerifyEmailView.as_view(), name="email-verify"),
+    path(
+        "auth/account/email/resend/",
+        recovery.ResendVerificationView.as_view(),
+        name="email-resend",
+    ),
+    # Two-factor authentication with an authenticator app (two_factor.py).
+    path("auth/two-factor/", two_factor.TwoFactorView.as_view(), name="two-factor"),
+    path(
+        "auth/two-factor/setup/", two_factor.TwoFactorSetupView.as_view(), name="two-factor-setup"
+    ),
+    path(
+        "auth/two-factor/enable/",
+        two_factor.TwoFactorEnableView.as_view(),
+        name="two-factor-enable",
+    ),
+    path(
+        "auth/two-factor/disable/",
+        two_factor.TwoFactorDisableView.as_view(),
+        name="two-factor-disable",
+    ),
+    path(
+        "auth/two-factor/recovery-codes/",
+        two_factor.RecoveryCodesView.as_view(),
+        name="two-factor-recovery-codes",
+    ),
     # Usage and budgets this month (any login; changing the budget: website login only).
     path("account/usage/", accounts.UsageView.as_view(), name="account-usage"),
     # What AI agents did with the user's API tokens and connected apps (website login only).
