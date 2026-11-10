@@ -27,6 +27,12 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **U-Net example and `ConvTranspose2d`.** A new brick for transposed 2-D convolutions
+  (learned upsampling: kernel 2 with stride 2 doubles the size; padding and output padding
+  as in PyTorch), and the example *U-Net (image segmentation)*: three levels down with
+  `MaxPool2d`, three up with `ConvTranspose2d`, skip connections with `Concat`, one value per
+  pixel as output. It is an example for building and exporting code: the datasets the app
+  trains on have one label per image, not one per pixel.
 - **A training queue with a separate worker.** With `BRICKDNN_TRAINING_WORKER` the web server
   only stores a new run as `queued`; `manage.py training_worker` (its own process or
   container, `--slots N`, `--once` for one run) takes the runs from the database and trains

@@ -45,6 +45,9 @@ describe('format', () => {
     expect(summarize('Conv2d', { out_channels: 32, kernel_size: [3, 3], stride: [2, 2] })).toBe(
       '32 filters · 3×3 · stride 2'
     );
+    expect(
+      summarize('ConvTranspose2d', { out_channels: 64, kernel_size: [2, 2], stride: [2, 2] })
+    ).toBe('64 filters · 2×2 · stride 2');
     expect(summarize('Input', { shape: [64], dtype: 'long' })).toBe('64 · token ids');
     expect(
       summarize('LSTM', {

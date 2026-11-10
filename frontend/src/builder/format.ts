@@ -124,6 +124,7 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       return `${num(p.in_features)} → ${num(p.out_features)}${p.bias === false ? ' · no bias' : ''}`;
     case 'Conv1d':
     case 'Conv2d':
+    case 'ConvTranspose2d':
       return `${num(p.out_channels)} filters · ${size(p.kernel_size)}${strideText(p.stride)}`;
     case 'MaxPool1d':
     case 'MaxPool2d':

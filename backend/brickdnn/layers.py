@@ -669,6 +669,92 @@ class Conv2d(_ConvNd):
     name_prefix = "conv2d"
 
 
+@register
+class ConvTranspose2d(Layer):
+    type = "ConvTranspose2d"
+    label = "ConvTranspose2d"
+    category = "Convolution"
+    description = (
+        "Transposed 2-D convolution: upsamples (channels, height, width) with learned weights, "
+        "e.g. in the decoder of a U-Net or an autoencoder. Kernel 2 with stride 2 doubles the size."
+    )
+    params = (
+        Param(
+            "in_channels",
+            "Input channels",
+            "int",
+            auto=True,
+            minimum=1,
+            help="Leave empty to infer it from the input shape.",
+        ),
+        Param("out_channels", "Output channels (filters)", "int", default=32, minimum=1),
+        Param("kernel_size", "Kernel size", "ints", default=(2, 2), minimum=1, length=2),
+        Param("stride", "Stride", "ints", default=(2, 2), minimum=1, length=2),
+        Param(
+            "padding_size",
+            "Padding",
+            "ints",
+            default=(0, 0),
+            minimum=0,
+            length=2,
+            help="Removes this many rows and columns from every side of the output.",
+        ),
+        Param(
+            "output_padding",
+            "Output padding",
+            "ints",
+            default=(0, 0),
+            minimum=0,
+            length=2,
+            help="Extra rows and columns on one side of the output (must be below the stride).",
+        ),
+        Param("bias", "Bias", "bool", default=True),
+    )
+    name_prefix = "upconv"
+
+    def infer(self, inputs: list[Shape]) -> Shape:
+        shape = self._single(inputs, (3,))
+        self._auto("in_channels", shape[0], "channels")
+        out = []
+        for size, k, s, p, extra in zip(
+            shape[1:],
+            self.p["kernel_size"],
+            self.p["stride"],
+            self.p["padding_size"],
+            self.p["output_padding"],
+            strict=True,
+        ):
+            if extra >= s:
+                raise LayerError(f"Output padding {extra} must be smaller than the stride {s}.")
+            result = (size - 1) * s - 2 * p + k + extra
+            if result < 1:
+                raise LayerError(
+                    f"Padding {p} removes the whole output (input size {size}, kernel size {k})."
+                )
+            out.append(result)
+        return (self.p["out_channels"], *out)
+
+    def num_params(self) -> int:
+        weights = self.p["in_channels"] * self.p["out_channels"] * math.prod(self.p["kernel_size"])
+        return weights + (self.p["out_channels"] if self.p["bias"] else 0)
+
+    def init_code(self) -> str:
+        args = [
+            str(self.p["in_channels"]),
+            str(self.p["out_channels"]),
+            f"kernel_size={fmt_size(self.p['kernel_size'])}",
+        ]
+        if any(s != 1 for s in self.p["stride"]):
+            args.append(f"stride={fmt_size(self.p['stride'])}")
+        if any(self.p["padding_size"]):
+            args.append(f"padding={fmt_size(self.p['padding_size'])}")
+        if any(self.p["output_padding"]):
+            args.append(f"output_padding={fmt_size(self.p['output_padding'])}")
+        if not self.p["bias"]:
+            args.append("bias=False")
+        return f"nn.ConvTranspose2d({', '.join(args)})"
+
+
 class _PoolNd(Layer):
     dims: ClassVar[int]
     mode: ClassVar[str]
