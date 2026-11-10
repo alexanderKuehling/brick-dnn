@@ -28,7 +28,9 @@ def env_list(name: str, default: str = "") -> list[str]:
 
 
 # Secrets are never read from the site settings file: it is in the public repository.
-SITE_ENV_SECRETS = frozenset({"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET"})
+SITE_ENV_SECRETS = frozenset(
+    {"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET", "BRICKDNN_HEALTH_TOKEN"}
+)
 
 
 def load_site_settings(environ=os.environ) -> None:
@@ -226,6 +228,11 @@ QUEUE_MAX_WAITING: int | None = (
     if os.environ.get("BRICKDNN_QUEUE_MAX_WAITING", "").strip()
     else None
 )
+# /api/health/ (brick_dnn_core.health): "degraded" when the data directory has less than this
+# many MB free (0: no check). Numbers and error messages are only shown to staff accounts and
+# to requests with the header X-Health-Token: <BRICKDNN_HEALTH_TOKEN> (empty: staff only).
+HEALTH_MIN_FREE_MB = int(os.environ.get("BRICKDNN_HEALTH_MIN_FREE_MB") or 1024)
+HEALTH_TOKEN = os.environ.get("BRICKDNN_HEALTH_TOKEN", "").strip()
 # Largest dataset upload (CSV or ZIP) in megabytes.
 TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.

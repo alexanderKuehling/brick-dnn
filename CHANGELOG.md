@@ -27,6 +27,15 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Uptime monitoring without another service.** A scheduled GitHub Actions workflow
+  (`uptime.yml`, every 15 minutes) checks `DEPLOY_URL/api/health/` and the front page, and
+  when the site is down opens one issue labelled `outage` (GitHub notifies the owner), comments
+  on it while the problem lasts or changes, and closes it when the site is back.
+  `/api/health/` now checks the database (`503` without it), the training worker's heartbeat
+  and the free disk space (`BRICKDNN_HEALTH_MIN_FREE_MB`), and answers `degraded` when one of
+  the latter fails. It names the checks only; the details are for staff accounts and requests
+  with the `X-Health-Token` header (`BRICKDNN_HEALTH_TOKEN`). See
+  [deploy/server/README.md](deploy/server/README.md#monitoring).
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public

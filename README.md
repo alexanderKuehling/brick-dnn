@@ -382,6 +382,8 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
 | `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
+| `BRICKDNN_HEALTH_MIN_FREE_MB`  | `1024`                     | `/api/health/` reports `degraded` below this much free space in the data dir (`0`: no check) |
+| `BRICKDNN_HEALTH_TOKEN`        | – (staff only)             | Secret for the `X-Health-Token` header that shows the details of `/api/health/` (only in `.env`) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in

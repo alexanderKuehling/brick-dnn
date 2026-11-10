@@ -88,6 +88,10 @@ services:
       BRICKDNN_NUM_PROXIES: 1
       # Live editing: the backend tells the realtime service about saves through Redis.
       REDIS_URL: redis://redis:6379/0
+      # /api/health/ (docs/api.md): "degraded" below this much free space (MB) in /data, and the
+      # secret of the X-Health-Token header that shows the details of the checks.
+      BRICKDNN_HEALTH_MIN_FREE_MB: ${BRICKDNN_HEALTH_MIN_FREE_MB:-}
+      BRICKDNN_HEALTH_TOKEN: ${BRICKDNN_HEALTH_TOKEN:-}
     volumes:
       - brickdnn-data:/data
     depends_on:

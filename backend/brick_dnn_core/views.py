@@ -17,6 +17,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import downloads, shared_data
+from . import health as health_checks
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
@@ -42,7 +43,12 @@ from .serializers import (
 
 @api_view(["GET"])
 def health(request: Request) -> Response:
-    return Response({"status": "ok", "version": brickdnn.__version__})
+    """Database, training worker and disk space (health.py); details only for staff or with
+    the X-Health-Token header."""
+    status_code, body = health_checks.report(details=health_checks.may_see_details(request))
+    response = Response(body, status=status_code)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @api_view(["GET"])

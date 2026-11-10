@@ -212,3 +212,40 @@ would otherwise create it, owned by root).
 
 The server keeps files on its disk; turn on Hetzner's backups (or back up the Docker volume
 `brick-dnn_brickdnn-data`) to keep them safe. Accounts and networks are in the database.
+
+## Monitoring
+
+GitHub checks the site every 15 minutes, without any other service or account
+(`.github/workflows/uptime.yml`, script `deploy/server/uptime.py`):
+
+- `DEPLOY_URL/api/health/` must answer `"status": "ok"` and the front page must load. A failed
+  check is tried twice more, 30 seconds apart, so a deploy does not count as an outage.
+- When the site is down, the workflow opens **one issue** labelled `outage` ("brickdnn.com is
+  down") with the failed checks. While the outage lasts it comments on that issue when the
+  problem changes and every six hours, never opening a second one. When the site is back it
+  comments how long the outage took and closes the issue.
+- GitHub sends you an e-mail and a notification in the GitHub app for the new issue and its
+  comments, **if you watch the repository**: on the repository page, *Watch* → *All Activity*
+  (or *Custom* → *Issues*), and in your GitHub settings under *Notifications* have e-mail (and
+  the mobile app's push notifications) on for *Watching*. Test it once: *Actions* → *Uptime* →
+  *Run workflow*.
+- It needs only the variable `DEPLOY_URL` (set for deploys); without it nothing runs. Public
+  repositories pay nothing for these runs. GitHub may start scheduled runs some minutes late,
+  and **switches schedules off after 60 days without any commit** to the repository: GitHub
+  says so by e-mail, and *Actions* → *Uptime* → *Enable workflow* turns it on again.
+
+What the checks mean:
+
+| Check | Fails when | Look at |
+| --- | --- | --- |
+| `database` (answer `503`, status `error`) | Django cannot run `SELECT 1`: Supabase paused (free projects pause after a week without use) or unreachable, wrong `DATABASE_URL` | the Supabase dashboard; `$C logs backend` |
+| `worker` (status `degraded`) | no training worker sent a heartbeat in the last minute: trainings wait | *Training workers* in the Django admin; `$C ps worker`, `$C logs worker` |
+| `disk` (status `degraded`) | less than 1 GB free in the data volume (`BRICKDNN_HEALTH_MIN_FREE_MB`) | `df -h`, `docker system df`; `docker system prune` removes old images |
+| front page | Caddy, nginx or the server is down, or the certificate fails | `$C ps`, `$C logs caddy`; the Hetzner console |
+
+Everyone can see the names of the checks and whether they passed (the repository is public, so
+the issue says no more than that). The numbers behind them (free space, seconds since the last
+heartbeat, the database's error message) are shown to staff accounts: log in to the site as an
+administrator and open `https://DOMAIN/api/health/`. For scripts, set a secret
+`BRICKDNN_HEALTH_TOKEN=…` in `/opt/brick-dnn/.env` (`$C up -d`) and send it as header:
+`curl -H "X-Health-Token: …" https://DOMAIN/api/health/`.
