@@ -83,10 +83,19 @@ export interface InsertOptions {
 }
 
 /**
+ * The stage of a step: combine steps (join, append) come first, then the steps that run before
+ * the split (remove atypical rows, find near-duplicate groups), then all others.
+ */
+export function stepStage(catalog: StepCatalog, type: string): 0 | 1 | 2 {
+  const spec = stepSpec(catalog, type);
+  return spec?.combine ? 0 : spec?.pre_split ? 1 : 2;
+}
+
+/**
  * Add a step: combine steps (join, append) go after the last combine step, because they must
- * come first. All others go to the end, or right after `after` (a step id) if given, but in
- * front of the first step that failed (see `InsertOptions.reports`) and never in front of a
- * combine step.
+ * come first; steps that run before the split go after the last combine or pre-split step.
+ * All others go to the end, or right after `after` (a step id) if given, but in front of the
+ * first step that failed (see `InsertOptions.reports`) and never in front of an earlier stage.
  */
 export function insertStep(
   catalog: StepCatalog,
@@ -96,21 +105,28 @@ export function insertStep(
   options: InsertOptions = {}
 ): PipelineStep[] {
   const created = createStep(catalog, step, steps, options.reserved);
-  let combineEnd = 0;
+  const stage = stepStage(catalog, step.type);
+  // End of the steps of this stage and of all earlier ones.
+  let stageEnd = 0;
+  let earlyEnd = 0;
   steps.forEach((s, index) => {
-    if (stepSpec(catalog, s.type)?.combine) {
-      combineEnd = index + 1;
+    const other = stepStage(catalog, s.type);
+    if (other <= stage) {
+      stageEnd = index + 1;
+    }
+    if (other < 2) {
+      earlyEnd = index + 1;
     }
   });
-  let position = combineEnd;
-  if (!stepSpec(catalog, step.type)?.combine) {
+  let position = stageEnd;
+  if (stage === 2) {
     const anchor = after === null ? -1 : steps.findIndex((s) => s.id === after);
     position = anchor >= 0 ? anchor + 1 : steps.length;
     const failed = options.reports ? firstFailedStep(steps, options.reports) : -1;
     if (failed >= 0) {
       position = Math.min(position, failed);
     }
-    position = Math.max(position, combineEnd);
+    position = Math.max(position, earlyEnd);
   }
   return [...steps.slice(0, position), created, ...steps.slice(position)];
 }

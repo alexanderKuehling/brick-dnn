@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { IconCheck, IconTarget } from '@tabler/icons-react';
 import {
   Anchor,
@@ -17,7 +17,7 @@ import {
   type ComboboxItem,
   type ComboboxLikeRenderOptionInput,
 } from '@mantine/core';
-import type { ColumnInfo, PrepSettings, PrepTask } from '@/api/types';
+import type { ColumnInfo, PrepSettings, PrepTask, SplitInfo } from '@/api/types';
 import { formatCount } from '../table/format';
 import { KIND_LABELS, KindIcon } from '../table/kinds';
 import { displayedSplit, MAX_SEED, percentToShare, shareToPercent, splitError } from './split';
@@ -30,6 +30,11 @@ interface TargetSplitCardProps {
   columns: ColumnInfo[];
   task: 'classification' | 'regression' | null;
   splitCounts: number[] | null;
+  /**
+   * Where the last preview assigned the split: the columns there (the group column must be one
+   * of them) and how the groups were split.
+   */
+  splitInfo?: SplitInfo | null;
   /** Shown, not changed (a preparation shared with the user to look at). */
   readOnly?: boolean;
   /** Adds a "Join another table" step; missing when no join can be added. */
@@ -55,6 +60,7 @@ export function TargetSplitCard({
   columns,
   task,
   splitCounts,
+  splitInfo = null,
   readOnly = false,
   onAddJoin,
   joinUnavailable = null,
@@ -292,8 +298,89 @@ export function TargetSplitCard({
             </div>
           </Tooltip>
         </SimpleGrid>
+
+        <GroupSplitField
+          settings={settings}
+          onSettingsChange={onSettingsChange}
+          columns={splitInfo?.columns ?? columns}
+          splitInfo={splitInfo}
+          readOnly={readOnly}
+          renderOption={renderOption}
+        />
       </Stack>
     </Paper>
+  );
+}
+
+interface GroupSplitFieldProps {
+  settings: PrepSettings;
+  onSettingsChange: (settings: PrepSettings) => void;
+  columns: ColumnInfo[];
+  splitInfo: SplitInfo | null;
+  readOnly: boolean;
+  renderOption: (input: ComboboxLikeRenderOptionInput<ComboboxItem>) => ReactNode;
+}
+
+/** "Keep rows of a group together": the group column and how the groups were split. */
+export function GroupSplitField({
+  settings,
+  onSettingsChange,
+  columns,
+  splitInfo,
+  readOnly,
+  renderOption,
+}: GroupSplitFieldProps) {
+  const { split } = settings;
+  const groupBy = split.group_by ?? null;
+  const target = settings.target;
+  const data = columns
+    .filter((column) => column.name !== target)
+    .map((column) => ({ value: column.name, label: column.name }));
+  if (groupBy && !data.some((item) => item.value === groupBy)) {
+    data.unshift({ value: groupBy, label: groupBy });
+  }
+  const groups = splitInfo && splitInfo.group_by === groupBy ? splitInfo.groups : null;
+  const error = splitInfo && splitInfo.group_by === groupBy ? splitInfo.error : null;
+  let summary: ReactNode = null;
+  if (groupBy && groups) {
+    summary = (
+      <Text size="xs" c="dimmed" data-testid="group-split-summary">
+        {formatCount(groups.count)} {groups.count === 1 ? 'group' : 'groups'} (
+        {formatCount(groups.multi)} with several rows, the largest {formatCount(groups.largest)}{' '}
+        rows);{' '}
+        {groups.mixed === 0 ? 'no group is in two parts' : `${groups.mixed} groups are split`}.
+        Training / validation / test hold {groups.per_part.map(formatCount).join(' / ')} groups.
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={4}>
+      <Select
+        label="Keep rows of a group together"
+        description={
+          <>
+            Rows with the same value (e.g. a person id, or the column of “Find near-duplicate
+            groups”) all go to the same part, so validation and test rows have no twin in training.
+            The column must exist before the split: in the data, from a combine step or from a step
+            that runs before the split.
+          </>
+        }
+        placeholder="Off: rows are split one by one"
+        data={data}
+        value={groupBy}
+        readOnly={readOnly}
+        searchable={!readOnly}
+        clearable={!readOnly}
+        nothingFoundMessage="No matching column"
+        renderOption={renderOption}
+        comboboxProps={{ withinPortal: true, shadow: 'md' }}
+        error={error ?? undefined}
+        onChange={(next) =>
+          onSettingsChange({ ...settings, split: { ...split, group_by: next ?? null } })
+        }
+      />
+      {summary}
+    </Stack>
   );
 }
 

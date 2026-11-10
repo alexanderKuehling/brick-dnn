@@ -1,5 +1,6 @@
 import type { PipelineStep } from '@/api/types';
 import { CATALOG, STEP_REPORTS } from '../fixtures';
+import { insertStep } from '../steps';
 import { displayedSplit, percentToShare, shareToPercent, splitError, splitRows } from './split';
 import { canMoveStep, duplicateStep, moveStep, restoreStep, stepStatus } from './stepList';
 
@@ -108,5 +109,23 @@ describe('split', () => {
       estimated: true,
     });
     expect(displayedSplit(null, 0.2, 0.1)).toBeNull();
+  });
+});
+
+describe('steps that run before the split', () => {
+  const groups = { ...CATALOG.steps[0], type: 'find_groups', combine: false, pre_split: true };
+  const catalog = { ...CATALOG, steps: [...CATALOG.steps, groups] };
+  const steps = [step('j1', 'join'), step('g', 'find_groups'), step('a', 'impute')];
+
+  it('stay between the combine steps and the others', () => {
+    expect(canMoveStep(catalog, steps, 1, -1)).toBe(false);
+    expect(canMoveStep(catalog, steps, 1, 1)).toBe(false);
+    expect(canMoveStep(catalog, steps, 2, -1)).toBe(false);
+    const next = insertStep(catalog, steps, { type: 'find_groups', params: {} });
+    expect(next.map((s) => s.type)).toEqual(['join', 'find_groups', 'find_groups', 'impute']);
+    const after = insertStep(catalog, [step('g', 'find_groups')], { type: 'impute', params: {} });
+    expect(after.map((s) => s.type)).toEqual(['find_groups', 'impute']);
+    const back = restoreStep(catalog, [step('j1', 'join'), step('a', 'impute')], steps[1], 5);
+    expect(back.map((s) => s.id)).toEqual(['j1', 'g', 'a']);
   });
 });

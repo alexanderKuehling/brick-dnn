@@ -1400,6 +1400,11 @@ export interface StepSpec {
   combine: boolean;
   /** Only changes training rows (e.g. class balancing); not applied to new data. */
   training_only: boolean;
+  /**
+   * Runs before the split, right after the combine steps (remove atypical rows, find
+   * near-duplicate groups). Missing on older servers.
+   */
+  pre_split?: boolean;
   params: StepParamSpec[];
 }
 
@@ -1433,6 +1438,11 @@ export interface SplitSettings {
   seed: number;
   /** Keep the class proportions in every part (classification only). */
   stratify: boolean;
+  /**
+   * Keep the rows of a group together: all rows with the same value of this column go to the
+   * same part. It must exist where the split is assigned (see SplitInfo). Missing = null.
+   */
+  group_by?: string | null;
 }
 
 export interface PrepSettings {
@@ -1584,6 +1594,8 @@ export interface DataFix {
   params: Record<string, unknown>;
   /** Button text, e.g. "Impute 3 columns (median)". */
   label: string;
+  /** Settings the fix changes as well, e.g. {split: {group_by: 'group'}}. */
+  settings?: { split?: Partial<SplitSettings> };
 }
 
 export interface DataWarning {
@@ -1667,6 +1679,8 @@ export interface PreviewResult {
   before: DataProfile | null;
   sample: DataSample;
   readiness: Readiness;
+  /** Where the split was assigned; missing on older servers. */
+  split?: SplitInfo;
   /** Pipeline-level notes, e.g. "Stratified split not possible: …". */
   warnings: string[];
   duration_ms: number;
@@ -1757,3 +1771,162 @@ export interface PlanChangePreview {
   now: { action: 'charge' | 'credit'; amount: number; currency: string } | null;
   next_billed_at: string | null;
 }
+// ---- Row analysis (Analysis → Rows) and the split by groups -----------------------------
+
+/** Where the split was assigned and, with `group_by`, how the groups were split. */
+export interface SplitInfo {
+  group_by: string | null;
+  /** Columns where the split is assigned (after the combine and pre-split steps). */
+  columns: ColumnInfo[];
+  /** Why the groups could not be used (the column is missing there); a random split instead. */
+  error: string | null;
+  groups: {
+    /** Groups in all, including single rows. */
+    count: number;
+    /** Groups with more than one row. */
+    multi: number;
+    largest: number;
+    /** Rows without a group value (each is its own group). */
+    missing: number;
+    /** Groups in training, validation and test. */
+    per_part: [number, number, number];
+    /** Groups in more than one part (0). */
+    mixed: number;
+  } | null;
+}
+
+/** Which number columns the row statistics compare rows on. */
+export type RowFeatureMode = 'auto' | 'all' | 'partnered' | 'columns';
+
+export interface RowFeatureChoice {
+  mode: RowFeatureMode;
+  /** What was used: auto resolves to all or partnered. */
+  used: 'all' | 'partnered' | 'columns';
+  count: number;
+  /** The first 50 columns used. */
+  columns: string[];
+  /** Number columns that could be used (without target, ID and group columns). */
+  candidates: number;
+  left_out: { name: string; reason: string }[];
+  /** Columns left out per reason: target_or_group, id, constant, no_partner, limit. */
+  left_out_counts: Record<string, number>;
+  /** |Spearman r| a partner needs (partnered only). */
+  partner_threshold: number | null;
+  note: string | null;
+}
+
+export interface RowAnalysisRequest {
+  steps?: PipelineStep[];
+  settings?: PrepSettings;
+  upto?: string | null;
+  features?: { mode: RowFeatureMode; columns?: string[] };
+  /** NN ratio below which rows are near twins (default: suggested, else 0.5). */
+  twin_threshold?: number | null;
+  /** Spread below which rows are unusually typical (default: suggested, else 0.25). */
+  atypical_threshold?: number | null;
+}
+
+/**
+ * Row statistics of the previewed data: one entry per analysed row in `rows` (all rows,
+ * or a seeded sample when `sampled`). Neighbour and pair indices refer to these entries.
+ */
+export interface RowAnalysis {
+  n_total: number;
+  analysed: number;
+  sampled: boolean;
+  /** Rows analysed at most for this many feature columns. */
+  limit: number;
+  seed: number;
+  features: RowFeatureChoice;
+  /** An ID column that names the rows, if the table has one. */
+  id_column: string | null;
+  target: string | null;
+  task: 'classification' | 'regression' | null;
+  /** Median distance of random pairs of rows (the unit of the NN ratio). */
+  pair_distance: number | null;
+  /** Thresholds at clear gaps of the distributions; null if there is none. */
+  suggested: { atypical: number | null; twins: number | null };
+  /** Thresholds used for `groups` (asked, else suggested, else defaults). */
+  thresholds: { twins: number; atypical: number };
+  rows: {
+    /** Row number in the table (0-based). */
+    position: number[];
+    id: (string | number | null)[] | null;
+    split: ('train' | 'val' | 'test')[] | null;
+    /** Numbers (regression) or class labels (classification). */
+    target: (number | string | null)[] | null;
+    /** Median |robust z| over the row's values: ~0.67 ordinary, near 0 too typical. */
+    spread: (number | null)[];
+    /** Missing values in the row (all columns except the target). */
+    missing: number[];
+    nn_distance: (number | null)[];
+    /** Nearest distance / typical pair distance. */
+    nn_ratio: (number | null)[];
+    /** Index (into these rows) of the nearest row, -1 if none. */
+    neighbor: number[];
+    group: number[];
+    group_size: number[];
+    pc1: (number | null)[];
+    pc2: (number | null)[];
+  };
+  groups: {
+    threshold: number;
+    /** Groups with at least two rows. */
+    count: number;
+    rows: number;
+    largest: number;
+    /** Groups whose rows are in more than one part of the split. */
+    mixed: number;
+    held_out: number;
+    /** Validation/test rows with a near twin in the training rows. */
+    held_out_with_twin: number;
+  };
+  /** Random pairs (the baseline): indices into `rows` and their distance ratios. */
+  random_pairs: { a: number[]; b: number[]; ratio: (number | null)[] };
+  /** Share of the variance on the two projection axes. */
+  explained: (number | null)[];
+  split_group_by: string | null;
+  duration_ms: number;
+  stats_ms: number;
+}
+
+export interface SimilarRow {
+  /** Index into RowAnalysis.rows. */
+  index: number;
+  position: number;
+  id: string | number | null;
+  split: 'train' | 'val' | 'test' | null;
+  target: number | string | null;
+  spread: number | null;
+  distance: number | null;
+  ratio: number | null;
+}
+
+export interface PairColumn {
+  name: string;
+  a: number | null;
+  b: number | null;
+  za: number | null;
+  zb: number | null;
+  /** |za − zb| */
+  diff: number | null;
+}
+
+export interface SimilarRows {
+  row: SimilarRow;
+  /** The nearest rows, nearest first. */
+  neighbors: SimilarRow[];
+  pair: {
+    a: SimilarRow;
+    b: SimilarRow;
+    distance: number | null;
+    ratio: number | null;
+    /** Columns both rows have, of `features`. */
+    shared: number;
+    features: number;
+    closest: PairColumn[];
+    farthest: PairColumn[];
+  } | null;
+}
+
+export type SimilarRowsRequest = RowAnalysisRequest & { row: number; other?: number | null };

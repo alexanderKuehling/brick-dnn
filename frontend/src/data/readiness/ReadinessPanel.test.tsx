@@ -48,6 +48,37 @@ describe('ReadinessPanel', () => {
     expect(screen.getByRole('button', { name: /Create training dataset/ })).toBeDisabled();
   });
 
+  it('applies the split settings of a fix with its step', async () => {
+    const onChangeSplit = vi.fn();
+    const twins: Readiness = {
+      ...READY,
+      issues: [
+        {
+          code: 'near_twins',
+          severity: 'warning',
+          column: null,
+          columns: [],
+          message: '820 rows (68 %) have a near twin.',
+          fix: {
+            type: 'find_groups',
+            params: { features: 'auto', columns: [], threshold: null, name: 'group' },
+            label: 'Find near-duplicate groups and split by them',
+            settings: { split: { group_by: 'group' } },
+          },
+        },
+      ],
+    };
+    const { onAddStep } = setup(twins, false, { onChangeSplit });
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Find near-duplicate groups and split by them' })
+    );
+    expect(onAddStep).toHaveBeenCalledWith({
+      type: 'find_groups',
+      params: { features: 'auto', columns: [], threshold: null, name: 'group' },
+    });
+    expect(onChangeSplit).toHaveBeenCalledWith({ group_by: 'group' });
+  });
+
   it('adds the fix of one problem as a step', async () => {
     const { onAddStep } = setup();
     await userEvent.click(screen.getByRole('button', { name: 'Impute 2 columns (median)' }));

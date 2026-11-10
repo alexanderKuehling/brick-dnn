@@ -9,6 +9,7 @@ import {
   type PrepSettings,
   type PreviewRequest,
   type PreviewResult,
+  type SplitSettings,
   type StepCatalog,
   type StepReport,
 } from '@/api';
@@ -64,6 +65,8 @@ export interface DataPrepController {
   setName: (name: string) => void;
   setSteps: (steps: PipelineStep[]) => void;
   setSettings: (settings: PrepSettings) => void;
+  /** Change some split settings (e.g. a fix that splits by a new group column). */
+  changeSplit: (split: Partial<SplitSettings>) => void;
   /**
    * Add a step (quick fixes, column actions). While the preview shows the data after a step,
    * the new step goes right after that one and the preview moves on to it. It goes in front of
@@ -466,6 +469,15 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
     (settings: PrepSettings) => change((d) => ({ ...d, settings })),
     [change]
   );
+  const changeSplit = useCallback(
+    (split: Partial<SplitSettings>) =>
+      change((d) =>
+        d.settings
+          ? { ...d, settings: { ...d.settings, split: { ...d.settings.split, ...split } } }
+          : d
+      ),
+    [change]
+  );
   const setSteps = useCallback(
     (steps: PipelineStep[]) => {
       change((d) => ({ ...d, steps }));
@@ -551,6 +563,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
     setName,
     setSteps,
     setSettings,
+    changeSplit,
     addStep,
     upto,
     setUpto,

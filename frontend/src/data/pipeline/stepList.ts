@@ -1,6 +1,6 @@
 /** Editing the step list: moving, duplicating, removing, and the status shown per step. */
 import type { PipelineStep, StepCatalog, StepReport } from '@/api/types';
-import { newStepId, stepSpec } from '../steps';
+import { newStepId, stepSpec, stepStage } from '../steps';
 
 /** Same limit as the server (`pipeline.MAX_STEPS`). */
 export const MAX_STEPS = 100;
@@ -11,7 +11,8 @@ export function isCombineStep(catalog: StepCatalog, step: PipelineStep): boolean
 
 /**
  * Whether the step at `index` can move by `delta` (-1 up, +1 down). Combine steps (join,
- * append) must stay in front of all other steps, so the two kinds never swap.
+ * append) must stay in front of all other steps and the steps that run before the split right
+ * behind them, so steps of different stages never swap.
  */
 export function canMoveStep(
   catalog: StepCatalog,
@@ -23,7 +24,7 @@ export function canMoveStep(
   if (index < 0 || index >= steps.length || target < 0 || target >= steps.length) {
     return false;
   }
-  return isCombineStep(catalog, steps[index]) === isCombineStep(catalog, steps[target]);
+  return stepStage(catalog, steps[index].type) === stepStage(catalog, steps[target].type);
 }
 
 export function moveStep(
@@ -72,10 +73,10 @@ export function restoreStep(
   index: number,
   reserved: Iterable<string> = []
 ): PipelineStep[] {
-  const combineCount = steps.filter((s) => isCombineStep(catalog, s)).length;
-  const position = isCombineStep(catalog, step)
-    ? Math.min(index, combineCount)
-    : Math.min(Math.max(index, combineCount), steps.length);
+  const stage = stepStage(catalog, step.type);
+  const before = steps.filter((s) => stepStage(catalog, s.type) < stage).length;
+  const upTo = steps.filter((s) => stepStage(catalog, s.type) <= stage).length;
+  const position = Math.min(Math.max(index, before), upTo);
   const restored = steps.some((s) => s.id === step.id)
     ? { ...step, id: newStepId(steps, reserved) }
     : step;

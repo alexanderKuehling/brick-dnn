@@ -6,6 +6,7 @@ import type {
   DataSource,
   PipelineStep,
   PrepSettings,
+  SplitInfo,
   StepCatalog,
   StepReport,
   StepSpec,
@@ -38,6 +39,8 @@ export interface PipelineEditorProps {
   /** Resolved task from the preview. */
   task: 'classification' | 'regression' | null;
   splitCounts: number[] | null;
+  /** Where and how the last preview assigned the split (group split). */
+  splitInfo?: SplitInfo | null;
 }
 
 /** How long "Undo" stays available after deleting a step. */
@@ -59,6 +62,7 @@ export function PipelineEditor({
   previewing,
   task,
   splitCounts,
+  splitInfo = null,
 }: PipelineEditorProps) {
   const headingId = useId();
   // Viewers of a shared preparation look at the steps; others only use the main table.
@@ -184,6 +188,7 @@ export function PipelineEditor({
         columns={finalColumns(steps, reports, sourceColumns)}
         task={task}
         splitCounts={splitCounts}
+        splitInfo={splitInfo}
         readOnly={readOnly}
         onAddJoin={onAddJoin}
         joinUnavailable={joinUnavailable}

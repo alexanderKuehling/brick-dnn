@@ -362,7 +362,7 @@ export function StepCard({
         )}
       </div>
 
-      {(spec.fitted || spec.training_only || spec.combine) && (
+      {(spec.fitted || spec.training_only || spec.combine || spec.pre_split) && (
         <Group gap={12} mt={4} className={classes.hints}>
           {spec.fitted && (
             <Tooltip label={FITTED_HINT} multiline w={260} withArrow>
@@ -379,7 +379,7 @@ export function StepCard({
               Changes training rows only
             </Text>
           )}
-          {spec.combine && (
+          {(spec.combine || spec.pre_split) && (
             <Text size="xs" c="dimmed" className={classes.hint}>
               <IconArrowMerge size={14} aria-hidden />
               Runs before the split
