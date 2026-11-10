@@ -27,6 +27,12 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Example *U-Net classifier (Fashion-MNIST)*.** The U-Net example with a classification
+  head: instead of the 1×1 mask convolution, `AdaptiveAvgPool2d` → `Flatten` → `Linear(10)`.
+  Its Input is `[1, 32, 32]` (Fashion-MNIST's 28×28 images are resized, so that three
+  halvings fit) and its filters are halved (16/32/64, bottleneck 128, 482k parameters), so
+  that it trains on a CPU server. It follows the U-Net in the examples; for this task a plain
+  CNN is smaller and faster.
 - **A guide for new users.** On the first visit, the builder walks through five short steps
   (the palette, connecting layers, the analysis badge and the properties, code and export,
   training with a built-in dataset) with Mantine's `Tour`: keyboard and screen reader

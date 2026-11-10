@@ -80,7 +80,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   [docs/training.md](docs/training.md#classical-models).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
-- **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
+- **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
+  classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
   tabular regression, multi-input model, Gaussian process regression, SVM classifier and a
   periodic Gaussian process.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.

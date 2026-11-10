@@ -2,7 +2,7 @@
   "id": "transformer_classifier",
   "name": "Transformer text classifier",
   "description": "A small Transformer encoder with learned positional embeddings and mean pooling.",
-  "order": 5,
+  "order": 6,
   "graph": {
     "version": 1,
     "nodes": [
