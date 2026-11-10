@@ -369,6 +369,9 @@ PUBLIC_URL = os.environ.get("BRICKDNN_PUBLIC_URL", "").rstrip("/")
 
 # Set to "false" to disable public sign-up (e.g. for a private instance).
 ALLOW_REGISTRATION = env_bool("BRICKDNN_ALLOW_REGISTRATION", True)
+# Usernames of accounts that are administrators (staff and superuser): they get the rights
+# when the backend starts, and nobody can register these names (see site_admins.py).
+ADMIN_USERS = env_list("BRICKDNN_ADMIN_USERS")
 
 # Privacy and legal pages (see docs/privacy.md). The imprint, privacy policy and terms of use
 # are Markdown files in LEGAL_DIR (imprint.md, privacy.md, terms.md), read on every request:

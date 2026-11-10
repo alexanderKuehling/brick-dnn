@@ -373,6 +373,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH` / `_PER_RUN` | `0` (unlimited) | Without plans: compute per account and month / per training |
 | `BRICKDNN_BUDGET_STORAGE_MB`   | `0` (unlimited)            | Without plans: storage per account                   |
 | `BRICKDNN_STAFF_UNLIMITED`     | `true`                     | Staff and superusers have no limits                  |
+| `BRICKDNN_ADMIN_USERS`         | unset                      | Usernames of accounts that become administrators when the backend starts; nobody can register these names |
 | `BRICKDNN_PRICE_PER_CPU_HOUR` / `_PER_GB_MONTH` / `BRICKDNN_PRICE_CURRENCY` | unset / `EUR` | Show usage in money |
 | `BRICKDNN_PADDLE_ENV`          | – (paid plans off)         | `sandbox` or `live`: sell the plans with Paddle, see [docs/billing.md](docs/billing.md) |
 | `BRICKDNN_PADDLE_CLIENT_TOKEN` | –                          | Paddle's client-side token for the checkout (public) |
