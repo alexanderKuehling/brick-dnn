@@ -4,6 +4,7 @@ import type {
   Optimizer,
   RunDetail,
   RunMetrics,
+  RunQueue,
   RunStatus,
   RunSummary,
   TrainingPlan,
@@ -13,13 +14,15 @@ import type {
 } from '@/api/types';
 import { isClassicalRun } from './classical';
 
-export const ACTIVE_STATUSES: readonly RunStatus[] = ['starting', 'preparing', 'running'];
+/** Not finished yet: waiting in the queue or training. */
+export const ACTIVE_STATUSES: readonly RunStatus[] = ['queued', 'starting', 'preparing', 'running'];
 
 export function isActive(status: RunStatus | null | undefined): boolean {
   return !!status && ACTIVE_STATUSES.includes(status);
 }
 
 export const STATUS_LABELS: Record<RunStatus, string> = {
+  queued: 'Queued',
   starting: 'Starting',
   preparing: 'Preparing',
   running: 'Running',
@@ -29,6 +32,7 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<RunStatus, string> = {
+  queued: 'grape',
   starting: 'gray',
   preparing: 'cyan',
   running: 'blue',
@@ -216,11 +220,51 @@ export function searchLabel(tuning: TuningConfig): string {
   return `${method} · ${tuning.trials} ${tuning.trials === 1 ? 'trial' : 'trials'}`;
 }
 
+/** "starts in about 4 minutes": the estimated wait of a queued run; null if unknown. */
+export function startsIn(seconds: number | null | undefined): string | null {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
+    return null;
+  }
+  if (seconds < 20) {
+    return 'starts in a moment';
+  }
+  if (seconds < 90) {
+    return 'starts in about a minute';
+  }
+  if (seconds < 90 * 60) {
+    return `starts in about ${Math.round(seconds / 60)} minutes`;
+  }
+  const hours = Math.round(seconds / 3600);
+  return `starts in about ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
 /**
- * Short progress text for the toolbar, e.g. "Epoch 3/10", "Trial 2/10", "Preparing" or
- * "Fitting" (classical models have no epochs).
+ * Where a queued run waits, e.g. "Queued — position 3, starts in about 4 minutes" (the start
+ * is the server's rough estimate).
+ */
+export function queueText(queue: RunQueue | null | undefined): string {
+  if (!queue) {
+    return 'Queued';
+  }
+  const place = `Queued — position ${queue.position}`;
+  if (!queue.worker_online) {
+    return `${place}, waiting for a training worker`;
+  }
+  if (queue.blocked_by === 'account') {
+    return `${place}, starts after your running training`;
+  }
+  const start = startsIn(queue.estimated_wait_seconds);
+  return start ? `${place}, ${start}` : place;
+}
+
+/**
+ * Short progress text for the toolbar, e.g. "Epoch 3/10", "Trial 2/10", "Preparing", "Queued
+ * #3" or "Fitting" (classical models have no epochs).
  */
 export function progressLabel(run: RunSummary): string {
+  if (run.status === 'queued' && run.queue) {
+    return `Queued #${run.queue.position}`;
+  }
   if (run.status === 'running' && isClassicalRun(run)) {
     return 'Fitting';
   }

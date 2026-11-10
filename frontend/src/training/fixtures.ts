@@ -4,12 +4,48 @@ import type {
   Dataset,
   GraphDocument,
   RunDetail,
+  RunQueue,
   RunSummary,
   TrainingConfig,
   TrainingStatus,
   TrialEntry,
   TuningConfig,
 } from '@/api/types';
+
+// ---------------------------------------------------------------------------
+// The training queue (servers with a training worker); the rest is below.
+// ---------------------------------------------------------------------------
+
+export function queue(overrides: Partial<RunQueue> = {}): RunQueue {
+  return {
+    position: 3,
+    waiting: 5,
+    estimated_wait_seconds: 240,
+    estimated_start_at: '2026-10-28T10:04:00Z',
+    worker_online: true,
+    blocked_by: null,
+    priority: 0,
+    hint: 'Paid plans start first.',
+    ...overrides,
+  };
+}
+
+const NOT_TRAINED = {
+  status: 'queued',
+  message: 'Waiting for a free training slot.',
+  epochs_done: 0,
+  metrics: null,
+  best: null,
+} as const;
+
+/** A run that waits for a training worker. */
+export function queuedSummary(overrides: Partial<RunSummary> = {}): RunSummary {
+  return summary({ ...NOT_TRAINED, queue: queue(), ...overrides });
+}
+
+export function queuedDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  return detail({ ...NOT_TRAINED, queue: queue(), state: null, ...overrides });
+}
 
 export const STATUS: TrainingStatus = {
   enabled: true,
@@ -39,6 +75,20 @@ export const STATUS: TrainingStatus = {
   max_upload_mb: 500,
   max_concurrent_runs: 1,
   login_required: true,
+};
+
+/** The server trains with a worker: one slot, one training runs, two wait. */
+export const QUEUE_STATUS: TrainingStatus = {
+  ...STATUS,
+  queue: {
+    online: true,
+    workers: 1,
+    slots: 1,
+    running: 1,
+    waiting: 2,
+    message: null,
+    priority_hint: 'Paid plans start first.',
+  },
 };
 
 export const DOC: GraphDocument = {

@@ -28,6 +28,7 @@ import {
   isActive,
   progressLabel,
   searchLabel,
+  startsIn,
 } from './format';
 import { confirmDeleteRun, StatusBadge } from './runActions';
 import classes from './Training.module.css';
@@ -53,6 +54,12 @@ const FILTERS: { value: RunFilter; label: string }[] = [
 
 /** The headline number of a run and what it is (the test result if there is one). */
 function headline(run: RunSummary): [string, string] | null {
+  if (run.status === 'queued') {
+    // Its place in the queue and the server's rough estimate of the start.
+    const queue = run.queue;
+    const start = queue?.worker_online ? startsIn(queue.estimated_wait_seconds) : null;
+    return [queue ? `Position ${queue.position}` : 'Waiting', start ?? 'in the queue'];
+  }
   if (isActive(run.status)) {
     return [progressLabel(run), 'in progress'];
   }

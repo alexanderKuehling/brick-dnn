@@ -7,6 +7,7 @@ import {
   IconCircleCheck,
   IconDownload,
   IconFileCode,
+  IconHourglassHigh,
   IconInfoCircle,
   IconPlayerPlay,
   IconPlayerStop,
@@ -51,6 +52,7 @@ import { semanticKey, slugify } from '@/builder/graph';
 import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
   canDeleteRun,
@@ -74,6 +76,7 @@ import {
   isActive,
   isClassification,
   preprocessingJson,
+  queueText,
   reportsR2,
   searchedSettings,
   searchLabel,
@@ -172,6 +175,8 @@ export function RunView({
 }: RunViewProps) {
   const state = run.state;
   const active = isActive(run.status);
+  // Waiting for a training worker: nothing was trained yet.
+  const queued = run.status === 'queued';
   const history = useMemo(() => state?.history ?? [], [state?.history]);
   const classification = isClassification(run, history);
   const r2 = reportsR2(run, history);
@@ -322,7 +327,7 @@ export function RunView({
             tuning && searchLabel(tuning),
             state?.device_label,
             run.started_via?.name && `via “${run.started_via.name}”`,
-            `started ${formatDate(new Date(startedAt).toISOString())}`,
+            `${queued ? 'queued' : 'started'} ${formatDate(new Date(startedAt).toISOString())}`,
             formatDuration(elapsed),
             cpuUsage(run),
           ]
@@ -339,7 +344,7 @@ export function RunView({
         classical={classicalRun}
       />
 
-      {classicalRun ? (
+      {queued ? null : classicalRun ? (
         <ClassicalResults run={run} classification={classification} active={active} />
       ) : (
         <>
@@ -492,7 +497,7 @@ export function RunView({
             disabled={run.stop_requested}
             onClick={() => confirmStopRun(run, onUpdate)}
           >
-            {run.stop_requested ? 'Stopping …' : 'Stop'}
+            {queued ? 'Cancel' : run.stop_requested ? 'Stopping …' : 'Stop'}
           </Button>
         )}
         {run.has_weights && (
@@ -643,6 +648,9 @@ function RunProgress({
   const message = run.message || state?.message;
   const progress = state?.progress ?? null;
 
+  if (run.status === 'queued') {
+    return <QueueNotice run={run} />;
+  }
   if (run.status === 'starting' || run.status === 'preparing') {
     return (
       <Group gap="xs" wrap="nowrap">
@@ -722,15 +730,87 @@ function RunProgress({
       </Alert>
     );
   }
+  // A queued run whose budget was gone when its turn came never started.
+  const noBudget = run.usage?.stop_reason === 'budget';
   return (
-    <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Training failed">
+    <Alert
+      color="red"
+      icon={<IconAlertTriangle size={18} />}
+      title={noBudget ? 'Not started: no compute budget left' : 'Training failed'}
+    >
       {message || 'Something went wrong.'}
+      {noBudget && (
+        <div>
+          <AccountLink />
+        </div>
+      )}
       {(state?.log.length ?? 0) > 0 && (
         <Text size="xs" mt={4}>
           The log below may tell more.
         </Text>
       )}
     </Alert>
+  );
+}
+
+/** What the server says about a run by default while it waits. */
+const QUEUED_MESSAGE = 'Waiting for a free training slot.';
+
+/**
+ * A run that waits for a training worker: its position, when it probably starts (the
+ * server's rough estimate, updated with every poll) and what holds it up.
+ */
+function QueueNotice({ run }: { run: RunDetail }) {
+  const queue = run.queue ?? null;
+  const notes: string[] = [];
+  if (run.message && run.message !== QUEUED_MESSAGE) {
+    notes.push(run.message); // e.g. it starts again after the worker was restarted
+  }
+  if (queue?.blocked_by === 'account') {
+    notes.push(
+      'Your plan limits how many trainings run at the same time: this one starts when your running training has ended.'
+    );
+  } else if (queue?.worker_online && queue.estimated_wait_seconds !== null) {
+    notes.push('The start time is a rough estimate.');
+  }
+  if (queue && queue.waiting > 1) {
+    notes.push(`${queue.waiting} trainings are waiting.`);
+  }
+  if (queue?.hint) {
+    notes.push(queue.hint);
+  }
+  notes.push('You can close this panel: the training starts by itself.');
+  return (
+    <Stack gap="xs">
+      <Paper component="section" withBorder p="sm" radius="md" aria-label="Queue">
+        <Group gap="xs" wrap="nowrap" align="flex-start">
+          <IconHourglassHigh
+            size={18}
+            color="var(--mantine-color-grape-6)"
+            style={{ flexShrink: 0, marginTop: 2 }}
+            aria-hidden
+          />
+          <div style={{ minWidth: 0 }}>
+            <Text size="sm" fw={600}>
+              {queueText(queue)}
+            </Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              {notes.join(' ')}
+            </Text>
+          </div>
+        </Group>
+      </Paper>
+      {queue && !queue.worker_online && (
+        <Alert
+          color="yellow"
+          icon={<IconAlertTriangle size={18} />}
+          title="No training worker is running"
+        >
+          This server cannot train right now. Your training keeps its place and starts as soon as a
+          worker is back.
+        </Alert>
+      )}
+    </Stack>
   );
 }
 

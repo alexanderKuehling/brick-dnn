@@ -47,7 +47,10 @@ export interface TrainingController {
   runs: RunSummary[] | null;
   runsError: string | null;
   refreshRuns: () => void;
-  /** The newest active run of this user or of the open network, if any. */
+  /**
+   * The active run of this user or of the open network, if any: the newest one that trains,
+   * else the queued one that starts first.
+   */
   activeRun: RunSummary | null;
   /** The user and the saved network open in the builder. */
   scope: TrainingScope;
@@ -112,10 +115,20 @@ export function useTraining(
   );
   const scopeRef = useRef(currentScope);
   scopeRef.current = currentScope;
-  const activeRun = useMemo(
-    () => runs?.find((run) => isActive(run.status) && isRelevantRun(run, currentScope)) ?? null,
-    [runs, currentScope]
-  );
+  const activeRun = useMemo(() => {
+    const active =
+      runs?.filter((run) => isActive(run.status) && isRelevantRun(run, currentScope)) ?? [];
+    const training = active.find((run) => run.status !== 'queued');
+    if (training) {
+      return training;
+    }
+    // Only queued ones: the one that starts first (the list is newest first).
+    const place = (run: RunSummary) => run.queue?.position ?? Infinity;
+    return active.reduceRight<RunSummary | null>(
+      (first, run) => (first === null || place(run) < place(first) ? run : first),
+      null
+    );
+  }, [runs, currentScope]);
 
   // Latest values for callbacks that outlive a render (polling, notifications, uploads).
   const shown = useRef({ opened, view, selectedRunId });

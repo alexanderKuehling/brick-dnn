@@ -5,6 +5,7 @@ import {
   type CostEstimate,
   type DatasetRef,
   type GraphDocument,
+  type QueuePreview,
   type TrainingConfig,
   type TuningInput,
 } from '@/api';
@@ -13,6 +14,8 @@ import { semanticKey } from '@/builder/graph';
 export interface CostEstimateState {
   estimate: CostEstimate | null;
   budget: BudgetCheck | null;
+  /** Servers with a training queue: where the run would wait and for how long. */
+  queue: QueuePreview | null;
   loading: boolean;
   /** The answer belongs to the current network, data and settings. */
   fresh: boolean;
@@ -21,10 +24,11 @@ export interface CostEstimateState {
 interface Answer {
   estimate: CostEstimate | null;
   budget: BudgetCheck | null;
+  queue: QueuePreview | null;
   key: string | null;
 }
 
-const NONE: Answer = { estimate: null, budget: null, key: null };
+const NONE: Answer = { estimate: null, budget: null, queue: null, key: null };
 
 /**
  * The estimated CPU time of the planned training and whether the budgets allow it, from the
@@ -69,7 +73,12 @@ export function useCostEstimate(
           )
         )
         .then((result) => {
-          setAnswer({ estimate: result.estimate ?? null, budget: result.budget ?? null, key });
+          setAnswer({
+            estimate: result.estimate ?? null,
+            budget: result.budget ?? null,
+            queue: result.queue ?? null,
+            key,
+          });
           setLoading(false);
         })
         .catch(() => {
@@ -87,5 +96,11 @@ export function useCostEstimate(
   }, [key, enabled, delay]);
 
   const fresh = enabled && !loading && answer.key === key;
-  return { estimate: answer.estimate, budget: answer.budget, loading, fresh };
+  return {
+    estimate: answer.estimate,
+    budget: answer.budget,
+    queue: answer.queue,
+    loading,
+    fresh,
+  };
 }
