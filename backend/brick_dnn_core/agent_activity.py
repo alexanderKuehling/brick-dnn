@@ -486,10 +486,12 @@ def training_data(user, ref: Any) -> tuple[dict[str, Any] | None, str]:
 # one, otherwise the validation result.
 HEADLINE_METRICS = (
     ("test_accuracy", "test accuracy"),
+    ("test_iou", "test mean IoU"),
     ("test_r2", "test R²"),
     ("test_rmse", "test RMSE"),
     ("test_loss", "test loss"),
     ("val_accuracy", "validation accuracy"),
+    ("val_iou", "validation mean IoU"),
     ("val_r2", "validation R²"),
     ("val_rmse", "validation RMSE"),
     ("val_loss", "validation loss"),
@@ -502,7 +504,8 @@ def _headline(metrics: Any) -> str:
     for key, label in HEADLINE_METRICS:
         value = metrics.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-            number = f"{value * 100:.1f} %" if key.endswith("accuracy") else f"{value:.3g}"
+            percent = key.endswith(("accuracy", "iou"))
+            number = f"{value * 100:.1f} %" if percent else f"{value:.3g}"
             return f", {label} {number}"
     return ""
 
@@ -718,8 +721,11 @@ def _weights_download(user, args, result) -> Described:
 
 def _predict(user, args, result) -> Described:
     ref, project = _run_targets(user, args.get("run_id"), None)
-    inputs = args.get("inputs")
-    samples = count(len(inputs), "sample") if isinstance(inputs, list) else "samples"
+    inputs, image = args.get("inputs"), args.get("image")
+    if isinstance(image, (str, list)) and image:
+        samples = count(len(image) if isinstance(image, list) else 1, "image")
+    else:
+        samples = count(len(inputs), "sample") if isinstance(inputs, list) else "samples"
     return Described(
         f"predict {samples} with {phrase_of(ref, 'run')}",
         targets=[ref] if ref else [],
@@ -818,7 +824,11 @@ REST_AS_TOOL: dict[tuple[str, str], tuple[str, Callable[[Mapping, Mapping], dict
     ("training-run-stop", "POST"): ("stop_training", lambda kw, body: {"id": kw.get("pk")}),
     ("training-run-predict", "POST"): (
         "predict",
-        lambda kw, body: {"run_id": kw.get("pk"), "inputs": body.get("inputs")},
+        lambda kw, body: {
+            "run_id": kw.get("pk"),
+            "inputs": body.get("inputs"),
+            "image": body.get("image"),
+        },
     ),
     ("training-dataset-detail", "DELETE"): (
         "delete_dataset",
@@ -840,6 +850,8 @@ REST_PHRASES: dict[tuple[str, str], str] = {
     ("training-dataset-list", "POST"): "upload {object}",
     ("training-dataset-detail", "GET"): "open {object}",
     ("training-run-weights", "GET"): "download the weights of {object}",
+    ("training-run-previews", "GET"): "look at the predicted masks of {object}",
+    ("training-run-preview-file", "GET"): "open a predicted mask of {object}",
     ("data-source-list", "GET"): "list the data files",
     ("data-source-list", "POST"): "import {object}",
     ("data-source-detail", "GET"): "open {object}",

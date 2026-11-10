@@ -144,7 +144,8 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
         "reference": {"kind": "upload", "id": dataset.pk},
     }
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
-    assert sizes["get_training_options"] < 4000 < full
+    # Four built-in datasets with their class names, the limits and the defaults.
+    assert sizes["get_training_options"] < 4400 < full
 
     # A run with 200 epochs and a long log.
     run = long_run(user, training_dir)

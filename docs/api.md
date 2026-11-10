@@ -399,9 +399,9 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits, `classical`, `queue` |
-| GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
-| POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images; `task` is `classification` or `segmentation`), limits, `classical`, `segmentation`, `queue` |
+| GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets (`kind`: `csv`, `images` or `segmentation`) |
+| POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` and `kind` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
 | POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it, how long would it wait? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
@@ -410,20 +410,24 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
-| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
+| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` or image files `{image, mask?}` |
+| GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
+| GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
 | GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
 | POST   | `/api/training/runs/<id>/explain/`     | Explain the trained model `{method, sample? \| input?, input_scale?, target?, layer?, node?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
-(`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
+(`mnist`, `fashion_mnist`, `cifar10`, or `shapes` for segmentation) or
+`{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
 `val_split`, `test_split` (0 = no test set; validation and test together at most 0.8; built-in
 datasets take `val_split` of their training images and always test on their official test
 images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
 stop when the validation loss has not improved for this many epochs, 1–1000; `null`, the
-default, trains every epoch) and `restore_best` (default `true`: test and save the weights of
-the epoch with the lowest validation loss instead of the last one); missing values use the
+default, trains every epoch), `restore_best` (default `true`: test and save the weights of
+the epoch with the lowest validation loss instead of the last one) and, for a segmentation,
+`loss` (`cross_entropy`, the default, or `cross_entropy_dice`); missing values use the
 defaults.
 
 `tuning` (optional) turns the run into a hyperparameter search, see
@@ -469,9 +473,58 @@ applied together (empty when it fits or when other layers would have to change):
 ]
 ```
 
-Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed;
+Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed
+(for a segmentation dataset the last `Conv2d` or `ConvTranspose2d` layer: `out_channels`);
 a fix for surplus class outputs can also come with `"ok": true`. See
 [training.md](training.md#adapting-the-network-to-the-data).
+
+**Segmentation** ([training.md](training.md#image-segmentation)). A `.zip` upload with a folder
+of images and a folder of masks becomes a dataset of `kind` `segmentation`; the form field
+`kind` (`segmentation` or `images`) says which one is meant when the folders should not
+decide. Its `info` has `num_samples` (images with a mask), `sample_shape` (channels, height
+and width of the most common image size), `class_names`, `predefined_split` (with `train`,
+`val` and `test` folders) and `segmentation`: `mask_format` (`binary`, `indices`, `levels` or
+`colors`), `ignore_index` (255 or null), `class_pixel_share` (one share per class),
+`image_sizes`, `unmatched_images`, `unmatched_masks`, `unmatched_examples` and
+`mask_size_mismatches`. `GET /api/training/` lists the limits under `segmentation`
+(`max_classes`, `max_images`, `max_input_side`, `batch_memory_mb`, `losses`). The plan of a
+check has `task` `segmentation`, the target `{"kind": "mask", "num_classes", "binary"}` and
+`segmentation` (`binary`, `ignore_index`, and `fixed_bytes` and `sample_bytes`: a training
+step needs about `fixed_bytes + batch_size · sample_bytes` of memory; a `config` whose batch
+does not fit into `batch_memory_mb` is an error that names the batch size that does).
+
+Runs of a segmentation have `val_iou`, `val_dice` and `val_pixel_accuracy` in every entry of
+`state.history` and in `metrics` (there also `test_iou`, `test_dice`, `test_pixel_accuracy`);
+the accuracies are null. Once the weights are saved, `state.segmentation` has the results of
+the kept weights per class and the previews:
+
+```json
+"segmentation": {
+  "loss": "cross_entropy", "binary": false, "ignore_index": null,
+  "class_names": ["background", "square", "circle", "triangle"],
+  "colors": ["#1a1a19", "#3987e5", "#d95926", "#199e70"],
+  "validation": {"epoch": 7, "iou": 0.79, "dice": 0.88, "pixel_accuracy": 0.97,
+                 "class_iou": [0.98, 0.8, 0.82, 0.56], "class_dice": [0.99, 0.89, 0.9, 0.72]},
+  "test": {"iou": 0.78, "dice": 0.87, "pixel_accuracy": 0.97, "class_iou": […], "class_dice": […]},
+  "previews": {"count": 8, "epoch": 7, "split": "validation"}
+}
+```
+
+`GET /api/training/runs/<id>/previews/` returns those previews (everyone who can see the run):
+
+```json
+{"epoch": 7, "split": "validation", "width": 64, "height": 64, "input_size": [64, 64],
+ "class_names": ["background", "square", "circle", "triangle"], "colors": ["#1a1a19", …],
+ "ignore_color": "#8a8f98",
+ "samples": [{"index": 0, "iou": 0.92, "pixel_accuracy": 0.97, "classes": [0, 1, 3],
+              "image": {"file": "0_image.png", "url": "data:image/png;base64,…"},
+              "truth": {…}, "prediction": {…}, "overlay": {…}}]}
+```
+
+`image` is the picture as the network got it, `truth` its mask and `prediction` the predicted
+mask (palette PNGs whose pixel values are the class indices, shown in `colors`), `overlay` the
+prediction drawn over the image; `iou` is the mean IoU of that image over its `classes`.
+`?embed=0` leaves the data URLs out; `GET …/previews/0_overlay.png` returns one file.
 
 The check also has `estimate` and `budget` (pass `config` and `tuning` as for the start):
 
@@ -663,6 +716,37 @@ also height × width) or in the shape of the Input layer, and need `input_scale`
 `state.preprocessing`). Runs on demo data take
 arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
 `top_k` (1–10, default 3) is the number of classes in `top`.
+
+Image networks also take image files instead of arrays: `{"image": "<base64>"}` or a list of
+at most 8 (PNG, JPEG, BMP, GIF or WebP, as base64 text or a `data:` URL, together at most
+900 kB of text). They are converted to the channels of the network and resized to its Input
+like the training images, so `input_scale` is not needed.
+
+A **segmentation** answers with one class map per image instead of one class:
+
+```json
+{ "image": "iVBORw0KGgo…", "mask": "png" }
+```
+
+```json
+{
+  "run": { "id": "…", "name": "U-Net" },
+  "task": "segmentation",
+  "class_names": ["background", "square", "circle", "triangle"],
+  "colors": ["#1a1a19", "#3987e5", "#d95926", "#199e70"],
+  "predictions": [
+    { "width": 64, "height": 64,
+      "classes": [{ "class": "background", "index": 0, "share": 0.91 }, { "class": "circle", "index": 2, "share": 0.09 }],
+      "mask_png": "data:image/png;base64,iVBORw0KGgo…" }
+  ]
+}
+```
+
+`classes` are the classes that occur with the share of their pixels, largest first.
+`mask_png` is the class map at the size of the Input as a palette PNG: the pixel values are
+the class indices, the palette shows them in `colors`. `mask` chooses how it is returned:
+`png` (default), `rle` (`mask_rle`: run-lengths row by row, `[class, pixels, class, pixels,
+…]`) or `none` (only the shares).
 
 Classical models take the same rows. Classifiers give their own class probabilities (an SVC
 calibrated with Platt scaling, a Gaussian process its predictive probabilities); a Gaussian

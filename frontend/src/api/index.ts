@@ -55,6 +55,7 @@ import type {
   RecoveryCodes,
   RunDetail,
   RunInput,
+  RunPreviews,
   RunSummary,
   SharedNetwork,
   ShareLink,
@@ -571,6 +572,9 @@ const serverApi = {
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
         requestFile(`/api/training/runs/${id}/weights/`, { auth: true }),
+      /** Segmentation runs: a few validation images with the masks the network predicts. */
+      previews: (id: string, signal?: AbortSignal) =>
+        request<RunPreviews>(`/api/training/runs/${id}/previews/`, { auth: true, signal }),
     },
   },
 

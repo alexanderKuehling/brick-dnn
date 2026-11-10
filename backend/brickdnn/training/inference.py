@@ -12,6 +12,12 @@ see compat.py) and the ``preprocessing`` that the training wrote into ``state.js
      "mean": [0.1307], "std": [0.3081], "class_names": ["0", ...], ...}
     {"kind": "demo"}            # random demo data: inputs are used as they are
 
+A segmentation (``plan["task"]`` "segmentation") takes images like any image network and
+answers with a class for every pixel instead of one for the image (see
+:func:`read_masks`). Image networks also take image files (PNG, JPEG …) as base64 text
+instead of arrays of numbers (:func:`prepare_image_files`): the prediction process decodes
+them and prepares them like the training images.
+
 Classical models (scikit-learn, ``plan["classical"]`` is set) predict in the units of the
 target column: their tabular preprocessing has no ``target_mean``/``target_std``, and
 classifiers report probabilities instead of raw scores (see :func:`read_outputs`).
@@ -36,6 +42,13 @@ DEFAULT_TOP_K = 3
 # How input values are given: "raw" as in the CSV file or image file (pixels 0-255), "unit"
 # for pixels scaled to 0-1, "normalized" for values that are already prepared.
 INPUT_SCALES = ("raw", "unit", "normalized")
+# Image files of one request (base64): how many, and their size together as base64 text
+# (JSON requests of the REST API are limited to 1 MB).
+MAX_IMAGE_FILES = 8
+MAX_IMAGE_TEXT = 900_000
+# What a segmentation answers with besides the pixel share of every class: the class map as
+# a small PNG file (one colour per class), as run-lengths, or not at all.
+MASK_FORMATS = ("png", "rle", "none")
 
 
 class UnknownPreprocessing(ValueError):
@@ -65,6 +78,11 @@ def _numbers(value: Any, length: int | None = None) -> bool:
 def is_classical(plan: Any) -> bool:
     """True for a run of a classical model (scikit-learn), see compat.TrainingPlan."""
     return isinstance(plan, dict) and isinstance(plan.get("classical"), dict)
+
+
+def is_segmentation(plan: Any) -> bool:
+    """True for a run that predicts a class for every pixel, see compat.TrainingPlan."""
+    return isinstance(plan, dict) and plan.get("task") == "segmentation"
 
 
 def input_specs(plan: Any) -> list[dict[str, Any]]:
@@ -131,7 +149,7 @@ def class_names(plan: Any, preprocessing: Any, index: int = 0) -> list[str] | No
     """Names of the classes of output ``index`` (``None`` if it is no class output)."""
     targets = plan.get("targets") if isinstance(plan, dict) else None
     target = targets[index] if isinstance(targets, list) and index < len(targets) else None
-    if not isinstance(target, dict) or target.get("kind") != "class":
+    if not isinstance(target, dict) or target.get("kind") not in ("class", "mask"):
         return None
     k = int(target.get("num_classes") or 0)
     names = None
@@ -172,11 +190,19 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
             "flat": f" The network takes it flattened to {c * h * w} values.",
         }[preprocessing["layout"]]
         also = f" or {h}×{w}" if c == 1 else ""
+        output = (
+            f" The network answers with one of {len(class_names(plan, preprocessing) or [])} "
+            f"classes for each of the {h}×{w} pixels."
+            if is_segmentation(plan)
+            else ""
+        )
         return (
             f"One {mode} image of {w}×{h} pixels per sample, as a {c}×{h}×{w} array (channels, "
             f"height, width){also}.{network} Pixels are scaled to 0–1 (pixel / 255), then "
             f"normalised per channel: (x - mean) / std with mean {_list(preprocessing['mean'])} "
-            f"and std {_list(preprocessing['std'])}."
+            f"and std {_list(preprocessing['std'])}. Or pass image files (PNG, JPEG …) as "
+            f"base64 text in 'image': they are converted to {mode} and resized to {w}×{h}."
+            f"{output}"
         )
     shapes = "; ".join(
         f"{_shape_text(s['shape'])} {'token ids' if s.get('dtype') == 'long' else 'numbers'}"
@@ -282,6 +308,20 @@ def usage_snippet(
         lines += ["with torch.no_grad():", f"    output = model({', '.join(variables)})"]
     if kind == "demo":
         lines.append("print(output)")
+    elif is_segmentation(plan):
+        binary = bool(plan["targets"][0].get("binary"))
+        lines += [
+            f"CLASS_NAMES = {names!r}",
+            "# One class per pixel: the class map has the size of the resized image.",
+            (
+                "classes = (output[0, 0] > 0).to(torch.uint8)  # 1 where the score is positive"
+                if binary
+                else "classes = output.argmax(dim=1)[0].to(torch.uint8)"
+            ),
+            "for index, name in enumerate(CLASS_NAMES):",
+            '    print(f"{name}: {(classes == index).float().mean().item():.1%} of the pixels")',
+            'Image.fromarray(classes.numpy()).save("mask.png")  # pixel value = class index',
+        ]
     elif names is not None:
         lines += [
             f"CLASS_NAMES = {names!r}",
@@ -343,6 +383,10 @@ class PreparedInputs:
     count: int
     tensors: list[dict[str, Any]]
     top_k: int
+    # Image files as base64 text instead of ``tensors``: the prediction process decodes
+    # them and prepares them like the training images (``image``: how, see image_request).
+    files: list[str] | None = None
+    image: dict[str, Any] | None = None
 
 
 def _dims(value: Any) -> list[int]:
@@ -571,9 +615,115 @@ def prepare_inputs(
     return PreparedInputs(kind, count, [tensor], top_k)
 
 
+def image_request(preprocessing: dict[str, Any]) -> dict[str, Any]:
+    """How the prediction process prepares image files: what the training wrote down."""
+    keys = ("channels", "height", "width", "layout", "mean", "std")
+    return {key: preprocessing[key] for key in keys}
+
+
+def prepare_image_files(
+    plan: Any, preprocessing: Any, image: Any, top_k: Any = None
+) -> PreparedInputs:
+    """Check image files given as base64 text (one, or a list of at most MAX_IMAGE_FILES;
+    a ``data:image/png;base64,`` prefix is fine). They are decoded in the prediction
+    process. Raises :class:`UnknownPreprocessing` or :class:`InvalidInputs`."""
+    kind = kind_of(plan, preprocessing)
+    if kind != "image":
+        raise InvalidInputs(
+            "'image' is for networks trained on images; this one takes numbers in 'inputs'."
+        )
+    if top_k is None:
+        top_k = DEFAULT_TOP_K
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= MAX_TOP_K:
+        raise InvalidInputs(f"top_k must be a whole number from 1 to {MAX_TOP_K}.")
+    files = [image] if isinstance(image, str) else image
+    wanted = (
+        "'image' must be an image file (PNG, JPEG …) as base64 text, or a list of at most "
+        f"{MAX_IMAGE_FILES} of them."
+    )
+    if not isinstance(files, list) or not files or not all(isinstance(f, str) for f in files):
+        raise InvalidInputs(wanted)
+    if len(files) > MAX_IMAGE_FILES:
+        raise InvalidInputs(
+            f"{len(files)} images are too many: predict at most {MAX_IMAGE_FILES} at a time."
+        )
+    cleaned = []
+    for number, text in enumerate(files, start=1):
+        label = _label(number, len(files)).replace("sample", "image").replace("Sample", "Image")
+        text = text.strip()
+        if text.startswith("data:"):
+            head, _, text = text.partition(",")
+            if not head.endswith(";base64"):
+                raise InvalidInputs(f"{label}: a data URL must be base64 encoded.")
+        text = "".join(text.split())
+        if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", text) or len(text) % 4 == 1:
+            raise InvalidInputs(
+                f"{label} is not base64 text. Encode the bytes of the image file with base64."
+            )
+        cleaned.append(text)
+    if sum(len(text) for text in cleaned) > MAX_IMAGE_TEXT:
+        raise InvalidInputs(
+            f"The images are too large: at most {MAX_IMAGE_TEXT // 1000} kB of base64 text "
+            f"per request (about {MAX_IMAGE_TEXT * 3 // 4000} kB of image files). Scale them "
+            "down first: the network only sees "
+            f"{preprocessing['width']}×{preprocessing['height']} pixels anyway."
+        )
+    return PreparedInputs(
+        kind, len(cleaned), [], top_k, files=cleaned, image=image_request(preprocessing)
+    )
+
+
+def mask_format(value: Any) -> str:
+    """The checked ``mask`` argument of a segmentation prediction (default "png")."""
+    if value is None:
+        return MASK_FORMATS[0]
+    if value not in MASK_FORMATS:
+        raise InvalidInputs(f"mask must be one of: {', '.join(MASK_FORMATS)}.")
+    return value
+
+
 # --------------------------------------------------------------------------- #
 # Outputs of a prediction
 # --------------------------------------------------------------------------- #
+
+
+def read_masks(plan: Any, preprocessing: Any, masks: Any, count: int) -> list[dict[str, Any]]:
+    """Turn what the prediction process reports for a segmentation (per sample ``{"width",
+    "height", "counts": [pixels per class], "png": base64 | None, "rle": [...] | None}``)
+    into one prediction per sample::
+
+        {"width": 64, "height": 64,
+         "classes": [{"class": "background", "index": 0, "share": 0.91}, ...],  # largest first
+         "mask_png": "data:image/png;base64,…",    # the class map, one colour per class
+         "mask_rle": [0, 130, 2, 5, ...]}          # or run-lengths: class, pixels, class, …
+
+    ``classes`` lists the classes that occur. Raises ``ValueError`` for masks that do not fit
+    the training plan."""
+    names = class_names(plan, preprocessing) or []
+    if not isinstance(masks, list) or len(masks) != count:
+        raise ValueError("The network returned an unexpected number of samples.")
+    predictions = []
+    for mask in masks:
+        counts = mask.get("counts") if isinstance(mask, dict) else None
+        if not _numbers(counts, len(names)) or not sum(counts):
+            raise ValueError("The network returned an unexpected number of classes.")
+        total = sum(counts)
+        classes = [
+            {"class": names[i], "index": i, "share": round(counts[i] / total, 4)}
+            for i in sorted(range(len(names)), key=lambda i: -counts[i])
+            if counts[i] > 0
+        ]
+        prediction: dict[str, Any] = {
+            "width": mask.get("width"),
+            "height": mask.get("height"),
+            "classes": classes,
+        }
+        if isinstance(mask.get("png"), str):
+            prediction["mask_png"] = "data:image/png;base64," + mask["png"]
+        if isinstance(mask.get("rle"), list):
+            prediction["mask_rle"] = mask["rle"]
+        predictions.append(prediction)
+    return predictions
 
 
 def _finite(value: Any) -> Any:

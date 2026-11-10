@@ -103,6 +103,14 @@ start_training, get_training_run). A finished run can predict new samples (predi
 its weights can be downloaded with a short-lived link (get_weights_download).
 Saved networks also appear in the user's Brick DNN web app.
 
+Segmentation (a class for every pixel): a network whose output is as high and wide as its
+Input, e.g. the example unet, with one output channel per class (or one channel for two
+classes). It trains on the built-in dataset shapes (generated, nothing to upload) or on a ZIP
+file with the folders images/ and masks/ (same file names; masks are PNG files with the
+class index of every pixel, or black and white), uploaded with create_upload_link. The
+metrics are mean IoU, Dice and pixel accuracy; use a batch size of 4 to 16 (8 for the example); predict takes an
+image file as base64 (image) and returns the class map as a small PNG.
+
 Real tables usually need preparing first (missing values, categories, dates, outliers):
 import_data (the text of a CSV or JSON file, base64 for Excel or Parquet, or a public link),
 create_data_prep with the target column (the column to predict), then repeat
@@ -149,9 +157,9 @@ GRAPH_SCHEMA: dict[str, Any] = {
 DATASET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
-        'Which data to train on: {"kind": "builtin", "id": "mnist"}, {"kind": "upload", '
-        '"id": 3} (one of the user\'s datasets) or {"kind": "random"}. See '
-        "get_training_options."
+        'Which data to train on: {"kind": "builtin", "id": "mnist"} (or "shapes" for '
+        'segmentation), {"kind": "upload", "id": 3} (one of the user\'s datasets) or '
+        '{"kind": "random"}. See get_training_options.'
     ),
     "properties": {
         "kind": {"type": "string", "enum": ["builtin", "upload", "random"]},
@@ -397,6 +405,9 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
         "classical": capabilities["classical"],
+        # Segmentation (a class for every pixel): its limits. The ZIP layout of a dataset is
+        # in the description of create_upload_link.
+        "segmentation": capabilities["segmentation"],
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
         "upload_dataset_max_mb": _megabytes(upload_limit()),
     }
@@ -1042,9 +1053,16 @@ class _PredictScope:
 
 def predict(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args, "run_id")
+    if args.get("inputs") is None and args.get("image") is None:
+        raise ToolError("Give the samples in 'inputs', or an image file as base64 in 'image'.")
     try:
         prediction = training.prepare_prediction(
-            run, args["inputs"], args.get("input_scale"), args.get("top_k")
+            run,
+            args.get("inputs"),
+            args.get("input_scale"),
+            args.get("top_k"),
+            args.get("image"),
+            args.get("mask"),
         )
     except training.TrainingInputError as exc:
         expected = training.describe_inputs(run)
@@ -1280,7 +1298,10 @@ TOOLS: dict[str, Tool] = {
             "with a shell command such as curl, for files too large to pass as text. "
             "purpose data_source imports it into the Data tab like import_data (any format "
             "import_data reads, with its options); training_dataset stores a CSV or ZIP file "
-            "like upload_dataset. Returns the url and ready-to-run curl commands; the curl "
+            "like upload_dataset: a ZIP with one folder of images per class, or for "
+            "segmentation with the folders images/ and masks/ (same file names; masks as PNG "
+            "with the class index of every pixel, or black and white; optional classes.txt). "
+            "Returns the url and ready-to-run curl commands; the curl "
             "answer is the JSON that import_data or upload_dataset would return (with the "
             "new id or the dataset reference). The size limit is that of the web app. Which "
             "way to send a file: small file (up to the import_data limit) as text or base64; "
@@ -1298,6 +1319,12 @@ TOOLS: dict[str, Tool] = {
                 "project_id": {
                     "type": "integer",
                     "description": "training_dataset: also share it in this project",
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": list(training.UPLOAD_KINDS),
+                    "description": "training_dataset, ZIP files: 'images' (one folder per "
+                    "class) or 'segmentation' (images/ and masks/). Default: the folders decide",
                 },
                 "delimiter": {"type": "string", "description": "data_source: CSV delimiter"},
                 "decimal": {"type": "string", "description": "data_source: '.' or ','"},
@@ -1760,7 +1787,8 @@ TOOLS: dict[str, Tool] = {
             "One training run, as a summary by default: status and message (queued runs: "
             "queue with the position and the estimated wait), settings, epochs "
             "done, the best epoch, the final and test metrics (loss, accuracy; for regressions "
-            "the RMSE in the units of the target and R²), "
+            "the RMSE in the units of the target and R²; for segmentations mean IoU, Dice and "
+            "pixel accuracy, and segmentation with the IoU per class), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
             "kernel, log marginal likelihood or support vectors) and the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
@@ -1819,7 +1847,12 @@ TOOLS: dict[str, Tool] = {
             "training). Inputs of an image network: one image per sample as a nested array of "
             "channels×height×width (grayscale also height×width) or in the shape of its Input "
             "layer, with input_scale 'raw' (pixels 0–255), 'unit' (0–1) or 'normalized' "
-            "(already normalised like in training). Runs trained on demo data take arrays of "
+            "(already normalised like in training). Image networks also take image instead of "
+            "inputs: an image file (PNG, JPEG …) as base64 text, converted and resized like "
+            "the training images. Segmentation: per image the share of the pixels of every "
+            "class and the predicted class map as a small PNG (mask_png, a data URL; mask "
+            "'rle' gives run-lengths instead, 'none' only the shares). Runs trained on demo "
+            "data take arrays of "
             "the Input shape as they are. get_weights_download describes a run's inputs.",
             predict,
             {
@@ -1827,6 +1860,18 @@ TOOLS: dict[str, Tool] = {
                 "inputs": {
                     "type": "array",
                     "description": f"The samples, at most {inference.MAX_SAMPLES}",
+                },
+                "image": {
+                    "type": ["string", "array"],
+                    "items": {"type": "string"},
+                    "description": "Image networks, instead of inputs: an image file as "
+                    f"base64 text, or a list of at most {inference.MAX_IMAGE_FILES} (together "
+                    f"at most {inference.MAX_IMAGE_TEXT // 1000} kB of text)",
+                },
+                "mask": {
+                    "type": "string",
+                    "enum": list(inference.MASK_FORMATS),
+                    "description": "Segmentation: how the class map is returned (default png)",
                 },
                 "input_scale": {
                     "type": "string",
@@ -1842,7 +1887,7 @@ TOOLS: dict[str, Tool] = {
                     "description": f"Classes listed per sample (default {inference.DEFAULT_TOP_K})",
                 },
             },
-            ("run_id", "inputs"),
+            ("run_id",),
         ),
         Tool(
             "delete_training_run",

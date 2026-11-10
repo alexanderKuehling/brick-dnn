@@ -23,7 +23,7 @@ class TrainingJob:
     graph: dict[str, Any]
     dataset: DatasetInfo
     config: TrainingConfig = field(default_factory=TrainingConfig)
-    path: str | None = None  # CSV file or image folder
+    path: str | None = None  # CSV file, image folder or segmentation folder
     data_root: str | None = None  # where torchvision datasets are downloaded
     name: str = ""
     tuning: TuningConfig | None = None  # set for a hyperparameter search
@@ -82,7 +82,8 @@ class TrainingResult:
     weights: bool = False
     history: list[dict[str, Any]] = field(default_factory=list)
     best: dict[str, Any] | None = None
-    # {"loss", "accuracy", "rmse", "r2"} of the final model on the test set
+    # {"loss", "accuracy", "rmse", "r2"} of the final model on the test set (a
+    # segmentation adds "iou", "dice", "pixel_accuracy", "class_iou", "class_dice")
     test: dict[str, Any] | None = None
     # Hyperparameter search: every trial (see state.py) and the number of the best one
     trials: list[dict[str, Any]] = field(default_factory=list)

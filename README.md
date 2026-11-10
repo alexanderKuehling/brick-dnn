@@ -46,7 +46,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Real graphs, not just stacks**: skip connections (`Add`), multiple inputs and outputs and
   branch merging (`Concat`).
 - **Local training from the editor**: press *Train*, pick demo data, MNIST, Fashion-MNIST,
-  CIFAR-10, a CSV file or a folder of images, and watch loss and accuracy live. Training runs
+  CIFAR-10, a CSV file, a folder of images or images with masks, and watch loss and accuracy
+  live. Training runs
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
   checks beforehand whether network and data fit and says what to change. Hold out a test set,
   stop early when the validation loss no longer improves (the weights of the best epoch are
@@ -55,6 +56,12 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   wait in a **queue** and a separate worker container trains them, so the site stays
   responsive and nothing is refused because the server is busy. See
   [docs/training.md](docs/training.md).
+- **Image segmentation**: train a U-Net (or any network that keeps the image size) on images
+  with one mask each, a ZIP file with the folders `images` and `masks`, or on the built-in
+  generated dataset *Shapes* without uploading anything. The run reports mean IoU, Dice and
+  pixel accuracy per epoch and the IoU of every class, and shows what the network predicts
+  for a few validation images next to their true masks. See
+  [docs/training.md](docs/training.md#image-segmentation).
 - **Data preparation and analysis** in the *Data* tab: import messy CSV files, Excel and
   OpenDocument workbooks (choose the sheet), JSON / JSON Lines, Parquet and Feather files, also
   zipped or gzipped, or straight from a link (Google Sheets, GitHub, Hugging Face …), join and
@@ -375,6 +382,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
 | `BRICKDNN_GPC_MAX_ROWS`        | `2000`                     | Training rows a Gaussian process classifier is fitted on at most |
 | `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
+| `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900`                   | Memory a batch of a segmentation training may need; larger batches are refused ([docs/training.md](docs/training.md#settings-memory-and-time)) |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
 | `BRICKDNN_EMAIL_HOST` / `_PORT` | – (no e-mail) / `587`     | SMTP server of an e-mail provider: password reset, confirming addresses, notices ([docs/email.md](docs/email.md)) |
 | `BRICKDNN_EMAIL_USER` / `_PASSWORD` | –                     | SMTP login and password (secret; only in `.env`)     |
@@ -435,7 +443,8 @@ cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
 The backend suite builds every example and every layer type, runs the generated code in
 PyTorch and checks that output shapes and parameter counts match the analysis exactly. It also
 trains the generated CSV scripts end to end and runs the training engine on every example
-(demo data, CSV files, image folders, built-in datasets with faked downloads). CI runs everything on Python 3.12 and 3.13 and builds
+(demo data, CSV files, image folders, images with masks, built-in datasets with faked
+downloads). CI runs everything on Python 3.12 and 3.13 and builds
 the Docker images.
 
 ## Roadmap

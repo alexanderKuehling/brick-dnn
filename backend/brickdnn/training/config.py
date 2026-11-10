@@ -9,6 +9,26 @@ from typing import Any
 
 OPTIMIZERS = ("adam", "adamw", "sgd")
 DEVICES = ("auto", "cpu", "cuda", "mps")
+# Loss of a segmentation: the cross-entropy of every pixel, or that plus a Dice term (one
+# minus the overlap of the predicted and the true area of each class), which helps when a
+# class covers only a few pixels. Other tasks do not use the setting.
+LOSSES = ("cross_entropy", "cross_entropy_dice")
+# Segmentation keeps every layer's output for a whole batch of images in memory. A batch
+# may need at most this much (MB): the default leaves room for PyTorch and the data in a
+# training process that may use about 1.8 GB.
+SEGMENTATION_MEMORY_MB = ("BRICKDNN_SEGMENTATION_MEMORY_MB", 900)
+
+
+def segmentation_memory_bytes() -> int:
+    """The memory one batch of a segmentation training may need on this machine."""
+    variable, default = SEGMENTATION_MEMORY_MB
+    try:
+        value = float(os.environ.get(variable, "").strip())
+    except ValueError:
+        value = default
+    return int((value if value >= 16 else default) * 1024 * 1024)
+
+
 # Validation and test data together: at most this share of all samples.
 MAX_HELD_OUT = 0.8
 # Classical models fit on at most this many training rows; larger training sets are
@@ -117,6 +137,8 @@ class TrainingConfig:
     # Keep the weights of the epoch with the lowest validation loss (they are tested and
     # saved) instead of those of the last epoch.
     restore_best: bool = True
+    # Segmentation only (see LOSSES).
+    loss: str = "cross_entropy"
 
     @property
     def has_test(self) -> bool:
@@ -153,6 +175,7 @@ class TrainingConfig:
             seed=_int(data, "seed", "Seed", None, 0, 2**31 - 1),
             patience=_int(data, "patience", "Patience", None, 1, 1000),
             restore_best=_bool(data, "restore_best", "Restore best weights", cls.restore_best),
+            loss=_choice(data, "loss", "Loss", cls.loss, LOSSES),
         )
 
     def to_dict(self) -> dict[str, Any]:

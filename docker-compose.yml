@@ -40,6 +40,9 @@ x-training: &training
   # is started again after its worker restarted (unset: 60 and 3).
   BRICKDNN_WORKER_TIMEOUT: ${BRICKDNN_WORKER_TIMEOUT:-}
   BRICKDNN_WORKER_MAX_RESTARTS: ${BRICKDNN_WORKER_MAX_RESTARTS:-}
+  # Memory (MB) a batch of a segmentation training may need (unset: 900, which fits a
+  # training process with about 1.8 GB). The backend checks it, the worker enforces it.
+  BRICKDNN_SEGMENTATION_MEMORY_MB: ${BRICKDNN_SEGMENTATION_MEMORY_MB:-}
 
 # Backups (deploy/server/README.md, "Backups"): the cleanup service runs `manage.py backup`
 # once a day if BRICKDNN_BACKUP_DIR is set (e.g. /data/backups, in the data volume); the

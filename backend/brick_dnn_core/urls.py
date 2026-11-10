@@ -158,6 +158,15 @@ urlpatterns = [
     path("oauth/token/", oauth.TokenView.as_view(), name="oauth-token"),
     path("oauth/revoke/", oauth.RevokeView.as_view(), name="oauth-revoke"),
     path("training/", views.training_info, name="training"),
+    # A preview image of a segmentation run: a file, so without the slash at the end.
+    path(
+        "training/runs/<uuid:pk>/previews/<str:name>",
+        views.TrainingRunViewSet.as_view(
+            {"get": "preview_file"},
+            renderer_classes=[views.renderers.JSONRenderer, views.PngRenderer],
+        ),
+        name="training-run-preview-file",
+    ),
     path("training/check/", views.training_check, name="training-check"),
     path("data/", data_views.data_status, name="data"),
     path("data/steps/", data_views.data_steps, name="data-steps"),

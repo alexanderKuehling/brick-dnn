@@ -741,7 +741,7 @@ export interface ProjectDataItem {
   owner: string;
   created_at: string;
   /** Datasets only. */
-  kind?: 'csv' | 'images';
+  kind?: 'csv' | 'images' | 'segmentation';
   /** Datasets only. */
   size_bytes?: number;
 }
@@ -879,6 +879,11 @@ export interface BuiltinDataset {
   id: string;
   name: string;
   description: string;
+  /**
+   * `segmentation`: a class for every pixel (Shapes, generated on the server); otherwise one
+   * label per image. Missing on older servers.
+   */
+  task?: 'classification' | 'segmentation';
   /** Channels, height, width. */
   sample_shape: number[];
   num_classes: number;
@@ -887,9 +892,23 @@ export interface BuiltinDataset {
   /** The official test images: always the test set. */
   test_size: number;
   download_mb: number;
-  /** False when torchvision is missing on the server. */
+  /** False when torchvision is missing on the server (generated datasets do not need it). */
   available: boolean;
 }
+
+/** What a segmentation dataset and training may be on this server. */
+export interface SegmentationLimits {
+  max_classes: number;
+  max_images: number;
+  /** The largest Input height and width. */
+  max_input_side: number;
+  /** The memory a batch may need (every layer's output for all its images). */
+  batch_memory_mb: number;
+  losses: SegmentationLoss[];
+}
+
+/** The loss of a segmentation: the cross-entropy per pixel, optionally plus a Dice term. */
+export type SegmentationLoss = 'cross_entropy' | 'cross_entropy_dice';
 
 /** Capabilities of the server: GET /api/training/. */
 export interface TrainingStatus {
@@ -916,6 +935,8 @@ export interface TrainingStatus {
    * classical models train without it. Missing on older servers.
    */
   classical?: ClassicalCapabilities;
+  /** Segmentation (a class for every pixel). Missing on servers without it. */
+  segmentation?: SegmentationLimits;
 }
 
 export interface ClassicalCapabilities {
@@ -928,7 +949,31 @@ export interface ClassicalCapabilities {
   tuning: boolean;
 }
 
-export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images';
+export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images' | 'segmentation';
+
+/** What the inspection of a segmentation dataset found (images with one mask each). */
+export interface SegmentationInfo {
+  /** How the masks are read: black and white, class indices, grey levels or colours. */
+  mask_format: 'binary' | 'indices' | 'levels' | 'colors';
+  mask_values?: unknown[] | null;
+  /** 255 if the masks mark pixels that are ignored. */
+  ignore_index: number | null;
+  ignored_share?: number;
+  /** The share of the pixels of every class. */
+  class_pixel_share: number[];
+  image_sizes?: {
+    /** Width, height. */
+    most_common: number[];
+    min: number[];
+    max: number[];
+    different: number;
+  };
+  unmatched_images?: number;
+  unmatched_masks?: number;
+  unmatched_examples?: string[];
+  /** Masks with another size than their image (they are resized). */
+  mask_size_mismatches?: number;
+}
 
 /** What the server knows about a dataset without loading it. */
 export interface DatasetInfo {
@@ -953,16 +998,20 @@ export interface DatasetInfo {
   num_classes: number | null;
   /**
    * Datasets made in the Data tab come with their own split: [train, validation, test] rows.
-   * Training then uses it instead of `val_split` / `test_split`.
+   * Training then uses it instead of `val_split` / `test_split`. Segmentation datasets with
+   * train/, val/ (and test/) folders have one too: their images.
    */
   predefined_split?: number[] | null;
+  /** `segmentation` for data with a class for every pixel. */
+  task?: 'segmentation' | null;
+  segmentation?: SegmentationInfo | null;
 }
 
-/** An uploaded dataset (CSV file or ZIP of image folders). */
+/** An uploaded dataset (CSV file, ZIP of image folders or ZIP of images with masks). */
 export interface Dataset {
   id: number;
   name: string;
-  kind: 'csv' | 'images';
+  kind: 'csv' | 'images' | 'segmentation';
   size_bytes: number;
   created_at: string;
   info: DatasetInfo;
@@ -979,13 +1028,18 @@ export interface Dataset {
 export type DatasetRef =
   { kind: 'random' } | { kind: 'builtin'; id: string } | { kind: 'upload'; id: number };
 
-export type TrainingTask = 'classification' | 'regression' | 'demo';
+export type TrainingTask = 'classification' | 'regression' | 'segmentation' | 'demo';
 
 export interface TrainingPlan {
   task: TrainingTask;
   summary: string;
   inputs: { shape: number[]; dtype: 'float' | 'long'; vocab: number | null }[];
-  targets: ({ kind: 'class'; num_classes: number } | { kind: 'value'; shape: number[] })[];
+  targets: (
+    | { kind: 'class'; num_classes: number }
+    | { kind: 'value'; shape: number[] }
+    /** Segmentation; `binary`: one output channel, the score of class 1. */
+    | { kind: 'mask'; num_classes: number; binary: boolean }
+  )[];
   image: {
     channels: number;
     height: number;
@@ -997,6 +1051,16 @@ export interface TrainingPlan {
   notes: string[];
   /** Classical models: what is fitted (missing for neural networks and older runs). */
   classical?: ClassicalPlan | null;
+  /**
+   * Segmentation: a training step needs about `fixed_bytes + batch size × sample_bytes` of
+   * memory (null otherwise).
+   */
+  segmentation?: {
+    binary: boolean;
+    ignore_index: number | null;
+    fixed_bytes: number;
+    sample_bytes: number;
+  } | null;
 }
 
 export interface ClassicalPlan {
@@ -1012,8 +1076,8 @@ export interface ClassicalPlan {
 
 /**
  * A suggested change that makes the network fit the data: set `params` on the layer `node`.
- * Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are ever
- * changed.
+ * Only the Input layer (`shape`, `dtype`) and the last layer are ever changed: `out_features`
+ * of a Linear layer, for segmentation `out_channels` of a convolution.
  */
 export interface CompatibilityFix {
   node: string;
@@ -1068,6 +1132,8 @@ export interface TrainingConfig {
    * of the last epoch (default true; missing in older runs, which kept the last epoch).
    */
   restore_best?: boolean;
+  /** Segmentation only (missing in older runs). */
+  loss?: SegmentationLoss;
 }
 
 // --------------------------------------------------------------------------
@@ -1148,6 +1214,10 @@ export interface TrialEntry {
   val_rmse: number | null;
   /** Regression only (missing in older runs). */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
   /** The epoch whose weights the trial keeps (missing in older runs). */
   weights_epoch?: number | null;
   /** Ended by early stopping. */
@@ -1164,6 +1234,8 @@ export interface BestTrial {
   val_rmse: number | null;
   /** Regression only (missing in older runs). */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
   weights_epoch?: number | null;
 }
 
@@ -1174,6 +1246,13 @@ export interface TestResult {
   rmse: number | null;
   /** Coefficient of determination: regression only (missing in older runs). */
   r2?: number | null;
+  /** Segmentation only: mean IoU and Dice over the classes, and the share of right pixels. */
+  iou?: number | null;
+  dice?: number | null;
+  pixel_accuracy?: number | null;
+  /** Per class; null for a class that occurs neither in the masks nor the predictions. */
+  class_iou?: (number | null)[];
+  class_dice?: (number | null)[];
 }
 
 /**
@@ -1195,12 +1274,24 @@ export interface RunMetrics {
    */
   val_r2?: number | null;
   test_r2?: number | null;
+  /**
+   * Segmentation only (other runs do not have the keys): mean IoU and Dice over the classes
+   * that occur, and the share of pixels with the right class.
+   */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
+  test_iou?: number | null;
+  test_dice?: number | null;
+  test_pixel_accuracy?: number | null;
 }
 
 export interface BestEpoch {
   epoch: number;
   val_loss: number | null;
   val_accuracy: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
 }
 
 export interface RunSummary {
@@ -1267,6 +1358,10 @@ export interface HistoryEntry {
   val_rmse?: number | null;
   /** Coefficient of determination; null when the validation targets are all equal. */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
   seconds?: number | null;
 }
 
@@ -1324,6 +1419,69 @@ export interface RunState {
   family?: 'neural' | 'classical';
   /** What the fit of a classical model found (null for neural networks). */
   classical?: ClassicalRunState | null;
+  /** Segmentation: the results per class and the preview images, once the weights are saved. */
+  segmentation?: SegmentationRunState | null;
+}
+
+/** The results of the kept weights of a segmentation on one split, with the values per class. */
+export interface SegmentationSplit {
+  /** Validation only: the epoch of the kept weights. */
+  epoch?: number | null;
+  iou: number | null;
+  dice: number | null;
+  pixel_accuracy: number | null;
+  class_iou: (number | null)[];
+  class_dice: (number | null)[];
+}
+
+export interface SegmentationRunState {
+  loss: SegmentationLoss;
+  /** One output channel (two classes). */
+  binary: boolean;
+  ignore_index: number | null;
+  class_names: string[];
+  /** One colour per class, as in the preview images. */
+  colors: string[];
+  /** Null if the kept weights are not those of a finished epoch. */
+  validation: SegmentationSplit | null;
+  test: SegmentationSplit | null;
+  /** How many preview images there are (GET …/runs/<id>/previews/), or null. */
+  previews: { count: number; epoch: number | null; split: string } | null;
+}
+
+/** One picture of a preview: its file name and, embedded, a data URL. */
+export interface PreviewImage {
+  file: string;
+  url?: string;
+}
+
+/** A validation image of a segmentation run with what the kept weights predict for it. */
+export interface PreviewSample {
+  index: number;
+  image: PreviewImage;
+  /** The true mask and the predicted one: one colour per class. */
+  truth: PreviewImage;
+  prediction: PreviewImage;
+  /** The prediction drawn over the image. */
+  overlay: PreviewImage;
+  /** Mean IoU over the classes in its mask or prediction. */
+  iou: number | null;
+  pixel_accuracy: number | null;
+  /** The classes in its mask or prediction. */
+  classes: number[];
+}
+
+/** GET /api/training/runs/<id>/previews/. */
+export interface RunPreviews {
+  epoch: number | null;
+  split: string;
+  /** Size of the pictures (large inputs are scaled down). */
+  width: number;
+  height: number;
+  class_names: string[];
+  colors: string[];
+  ignore_color: string;
+  samples: PreviewSample[];
 }
 
 /** The metrics of a fitted classical model on some rows. */

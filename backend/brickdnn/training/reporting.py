@@ -25,6 +25,10 @@ class DivergedError(TrainingError):
     """The loss became NaN or infinite (the settings, e.g. the learning rate, are to blame)."""
 
 
+class MemoryLimitError(TrainingError):
+    """A batch would need more memory than a training may use (the batch size is to blame)."""
+
+
 class StopTraining(Exception):
     """Raised inside the engine when the user asked to stop."""
 
@@ -35,7 +39,8 @@ class Reporter:
     Call order: ``status``/``log`` while preparing, ``setup`` once data and model are
     ready, then per epoch ``status`` + ``progress`` (about twice per second) +
     ``epoch_end``, ``weights_kept`` once the epochs are over (or the run was stopped),
-    ``test_end`` if there is a test set, and exactly one ``finish`` at the end. A
+    ``test_end`` if there is a test set, ``segmentation_end`` (segmentation only) and exactly
+    one ``finish`` at the end. A
     hyperparameter search wraps the epochs of every trial in ``trial_start`` and
     ``trial_end`` and calls ``search_end`` before ``weights_kept`` and testing the best
     trial.
@@ -78,7 +83,13 @@ class Reporter:
         both describe the best trial."""
 
     def test_end(self, result: dict[str, Any]) -> None:
-        """``{"loss", "accuracy", "rmse", "r2"}`` of the kept weights on the test set."""
+        """``{"loss", "accuracy", "rmse", "r2"}`` of the kept weights on the test set; a
+        segmentation adds ``"iou", "dice", "pixel_accuracy", "class_iou", "class_dice"``."""
+
+    def segmentation_end(self, result: dict[str, Any]) -> None:
+        """Segmentation only, once the weights are saved: the per-class results of the kept
+        weights and the preview images that were written (state.json key ``segmentation``,
+        see state.py)."""
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         """Terminal status (completed | stopped | failed) and the result for the user."""
