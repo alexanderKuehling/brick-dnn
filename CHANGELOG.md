@@ -27,6 +27,22 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Explanations of trained models and views inside them** (*Explain* in a finished run, see
+  [docs/explain.md](docs/explain.md)): saliency maps (SmoothGrad), Grad-CAM (any brick with
+  feature maps) and occlusion over the image for image classifiers, for a validation image,
+  a drawing or an uploaded file; Shapley values against the mean training row (exact up to
+  10 features), integrated gradients and permutation importance for models trained on CSV
+  files, also classical ones; decision boundaries with the training points for models with
+  two input features (with the predictive std of Gaussian processes); the output of every
+  brick for one sample, the learned filters of the first convolution and weight histograms.
+  They run like predictions (same process, limits and rate limit, counted as predictions),
+  are cached per run, and are available as `GET/POST /api/training/runs/<id>/explain/` and
+  the MCP tools `explain_prediction` and `get_layer_activations` (compact: coarse grids
+  instead of pictures).
+- **Learning aids in the builder** (also in the online demo): *How data flows* steps one
+  sample through the network brick by brick with the shapes before and after and what each
+  brick computes; the inspector shows how a brick's parameters add up (`3×3×32×64 + 64 =
+  18,496`) and the receptive field of bricks in a convolution stack.
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public

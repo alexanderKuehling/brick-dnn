@@ -254,6 +254,14 @@ separate process, like a training. AI assistants get the weights with `get_weigh
 a download link valid for 15 minutes, the model code, the preprocessing and a snippet like the
 one above (see [mcp.md](mcp.md#downloading-the-weights)).
 
+### Explaining the trained model
+
+**Explain** in a finished run opens explanations of the trained model and views inside it:
+saliency maps, Grad-CAM and occlusion for images, Shapley values, integrated gradients and
+permutation importance for CSV data, decision boundaries for models with two input features,
+the output of every brick for one sample, the learned filters and weight histograms. They run
+like predictions (and count as such); see [explain.md](explain.md).
+
 ## Classical models
 
 Besides neural networks, Brick DNN builds and trains classical models for tabular data
@@ -409,6 +417,8 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
   `weights.pt`, `weights.preprocessing.json` and `output.log` with the full output, useful when
   a run fails). Uploaded datasets
   are in `training/datasets/`, downloaded built-in datasets in `training/builtin/`.
+  Explanations keep the validation samples they read and their cached answers in
+  `explain/` inside the run directory ([explain.md](explain.md#limits-and-costs)).
 - Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights
   (of the best epoch so far) and exits. A run whose process disappears (for example because the server was restarted) is
   marked as failed.

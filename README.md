@@ -78,6 +78,13 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   or the support vectors, predict with uncertainty (Gaussian processes) or class
   probabilities, and export as a scikit-learn script. See
   [docs/training.md](docs/training.md#classical-models).
+- **Explainable AI and learning aids**: explain a trained model's predictions with saliency
+  maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
+  importance (tables), compare decision boundaries of an MLP, an SVM and a Gaussian process,
+  and look inside a network: the output of every layer for one sample, learned filters and
+  weight histograms. In the builder, **How data flows** steps a sample through the network,
+  and the inspector shows how a layer's parameters add up and its receptive field (also in
+  the online demo). See [docs/explain.md](docs/explain.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
