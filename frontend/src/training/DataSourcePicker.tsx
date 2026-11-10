@@ -1,6 +1,9 @@
 import { useId, useRef } from 'react';
 import {
+  IconChevronDown,
+  IconChevronRight,
   IconFileSpreadsheet,
+  IconLayersIntersect,
   IconPhoto,
   IconTableShortcut,
   IconTrash,
@@ -14,6 +17,8 @@ import {
   Anchor,
   Badge,
   Button,
+  Code,
+  Collapse,
   FileButton,
   Group,
   Loader,
@@ -24,12 +29,13 @@ import {
   ThemeIcon,
   Tooltip,
 } from '@mantine/core';
-import type { Dataset, TrainingStatus } from '@/api';
+import { useDisclosure } from '@mantine/hooks';
+import type { BuiltinDataset, Dataset, TrainingStatus } from '@/api';
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import type { UploadBytes } from '@/components/useUploadProgress';
 import { isOwnDataset } from './access';
-import { datasetDetails, formatSplit } from './format';
+import { classShares, datasetDetails, formatSplit, segmentationNotes } from './format';
 import type { SourceChoice, SourceTab } from './settings';
 import classes from './Training.module.css';
 
@@ -83,8 +89,10 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
           label="Dataset"
           description={
             status.torchvision
-              ? 'Downloaded to the server on first use.'
-              : 'Built-in datasets need torchvision on the server.'
+              ? status.builtin_datasets.some((dataset) => dataset.download_mb === 0)
+                ? 'Downloaded to the server on first use, or generated there.'
+                : 'Downloaded to the server on first use.'
+              : 'Downloaded datasets need torchvision on the server.'
           }
           value={choice.builtin}
           onChange={(id) => onChange({ ...choice, builtin: id })}
@@ -108,9 +116,7 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
                       {dataset.description}
                     </Text>
                     <Text size="xs" c="dimmed">
-                      {dataset.train_size.toLocaleString('en-US')} training and{' '}
-                      {dataset.test_size.toLocaleString('en-US')} test images ·{' '}
-                      {dataset.num_classes} classes · {dataset.download_mb} MB download
+                      {builtinDetails(dataset)}
                     </Text>
                   </div>
                 </Group>
@@ -122,6 +128,66 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
 
       {choice.tab === 'upload' && <Uploads {...props} />}
     </Stack>
+  );
+}
+
+/** "60,000 training and 10,000 test images · 10 classes · 12 MB download". */
+function builtinDetails(dataset: BuiltinDataset): string {
+  const sizes =
+    `${dataset.train_size.toLocaleString('en-US')} training and ` +
+    `${dataset.test_size.toLocaleString('en-US')} test images`;
+  if (dataset.task === 'segmentation') {
+    // Generated on the server: a class for every pixel.
+    const classes = dataset.class_names.join(', ');
+    return `${sizes} with masks · ${dataset.num_classes} classes (${classes}) · no download`;
+  }
+  return `${sizes} · ${dataset.num_classes} classes · ${dataset.download_mb} MB download`;
+}
+
+/** How to pack images and masks for a segmentation dataset (shown on demand). */
+function SegmentationHelp({ status }: { status: TrainingStatus }) {
+  const [opened, { toggle }] = useDisclosure(false);
+  const limits = status.segmentation;
+  if (!limits) {
+    return null; // A server without segmentation.
+  }
+  return (
+    <div>
+      <Button
+        variant="subtle"
+        color="gray"
+        size="compact-xs"
+        leftSection={opened ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+        onClick={toggle}
+        aria-expanded={opened}
+      >
+        Segmentation: how to pack the ZIP
+      </Button>
+      <Collapse expanded={opened}>
+        <Stack gap={6} mt={6}>
+          <Text size="xs" c="dimmed">
+            Images with one mask each, in two folders. An image and its mask have the same file name
+            (the ending may differ):
+          </Text>
+          <Code block fz="xs">
+            {
+              'images/001.jpg\nimages/002.jpg\nmasks/001.png\nmasks/002.png\nclasses.txt   (optional: one class name per line)'
+            }
+          </Code>
+          <Text size="xs" c="dimmed">
+            <b>Masks</b> are PNG files that give every pixel its class: grey values 0, 1, 2 … (255
+            marks pixels to ignore), black and white for two classes, or one colour per class. Up to{' '}
+            {limits.max_classes} classes; JPEG masks and smoothed edges do not work.
+          </Text>
+          <Text size="xs" c="dimmed">
+            With <Code fz="xs">train/images</Code>, <Code fz="xs">train/masks</Code>,{' '}
+            <Code fz="xs">val/…</Code> and <Code fz="xs">test/…</Code> the folders are the split.
+            Images of any size are resized to the Input of the network (at most{' '}
+            {limits.max_input_side}×{limits.max_input_side}).
+          </Text>
+        </Stack>
+      </Collapse>
+    </div>
   );
 }
 
@@ -148,7 +214,14 @@ function Uploads({
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
         <Text size="xs" c="dimmed">
           <b>CSV</b>: numeric feature columns, the target in the last column. <b>ZIP</b>: one folder
-          per class with images inside. Up to {status.max_upload_mb} MB.
+          per class with images inside
+          {status.segmentation ? (
+            <>
+              , or for segmentation the folders <Code fz="xs">images</Code> and{' '}
+              <Code fz="xs">masks</Code>
+            </>
+          ) : null}
+          {`. Up to ${status.max_upload_mb} MB.`}
         </Text>
         <FileButton
           resetRef={resetFile}
@@ -175,6 +248,7 @@ function Uploads({
         </FileButton>
       </Group>
 
+      <SegmentationHelp status={status} />
       <UploadNotice />
       <DataTabHint />
 
@@ -276,6 +350,9 @@ function DatasetCard({
   onDelete?: (dataset: Dataset) => void;
 }) {
   const own = isOwnDataset(dataset);
+  const segmentation = dataset.kind === 'segmentation';
+  const shares = segmentation ? classShares(dataset) : null;
+  const notes = segmentation ? segmentationNotes(dataset) : null;
   return (
     <Group wrap="nowrap" gap="xs">
       <Radio.Card
@@ -287,8 +364,14 @@ function DatasetCard({
       >
         <Group wrap="nowrap" gap="sm">
           <Radio.Indicator />
-          <ThemeIcon variant="light" color={dataset.kind === 'csv' ? 'teal' : 'violet'} aria-hidden>
-            {dataset.kind === 'csv' ? <IconFileSpreadsheet size={16} /> : <IconPhoto size={16} />}
+          <ThemeIcon variant="light" color={KIND_COLORS[dataset.kind]} aria-hidden>
+            {dataset.kind === 'csv' ? (
+              <IconFileSpreadsheet size={16} />
+            ) : dataset.kind === 'segmentation' ? (
+              <IconLayersIntersect size={16} />
+            ) : (
+              <IconPhoto size={16} />
+            )}
           </ThemeIcon>
           <div style={{ minWidth: 0 }}>
             <Group gap={6} wrap="nowrap">
@@ -315,11 +398,21 @@ function DatasetCard({
               </Text>
             )}
             <Text size="xs" c="dimmed">
-              {dataset.kind === 'csv' ? 'CSV' : 'Images'} · {datasetDetails(dataset)}
+              {KIND_LABELS[dataset.kind]} · {datasetDetails(dataset)}
             </Text>
+            {shares && (
+              <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                Pixels: {shares}
+              </Text>
+            )}
             {dataset.info.predefined_split && (
               <Text size="xs" c="dimmed">
                 Split {formatSplit(dataset.info.predefined_split)} (training / validation / test)
+              </Text>
+            )}
+            {notes && (
+              <Text size="xs" c="orange" style={{ overflowWrap: 'anywhere' }}>
+                {notes}
               </Text>
             )}
           </div>
@@ -343,9 +436,21 @@ function DatasetCard({
   );
 }
 
+const KIND_LABELS: Record<Dataset['kind'], string> = {
+  csv: 'CSV',
+  images: 'Images',
+  segmentation: 'Segmentation',
+};
+const KIND_COLORS: Record<Dataset['kind'], string> = {
+  csv: 'teal',
+  images: 'violet',
+  segmentation: 'grape',
+};
+
 /** Datasets made in the Data tab (they bring their own split). */
 function isPrepared(dataset: Dataset): boolean {
-  return Boolean(dataset.prepared_from || dataset.info.predefined_split);
+  // Segmentation datasets can bring a split too: their train/, val/ and test/ folders.
+  return dataset.kind === 'csv' && Boolean(dataset.prepared_from || dataset.info.predefined_split);
 }
 
 /** Points to the Data tab, which turns messy CSV files into training data. */

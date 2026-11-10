@@ -191,6 +191,13 @@ class BinaryRenderer(renderers.BaseRenderer):
         return json.dumps(data).encode()
 
 
+class PngRenderer(BinaryRenderer):
+    """Lets clients ask for ``image/png`` (errors are still JSON)."""
+
+    media_type = "image/png"
+    format = "png"
+
+
 def _disabled_response() -> Response | None:
     if not settings.TRAINING_ENABLED:
         return Response(
@@ -238,7 +245,10 @@ class DatasetViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Uploaded training data: a CSV file or a ZIP file with one folder per class."""
+    """Uploaded training data: a CSV file, a ZIP file with one folder of images per class,
+    or a ZIP file with images and their masks (``images/`` and ``masks/``) for segmentation.
+    The form field ``kind`` ("images" or "segmentation") says what a ZIP file holds; without
+    it the folders decide."""
 
     serializer_class = DatasetSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -294,9 +304,13 @@ class DatasetViewSet(
         if upload.size is not None and upload.size > limit:
             return too_large
         name = request.data.get("name")
+        kind = request.data.get("kind")
         try:
             dataset = training.save_upload(
-                request.user, upload, name if isinstance(name, str) else None
+                request.user,
+                upload,
+                name if isinstance(name, str) else None,
+                kind if isinstance(kind, str) else None,
             )
         except DatasetError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -408,7 +422,10 @@ class TrainingRunViewSet(
     def predict(self, request: Request, pk=None) -> Response:
         """Run the trained network on a few inputs: ``{"inputs", "input_scale"?, "top_k"?,
         "input_format"?}`` (see brickdnn.training.inference; "raw": rows of the source table
-        of a data preparation, see raw_predictions.py). Everyone who can see the run may."""
+        of a data preparation, see raw_predictions.py). Image networks also take ``{"image"}``
+        instead of ``inputs``: an image file (PNG, JPEG …) as base64 text, or a list of them.
+        A segmentation answers with a class map per image; ``mask`` ("png", "rle" or "none")
+        says how it is returned. Everyone who can see the run may."""
         run = self.get_object()
         data = request.data if isinstance(request.data, dict) else {}
         try:
@@ -417,6 +434,8 @@ class TrainingRunViewSet(
                 data.get("inputs"),
                 data.get("input_scale"),
                 data.get("top_k"),
+                data.get("image"),
+                data.get("mask"),
                 input_format=data.get("input_format"),
             )
         except training.TrainingUnavailable as exc:
@@ -451,6 +470,31 @@ class TrainingRunViewSet(
         rows, or the image size; why the run cannot predict otherwise."""
         run = self.get_object()
         return Response(raw_predictions.prediction_form(run, Actor.of(request)))
+
+    @action(detail=True, methods=["get"])
+    def previews(self, request: Request, pk=None) -> Response:
+        """Segmentation runs: what the kept weights predict for a few validation images
+        (image, mask, prediction and the prediction over the image, each a small PNG as a
+        data URL; ``?embed=0`` only lists the file names) with the IoU of every sample.
+        404 if the run has none. Everyone who can see the run may."""
+        run = self.get_object()
+        previews = training.previews_of(run, embed=request.query_params.get("embed") != "0")
+        if previews is None:
+            return Response(
+                {"detail": "This run has no preview images."}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(previews)
+
+    def preview_file(self, request: Request, pk=None, name: str = "") -> Response | FileResponse:
+        """One preview image of a segmentation run as a PNG file (the names are in
+        ``previews``): ``GET /api/training/runs/<id>/previews/<name>``, see urls.py."""
+        run = self.get_object()
+        path = training.preview_file(run, name)
+        if path is None:
+            return Response({"detail": "No such preview image."}, status=status.HTTP_404_NOT_FOUND)
+        response = FileResponse(path.open("rb"), content_type="image/png")
+        response["Cache-Control"] = "private, max-age=3600"
+        return response
 
     @action(
         detail=True,

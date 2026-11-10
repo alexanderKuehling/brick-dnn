@@ -1,5 +1,11 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { IconFileSpreadsheet, IconPhoto, IconTableOptions, IconX } from '@tabler/icons-react';
+import {
+  IconFileSpreadsheet,
+  IconLayersIntersect,
+  IconPhoto,
+  IconTableOptions,
+  IconX,
+} from '@tabler/icons-react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import {
   ActionIcon,
@@ -44,6 +50,10 @@ const KIND_TITLES: Record<ProjectDataKind, string> = {
 };
 
 const itemKey = (kind: ProjectDataKind, id: number) => `${kind}:${id}`;
+
+/** What a shared training dataset holds. */
+const DATASET_LABELS = { csv: 'CSV', images: 'Images', segmentation: 'Segmentation' } as const;
+const DATASET_COLORS = { csv: 'teal', images: 'violet', segmentation: 'grape' } as const;
 
 /**
  * Training datasets and data preparations shared in a project: everyone with access sees
@@ -264,7 +274,7 @@ function DataItemRow({
   const inRouter = useInRouterContext();
   const meta = [
     you ? 'by you' : `by ${item.owner}`,
-    kind === 'dataset' && (item.kind === 'images' ? 'Images' : 'CSV'),
+    kind === 'dataset' && DATASET_LABELS[item.kind ?? 'csv'],
     kind === 'dataset' && formatBytes(item.size_bytes),
   ]
     .filter(Boolean)
@@ -272,6 +282,8 @@ function DataItemRow({
   const icon =
     kind === 'prep' ? (
       <IconTableOptions size={16} />
+    ) : item.kind === 'segmentation' ? (
+      <IconLayersIntersect size={16} />
     ) : item.kind === 'images' ? (
       <IconPhoto size={16} />
     ) : (
@@ -282,7 +294,7 @@ function DataItemRow({
       <div className={classes.personName}>
         <ThemeIcon
           variant="light"
-          color={kind === 'prep' ? 'blue' : item.kind === 'images' ? 'violet' : 'teal'}
+          color={kind === 'prep' ? 'blue' : DATASET_COLORS[item.kind ?? 'csv']}
           aria-hidden
         >
           {icon}

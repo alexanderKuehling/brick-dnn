@@ -125,9 +125,10 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
             f"--save {filename}."
         )
     elif code is not None:
+        tabular = isinstance(preprocessing, dict) and preprocessing.get("kind") == "tabular"
         info["notes"].append(
             "Save model_code as "
             f"{module}.py next to the weights; generate_pytorch_code gives the full script "
-            "with a demo main and a CSV training loop."
+            + ("with a demo main and a CSV training loop." if tabular else "with a demo main.")
         )
     return info

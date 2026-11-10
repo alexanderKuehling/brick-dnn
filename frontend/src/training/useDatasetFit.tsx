@@ -177,11 +177,14 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
   const start = useCallback((network: GraphDocument, datasetName: string, images: boolean) => {
     latest.current.startNetwork(network);
     const input = network.nodes[0]?.params?.shape;
-    const outputs = network.nodes[network.nodes.length - 1]?.params?.out_features;
+    const last = network.nodes[network.nodes.length - 1]?.params;
+    // Segmentation networks end in a convolution with one channel per class.
+    const channels = last?.out_channels;
+    const outputs = channels ?? last?.out_features;
     const shape = Array.isArray(input) ? describeShape(input as number[], images) : 'the data';
     showUndo(
       `Started a network for “${datasetName}”: Input ${shape}, ${String(outputs)} ` +
-        `output${outputs === 1 ? '' : 's'}.`,
+        `output${channels !== undefined ? ' channel' : ''}${outputs === 1 ? '' : 's'}.`,
       () => {
         const ids = new Set(latest.current.nodes.map((n) => n.id));
         if (network.nodes.every((n) => ids.has(n.id))) {

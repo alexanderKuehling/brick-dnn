@@ -4,6 +4,8 @@ brickdnn train --example cnn_mnist --data mnist --epochs 5
 brickdnn train graph.json --data random                # demo data with a hidden rule
 brickdnn train graph.json --data houses.csv --save houses.pt
 brickdnn train graph.json --data photos.zip            # or a folder with one folder per class
+brickdnn train --example unet --data shapes            # segmentation: a class per pixel
+brickdnn train unet.json --data scans.zip --previews out/   # images/ and masks/ in the ZIP
 brickdnn train graph.json --data houses.csv --test-split 0.2       # hold out a test set
 brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopping
 brickdnn train graph.json --data mnist --tune --trials 20          # hyperparameter search
@@ -30,7 +32,7 @@ from typing import Any, TextIO
 from .. import EXAMPLES, analyze, get_example
 from . import sklearn_installed, torch_installed
 from .compat import check_compatibility
-from .config import DEVICES, OPTIMIZERS, ConfigError, TrainingConfig
+from .config import DEVICES, LOSSES, OPTIMIZERS, ConfigError, TrainingConfig
 from .datasets import (
     BUILTIN_DATASETS,
     DEFAULT_DATA_ROOT,
@@ -44,6 +46,7 @@ from .datasets import (
 )
 from .job import TrainingJob
 from .reporting import Reporter
+from .segmentation import inspect_segmentation_folder, is_segmentation_folder
 from .state import preprocessing_path
 from .tuning import LABELS, METHODS, TUNABLE, TuningConfig, describe_params, format_value
 
@@ -70,6 +73,7 @@ class ConsoleReporter(Reporter):
         self._trials: list[dict[str, Any]] = []
         self._preprocessing: dict[str, Any] | None = None
         self.classical = False
+        self.previews: Path | None = None  # where a segmentation writes its preview images
 
     def _print(self, text: str, err: bool = False) -> None:
         self._clear()
@@ -169,6 +173,12 @@ class ConsoleReporter(Reporter):
             line += f"  val rmse {entry['val_rmse']:.4g}"
         if entry.get("val_r2") is not None:
             line += f"  val R² {entry['val_r2']:.3f}"
+        if entry.get("val_iou") is not None:
+            line += f"  val IoU {entry['val_iou']:.1%}"
+        if entry.get("val_dice") is not None:
+            line += f"  val Dice {entry['val_dice']:.1%}"
+        if entry.get("val_pixel_accuracy") is not None:
+            line += f"  val pixel acc {entry['val_pixel_accuracy']:.1%}"
         self._print(line + f"  ({entry['seconds']:.1f}s)")
 
     def trial_start(self, trial: dict[str, Any]) -> None:
@@ -198,8 +208,10 @@ class ConsoleReporter(Reporter):
         accuracy = any(t.get("val_accuracy") is not None for t in self._trials)
         rmse = any(t.get("val_rmse") is not None for t in self._trials)
         r2 = not accuracy and any(t.get("val_r2") is not None for t in self._trials)
+        iou = any(t.get("val_iou") is not None for t in self._trials)
         columns += ["val acc"] if accuracy else ["val rmse"] if rmse else []
         columns += ["val R²"] if r2 else []
+        columns += ["val IoU"] if iou else []
         ranked = sorted(
             self._trials,
             key=lambda t: (t["val_loss"] is None, t["val_loss"] or 0.0, t["trial"]),
@@ -219,6 +231,8 @@ class ConsoleReporter(Reporter):
                     cells.append(f"{trial['val_rmse']:.4g}")
                 if r2:
                     cells.append(_number(trial.get("val_r2"), ".3f"))
+                if iou:
+                    cells.append(_number(trial.get("val_iou"), ".1%"))
             rows.append(cells)
         widths = [
             max([len(columns[i])] + [len(row[i]) for row in rows if i < len(row)])
@@ -238,7 +252,36 @@ class ConsoleReporter(Reporter):
             line += f", rmse {result['rmse']:.4g}"
         if result.get("r2") is not None:
             line += f", R² {result['r2']:.3f}"
+        if result.get("iou") is not None:
+            line += f", mean IoU {result['iou']:.1%}"
+        if result.get("dice") is not None:
+            line += f", Dice {result['dice']:.1%}"
+        if result.get("pixel_accuracy") is not None:
+            line += f", pixel accuracy {result['pixel_accuracy']:.1%}"
         self._print(line)
+
+    def segmentation_end(self, result: dict[str, Any]) -> None:
+        names = [str(name) for name in result.get("class_names") or []]
+        parts = [
+            (label, result.get(key)) for label, key in (("val", "validation"), ("test", "test"))
+        ]
+        parts = [(label, part) for label, part in parts if part]
+        if names and parts:
+            width = max(len("class"), *(len(name) for name in names))
+            self._print("\nIoU per class (of the kept weights):")
+            self._print("  ".join(["class".ljust(width), *[label.rjust(7) for label, _ in parts]]))
+            for index, name in enumerate(names):
+                cells = [
+                    _number((part.get("class_iou") or [None] * len(names))[index], ".1%").rjust(7)
+                    for _, part in parts
+                ]
+                self._print("  ".join([name.ljust(width), *cells]))
+        previews = result.get("previews")
+        if previews and self.previews is not None:
+            self._print(
+                f"Saved {previews['count']} preview images (image, mask, prediction, overlay) "
+                f"to {self.previews}"
+            )
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         if status == "failed":
@@ -264,6 +307,8 @@ def _metrics(trial: dict[str, Any], prefix: str) -> str:
         text += f", {prefix} rmse {trial[f'{prefix}_rmse']:.4g}"
     if trial.get(f"{prefix}_r2") is not None:
         text += f", {prefix} R² {trial[f'{prefix}_r2']:.3f}"
+    if trial.get(f"{prefix}_iou") is not None:
+        text += f", {prefix} IoU {trial[f'{prefix}_iou']:.1%}"
     return text
 
 
@@ -307,7 +352,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--data",
         default="random",
         help=f"random (demo data, default), {builtin}, a .csv file, a .zip file or a folder "
-        "with one sub-folder of images per class",
+        "with one sub-folder of images per class, or for segmentation with the folders "
+        "images/ and masks/",
     )
     parser.add_argument("--epochs", type=int, help="number of epochs (default 10)")
     parser.add_argument("--batch-size", type=int, help="samples per batch (default 64)")
@@ -339,6 +385,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="keep (test and save) the weights of the epoch with the lowest validation loss "
         "instead of those of the last epoch (default: on)",
+    )
+    parser.add_argument(
+        "--loss",
+        choices=LOSSES,
+        help="segmentation only: cross_entropy (default) or cross_entropy_dice, which adds "
+        "a Dice term for classes with few pixels",
+    )
+    parser.add_argument(
+        "--previews",
+        metavar="DIR",
+        help="segmentation only: write what the trained network predicts for a few "
+        "validation images (image, mask, prediction, overlay) into this folder",
     )
     parser.add_argument(
         "--save",
@@ -398,11 +456,15 @@ def resolve_data(value: str, workdir: Path) -> tuple[DatasetInfo, str | None]:
         return builtin_info(key), None
     path = Path(value).expanduser()
     if path.is_dir():
+        if is_segmentation_folder(path):
+            return inspect_segmentation_folder(path), str(path)
         return inspect_image_folder(path), str(path)
     if path.is_file() and path.suffix.lower() == ".zip":
         dest = workdir / "images"
         count = extract_image_zip(path, dest)
         print(f"Extracted {count:,} images from {path.name}.")
+        if is_segmentation_folder(dest):
+            return inspect_segmentation_folder(dest, name=path.stem), str(dest)
         return inspect_image_folder(dest, name=path.stem), str(dest)
     if path.is_file() and path.suffix.lower() in CSV_SUFFIXES:
         return inspect_csv(path), str(path)
@@ -458,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
                 "seed": args.seed,
                 "patience": args.patience,
                 "restore_best": args.restore_best,
+                "loss": args.loss,
             }
         )
         tuning = tuning_from_args(args)
@@ -496,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
             tuning=tuning,
         )
         reporter = ConsoleReporter(config.epochs, save)
+        reporter.previews = Path(args.previews) if args.previews else None
         restore = _catch_ctrl_c(reporter)
         try:
             if classical:
@@ -506,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
                 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
                 from . import engine
 
-                result = engine.train(job, reporter, save)
+                result = engine.train(job, reporter, save, reporter.previews)
         except KeyboardInterrupt:
             print("\nAborted, no weights saved.", file=sys.stderr)
             return 130

@@ -145,13 +145,17 @@ class DataPrep(models.Model):
 class Dataset(models.Model):
     """An uploaded training dataset. The files live in TRAINING_DIR/datasets/<id>/."""
 
-    KINDS = [("csv", "CSV file"), ("images", "Image folders")]
+    KINDS = [
+        ("csv", "CSV file"),
+        ("images", "Image folders"),
+        ("segmentation", "Images with masks"),
+    ]
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="datasets"
     )
     name = models.CharField(max_length=120)
-    kind = models.CharField(max_length=10, choices=KINDS)
+    kind = models.CharField(max_length=20, choices=KINDS)
     size_bytes = models.BigIntegerField(default=0)
     # DatasetInfo.to_dict(): columns, classes, number of samples, ...
     info = models.JSONField(default=dict)

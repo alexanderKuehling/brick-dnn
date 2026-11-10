@@ -59,6 +59,7 @@ def test_config_defaults():
         "seed": None,
         "patience": None,
         "restore_best": True,
+        "loss": "cross_entropy",
     }
     assert TrainingConfig.from_dict(config.to_dict()) == config
     assert not config.has_test
@@ -574,7 +575,7 @@ def test_dataset_info_round_trip():
 
 
 def test_builtin_datasets():
-    assert set(BUILTIN_DATASETS) == {"mnist", "fashion_mnist", "cifar10"}
+    assert set(BUILTIN_DATASETS) == {"mnist", "fashion_mnist", "cifar10", "shapes"}
     data = BUILTIN_DATASETS["mnist"].to_dict()
     assert data["download_mb"] == 12 and data["train_size"] == 60_000
     assert data["test_size"] == 10_000 and "val_size" not in data

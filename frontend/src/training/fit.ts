@@ -11,6 +11,9 @@ import type { EffectiveSource } from './settings';
 const AUTOMATIC: Record<string, string[]> = {
   Input: ['shape', 'dtype'],
   Linear: ['out_features'],
+  // Segmentation: one output channel per class.
+  Conv2d: ['out_channels'],
+  ConvTranspose2d: ['out_channels'],
 };
 
 /** True if the fixes only change the Input's shape or data type and the number of outputs. */
@@ -42,6 +45,8 @@ export function describeShape(shape: number[], images: boolean): string {
  */
 export function describeFixes(fixes: CompatibilityFix[], images: boolean): string {
   const input = fixes.find((fix) => fix.type === 'Input')?.params;
+  const channels = fixes.find((fix) => typeof fix.params.out_channels === 'number')?.params
+    .out_channels as number | undefined;
   const outputs = fixes.find((fix) => typeof fix.params.out_features === 'number')?.params
     .out_features as number | undefined;
   const inputText =
@@ -52,16 +57,48 @@ export function describeFixes(fixes: CompatibilityFix[], images: boolean): strin
     ]
       .filter(Boolean)
       .join(', ')}`;
-  const outputText = outputs === undefined ? null : plural(outputs, 'output');
+  const outputText =
+    channels !== undefined
+      ? plural(channels, 'output channel')
+      : outputs === undefined
+        ? null
+        : plural(outputs, 'output');
   if (inputText && outputText) {
     return `${inputText}, last layer to ${outputText}`;
   }
   return inputText || (outputText ? `Last layer set to ${outputText}` : 'Network adapted');
 }
 
-/** True if `source` holds images (built-in datasets, image folders). */
+/** True if `source` holds images (built-in datasets, image folders, images with masks). */
 export function isImageSource(source: EffectiveSource): boolean {
-  return source.ref?.kind === 'builtin' || source.upload?.kind === 'images';
+  return (
+    source.ref?.kind === 'builtin' ||
+    source.upload?.kind === 'images' ||
+    source.upload?.kind === 'segmentation'
+  );
+}
+
+/** True if `source` has a class for every pixel: Shapes or an upload of images with masks. */
+export function isSegmentationSource(source: EffectiveSource | null): boolean {
+  if (source?.ref?.kind === 'builtin') {
+    return source.builtin?.task === 'segmentation';
+  }
+  return source?.ref?.kind === 'upload' && source.upload?.kind === 'segmentation';
+}
+
+/**
+ * A first segmentation network: two convolutions that keep the image size and a 1×1
+ * convolution with one channel per class.
+ */
+function segmentationLayers(shape: number[], classes: number): [string, Params][] {
+  return [
+    ['Input', { shape }],
+    ['Conv2d', { out_channels: 16 }],
+    ['Activation', { function: 'relu' }],
+    ['Conv2d', { out_channels: 16 }],
+    ['Activation', { function: 'relu' }],
+    ['Conv2d', { out_channels: classes, kernel_size: [1, 1] }],
+  ];
 }
 
 /** The layers of a first network for `source`, from its known shape and classes. */
@@ -73,11 +110,18 @@ function starterLayers(source: EffectiveSource): [string, Params][] | null {
   ];
   if (source.ref?.kind === 'builtin' && source.builtin) {
     const { sample_shape: shape, num_classes: classes } = source.builtin;
+    if (source.builtin.task === 'segmentation') {
+      return segmentationLayers(shape, classes);
+    }
     return [['Input', { shape }], ['Flatten', {}], ...head(classes)];
   }
   const info = source.ref?.kind === 'upload' ? source.upload?.info : null;
   if (!info) {
     return null;
+  }
+  if (info.kind === 'segmentation') {
+    const channels = info.sample_shape?.[0] === 1 ? 1 : 3;
+    return segmentationLayers([channels, 64, 64], info.num_classes ?? 2);
   }
   if (info.kind === 'images') {
     return [['Input', { shape: [3, 64, 64] }], ['Flatten', {}], ...head(info.num_classes ?? 2)];
@@ -98,8 +142,8 @@ function starterLayers(source: EffectiveSource): [string, Params][] | null {
 
 /**
  * A small network that fits `source`, for an empty canvas: Input → (Flatten →) Linear → ReLU →
- * Linear with one output per class (1 for a regression). Null if the data or a layer type is
- * not known.
+ * Linear with one output per class (1 for a regression); for segmentation data convolutions
+ * that end in one channel per class. Null if the data or a layer type is not known.
  */
 export function starterNetwork(
   source: EffectiveSource,

@@ -27,10 +27,12 @@ import { useCostEstimate } from '@/usage/useCostEstimate';
 import type { TrainingProject } from './access';
 import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
+import { isSegmentationSource } from './fit';
 import { startsIn } from './format';
 import {
   effectiveSource,
   loadSettings,
+  maxSegmentationBatch,
   saveSettings,
   toConfig,
   toTuning,
@@ -123,12 +125,8 @@ export function SetupView({
     saveSettings(next);
   };
 
-  const {
-    choice: effective,
-    ref,
-    upload,
-    name: datasetName,
-  } = effectiveSource(status, choice, datasets);
+  const source = effectiveSource(status, choice, datasets);
+  const { choice: effective, ref, upload, name: datasetName } = source;
 
   const empty = doc.nodes.length === 0;
   const networkValid = !empty && analysis?.valid === true;
@@ -147,7 +145,23 @@ export function SetupView({
   const search = settings.search && !classical;
 
   const builtinSource = choice.tab === 'builtin';
-  const errors = validateSettings(settings, { classical: classical && { maxRows } });
+  // A class for every pixel: the batch size is limited by the memory a batch needs, which the
+  // check of the network reports (plan.segmentation) for the limit of this server.
+  const segmentationSource = !classical && isSegmentationSource(source);
+  const maxBatch = segmentationSource
+    ? maxSegmentationBatch(
+        compatibility.fresh ? check?.plan?.segmentation : null,
+        status.segmentation?.batch_memory_mb
+      )
+    : null;
+  const segmentation = useMemo(
+    () => (segmentationSource ? { maxBatch } : null),
+    [segmentationSource, maxBatch]
+  );
+  const errors = validateSettings(settings, {
+    classical: classical && { maxRows },
+    segmentation,
+  });
   if (builtinSource) {
     // Built-in datasets always test on their official test images: the test share is not used.
     delete errors.test_split;
@@ -172,9 +186,9 @@ export function SetupView({
       // A remembered device may not exist on this server (any more).
       toConfig(
         { ...settings, device: knownDevice ? settings.device : 'auto' },
-        { builtin: builtinSource, classical: isClassical }
+        { builtin: builtinSource, classical: isClassical, segmentation: segmentationSource }
       ),
-    [settings, knownDevice, builtinSource, isClassical]
+    [settings, knownDevice, builtinSource, isClassical, segmentationSource]
   );
   const tuning = useMemo(() => (isClassical ? null : toTuning(settings)), [settings, isClassical]);
   const cost = useCostEstimate(
@@ -327,6 +341,7 @@ export function SetupView({
         builtin={builtinSource}
         predefinedSplit={predefinedSplit}
         classical={classical}
+        segmentation={segmentation}
       />
 
       {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}

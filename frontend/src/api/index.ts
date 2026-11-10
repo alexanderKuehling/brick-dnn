@@ -51,6 +51,7 @@ import type {
   ProjectVersionDetail,
   RunDetail,
   RunInput,
+  RunPreviews,
   RunSummary,
   SharedNetwork,
   ShareLink,
@@ -479,6 +480,9 @@ const serverApi = {
           auth: true,
           signal,
         }),
+      /** Segmentation runs: a few validation images with the masks the network predicts. */
+      previews: (id: string, signal?: AbortSignal) =>
+        request<RunPreviews>(`/api/training/runs/${id}/previews/`, { auth: true, signal }),
     },
   },
 

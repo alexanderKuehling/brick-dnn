@@ -25,6 +25,7 @@ shared directory later.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import copy
 import importlib.metadata
@@ -32,6 +33,7 @@ import json
 import logging
 import math
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -75,20 +77,32 @@ from brickdnn.training import (
     inference,
     inspect_csv,
     inspect_image_folder,
+    inspect_segmentation_folder,
+    is_segmentation_folder,
     random_info,
     sklearn_installed,
     torch_installed,
     torchvision_installed,
 )
-from brickdnn.training.config import ConfigError, classical_max_rows
+from brickdnn.training.compat import MAX_SEGMENTATION_SIDE
+from brickdnn.training.config import (
+    LOSSES,
+    ConfigError,
+    classical_max_rows,
+    segmentation_memory_bytes,
+)
 from brickdnn.training.estimate import Estimate, estimate_training
 from brickdnn.training.job import graph_family
+from brickdnn.training.segmentation import MAX_PAIRS, MAX_SEGMENTATION_CLASSES, class_colors
 from brickdnn.training.state import (
     LOG_FILE,
+    PREVIEW_DIR,
+    PREVIEW_INDEX_FILE,
     STATE_FILE,
     STOP_FILE,
     is_stale,
     preprocessing_path,
+    read_json,
     read_state,
     request_stop,
     stop_request,
@@ -135,7 +149,15 @@ BUSY_MESSAGE = "Another training is still running. Stop it or wait until it fini
 UNEXPECTED_MESSAGE = "The training process stopped unexpectedly."
 NOT_STARTED_MESSAGE = "The training process did not start."
 STOPPED_MESSAGE = "Training was stopped."
-WRONG_FILE_MESSAGE = "Upload a .csv file or a .zip file with one folder per class."
+WRONG_FILE_MESSAGE = (
+    "Upload a .csv file or a .zip file: with one folder of images per class, or for "
+    "segmentation with the folders images/ and masks/."
+)
+UPLOAD_KINDS = ("images", "segmentation")
+WRONG_KIND_MESSAGE = (
+    "'kind' says what a .zip file holds: 'images' (one folder per class) or 'segmentation' "
+    "(the folders images/ and masks/). Leave it out to let the folders decide."
+)
 IN_USE_MESSAGE = "This dataset is used by a training that is still running. Stop it first."
 IN_USE_QUEUED_MESSAGE = (
     "This dataset is used by a training that waits in the queue. Cancel it first."
@@ -175,6 +197,18 @@ TRIAL_KEYS = (
     "val_r2",
     "weights_epoch",
 )
+# Segmentation runs add these (other runs do not have the keys).
+SEGMENTATION_METRIC_KEYS = ("val_iou", "val_dice", "val_pixel_accuracy")
+SEGMENTATION_TEST_KEYS = {
+    "test_iou": "iou",
+    "test_dice": "dice",
+    "test_pixel_accuracy": "pixel_accuracy",
+}
+# The preview images of a segmentation run (brickdnn.training.previews).
+PREVIEW_PARTS = ("image", "truth", "prediction", "overlay")
+PREVIEW_NAME = re.compile(r"[0-9]{1,3}_(?:image|truth|prediction|overlay)\.png")
+# A preview image is small (see previews.py); anything larger is not served.
+MAX_PREVIEW_BYTES = 1024 * 1024
 
 # Training processes started by this server process, by run id. A daemon thread waits
 # for each of them so that finished processes do not linger as zombies.
@@ -374,9 +408,19 @@ def capabilities(user=None) -> dict[str, Any]:
         "devices": info.get("devices", []) if available else [],
         "default_device": info.get("default_device") if available else None,
         "builtin_datasets": [
-            {**dataset.to_dict(), "available": has_torchvision}
+            # Generated datasets (Shapes) need no torchvision.
+            {**dataset.to_dict(), "available": has_torchvision or dataset.generated}
             for dataset in BUILTIN_DATASETS.values()
         ],
+        # Segmentation (a class for every pixel): what a dataset and a training may be.
+        "segmentation": {
+            "max_classes": MAX_SEGMENTATION_CLASSES,
+            "max_images": MAX_PAIRS,
+            "max_input_side": MAX_SEGMENTATION_SIDE,
+            # A batch (every layer's output for all its images) may need this much memory.
+            "batch_memory_mb": round(segmentation_memory_bytes() / 1024**2),
+            "losses": list(LOSSES),
+        },
         "max_upload_mb": settings.TRAINING_MAX_UPLOAD_MB,
         # Trainings that run at the same time (all users): the slots of the workers, or
         # BRICKDNN_TRAINING_MAX_RUNS when the web server trains itself.
@@ -404,13 +448,22 @@ def capabilities(user=None) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
-def save_upload(user, upload, name: str | None = None) -> Dataset:
+def save_upload(user, upload, name: str | None = None, kind: str | None = None) -> Dataset:
     """Store and inspect an uploaded CSV or ZIP file. Raises :class:`DatasetError`, or
-    :class:`budgets.StorageQuotaExceeded` if it does not fit into the account's storage."""
+    :class:`budgets.StorageQuotaExceeded` if it does not fit into the account's storage.
+
+    A ZIP file with a folder of images and a folder of masks (``images/`` and ``masks/``)
+    becomes a segmentation dataset, any other one a dataset with one folder per class;
+    ``kind`` ("images" or "segmentation") says which one is meant, for clearer errors."""
     filename = Path(upload.name or "").name
     suffix = Path(filename).suffix.lower()
     if suffix not in (".csv", ".zip"):
         raise DatasetError(WRONG_FILE_MESSAGE)
+    if kind in ("", None):
+        kind = None
+    elif kind not in UPLOAD_KINDS or suffix != ".zip":
+        raise DatasetError(WRONG_KIND_MESSAGE)
+    wanted = kind
     name = (str(name or "").strip() or Path(filename).stem.strip() or "Dataset")[:120]
     kind = "csv" if suffix == ".csv" else "images"
     budgets.check_storage(user, int(upload.size or 0))
@@ -441,7 +494,13 @@ def save_upload(user, upload, name: str | None = None) -> Dataset:
             )
             if archive.parent == work:
                 archive.unlink()
-            info = inspect_image_folder(work / "images", name=name)
+            if wanted == "segmentation" or (
+                wanted is None and is_segmentation_folder(work / "images")
+            ):
+                info = inspect_segmentation_folder(work / "images", name=name)
+                kind = "segmentation"
+            else:
+                info = inspect_image_folder(work / "images", name=name)
             size = _folder_size(work / "images")
             budgets.check_storage(user, size)  # unpacked, the images can take more room
         dataset = Dataset.objects.create(
@@ -606,7 +665,9 @@ def check(
             result.errors.insert(0, reason)
             result.plan = None
         return result
-    if dataset.info.kind == "builtin" and not torchvision_installed():
+    builtin = BUILTIN_DATASETS.get(dataset.info.builtin or "")
+    generated = builtin is not None and builtin.generated
+    if dataset.info.kind == "builtin" and not generated and not torchvision_installed():
         result.errors.insert(
             0,
             "torchvision is not installed on the server, so the built-in datasets cannot be "
@@ -834,6 +895,7 @@ def start_claimed(run: TrainingRun, limit: budgets.RunLimit) -> None:
     for name in leftovers:
         with contextlib.suppress(OSError):
             (directory / name).unlink()
+    shutil.rmtree(directory / PREVIEW_DIR, ignore_errors=True)
     try:
         info, path = _run_dataset(run)
     except TrainingInputError as exc:
@@ -954,6 +1016,11 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
             **{key: entry.get(key) for key in METRIC_KEYS},
             **{key: test.get(name) for key, name in TEST_KEYS.items()},
         }
+        if state.get("task") == "segmentation":
+            run.metrics.update({key: entry.get(key) for key in SEGMENTATION_METRIC_KEYS})
+            run.metrics.update(
+                {key: test.get(name) for key, name in SEGMENTATION_TEST_KEYS.items()}
+            )
     elif isinstance(history, list):
         run.epochs_done = 0  # a new trial of a search has started
     if isinstance(state.get("best"), dict) or state.get("best") is None:
@@ -965,6 +1032,8 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
         number = state.get("best_trial")
         best = next((t for t in trials if number is not None and t.get("trial") == number), None)
         run.best_trial = {key: best.get(key) for key in TRIAL_KEYS} if best else None
+        if best and "val_iou" in best:  # segmentation
+            run.best_trial["val_iou"] = best.get("val_iou")
     run.has_weights = bool(state.get("weights")) and _weights_file(run).is_file()
     total = state.get("total_params")
     if isinstance(total, int) and not isinstance(total, bool):
@@ -1420,6 +1489,49 @@ def weights_filename(run: TrainingRun) -> str:
     return (slugify(run.name) or ("model" if suffix == ".joblib" else "weights")) + suffix
 
 
+def previews_of(run: TrainingRun, embed: bool = True) -> dict[str, Any] | None:
+    """The preview images of a segmentation run (what the kept weights predict for a few
+    validation images, see brickdnn.training.previews): its index, with every image as a
+    data URL (``embed``) next to its file name. None if the run has none."""
+    directory = run_dir(run.pk) / PREVIEW_DIR
+    index = read_json(directory / PREVIEW_INDEX_FILE)
+    if not isinstance(index, dict) or not isinstance(index.get("samples"), list):
+        return None
+    samples = []
+    for sample in index["samples"]:
+        if not isinstance(sample, dict):
+            continue
+        entry = _finite(dict(sample))
+        for part in PREVIEW_PARTS:
+            path = _preview_path(directory, sample.get(part))
+            if path is None:
+                break
+            entry[part] = {"file": path.name}
+            if embed:
+                encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+                entry[part]["url"] = f"data:image/png;base64,{encoded}"
+        else:
+            samples.append(entry)
+    return {**index, "samples": samples}
+
+
+def _preview_path(directory: Path, name: Any) -> Path | None:
+    """The file of a preview image, if ``name`` is one (``3_overlay.png``) and it exists."""
+    if not isinstance(name, str) or not PREVIEW_NAME.fullmatch(name):
+        return None
+    path = directory / name
+    try:
+        ok = path.is_file() and not path.is_symlink() and path.stat().st_size <= MAX_PREVIEW_BYTES
+    except OSError:
+        return None
+    return path if ok else None
+
+
+def preview_file(run: TrainingRun, name: Any) -> Path | None:
+    """One preview image of ``run`` by its file name (None if there is none)."""
+    return _preview_path(run_dir(run.pk) / PREVIEW_DIR, name)
+
+
 def no_weights_reason(run: TrainingRun) -> str:
     """Why a run has no weights to download or predict with (for the user)."""
     if run.status == QUEUED:
@@ -1449,6 +1561,7 @@ class Prediction:
     # preparation took in this process.
     warnings: list[str] = dataclass_field(default_factory=list)
     prepare_seconds: float = 0.0
+    mask_format: str = "png"  # segmentation: how the class maps are returned
 
 
 def prepare_prediction(
@@ -1456,11 +1569,16 @@ def prepare_prediction(
     inputs: Any,
     input_scale: Any = None,
     top_k: Any = None,
+    image: Any = None,
+    mask: Any = None,
     input_format: Any = None,
 ) -> Prediction:
     """Check that ``run`` can predict and prepare ``inputs`` like its training data (cheap:
     no process is started). ``input_format`` "raw": rows of the source table of a data
-    preparation, prepared first (see raw_predictions.py). Raises :class:`TrainingUnavailable`,
+    preparation, prepared first (see raw_predictions.py). Image networks also take ``image``
+    instead: image files as base64 text, which the prediction process decodes. ``mask``: how
+    a segmentation returns its class maps (inference.MASK_FORMATS). Raises
+    :class:`TrainingUnavailable`,
     :class:`PredictionUnavailable` or :class:`TrainingInputError`."""
     from . import raw_predictions
 
@@ -1476,7 +1594,13 @@ def prepare_prediction(
         inputs, warnings = raw_predictions.prepare_raw(run, inputs)
         input_scale = None  # the prepared rows are in the units of the training CSV file
     try:
-        prepared = inference.prepare_inputs(run.plan, preprocessing, inputs, input_scale, top_k)
+        mask_format = inference.mask_format(mask)
+        if image is not None and inputs is not None:
+            raise inference.InvalidInputs("Give either 'inputs' or 'image', not both.")
+        if image is not None:
+            prepared = inference.prepare_image_files(run.plan, preprocessing, image, top_k)
+        else:
+            prepared = inference.prepare_inputs(run.plan, preprocessing, inputs, input_scale, top_k)
     except inference.UnknownPreprocessing as exc:
         raise PredictionUnavailable(str(exc)) from None
     except inference.InvalidInputs as exc:
@@ -1488,7 +1612,14 @@ def prepare_prediction(
             )
         raise TrainingInputError(message) from None
     spent = time.thread_time() - started if input_format == "raw" else 0.0
-    return Prediction(run, preprocessing, prepared, warnings, spent)
+    return Prediction(
+        run,
+        preprocessing,
+        prepared,
+        mask_format=mask_format,
+        warnings=warnings,
+        prepare_seconds=spent,
+    )
 
 
 def describe_inputs(run: TrainingRun) -> str | None:
@@ -1515,18 +1646,35 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
     budgets.check_compute(actor)
     if prediction.prepare_seconds > 0:  # preparing raw rows (in this process)
         budgets.record_prediction(actor, run, prediction.prepare_seconds)
+    request: dict[str, Any] = {"inputs": prepared.tensors, "kind": prepared.kind}
+    if prepared.files is not None:
+        request = {"images": prepared.files, "image": prepared.image, "kind": prepared.kind}
+    segmentation = inference.is_segmentation(run.plan)
+    names = inference.class_names(run.plan, prediction.preprocessing)
+    if segmentation:
+        target = run.plan["targets"][0]
+        request["segmentation"] = {
+            "binary": bool(target.get("binary")),
+            "num_classes": len(names or []),
+            "mask": prediction.mask_format,
+        }
     with _prediction_slot():
-        result = _predict_process(run, {"inputs": prepared.tensors, "kind": prepared.kind}, actor)
+        result = _predict_process(run, request, actor)
     try:
-        predictions = inference.read_outputs(
-            run.plan,
-            prediction.preprocessing,
-            result["outputs"],
-            prepared.count,
-            prepared.top_k,
-            probabilities=bool(result.get("probabilities")),
-            std=result.get("std"),
-        )
+        if segmentation:
+            predictions = inference.read_masks(
+                run.plan, prediction.preprocessing, result.get("masks"), prepared.count
+            )
+        else:
+            predictions = inference.read_outputs(
+                run.plan,
+                prediction.preprocessing,
+                result.get("outputs"),
+                prepared.count,
+                prepared.top_k,
+                probabilities=bool(result.get("probabilities")),
+                std=result.get("std"),
+            )
     except ValueError as exc:
         raise PredictionFailed(str(exc)) from None
     answer: dict[str, Any] = {
@@ -1534,6 +1682,14 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
         "task": run.plan.get("task"),
         "predictions": predictions,
     }
+    if segmentation:
+        answer["class_names"] = names
+        answer["colors"] = class_colors(len(names or []))
+        answer["mask_note"] = (
+            "mask_png is the predicted class of every pixel as a PNG file: the pixel values "
+            "are the class indices, shown in 'colors'. mask 'rle' returns run-lengths "
+            "instead (class, pixels, class, pixels … row by row), 'none' only the shares."
+        )
     if (
         prepared.kind == "tabular"
         and inference.class_names(run.plan, prediction.preprocessing) is None
@@ -1618,7 +1774,11 @@ def _predict_process(run: TrainingRun, request: dict[str, Any], actor: Actor) ->
     budgets.record_prediction(actor, run, float(spent))
     if isinstance(answer, dict) and isinstance(answer.get("error"), str):
         raise PredictionFailed(answer["error"][:500])
-    if result.returncode == 0 and isinstance(answer, dict) and "outputs" in answer:
+    if (
+        result.returncode == 0
+        and isinstance(answer, dict)
+        and ("outputs" in answer or "masks" in answer)
+    ):
         return answer
     lines = [line.strip() for line in result.stderr.splitlines() if line.strip()]
     detail = lines[-1][:300] if lines else f"exit code {result.returncode}"
