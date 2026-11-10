@@ -3,7 +3,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.db.models import Q
 
-from . import billing_admin, budgets  # noqa: F401 (billing_admin registers its models)
+# billing_admin and training_admin register their models.
+from . import billing_admin, budgets, training_admin  # noqa: F401
 from .models import (
     AgentAction,
     ApiToken,
@@ -46,7 +47,15 @@ class DatasetAdmin(admin.ModelAdmin):
 
 @admin.register(TrainingRun)
 class TrainingRunAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "status", "epochs_done", "created_at", "finished_at")
+    list_display = (
+        "name",
+        "owner",
+        "status",
+        "epochs_done",
+        "worker",
+        "created_at",
+        "finished_at",
+    )
     list_filter = ("status",)
     search_fields = ("name", "owner__username")
     readonly_fields = (
@@ -78,6 +87,9 @@ class TrainingRunAdmin(admin.ModelAdmin):
         "estimated_cpu_seconds",
         "stop_reason",
         "size_bytes",
+        "queued_at",
+        "worker",
+        "restarts",
     )
 
 

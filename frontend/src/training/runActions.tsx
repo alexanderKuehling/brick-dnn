@@ -26,24 +26,33 @@ function notAllowed(error: unknown): boolean {
 }
 
 export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => void) {
+  // A run that still waits in the queue is cancelled: nothing was trained, nothing is lost.
+  const queued = run.status === 'queued';
   modals.openConfirmModal({
-    title: 'Stop the training?',
+    title: queued ? 'Cancel the training?' : 'Stop the training?',
     children: (
       <Text size="sm">
-        {isClassicalRun(run)
-          ? `scikit-learn cannot pause a fit: “${run.name}” stops at once and nothing is saved.`
-          : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
+        {queued
+          ? `“${run.name}” leaves the queue without having trained. It uses no compute.`
+          : isClassicalRun(run)
+            ? `scikit-learn cannot pause a fit: “${run.name}” stops at once and nothing is saved.`
+            : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
       </Text>
     ),
-    labels: { confirm: 'Stop training', cancel: 'Keep training' },
+    labels: queued
+      ? { confirm: 'Cancel training', cancel: 'Keep waiting' }
+      : { confirm: 'Stop training', cancel: 'Keep training' },
     confirmProps: { color: 'red' },
     onConfirm: async () => {
       try {
         onStopped(await api.training.runs.stop(run.id));
       } catch (error) {
+        const what = queued ? 'cancel' : 'stop';
         notifications.show({
           color: 'red',
-          title: notAllowed(error) ? 'You cannot stop this training' : 'Cannot stop the training',
+          title: notAllowed(error)
+            ? `You cannot ${what} this training`
+            : `Cannot ${what} the training`,
           message: (error as Error).message,
         });
       }
@@ -56,9 +65,11 @@ export function confirmDeleteRun(run: RunSummary, onDeleted: (id: string) => voi
     title: `Delete “${run.name}”?`,
     children: (
       <Text size="sm">
-        {isActive(run.status)
-          ? 'The training is stopped and everything it produced is deleted, including the weights.'
-          : 'The results and the trained weights are deleted. This cannot be undone.'}
+        {run.status === 'queued'
+          ? 'The training leaves the queue and is deleted.'
+          : isActive(run.status)
+            ? 'The training is stopped and everything it produced is deleted, including the weights.'
+            : 'The results and the trained weights are deleted. This cannot be undone.'}
         {run.project !== null && ' It is deleted for everyone in the network.'}
       </Text>
     ),

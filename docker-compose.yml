@@ -28,6 +28,19 @@ x-budgets: &budgets
   BRICKDNN_PRICE_PER_GB_MONTH: ${BRICKDNN_PRICE_PER_GB_MONTH:-}
   BRICKDNN_PRICE_CURRENCY: ${BRICKDNN_PRICE_CURRENCY:-}
 
+# Trainings (docs/training.md): the backend puts them into a queue in the database and the
+# worker service trains them, plans with a higher priority first. BRICKDNN_TRAINING_WORKER=false
+# switches the queue off: the backend then trains itself (and the worker service idles).
+x-training: &training
+  BRICKDNN_TRAINING: ${BRICKDNN_TRAINING:-true}
+  BRICKDNN_TRAINING_WORKER: ${BRICKDNN_TRAINING_WORKER:-true}
+  # Trainings of one account that may wait in the queue (unset: 3 with plans, else no limit).
+  BRICKDNN_QUEUE_MAX_WAITING: ${BRICKDNN_QUEUE_MAX_WAITING:-}
+  # Seconds without a heartbeat after which a worker counts as dead, and how often a training
+  # is started again after its worker restarted (unset: 60 and 3).
+  BRICKDNN_WORKER_TIMEOUT: ${BRICKDNN_WORKER_TIMEOUT:-}
+  BRICKDNN_WORKER_MAX_RESTARTS: ${BRICKDNN_WORKER_MAX_RESTARTS:-}
+
 # Paid plans with Paddle (docs/billing.md); all unset: off. The backend sells and manages the
 # subscriptions, the cleanup service checks them once a day and bills overage. The API key and
 # the webhook secret only come from .env; the others can also be in the settings of the domain.
@@ -47,18 +60,19 @@ services:
       args:
         # Set to "true" to install PyTorch (CPU) and enable training in the UI.
         INSTALL_TORCH: ${BRICKDNN_INSTALL_TORCH:-false}
-    # The realtime and cleanup services run the same image.
+    # The worker, realtime and cleanup services run the same image.
     image: brick-dnn-backend:local
-    # A minimal init process reaps training processes whose gunicorn worker was restarted.
+    # A minimal init process reaps the processes of predictions (and of trainings, without the
+    # worker) whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: [*retention, *budgets, *paddle]
+      <<: [*retention, *budgets, *paddle, *training]
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       BRICKDNN_ALLOW_REGISTRATION: ${BRICKDNN_ALLOW_REGISTRATION:-true}
-      BRICKDNN_TRAINING: ${BRICKDNN_TRAINING:-true}
+      # Without the queue: trainings the backend runs at the same time.
       BRICKDNN_TRAINING_MAX_RUNS: ${BRICKDNN_TRAINING_MAX_RUNS:-1}
       BRICKDNN_MAX_UPLOAD_MB: ${BRICKDNN_MAX_UPLOAD_MB:-500}
       # Data tab: largest import (MB) and imports from links (see docs/data-preparation.md).
@@ -78,6 +92,44 @@ services:
       - brickdnn-data:/data
     depends_on:
       - redis
+    logging: *logging
+    restart: unless-stopped
+
+  # Trains what the backend queued (docs/training.md): `manage.py training_worker`, the same
+  # image, the same data volume (run directories, datasets; SQLite without DATABASE_URL). It
+  # waits until the backend has migrated the database.
+  worker:
+    image: brick-dnn-backend:local
+    pull_policy: never
+    command: ["python", "manage.py", "training_worker"]
+    # Passes the stop signal on to the worker and reaps the training processes.
+    init: true
+    # When it is stopped (e.g. by a deploy), the worker lets its trainings finish for 30
+    # seconds (BRICKDNN_WORKER_DRAIN_SECONDS; keep it well below the grace period), then puts
+    # them back into the queue: the next worker starts them again.
+    stop_grace_period: 60s
+    environment:
+      <<: [*budgets, *training]
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      BRICKDNN_WORKER_DRAIN_SECONDS: ${BRICKDNN_WORKER_DRAIN_SECONDS:-}
+      # Trainings at the same time. Unset: BRICKDNN_TRAINING_MAX_RUNS if that is set, else as
+      # many as fit on the CPUs with OMP_NUM_THREADS threads each (one without it).
+      BRICKDNN_WORKER_SLOTS: ${BRICKDNN_WORKER_SLOTS:-${BRICKDNN_TRAINING_MAX_RUNS:-}}
+    volumes:
+      - brickdnn-data:/data
+    depends_on:
+      - backend
+    healthcheck:
+      # The worker touches this file in every round (every two seconds).
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/brickdnn-worker.alive') > 60)"
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
     logging: *logging
     restart: unless-stopped
 

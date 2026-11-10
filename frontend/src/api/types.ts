@@ -311,7 +311,9 @@ export interface Plan {
   storage_gb: number | null;
   cpu_minutes_per_run: number | null;
   concurrent_trainings: number | null;
-  /** For the job queue (higher goes first). */
+  /** Trainings of an account that may wait in the queue (null: the server's default). */
+  queued_trainings?: number | null;
+  /** For the training queue: runs of plans with a higher priority start first. */
   priority: number;
   /** Compute beyond the allowance, if the plan offers it (per CPU hour). */
   overage_price_per_cpu_hour: number | null;
@@ -685,7 +687,50 @@ export interface CommentInput {
 // Training (runs on the machine of the backend, see /api/training/)
 // --------------------------------------------------------------------------
 
-export type RunStatus = 'starting' | 'preparing' | 'running' | 'completed' | 'stopped' | 'failed';
+/** `queued`: waiting for a training worker (servers with a training queue). */
+export type RunStatus =
+  'queued' | 'starting' | 'preparing' | 'running' | 'completed' | 'stopped' | 'failed';
+
+/**
+ * Where a queued run waits (`queue` of a run). The start is a rough estimate from the CPU-time
+ * estimates of the trainings ahead and the worker's slots.
+ */
+export interface RunQueue {
+  /** Its place among all waiting trainings, from 1, and how many wait. */
+  position: number;
+  waiting: number;
+  /** Null when it cannot be told (e.g. without a worker). */
+  estimated_wait_seconds: number | null;
+  estimated_start_at: string | null;
+  /** False: no training worker is running; the run waits until one is back. */
+  worker_online: boolean;
+  /** `account`: it waits for a running training of the same account to finish. */
+  blocked_by: 'account' | null;
+  priority: number;
+  /** One line on what the plan means for the place, e.g. "Paid plans start first." */
+  hint: string | null;
+}
+
+/** The training queue of the server (`queue` of GET /api/training/). */
+export interface QueueStatus {
+  /** A training worker is running. */
+  online: boolean;
+  workers: number;
+  /** Trainings the workers run at the same time. */
+  slots: number;
+  running: number;
+  waiting: number;
+  /** Set when no worker is running. */
+  message: string | null;
+  /** Logged in: what the plan means for the place in the queue (null: nothing). */
+  priority_hint: string | null;
+}
+
+/** Where a training started now would wait (`queue` of the training check). */
+export interface QueuePreview extends RunQueue {
+  running: number;
+  message: string | null;
+}
 
 export interface TrainingDevice {
   id: string;
@@ -720,6 +765,11 @@ export interface TrainingStatus {
   builtin_datasets: BuiltinDataset[];
   max_upload_mb: number;
   max_concurrent_runs: number;
+  /**
+   * With a training worker: new trainings wait in a queue instead of being refused while
+   * the server is busy. Null (or missing on older servers): the web server trains itself.
+   */
+  queue?: QueueStatus | null;
   login_required: boolean;
   /** Limits of the hyperparameter search (missing on servers without it). */
   tuning?: TuningLimits;
@@ -847,6 +897,8 @@ export interface Compatibility {
   /** The estimated CPU time of the run (null if it cannot be estimated). */
   estimate?: CostEstimate | null;
   budget?: BudgetCheck | null;
+  /** Servers with a training queue: where a training started now would wait. */
+  queue?: QueuePreview | null;
 }
 
 export type Optimizer = 'adam' | 'adamw' | 'sgd';
@@ -1047,6 +1099,8 @@ export interface RunSummary {
   /** The API token or connected app that started it (null: the web app). */
   started_via?: { source: 'token' | 'app'; name: string | null } | null;
   usage?: RunUsage;
+  /** While the run is `queued`: its position and estimated start. Null otherwise. */
+  queue?: RunQueue | null;
 }
 
 /** Why a stopped run stopped: the user, a used-up budget or the limit per training. */

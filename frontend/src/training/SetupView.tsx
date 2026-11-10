@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   IconAlertTriangle,
   IconCircleCheck,
+  IconHourglassHigh,
   IconInfoCircle,
   IconPlayerPlay,
   IconUsers,
@@ -16,6 +17,7 @@ import {
   type Analysis,
   type Dataset,
   type GraphDocument,
+  type QueuePreview,
   type RunDetail,
   type RunSummary,
   type TrainingStatus,
@@ -25,6 +27,7 @@ import { useCostEstimate } from '@/usage/useCostEstimate';
 import type { TrainingProject } from './access';
 import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
+import { startsIn } from './format';
 import {
   effectiveSource,
   loadSettings,
@@ -55,7 +58,10 @@ interface SetupViewProps {
   onStarted: (run: RunDetail) => void;
   onOpenRun: (id: string) => void;
   onShowProblems: () => void;
-  /** Called when the server says training is unavailable (503) or busy (409). */
+  /**
+   * Called when the server says training is unavailable (503) or busy (409: another training
+   * runs or, with a training queue, too many of the account's trainings are waiting).
+   */
   onRefresh: () => void;
   /**
    * The builder's check of the network against the chosen dataset, with the action that adapts
@@ -152,7 +158,10 @@ export function SetupView({
     delete errors.val_split;
     delete errors.test_split;
   }
-  const blockedByActive = activeRun !== null && status.max_concurrent_runs <= 1;
+  // With a training queue (a worker trains) a new training simply waits for its turn;
+  // without one the server refuses a start while it is busy.
+  const queueing = status.queue != null;
+  const blockedByActive = !queueing && activeRun !== null && status.max_concurrent_runs <= 1;
   const settingsValid = Object.keys(errors).length === 0;
 
   // The settings as they are sent: for the start and for the estimate of its CPU time.
@@ -321,6 +330,9 @@ export function SetupView({
       />
 
       {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}
+      {networkValid && ref && check?.ok && settingsValid && cost.fresh && (
+        <QueueHint queue={cost.queue} />
+      )}
 
       {startError && (
         <Alert
@@ -328,7 +340,9 @@ export function SetupView({
           icon={<IconAlertTriangle size={18} />}
           title={
             startError.busy
-              ? 'Another training is running'
+              ? queueing
+                ? 'Too many trainings are waiting'
+                : 'Another training is running'
               : startError.budget
                 ? (BUDGET_TITLES[startError.budget] ?? 'Not enough budget')
                 : 'Cannot start the training'
@@ -376,6 +390,51 @@ export function SetupView({
         </Button>
       </Group>
     </Stack>
+  );
+}
+
+/**
+ * Servers with a training queue: says before the start that the training will wait, where
+ * and roughly how long (the server's estimate), or that no worker is running at all. Nothing
+ * when it would start right away.
+ */
+function QueueHint({ queue }: { queue: QueuePreview | null }) {
+  if (!queue) {
+    return null;
+  }
+  if (!queue.worker_online) {
+    return (
+      <Alert
+        color="yellow"
+        icon={<IconAlertTriangle size={18} />}
+        title="No training worker is running"
+      >
+        <Text size="sm">
+          This server cannot train right now. A training you start waits in the queue until a worker
+          is back.
+        </Text>
+      </Alert>
+    );
+  }
+  const wait = queue.estimated_wait_seconds;
+  const blocked = queue.blocked_by === 'account';
+  if (!blocked && queue.position <= 1 && (wait === null || wait < 20)) {
+    return null;
+  }
+  const start = blocked ? 'starts after your running training' : startsIn(wait);
+  return (
+    <Group gap={6} wrap="nowrap" align="flex-start">
+      <IconHourglassHigh
+        size={16}
+        color="var(--mantine-color-dimmed)"
+        style={{ flexShrink: 0, marginTop: 2 }}
+        aria-hidden
+      />
+      <Text size="xs" c="dimmed">
+        The server is busy: this training will wait in the queue (position {queue.position}
+        {start ? `, ${start}` : ''}; an estimate).{queue.hint ? ` ${queue.hint}` : ''}
+      </Text>
+    </Group>
   );
 }
 

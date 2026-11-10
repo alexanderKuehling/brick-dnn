@@ -191,13 +191,47 @@ def _started_via(run: TrainingRun) -> str | None:
     return None
 
 
-def run_summary(run: TrainingRun) -> dict[str, Any]:
+def queue_info(run: TrainingRun, context: dict[str, Any], full: bool = False) -> dict | None:
+    """Where a queued run waits: its position among the waiting trainings and a rough
+    estimate of the minutes until it starts. ``context``: shared by the runs of one answer,
+    so the queue is looked at once."""
+    if run.status != "queued":
+        return None
+    from . import training_queue
+
+    info = training_queue.run_info(run, training_queue.snapshot_in(context))
+    if info is None:
+        return None
+    seconds = info["estimated_wait_seconds"]
+    brief = {
+        "position": info["position"],
+        "waiting": info["waiting"],
+        "estimated_wait_minutes": round(seconds / 60, 1) if seconds is not None else None,
+        "worker_online": None if info["worker_online"] else False,
+    }
+    if full:
+        brief["estimated_start_at"] = info["estimated_start_at"]
+        if info["blocked_by"] == "account":
+            brief["note"] = (
+                "Waits until a running training of this account ends (the plan's trainings "
+                "at a time)."
+            )
+        elif not info["worker_online"]:
+            brief["note"] = training_queue.NO_WORKER_MESSAGE
+        elif seconds is not None:
+            brief["note"] = "The wait is a rough estimate."
+        brief["priority_hint"] = info["hint"]
+    return _no_none(brief)
+
+
+def run_summary(run: TrainingRun, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """One line of list_training_runs."""
     plan = run.plan if isinstance(run.plan, dict) else {}
     summary = {
         "id": str(run.pk),
         "name": run.name,
         "status": run.status,
+        "queue": queue_info(run, context if context is not None else {}),
         "family": _family(run),
         "task": plan.get("task"),
         "dataset": _dataset_name(run).get("name"),
@@ -277,6 +311,7 @@ def run_detail(
         "total_params": run.total_params,
         "device": state.get("device_label") or state.get("device"),
         "usage": _usage(run),
+        "queue": queue_info(run, {}, full=True),
         "started_via": _started_via(run),
         "has_weights": run.has_weights,
         "started_by": run.owner.get_username(),

@@ -12,8 +12,52 @@
   data tools cap long lists with their totals. A run with 200 epochs went from 71 KB to 1 KB.
 - gunicorn's access log leaves out query strings, so signed download and upload links are not
   logged.
+- **With Docker Compose, trainings are queued and trained by a worker container** (see
+  *Added*). `docker compose up` now starts a `worker` service next to the backend, and a
+  start no longer answers `409` because another training is running: the run is `queued`.
+  `BRICKDNN_TRAINING_WORKER=false` brings the old behaviour back; without Docker
+  (`runserver`, `make backend`) nothing changes. `BRICKDNN_TRAINING_MAX_RUNS` becomes the
+  default of the worker's slots. Clients that only know the old run statuses should treat
+  `queued` like `starting`.
+- **Server deployment** (`deploy/server`): the trainings moved out of the web backend into
+  the worker, each with its own limits within the same three quarters of the server (on 2
+  CPUs and 4 GB: worker 1.5 CPUs and 1.8 GB, backend 1 CPU and 1 GB, and the backend gets the
+  CPU first). Servers that were set up earlier need no new copy of `brickdnn-deploy`; with
+  one, the memory limits follow the size of the server. A deploy no longer fails the running
+  trainings: they go back into the queue and start again.
 
 ### Added
+- **A training queue with a separate worker.** With `BRICKDNN_TRAINING_WORKER` the web server
+  only stores a new run as `queued`; `manage.py training_worker` (its own process or
+  container, `--slots N`, `--once` for one run) takes the runs from the database and trains
+  them with the usual runner, so trainings wait instead of being refused and cannot slow the
+  site down. Plans with a higher `priority` start first (accounts without limits before
+  all), accounts of the same priority take turns, and within a turn the oldest run goes
+  first. A plan's `concurrent_trainings` limits what trains at the same time (the next run
+  keeps its place), the new `queued_trainings` / `BRICKDNN_QUEUE_MAX_WAITING` what may wait
+  (`409` beyond it). Waiting runs reserve their budget, and the budgets are checked again when
+  a run starts. Claiming is safe with several workers (`SELECT … FOR UPDATE SKIP LOCKED` and
+  an advisory lock per account on PostgreSQL, a file lock on SQLite). Stop requests go
+  through the `STOP` file and the database, and the worker kills what does not react, also
+  for budget stops and deleted runs. Workers send a heartbeat: the runs of a worker that
+  restarted (a deploy) or died go back into the queue and start again (once after a dead
+  worker, at most `BRICKDNN_WORKER_MAX_RESTARTS` times in all, then they fail with a message),
+  and their usage is counted once. See [docs/training.md](docs/training.md#the-training-queue)
+  and [docs/scaling.md](docs/scaling.md) (what a later move to Kubernetes would change).
+- **The wait is visible.** Queued runs show "Queued — position 3, starts in about 4 minutes"
+  in the training panel, the run list and on the toolbar button, can be cancelled, and say in
+  one line what the plan means ("Paid plans start first") where plans differ in priority; the
+  panel also says before a start that the run will wait, and when no training worker is
+  running at all. REST: `queue` on runs (`position`, `waiting`, `estimated_wait_seconds`,
+  `estimated_start_at`, `worker_online`, `blocked_by`, `hint`), on `GET /api/training/`
+  (`online`, `slots`, `running`, `waiting`, `message`) and on the training check. MCP:
+  `get_training_options`, `check_training`, `start_training`, `list_training_runs` and
+  `get_training_run` report the same in a few fields; `stop_training` cancels a queued run.
+- **Queue overview for the operator.** *Training workers* in the Django admin and
+  `manage.py training_queue` show the waiting and running trainings (account, plan, priority,
+  waiting time), the workers (heartbeat, slots, memory limit, current runs) and, for the last
+  seven days, the median and 95th percentile of the wait for a slot and the utilisation of
+  the worker.
 - **Data preparation over MCP.** AI assistants can go from a file to a trained network
   without the web app: `import_data` (CSV/JSON as text, Excel, Parquet … as base64, or a public
   link with the same checks against private addresses), `list_data_sources`,
@@ -36,8 +80,8 @@
   server process reaped the run), predictions report theirs, and both go into a ledger
   (`UsageRecord`) per account, calendar month (UTC) and the API token or connected app that
   caused them. An account's limits come from its plan (`BRICKDNN_PLANS`, JSON:
-  compute per month, storage, compute per training, trainings at a time, a queue priority for
-  later, optional prices and an overage price; `BRICKDNN_DEFAULT_PLAN`); without plans a
+  compute per month, storage, compute per training, trainings at a time, a priority for the
+  training queue, optional prices and an overage price; `BRICKDNN_DEFAULT_PLAN`); without plans a
   server has no limits unless `BRICKDNN_BUDGET_*` are set. brickdnn.com has the plans Free
   (0.5 CPU hours, 1 GB, 15 CPU min per training), Starter, Plus and Pro. Operators change
   plans and mark accounts as unlimited in the Django admin (filters, bulk actions) or with

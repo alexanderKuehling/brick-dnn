@@ -12,6 +12,15 @@ Predictions with the trained weights also run in a process of their own
 Both report the CPU time they use, which is counted against the budgets of the account and of
 the API token or app that started them (see budgets.py): every look at an active run counts
 what it used since, and stops it when a budget is used up.
+
+With ``BRICKDNN_TRAINING_WORKER`` the web server does not start the training processes
+itself: :func:`start_run` only puts the run into the queue (training_queue.py), and a worker
+(training_worker.py) takes it, starts the process with :func:`start_claimed` and watches it
+with :func:`sync_run`, like the web server does without the setting. The web server then
+only reads the files of the run; it stops a run through the ``STOP`` file and the database,
+and the worker does the killing. Everything that reads those files goes through
+:func:`read_run_state` and :func:`weights_path`, so that another store can replace the
+shared directory later.
 """
 
 from __future__ import annotations
@@ -40,7 +49,7 @@ from typing import Any
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import slugify
@@ -51,6 +60,8 @@ from brickdnn.layers import ClassicalModel
 from brickdnn.training import (
     ACTIVE_STATUSES,
     BUILTIN_DATASETS,
+    QUEUED,
+    RUNNING_STATUSES,
     STATUSES,
     TERMINAL_STATUSES,
     Compatibility,
@@ -73,10 +84,14 @@ from brickdnn.training.estimate import Estimate, estimate_training
 from brickdnn.training.job import graph_family
 from brickdnn.training.state import (
     LOG_FILE,
+    STATE_FILE,
+    STOP_FILE,
     is_stale,
+    preprocessing_path,
     read_state,
     request_stop,
     stop_request,
+    stop_requested,
     weights_file,
     write_job,
 )
@@ -89,6 +104,7 @@ from brickdnn.training.tuning import (
 )
 
 from . import budgets
+from . import training_queue as queue
 from .budgets import Actor
 from .models import Dataset, TrainingRun
 from .retention import touch
@@ -120,6 +136,9 @@ NOT_STARTED_MESSAGE = "The training process did not start."
 STOPPED_MESSAGE = "Training was stopped."
 WRONG_FILE_MESSAGE = "Upload a .csv file or a .zip file with one folder per class."
 IN_USE_MESSAGE = "This dataset is used by a training that is still running. Stop it first."
+IN_USE_QUEUED_MESSAGE = (
+    "This dataset is used by a training that waits in the queue. Cancel it first."
+)
 PREDICT_BUSY_MESSAGE = "The server is busy with other predictions. Try again in a few seconds."
 # A prediction (starting Python, loading PyTorch and the weights, a forward pass on the CPU)
 # that takes longer than this is stopped. It blocks a web server worker meanwhile.
@@ -160,6 +179,9 @@ TRIAL_KEYS = (
 # for each of them so that finished processes do not linger as zombies.
 _PROCESSES: dict[str, subprocess.Popen] = {}
 _START_LOCK = threading.Lock()
+# The training worker this process is (TrainingWorker.pk) while it looks after its runs,
+# see :func:`supervising`. None in the web server.
+_SUPERVISOR = threading.local()
 
 
 class TrainingInputError(ValueError):
@@ -330,9 +352,11 @@ def classical_capabilities() -> dict[str, Any]:
     }
 
 
-def capabilities() -> dict[str, Any]:
-    """Everything the UI needs to know before offering training."""
+def capabilities(user=None) -> dict[str, Any]:
+    """Everything the UI needs to know before offering training. ``user``: who asks (for
+    what their plan means in the queue)."""
     reason = unavailable_reason()
+    waiting = queue.status(user)
     has_torchvision = torchvision_installed()
     info: dict[str, Any] = {}
     if reason is None:
@@ -353,7 +377,14 @@ def capabilities() -> dict[str, Any]:
             for dataset in BUILTIN_DATASETS.values()
         ],
         "max_upload_mb": settings.TRAINING_MAX_UPLOAD_MB,
-        "max_concurrent_runs": settings.TRAINING_MAX_RUNS,
+        # Trainings that run at the same time (all users): the slots of the workers, or
+        # BRICKDNN_TRAINING_MAX_RUNS when the web server trains itself.
+        "max_concurrent_runs": (
+            max(1, waiting["slots"]) if waiting is not None else settings.TRAINING_MAX_RUNS
+        ),
+        # With a training worker: new trainings wait in a queue (see training_queue.status);
+        # null when the web server trains itself and refuses a start while it is busy.
+        "queue": waiting,
         "login_required": True,
         "tuning": {
             "methods": list(METHODS),
@@ -553,7 +584,12 @@ def budget_check(
     estimate = None
     if result.ok and result.plan is not None:
         estimate = estimate_run(graph, dataset, config, result.plan.to_dict(), search)
-    return budgets.estimate_data(actor, estimate)
+    data = budgets.estimate_data(actor, estimate)
+    # With a training worker: where the run would wait and for how long (an estimate).
+    data["queue"] = queue.preview(
+        actor.user, estimate.cpu_seconds if estimate is not None else None
+    )
+    return data
 
 
 def check(
@@ -588,7 +624,8 @@ def delete_dataset(dataset: Dataset) -> None:
     """Delete a dataset with its files. Raises :class:`DatasetInUse` while a training uses
     it. The caller checks that the user owns it."""
     if dataset_in_use(dataset):
-        raise DatasetInUse(IN_USE_MESSAGE)
+        training = dataset.runs.filter(status__in=RUNNING_STATUSES).exists()
+        raise DatasetInUse(IN_USE_MESSAGE if training else IN_USE_QUEUED_MESSAGE)
     dataset.delete()  # the files are removed by a post_delete signal
 
 
@@ -611,6 +648,11 @@ def _start_lock():
             finally:
                 if fcntl is not None:
                     fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def start_lock():
+    """The start lock, for the queue (claims on databases without row locks)."""
+    return _start_lock()
 
 
 def active_run_count() -> int:
@@ -637,6 +679,11 @@ def start_run(
     :class:`TrainingInputError` (also for ``ConfigError``), :class:`IncompatibleNetwork`,
     :class:`TrainingBusy` or a :class:`budgets.BudgetError`. The run's ``budget_warning``
     (not stored) says if it will probably be stopped by its limit.
+
+    With a training worker (BRICKDNN_TRAINING_WORKER) the run is only put into the queue and
+    returned as ``queued``: a worker starts it (see training_queue.py). It reserves what it
+    may use of the budgets while it waits. :class:`TrainingBusy` then means that the account
+    has as many trainings waiting as it may.
     """
     actor = actor or Actor(user)
     family = graph_family(graph)
@@ -679,19 +726,8 @@ def start_run(
     )
     budgets.check_storage(user)
 
-    # Under the start lock: two starts cannot both use what is left of a budget.
-    with _start_lock():
-        active = active_run_count()  # also counts what the active runs used so far
-        limit = budgets.run_limit(actor)
-        refusal, warning = budgets.estimate_verdict(estimate, limit)
-        if refusal is not None:
-            raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
-        if active >= settings.TRAINING_MAX_RUNS:
-            raise TrainingBusy(BUSY_MESSAGE)
-        mine = TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES).count()
-        if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
-            raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
-        run = TrainingRun.objects.create(
+    def create(limit: budgets.RunLimit, **fields: Any) -> TrainingRun:
+        return TrainingRun.objects.create(
             owner=user,
             project=project,
             name=name,
@@ -702,29 +738,113 @@ def start_run(
             tuning=search.to_dict() if search is not None else None,
             plan=compatibility.plan.to_dict(),
             total_params=analysis.total_params,
-            message="Starting …",
             api_token=actor.token,
             connection=actor.connection,
             cpu_limit_seconds=limit.seconds,
             estimated_cpu_seconds=estimate.cpu_seconds if estimate is not None else None,
+            **fields,
         )
-        job = {
-            "name": run.name,
-            "graph": graph,
-            "dataset": {
-                "kind": dataset.info.kind,
-                "path": str(dataset.path) if dataset.path is not None else None,
-                "info": dataset.info.to_dict(),
-            },
-            "config": training_config.to_dict(),
-            "tuning": search.to_dict() if search is not None else None,
-            "data_root": str(builtin_data_dir()),
-            # The runner stops by itself once it has used this much CPU time.
-            "limits": limit.job(),
-        }
-        _launch(run, job)
+
+    # Under the start lock: two starts cannot both use what is left of a budget.
+    with _start_lock():
+        if queue.enabled():
+            # The run waits for a worker. Until then it reserves what it may use, so the
+            # runs queued after it cannot count on the same rest of a budget.
+            with queue.account_lock(user.pk):
+                sync_runs(TrainingRun.objects.filter(owner=user, status__in=RUNNING_STATUSES))
+                limit = budgets.run_limit(actor)
+                refusal, warning = budgets.estimate_verdict(estimate, limit)
+                if refusal is not None:
+                    raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
+                refusal = budgets.waiting_refusal(user, queue.waiting_count(user))
+                if refusal is not None:
+                    raise TrainingBusy(refusal)
+                run = create(
+                    limit, status=QUEUED, message=queue.QUEUED_MESSAGE, queued_at=timezone.now()
+                )
+        else:
+            active = active_run_count()  # also counts what the active runs used so far
+            limit = budgets.run_limit(actor)
+            refusal, warning = budgets.estimate_verdict(estimate, limit)
+            if refusal is not None:
+                raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
+            if active >= settings.TRAINING_MAX_RUNS:
+                raise TrainingBusy(BUSY_MESSAGE)
+            mine = TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES).count()
+            if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
+                raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
+            run = create(limit, message="Starting …")
+            _launch(run, _job(run, dataset.info, dataset.path, limit))
     run.budget_warning = warning  # type: ignore[attr-defined]
     return run
+
+
+def _job(
+    run: TrainingRun, info: DatasetInfo, path: Path | None, limit: budgets.RunLimit
+) -> dict[str, Any]:
+    """job.json of ``run`` (see brickdnn.training.state)."""
+    return {
+        "name": run.name,
+        "graph": run.graph,
+        "dataset": {
+            "kind": info.kind,
+            "path": str(path) if path is not None else None,
+            "info": info.to_dict(),
+        },
+        "config": run.config,
+        "tuning": run.tuning,
+        "data_root": str(builtin_data_dir()),
+        # The runner stops by itself once it has used this much CPU time.
+        "limits": limit.job(),
+    }
+
+
+def _run_dataset(run: TrainingRun) -> tuple[DatasetInfo, Path | None]:
+    """The dataset of a stored run, as :func:`resolve_dataset` found it when the run was
+    created. Raises :class:`TrainingInputError` if it is gone."""
+    ref = run.dataset if isinstance(run.dataset, dict) else {}
+    kind = ref.get("kind")
+    try:
+        if kind == "random":
+            return random_info(), None
+        if kind == "builtin":
+            return builtin_info(ref.get("id")), None
+    except DatasetError as exc:
+        raise TrainingInputError(str(exc)) from None
+    dataset = run.upload if kind == "upload" else None
+    path = dataset_path(dataset) if dataset is not None else None
+    if dataset is None or path is None or not path.exists():
+        raise TrainingInputError(
+            "The dataset of this training was deleted before the training started."
+        )
+    return DatasetInfo.from_dict(dataset.info), path
+
+
+def start_claimed(run: TrainingRun, limit: budgets.RunLimit) -> None:
+    """Start the training process of a run that this worker took from the queue
+    (training_queue.claim), with the CPU time it may use now. A run that was interrupted
+    before starts from the beginning: what its earlier attempt left behind is removed."""
+    directory = run_dir(run.pk)
+    if run.pid:
+        _kill(run, wait=3.0)  # only a process that still is the runner of this run
+    family = run_family(run)
+    leftovers = [STATE_FILE, STOP_FILE, weights_file(family)]
+    leftovers.append(preprocessing_path(weights_file(family)).name)
+    for name in leftovers:
+        with contextlib.suppress(OSError):
+            (directory / name).unlink()
+    try:
+        info, path = _run_dataset(run)
+    except TrainingInputError as exc:
+        run.status = "failed"
+        run.message = f"Not started: {exc}"
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "message", "finished_at"])
+        return
+    if run.restarts:
+        with contextlib.suppress(OSError), open(directory / LOG_FILE, "ab") as log:
+            log.write(f"\n--- started again (restart {run.restarts}) ---\n".encode())
+    _launch(run, _job(run, info, path, limit))
 
 
 def _command(configured: Any, module: str) -> list[str]:
@@ -938,6 +1058,40 @@ def _enforce_budgets(run: TrainingRun) -> None:
     logger.info("Stopping training run %s: %s", run.pk, reason)
 
 
+@contextlib.contextmanager
+def supervising(worker_id: int):
+    """While it lasts, this thread is the training worker ``worker_id`` (TrainingWorker.pk):
+    it looks after the training processes of that worker's runs (see :func:`sync_run`)."""
+    previous = getattr(_SUPERVISOR, "worker", None)
+    _SUPERVISOR.worker = worker_id
+    try:
+        yield
+    finally:
+        _SUPERVISOR.worker = previous
+
+
+def _supervises(run: TrainingRun) -> bool:
+    """Whether this process looks after the training process of ``run``: it may judge if
+    the process is alive, and kill it. Without a training worker every server process does
+    (the web server started the process); with one, only the worker that took the run."""
+    if not queue.enabled():
+        return True
+    worker = getattr(_SUPERVISOR, "worker", None)
+    return worker is not None and run.worker_id == worker
+
+
+def _mirror_stop(run: TrainingRun, directory: Path) -> None:
+    """Pass a stop request that is only in the database on to the runner (the ``STOP``
+    file): the web server could not write it, e.g. because the run was being started."""
+    if run.stop_requested_at is None or not directory.is_dir() or stop_requested(directory):
+        return
+    if run.stop_reason in ("budget", "run_limit"):
+        verdict = budgets.over_budget(run)
+        request_stop(directory, run.stop_reason, verdict[1] if verdict else "")
+    else:
+        request_stop(directory)
+
+
 def _is_own_child(run: TrainingRun) -> bool:
     return str(run.pk) in _PROCESSES
 
@@ -1008,6 +1162,10 @@ def _command_line(pid: int) -> str | None:
 
 def _is_runner(pid: int, run: TrainingRun) -> bool:
     """True if ``pid`` still is the training process of ``run`` (pids get reused)."""
+    return _is_runner_of(pid, run.pk)
+
+
+def _is_runner_of(pid: int, run_id: Any) -> bool:
     if os.name != "posix":  # pragma: no cover - Windows
         return True
     try:
@@ -1016,24 +1174,42 @@ def _is_runner(pid: int, run: TrainingRun) -> bool:
     except OSError:
         return False
     command = _command_line(pid)
-    return command is not None and str(run_dir(run.pk)) in command
+    return command is not None and str(run_dir(run_id)) in command
 
 
 def sync_run(run: TrainingRun) -> TrainingRun:
-    """Update an active run from its state.json and detect dead or stuck processes."""
+    """Update an active run from its state.json and detect dead or stuck processes.
+
+    A run that waits in the queue has no process and nothing to read. With a training
+    worker, the web server only reads what the runner reports (progress, usage) and asks it
+    to stop when a budget is used up; whether the process is alive is for the worker that
+    started it to judge. The web server instead checks that this worker is: the runs of a
+    dead worker go back into the queue (training_queue.recover)."""
     if run.status not in ACTIVE_STATUSES:
         return run
+    if run.status == QUEUED:
+        if not queue.enabled():
+            # The queue was switched off while the run waited: nobody would start it.
+            queue.fail_waiting(run, queue.MODE_OFF_MESSAGE)
+        return run
+    supervised = _supervises(run)
+    if not supervised and not queue.is_alive(run.worker):
+        queue.recover()
+        with contextlib.suppress(TrainingRun.DoesNotExist):
+            run.refresh_from_db()
+        return run
     directory = run_dir(run.pk)
-    state = _read_state(directory)
+    state = read_run_state(run)
     if state is not None:
         _apply_state(run, state)
 
-    if run.status in ACTIVE_STATUSES:
+    if run.status in ACTIVE_STATUSES and supervised:
+        _mirror_stop(run, directory)
         now = timezone.now()
         started = run.started_at or run.created_at
         if not _process_alive(run):
             # Read again: the runner may have written its final state just before exiting.
-            state = _read_state(directory)
+            state = read_run_state(run)
             if state is not None:
                 _apply_state(run, state)
             if run.status in ACTIVE_STATUSES:
@@ -1057,18 +1233,28 @@ def sync_run(run: TrainingRun) -> TrainingRun:
             _stopped(run)
 
     added = _count_usage(run, state)
-    # Never overwrite a final status that another request has already stored.
-    updated = TrainingRun.objects.filter(pk=run.pk, status__in=ACTIVE_STATUSES).update(
-        **{field: getattr(run, field) for field in SYNC_FIELDS}
-    )
+    # Never overwrite a final status that another request has already stored, nor a run
+    # that went back into the queue or to another worker meanwhile.
+    updated = _still_training(run).update(**{field: getattr(run, field) for field in SYNC_FIELDS})
     if not updated:
         with contextlib.suppress(TrainingRun.DoesNotExist):
             run.refresh_from_db()
     elif added > 0:
         _enforce_budgets(run)
     if run.status in TERMINAL_STATUSES:
-        _PROCESSES.pop(str(run.pk), None)
+        if supervised:
+            _PROCESSES.pop(str(run.pk), None)
+        if updated and run.worker_id is not None:
+            queue.close_attempt(run.pk, run.status)
     return run
+
+
+def _still_training(run: TrainingRun):
+    """The row of ``run`` as long as it still trains where ``run`` was loaded from."""
+    runs = TrainingRun.objects.filter(pk=run.pk, status__in=RUNNING_STATUSES)
+    if run.worker_id is None:
+        return runs.filter(worker__isnull=True)
+    return runs.filter(worker_id=run.worker_id)
 
 
 def _stale_confirmed(run: TrainingRun) -> bool:
@@ -1093,9 +1279,18 @@ def sync_runs(runs) -> None:
 
 
 def stop_run(run: TrainingRun) -> TrainingRun:
-    """Ask the runner to stop after the current batch (it saves the weights)."""
+    """Ask the runner to stop after the current batch (it saves the weights). A run that
+    still waits in the queue is cancelled: it ends as stopped without having used compute.
+
+    The request is a ``STOP`` file in the run directory and a time in the database. The
+    runner follows the file; whoever looks after its process (the worker, or the web server
+    without one) kills it if it does not, and passes a request it only finds in the database
+    on to the runner."""
     sync_run(run)
-    if run.status in ACTIVE_STATUSES:
+    if run.status == QUEUED and not queue.cancel(run):
+        with contextlib.suppress(TrainingRun.DoesNotExist):
+            run.refresh_from_db()  # a worker took it at that moment: stop the training
+    if run.status in RUNNING_STATUSES:
         directory = run_dir(run.pk)
         if directory.is_dir() and run.stop_requested_at is None:
             request_stop(directory)
@@ -1107,9 +1302,11 @@ def stop_run(run: TrainingRun) -> TrainingRun:
 
 
 def terminate_run(run: TrainingRun) -> None:
-    """Kill the process of an active run (used before deleting it)."""
+    """Kill the process of an active run (used before deleting it). With a training worker
+    the web server cannot: the worker kills the process as soon as it sees that the run is
+    gone (training_worker.py)."""
     sync_run(run)
-    if run.status in ACTIVE_STATUSES:
+    if run.status in RUNNING_STATUSES and _supervises(run):
         # Still active after the sync: the process is alive and its pid is trustworthy.
         _kill(run, wait=3.0)
 
@@ -1121,13 +1318,75 @@ def delete_run(run: TrainingRun) -> None:
     run.delete()  # the run directory is removed by a post_delete signal
 
 
+def read_run_state(run: TrainingRun) -> dict[str, Any] | None:
+    """What the training process of ``run`` last reported (state.json; NaN/infinity become
+    None), or None if it has not reported yet. The one place that reads it, so that another
+    store than the shared run directory can take over later."""
+    return _read_state(run_dir(run.pk))
+
+
+def apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
+    """Copy what the runner reported into ``run`` (not saved)."""
+    _apply_state(run, state)
+
+
+def mark_finished(run: TrainingRun, status: str, message: str) -> None:
+    """End ``run`` (not saved): the server, not the runner, decided how it ends."""
+    _finish(run, status, message)
+
+
+def mark_stopped(run: TrainingRun) -> None:
+    """End ``run`` as stopped after a stop request (not saved)."""
+    _stopped(run)
+
+
+def process_of(run_id: Any) -> subprocess.Popen | None:
+    """The training process this server process started for the run, if any."""
+    return _PROCESSES.get(str(run_id))
+
+
+def is_runner(pid: int, run: TrainingRun) -> bool:
+    """True if ``pid`` is the training process of ``run`` on this machine."""
+    return _is_runner(pid, run)
+
+
+def kill_process(run_id: Any, wait: float = 0.0, pid: int | None = None) -> None:
+    """Kill the training process this server process started for the run, with its
+    children (also when the run itself is gone from the database). ``pid``: the process of
+    a run that another process started, killed only if it still is that run's runner."""
+    process = _PROCESSES.pop(str(run_id), None)
+    if process is not None:
+        if process.poll() is not None:
+            return
+        pid = process.pid
+    elif not pid or not _is_runner_of(pid, run_id):
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(pid, signal.SIGKILL)
+        elif process is not None:  # pragma: no cover - Windows
+            process.kill()
+    except OSError:
+        pass
+    deadline = time.monotonic() + wait
+    while wait and time.monotonic() < deadline:
+        if process is not None:
+            if process.poll() is not None:
+                break
+        elif not _is_runner_of(pid, run_id):
+            break
+        time.sleep(0.05)
+
+
 def state_of(run: TrainingRun) -> dict[str, Any] | None:
     """state.json for the API. NaN/infinity become None.
 
     If the API itself ended the run (crash, lost heartbeat, kill after a stop request),
     state.json still shows the last progress; the outcome from the database wins then.
     """
-    state = _read_state(run_dir(run.pk))
+    if run.status == QUEUED:
+        return None  # nothing was trained yet (after a restart: not in this attempt)
+    state = read_run_state(run)
     if (
         state is not None
         and run.status in TERMINAL_STATUSES
@@ -1162,6 +1421,8 @@ def weights_filename(run: TrainingRun) -> str:
 
 def no_weights_reason(run: TrainingRun) -> str:
     """Why a run has no weights to download or predict with (for the user)."""
+    if run.status == QUEUED:
+        return "This run still waits in the queue: it has not trained anything yet."
     if run.status in ACTIVE_STATUSES:
         return (
             f"This run is still {run.status}: its weights are saved when it finishes or is stopped."
@@ -1353,9 +1614,18 @@ def _delete_run_files(sender, instance: TrainingRun, **kwargs) -> None:
     run = copy.copy(instance)  # Django clears instance.pk after the deletion
 
     def remove() -> None:
-        if run.status in ACTIVE_STATUSES:
-            _kill(run, wait=3.0)  # only kills a process that still is this runner
-        _PROCESSES.pop(str(run.pk), None)
+        # With a training worker, its worker kills the process (and removes what the
+        # process wrote meanwhile) when it sees that the run is gone.
+        if _supervises(run):
+            if run.status in RUNNING_STATUSES:
+                _kill(run, wait=3.0)  # only kills a process that still is this runner
+            _PROCESSES.pop(str(run.pk), None)
         shutil.rmtree(run_dir(run.pk), ignore_errors=True)
 
     transaction.on_commit(remove)
+
+
+@receiver(pre_delete, sender=TrainingRun, dispatch_uid="brickdnn_run_attempt")
+def _close_attempt_of_deleted_run(sender, instance: TrainingRun, **kwargs) -> None:
+    if instance.worker_id is not None and instance.status in RUNNING_STATUSES:
+        queue.close_attempt(instance.pk, "deleted")

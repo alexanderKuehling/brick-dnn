@@ -177,9 +177,13 @@ class TrainingRun(models.Model):
 
     The training process writes its progress to ``state.json``; the API copies the
     interesting parts into this row whenever an active run is looked at.
+
+    With a training worker (BRICKDNN_TRAINING_WORKER, see training_queue.py) a new run is
+    ``queued`` until a worker takes it; ``worker`` is the one that trains it.
     """
 
     STATUSES = [
+        ("queued", "Queued"),
         ("starting", "Starting"),
         ("preparing", "Preparing"),
         ("running", "Running"),
@@ -252,12 +256,88 @@ class TrainingRun(models.Model):
     stop_reason = models.CharField(max_length=20, blank=True)
     # Bytes of its files (weights, log) once it has finished, for the storage quota.
     size_bytes = models.BigIntegerField(null=True, blank=True)
+    # The queue (training_queue.py): since when the run waits for a worker (set again when
+    # it is put back into the queue), the worker that took it, and how often it was put back
+    # after a worker restarted or died. All empty when the web server trains itself.
+    queued_at = models.DateTimeField(null=True, blank=True)
+    worker = models.ForeignKey(
+        "TrainingWorker", on_delete=models.SET_NULL, null=True, blank=True, related_name="runs"
+    )
+    # (The default is also in the database, so that a version from before the queue, which
+    # does not know the column, can still create runs after it was deployed again.)
+    restarts = models.PositiveSmallIntegerField(default=0, db_default=0)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["status", "created_at"], name="run_status_created")]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner}, {self.status})"
+
+
+class TrainingWorker(models.Model):
+    """A training worker process (``manage.py training_worker``): one row per start. It
+    takes queued runs, trains them and says every few seconds that it is alive
+    (``heartbeat_at``); a worker that stopped saying so is considered dead and its runs are
+    put back into the queue (see training_queue.py)."""
+
+    # BRICKDNN_WORKER_NAME, by default the host name: a worker that starts again under the
+    # same name takes over what its predecessor left behind.
+    name = models.CharField(max_length=120)
+    hostname = models.CharField(max_length=255, blank=True)
+    pid = models.IntegerField(null=True, blank=True)
+    # Trainings it runs at the same time, and the CPU threads of each.
+    slots = models.PositiveSmallIntegerField(default=1)
+    threads = models.PositiveSmallIntegerField(default=1)
+    # The memory limit of its container in megabytes, if it has one (for the operator).
+    memory_mb = models.PositiveIntegerField(null=True, blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
+    # Set when it ended in an orderly way, or when it was found dead.
+    stopped_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+        indexes = [models.Index(fields=["stopped_at", "heartbeat_at"], name="worker_alive")]
+
+    def __str__(self) -> str:
+        return f"{self.name} (started {self.started_at:%Y-%m-%d %H:%M})"
+
+
+class TrainingAttempt(models.Model):
+    """One start of a run by a worker: how long the run waited for it and how long the
+    worker was busy with it. The numbers of the queue overview (waiting times, utilisation)
+    come from these rows, which outlive the run; they name no user. Kept for 90 days."""
+
+    OUTCOMES = [
+        ("completed", "Completed"),
+        ("stopped", "Stopped"),
+        ("failed", "Failed"),
+        ("requeued", "Put back into the queue (its worker restarted)"),
+        ("lost", "Put back into the queue (its worker died)"),
+        ("deleted", "Deleted while it ran"),
+    ]
+
+    run = models.ForeignKey(
+        TrainingRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="attempts"
+    )
+    worker = models.ForeignKey(
+        TrainingWorker, on_delete=models.SET_NULL, null=True, blank=True, related_name="attempts"
+    )
+    # The plan of the account and its priority in the queue when the run started.
+    plan = models.CharField(max_length=64, blank=True)
+    priority = models.IntegerField(default=0)
+    queued_at = models.DateTimeField()
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    outcome = models.CharField(max_length=10, choices=OUTCOMES, blank=True)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+        indexes = [models.Index(fields=["started_at"], name="attempt_started")]
+
+    def __str__(self) -> str:
+        return f"{self.run_id or 'deleted run'} on {self.worker_id}: {self.outcome or 'running'}"
 
 
 class ApiToken(models.Model):

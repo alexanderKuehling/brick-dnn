@@ -52,7 +52,9 @@ stored per user.
    **script** (`.py`).
 
 All runs are kept in the **History** tab together with the exact network that was trained.
-Only one training runs at a time by default (`BRICKDNN_TRAINING_MAX_RUNS`).
+With Docker Compose, trainings wait in a [queue](#the-training-queue) and a worker trains
+them one after the other; without it, the web server trains itself, one training at a time
+by default (`BRICKDNN_TRAINING_MAX_RUNS`), and refuses a start while it is busy.
 
 ### Data
 
@@ -410,12 +412,127 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
 - Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights
   (of the best epoch so far) and exits. A run whose process disappears (for example because the server was restarted) is
   marked as failed.
+- With a [training queue](#the-training-queue), the process is started and watched by the
+  worker instead of the web server, which only reads `state.json`; a run whose worker
+  disappears is started again.
 - Predictions start `python -m brickdnn.training.predict <run dir>` per request: it builds the
   network from `job.json`, loads `weights.pt`, reads the prepared inputs from stdin and prints
   the outputs. It runs on the CPU with a lower priority and is stopped after 30 seconds; the
   web server waits for it.
 
 The REST endpoints are documented in [api.md](api.md#training-login-required).
+
+## The training queue
+
+With `BRICKDNN_TRAINING_WORKER=true` the web server does not train itself. Starting a training
+only stores the run as **queued** and answers at once; a separate **worker** process
+(`python manage.py training_worker`, in Docker its own container) takes the runs from the
+database one after the other and trains them. Trainings wait instead of being refused, and
+the site stays responsive whatever the trainings do. Docker Compose switches this on and
+starts the worker; without Docker (`make backend`) it is off and the web server trains
+itself, as described above.
+
+```
+editor ──REST──▶ Django API ──▶ run "queued" in the database
+                     ▲                    │ claim (plans with a higher priority first)
+                     │                    ▼
+                     │          manage.py training_worker ──spawns──▶ runner <run dir>
+                     │               heartbeat, usage, budgets, kill      │
+                     └──────── state.json, weights.pt (shared data directory) ◀─┘
+```
+
+**What users see.** A queued run shows its position and a rough start time ("Queued —
+position 3, starts in about 4 minutes") in the training panel, in the run list and on the
+toolbar button; they update while the panel polls. A queued run can be **cancelled** (the
+*Cancel* button, `POST …/stop/`): it ends as `stopped` without having used compute. The start
+time is an estimate from the CPU-time estimates (at most the limits) of the trainings ahead
+and the worker's slots, so it is often off, and a run of a higher plan may still come first.
+If no worker is running, the panel and the API say so ("No training worker is running")
+instead of promising a start; the runs keep their place.
+
+**Order.**
+
+1. The plan's `priority` decides first: the higher, the earlier. Accounts without limits
+   (staff, `set_plan --unlimited`) come before every plan. A plan change takes effect at
+   once, also for runs that already wait. Where the plans of a server differ in priority,
+   the panel says so in one line ("Paid plans start first").
+2. Among runs of the same priority the accounts take turns: every account's first waiting run
+   comes before any account's second one, and a training an account has running counts like
+   a turn it already had. One account with many waiting runs cannot keep the others waiting.
+3. Within a turn, the run that waits longest goes first.
+
+**Limits per account.** A plan's `concurrent_trainings` limits how many of an account's runs
+*train* at the same time: the next one keeps its place in the queue and is passed over until
+one has ended. `queued_trainings` limits how many may *wait*; without it the limit is
+`BRICKDNN_QUEUE_MAX_WAITING`, by default 3 on a server with plans and none on a server
+without (accounts without limits never have one). A start beyond it is refused with `409`.
+
+**Budgets.** A waiting run reserves the CPU time it may use like a running one, so two queued
+runs cannot both count on the same rest of a budget. When a worker takes the run, the budgets
+are checked again: the run gets what is left then (it can be less than when it was queued,
+e.g. after a budget was lowered), and if nothing is left it ends as `failed` with the budget's
+message ("Not started: …") without having used compute. While a run trains, the worker counts
+its usage every two seconds and stops it when a budget is used up, also when nobody looks at
+the run in the web app.
+
+**Stopping and deleting.** The web server cannot signal a process in another container. A
+stop is a `STOP` file in the run directory (which the runner follows) and a time in the
+database; the worker kills a runner that does not react within 30 seconds, and passes a
+request it only finds in the database on to the runner. When an active run is deleted, the
+worker notices that it is gone, kills its process and removes what the process wrote
+meanwhile.
+
+### The worker
+
+```bash
+python manage.py training_worker                # train until stopped (SIGTERM, Ctrl+C)
+python manage.py training_worker --slots 2      # two trainings at the same time
+python manage.py training_worker --once         # one run, then end (see docs/scaling.md)
+python manage.py training_queue                 # who waits, who trains, the last 7 days
+```
+
+It needs the same database and data directory as the web server and
+`BRICKDNN_TRAINING_WORKER=true` (without it, the command only says that there is nothing to
+do). To try it without Docker, start the web server and the worker with that variable set.
+
+- **Slots.** A worker trains `--slots` / `BRICKDNN_WORKER_SLOTS` runs at the same time. By
+  default as many as fit on its CPUs (the limit of its container) with `OMP_NUM_THREADS`
+  threads each, and one if that variable is not set: PyTorch then uses every CPU for one
+  training. Docker Compose also takes `BRICKDNN_TRAINING_MAX_RUNS` as the default.
+- **Claiming** is safe with several workers: on PostgreSQL the run is taken with
+  `SELECT … FOR UPDATE SKIP LOCKED` and the account with an advisory lock, in one transaction
+  with the change of its status; on SQLite (one server) a file lock serialises the claims.
+- **Heartbeat.** Every worker has a row (*Training workers* in the Django admin) and says
+  every few seconds that it is alive. Without a heartbeat for `BRICKDNN_WORKER_TIMEOUT`
+  seconds (60) it counts as dead.
+- **A worker that is stopped** (`docker compose stop`, a deploy: SIGTERM) takes no new runs,
+  lets the running ones finish for `BRICKDNN_WORKER_DRAIN_SECONDS` (30), then kills what is
+  left and puts those runs back into the queue, in their old place. The next worker starts
+  them again **from the beginning** (there are no checkpoints to continue from).
+- **A worker that dies** (killed, out of memory, the server crashed): its runs go back into
+  the queue once its heartbeat is too old; a worker that starts again under the same name
+  (`BRICKDNN_WORKER_NAME`, by default the host name) does that at once. Without Docker, a
+  training process can survive its worker: a worker of the same name on the same machine then
+  watches it again instead of starting it anew.
+- **How often.** A run is started again once after a worker died, and at most
+  `BRICKDNN_WORKER_MAX_RESTARTS` times (3) in all; beyond that it fails with a message that
+  says so. A run that had finished, or was asked to stop, ends that way instead.
+- **Usage is counted once.** The CPU time of an interrupted attempt stays counted; the new
+  attempt only adds what it uses beyond that (the ledger compares with what is counted, see
+  below). So a restarted run costs as much as its longest attempt, and overage is not billed
+  twice.
+
+### Watching the queue
+
+*Training workers* in the Django admin (`/admin/`) shows the waiting and running trainings
+with account, plan, priority and waiting time, the workers with their heartbeat, slots and
+current runs, and two numbers for the last seven days that say whether the server is large
+enough: how long trainings **waited** for a slot (median and 95th percentile, also per plan)
+and the **utilisation** of the worker (the time its slots trained / the time they were
+there). Long waits with a utilisation near 100 % mean too little capacity. `python manage.py
+training_queue` prints the same in a terminal (`--days 30`, `--recover`).
+
+[scaling.md](scaling.md) describes what this setup is meant for and what comes after it.
 
 ## Usage and budgets
 
@@ -452,7 +569,8 @@ object of plans by key; `BRICKDNN_DEFAULT_PLAN` is the plan of accounts without 
 | `storage_gb` | Storage quota |
 | `cpu_minutes_per_run` | The most compute one training may use |
 | `concurrent_trainings` | Trainings of the account that may run at the same time |
-| `priority` | For the planned job queue (higher goes first); not used yet |
+| `queued_trainings` | Trainings of the account that may wait in the [queue](#the-training-queue) (missing: `BRICKDNN_QUEUE_MAX_WAITING`) |
+| `priority` | The place in the [queue](#the-training-queue): runs of plans with a higher priority start first (default 0) |
 | `overage_price_per_cpu_hour` | Offer compute beyond the allowance at this price (see below) |
 
 Without `BRICKDNN_PLANS` there is one plan whose limits are `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH`,
@@ -508,13 +626,16 @@ money.
   CPU time left, the storage quota must not be used up and the plan must allow another training
   at a time. Otherwise the start is refused (HTTP 403 with `code` `budget_exceeded` or
   `storage_quota_exceeded`, 409 for trainings at a time) with what is used, the limit, when it
-  resets and how to get more.
+  resets and how to get more. With a [training queue](#the-training-queue), the trainings at
+  a time do not refuse a start (the run waits for its turn); 409 then means that the account
+  has as many runs waiting as it may.
 - The run gets what is left as its **limit** (at most the plan's limit per training), written
   into `job.json`; the runner stops by itself when it has used it, like after a stop request:
   the weights of the best epoch so far are kept (a classical model being fitted cannot be
   interrupted and is not saved). Its message says why, and `usage.stop_reason` is `budget` or
-  `run_limit`. Active runs reserve their limits, and starts are serialised by the start lock,
-  so two trainings started at once cannot both spend the rest of a budget.
+  `run_limit`. Active runs (waiting in the queue or training) reserve their limits, and
+  starts are serialised by the start lock, so two trainings started at once cannot both spend
+  the rest of a budget. A run that waited in the queue is checked again when it starts.
 - **During a run**, every look at it (the panel polls it every second) counts the CPU time used
   since and stops the run when a budget is used up, e.g. after the user lowered a budget or the
   plan changed.
@@ -539,7 +660,14 @@ limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
 | `BRICKDNN_TRAINING` | `true` | Set to `false` to disable training completely |
-| `BRICKDNN_TRAINING_MAX_RUNS` | `1` | Trainings that may run at the same time (all users) |
+| `BRICKDNN_TRAINING_MAX_RUNS` | `1` | Without the queue: trainings that may run at the same time (all users) |
+| `BRICKDNN_TRAINING_WORKER` | `false` (`true` with Docker Compose) | Queue trainings in the database for `manage.py training_worker` instead of training in the web server (see [The training queue](#the-training-queue)) |
+| `BRICKDNN_WORKER_SLOTS` | from the CPUs and `OMP_NUM_THREADS` | Trainings a worker runs at the same time |
+| `BRICKDNN_WORKER_NAME` | the host name | Name of a worker; one that starts again under the same name takes over what its predecessor left |
+| `BRICKDNN_WORKER_TIMEOUT` | `60` | Seconds without a heartbeat after which a worker counts as dead |
+| `BRICKDNN_WORKER_DRAIN_SECONDS` | `30` | Seconds a worker that is stopped lets its trainings finish before it puts them back into the queue |
+| `BRICKDNN_WORKER_MAX_RESTARTS` | `3` | How often a run is started again after its worker restarted or died (after a dead worker: once) |
+| `BRICKDNN_QUEUE_MAX_WAITING` | `3` with plans, else unlimited | Trainings of one account that may wait in the queue (`0`: no limit; a plan's `queued_trainings` wins) |
 | `BRICKDNN_MAX_UPLOAD_MB` | `500` | Maximum size of an uploaded dataset |
 | `BRICKDNN_TRAINING_RATE` | `120/hour` | Rate limit for starting runs |
 | `BRICKDNN_UPLOAD_RATE` | `60/hour` | Rate limit for uploads |
@@ -576,6 +704,10 @@ training if that is not wanted.
 - **A Gaussian process takes very long or runs out of memory**: set *Max. samples*, or lower
   `BRICKDNN_GP_MAX_ROWS` / `BRICKDNN_GPC_MAX_ROWS`. A fit that fails with a matrix that is not positive definite needs
   a larger `alpha` or a `WhiteKernel` in its kernel.
+- **A training stays "Queued" and the panel says that no training worker is running**: the
+  worker is not running (`docker compose ps worker`, `docker compose logs worker`), or it runs
+  without `BRICKDNN_TRAINING_WORKER=true`. Without a worker, set
+  `BRICKDNN_TRAINING_WORKER=false` for the web server: it then trains itself.
 - **Out of memory**: lower the batch size, the image size or the network size. On a server
   with limits ([deploy/server](../deploy/server/README.md#cpu-and-memory-the-site-comes-first))
   such a run often only says "The training process stopped unexpectedly".

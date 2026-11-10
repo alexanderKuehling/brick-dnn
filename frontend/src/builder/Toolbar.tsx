@@ -34,7 +34,7 @@ import { LiveBadge } from '@/live/LiveBadge';
 import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
 import sharingClasses from '@/sharing/Sharing.module.css';
-import { progressLabel } from '@/training/format';
+import { progressLabel, queueText } from '@/training/format';
 import { networkSize } from './format';
 import { networkFamily } from './kinds';
 import classes from './Toolbar.module.css';
@@ -381,9 +381,11 @@ export function Toolbar(props: ToolbarProps) {
 }
 
 function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => void }) {
-  const label = run
-    ? `Training “${run.name}”: ${progressLabel(run)}`
-    : 'Train this network on the server (Ctrl+Enter)';
+  const label = !run
+    ? 'Train this network on the server (Ctrl+Enter)'
+    : run.status === 'queued'
+      ? `“${run.name}”: ${queueText(run.queue)}`
+      : `Training “${run.name}”: ${progressLabel(run)}`;
   return (
     <>
       <Tooltip label={label}>

@@ -9,6 +9,7 @@ automatically once all CI checks have passed (`.github/workflows/deploy-server.y
 GitHub Actions ──ssh deploy@SERVER <commit>──▶ brickdnn-deploy: git checkout, docker compose up
 Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api──▶ Django (backend) ──▶ Supabase / SQLite
                                                    ──/api/ws/──▶ Daphne (realtime) ◀─ Redis ─▶ Django
+Trainings: Django queues them in the database ──▶ worker (manage.py training_worker) trains them
 ```
 
 ## One-time setup
@@ -88,39 +89,83 @@ The same by hand, on your machine, in the repository:
 ## CPU and memory: the site comes first
 
 Trainings can keep all CPUs busy and use a lot of memory. So that the site still loads and
-answers while they run, the containers get different shares of the server:
+answers while they run, they do not run in the web backend: the backend puts them into a queue
+in the database and the `worker` container trains them
+([docs/training.md](../../docs/training.md#the-training-queue)). Every container has its own
+share of the server:
 
-| Container | Gets |
-| --- | --- |
-| `backend`: Django with all its trainings | at most 3/4 of the CPUs and of the memory, no swap |
-| `realtime` (live editing, Daphne) and `redis` | small fixed limits: half a CPU and 256 MB, 64 MB |
-| `cleanup` (deletes old data once a day, sleeps in between) | half a CPU and 256 MB |
-| `caddy` and `frontend` (nginx) | the other quarter, shared with the system; the CPU first when it is busy, killed last |
+| Container | CPUs | Memory (no swap) | On a CX23 (2 vCPUs, 4 GB) |
+| --- | --- | --- | --- |
+| `worker`: the trainings (`manage.py training_worker` and one process per training) | at most 3/4, and the last to get the CPU when the server is busy | what is left of 3/4 of the memory after the backend's share | 1.5 CPUs, 1.8 GB |
+| `backend`: Django (API, data preparation, predictions) | a quarter, at least 1 and at most 2; before the worker when both want the CPU | about a third of those 3/4, at least 1 GB and at most 3 GB | 1 CPU, 1 GB |
+| `realtime` (live editing, Daphne) and `redis` | half a CPU | 256 MB, 64 MB | the same |
+| `cleanup` (deletes old data once a day, sleeps in between) | half a CPU | 256 MB | the same |
+| `caddy` and `frontend` (nginx) | the CPU first when it is busy | the rest, shared with the system; killed last | about 350 MB |
 
-- Every deploy computes the limits from the size of the server, so they follow a resize
-  (Hetzner: *Rescale*, then deploy). They are in `/opt/brick-dnn/.env`
-  (`BRICKDNN_BACKEND_CPUS`, `BRICKDNN_BACKEND_MEMORY`, `BRICKDNN_BACKEND_THREADS`); the next
-  deploy overwrites changes. A CX23 (2 vCPUs, 4 GB) gives the backend 1.5 CPUs and 2.8 GB.
-- In the backend, the API comes first: trainings run with a lower CPU priority, and PyTorch
-  uses one thread per whole CPU of the backend (on a CX23 one thread, so half a CPU stays
-  free for the API).
-- A training that needs more memory than the backend has is the first process the kernel
-  kills; the run fails with "The training process stopped unexpectedly" and the API keeps
-  running. Imports in the Data tab need about 10–15 times the file size in memory: lower
-  `BRICKDNN_DATA_MAX_UPLOAD_MB` on a small server. The server's swap is for building images.
-- `docker stats` shows what every container uses.
+The memory limits add up to 3.4 GB on a server with 4 GB (3.75 GB usable), as before the
+worker existed: backend and worker share what the backend alone had. CPU limits may overlap
+(1.5 + 1 + 0.5 + 0.5 on 2 CPUs): CPU time is shared by priority, and the site wins.
+
+- A worker trains **one run at a time** with one thread per whole CPU it has (on a CX23 one
+  thread); `BRICKDNN_WORKER_SLOTS=2` in `.env` trains two at once (they share the worker's
+  CPUs and memory). More trainings wait in the queue, paid plans first.
+- A training that needs more memory than the worker has is stopped by the kernel: the run
+  fails with "The training process stopped unexpectedly", and the worker and the site keep
+  running. An import in the Data tab or a prediction that needs more memory than the backend
+  has fails the same way without touching the trainings. Imports need about 10–15 times the
+  file size in memory: lower `BRICKDNN_DATA_MAX_UPLOAD_MB` on a small server (to about 50 with
+  the backend's 1 GB). The server's swap is for building images.
+- Predictions still run in the backend (a short process with PyTorch per request, at most 30
+  seconds): its limits leave room for one at a time.
+- `docker stats` shows what every container uses; *Training workers* in the Django admin
+  shows the memory limit each worker found.
+
+**Where the limits come from.** Every deploy computes them from the size of the server, so
+they follow a resize (Hetzner: *Rescale*, then deploy), and writes them to
+`/opt/brick-dnn/.env`; the next deploy overwrites changes:
+
+| Variable | Is | Written by |
+| --- | --- | --- |
+| `BRICKDNN_BACKEND_CPUS`, `BRICKDNN_BACKEND_MEMORY`, `BRICKDNN_BACKEND_THREADS` | 3/4 of the server (what backend and worker share) | every version of `brickdnn-deploy` |
+| `BRICKDNN_WORKER_CPUS`, `BRICKDNN_WORKER_THREADS`, `BRICKDNN_WORKER_MEMORY` | the worker's limits | `brickdnn-deploy` since the worker exists |
+| `BRICKDNN_WEB_CPUS`, `BRICKDNN_WEB_MEMORY` | the backend's limits | `brickdnn-deploy` since the worker exists |
 
 `setup.sh` copies `deploy.sh` to `/usr/local/bin/brickdnn-deploy`, and deploys do not update
-that copy. After a change to `deploy.sh` (such as these limits), copy it again before the
-change is deployed, or run `bootstrap.sh` again:
+that copy. **A server that was set up before the worker existed keeps working without a new
+copy**: its script writes only the `BRICKDNN_BACKEND_*` values, and `compose.yml` then gives
+the worker those CPUs and threads and uses fixed memory limits, 1792 MB for the worker and
+1 GB (and one CPU) for the backend, which are the right ones for a server with 4 GB. With the
+old copy the memory limits therefore do **not** follow the size of the server: on a larger
+server the worker stays at 1.8 GB. To change that, copy the script again (or run
+`bootstrap.sh` again) and deploy:
 
 ```bash
 scp deploy/server/deploy.sh root@SERVER:/usr/local/bin/brickdnn-deploy
 ```
 
-With the old copy, deploys of commits with the limits fail ("required variable
-BRICKDNN_BACKEND_CPUS is missing a value") and the site keeps running the previous version:
-copy it, then run the deploy again (GitHub → *Actions* → *Deploy server* → *Run workflow*).
+On a server with 4 GB a new copy changes nothing worth the trouble (1788 instead of 1792 MB).
+Without any of the variables a deploy fails ("required variable BRICKDNN_BACKEND_CPUS is
+missing a value") and the site keeps running the previous version.
+
+## What a deploy does to trainings
+
+A deploy rebuilds the image and replaces the containers, the worker included. The worker is
+asked to stop, takes no new training, gives the running ones 30 seconds to finish
+(`BRICKDNN_WORKER_DRAIN_SECONDS`; Docker waits up to 60) and puts the rest **back into the
+queue**, in their old place. The new worker starts them again from the beginning as soon as it
+is up; in the web app they are "Queued" for a moment with a note that the worker was
+restarted. The compute of the interrupted attempt is not charged twice. A training that is
+interrupted like this more than three times (`BRICKDNN_WORKER_MAX_RESTARTS`) fails with a
+message that says so; start it again when the deploys are through.
+
+Trainings that only wait in the queue are not affected. The web backend restarts within
+seconds as before; trainings go on meanwhile, the web app just cannot show their progress for
+that moment.
+
+The first deploy with the worker: trainings that the old backend was running end with it;
+they are put into the queue and start again in the worker. Deploying an older commit from
+before the worker removes the worker again; what waits in the queue then stays there until a
+newer commit is deployed.
 
 ## On the server
 
@@ -143,7 +188,18 @@ nano .env && $C up -d          # change settings
 sudo -u deploy brickdnn-deploy <commit>   # deploy another commit of main, e.g. an older one
 $C logs cleanup                # what the daily clean-up deleted
 $C exec backend python manage.py purge_old_data --dry-run   # what it would delete now
+$C logs -f --tail 100 worker   # what the training worker starts, stops and puts back
+$C exec backend python manage.py training_queue   # who waits, who trains, the last 7 days
 ```
+
+**The training queue** is also in the Django admin, without a shell: `https://DOMAIN/admin/` →
+*Training workers* shows the waiting and running trainings (account, plan, priority, waiting
+time), the workers (heartbeat, slots, memory limit, current trainings) and, for the last seven
+days, how long trainings waited for a slot (median, 95th percentile, per plan) and how busy
+the worker was. Long waits while the worker is busy most of the day mean that the server is
+too small: rescale it, or see [docs/scaling.md](../../docs/scaling.md). If the web app says
+"No training worker is running", look at `$C ps worker` and `$C logs worker`; trainings wait
+in the queue until it is back.
 
 Old data is only deleted automatically if `.env` sets `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS`
 or `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` (then `$C up -d`); see

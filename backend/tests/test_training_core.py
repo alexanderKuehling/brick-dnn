@@ -1080,8 +1080,20 @@ def test_is_stale():
 
 
 def test_status_constants():
-    assert st.STATUSES == ("starting", "preparing", "running", "completed", "stopped", "failed")
+    # "queued" is the server's: a run waits there for a training worker. Runners never report it.
+    assert st.STATUSES == (
+        "queued",
+        "starting",
+        "preparing",
+        "running",
+        "completed",
+        "stopped",
+        "failed",
+    )
+    assert st.RUNNING_STATUSES == ("starting", "preparing", "running")
+    assert (st.QUEUED, *st.RUNNING_STATUSES) == st.ACTIVE_STATUSES
     assert set(st.ACTIVE_STATUSES).isdisjoint(st.TERMINAL_STATUSES)
+    assert st.initial_state()["status"] == "starting"
 
 
 def test_runner_lowers_its_priority_before_training(tmp_path, monkeypatch):

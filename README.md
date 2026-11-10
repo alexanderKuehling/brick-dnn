@@ -51,7 +51,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   checks beforehand whether network and data fit and says what to change. Hold out a test set,
   stop early when the validation loss no longer improves (the weights of the best epoch are
   kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer,
-  and download the trained weights together with the matching script. See
+  and download the trained weights together with the matching script. With Docker, trainings
+  wait in a **queue** and a separate worker container trains them, so the site stays
+  responsive and nothing is refused because the server is busy. See
   [docs/training.md](docs/training.md).
 - **Data preparation and analysis** in the *Data* tab: import messy CSV files, Excel and
   OpenDocument workbooks (choose the sheet), JSON / JSON Lines, Parquet and Feather files, also
@@ -125,9 +127,13 @@ models (Gaussian processes, SVMs) train in the default image. To create an admin
 docker compose exec backend python manage.py createsuperuser
 ```
 
+Trainings are queued in the database and trained by the `worker` service, one at a time by
+default (`BRICKDNN_WORKER_SLOTS`); `docker compose logs worker` shows what it does, and
+[docs/training.md](docs/training.md#the-training-queue) how the queue works.
+
 On a public server (HTTPS with Caddy, automatic deploys from GitHub Actions after every
-push to `main`, backend and trainings limited to three quarters of the server):
-[deploy/server/README.md](deploy/server/README.md).
+push to `main`, the web backend and the training worker with their own limits within three
+quarters of the server): [deploy/server/README.md](deploy/server/README.md).
 
 ### For development
 
@@ -153,7 +159,9 @@ The Vite dev server proxies `/api` to the backend, so no CORS setup is needed. I
 elsewhere, start the UI with `BACKEND_URL=http://host:port npm run dev`.
 
 A `Makefile` wraps these steps (`make install`, `make install-training`, `make backend`,
-`make frontend`, `make test`).
+`make frontend`, `make test`). In development the API trains itself, one training at a time.
+To try the training queue, start the API and, in another terminal, the worker
+(`python manage.py training_worker`), both with `BRICKDNN_TRAINING_WORKER=true`.
 
 ### Online demo
 
@@ -285,7 +293,9 @@ frontend/  React + Mantine + React Flow (TypeScript)
    │  live editing of shared networks → WebSocket /api/ws/projects/<id>/
    ▼
 backend/   Django REST API: accounts (JWT), saved and shared networks, datasets, training runs
-   │          starts one process per training run, reads its progress from state.json
+   │          queues training runs in the database; a worker (manage.py training_worker, its
+   │          own container) starts one process per run; the API reads the progress from
+   │          state.json (without the worker, e.g. in development, the API starts them itself)
    │          live editing: Django Channels (served by Daphne), Redis between the processes
    ├── brickdnn/            pure Python: layer catalogue, graph validation, shape inference,
    │                        code generation (no dependencies)
@@ -318,7 +328,7 @@ brick-dnn/
 │       ├── legal/           imprint, privacy policy, terms of use (safe Markdown)
 │       └── pages/           login, sign-up, saved networks
 ├── deploy/                  server setup (Docker Compose, Caddy), legal templates, demo
-├── docs/                    graph format, REST API, training, data, database, privacy
+├── docs/                    graph format, REST API, training, data, database, privacy, scaling
 └── docker-compose.yml
 ```
 
@@ -340,7 +350,10 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_NUM_PROXIES`         | `0` (`1` in Docker)        | Reverse proxies in front of Django (for rate limits) |
 | `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
 | `BRICKDNN_TRAINING`            | `true`                     | Set to `false` to disable training                   |
-| `BRICKDNN_TRAINING_MAX_RUNS`   | `1`                        | Trainings running at the same time (all users)       |
+| `BRICKDNN_TRAINING_MAX_RUNS`   | `1`                        | Trainings running at the same time (all users) when the web server trains itself; with Docker Compose also the default of `BRICKDNN_WORKER_SLOTS` |
+| `BRICKDNN_TRAINING_WORKER`     | `true` with Docker Compose, else `false` | Trainings wait in a queue in the database and the `worker` service trains them, plans with a higher priority first; `false`: the web server trains itself and refuses a start while it is busy ([docs/training.md](docs/training.md#the-training-queue)) |
+| `BRICKDNN_WORKER_SLOTS`        | from the CPUs              | Trainings the worker runs at the same time           |
+| `BRICKDNN_QUEUE_MAX_WAITING`   | `3` with plans, else unlimited | Trainings of one account that may wait in the queue |
 | `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
 | `BRICKDNN_DATA_MAX_UPLOAD_MB`  | `200`                      | Largest import in the Data tab (file, link or unpacked) |
 | `BRICKDNN_DATA_URL_IMPORT`     | `true`                     | Set to `false` to switch imports from links off      |
@@ -377,7 +390,9 @@ people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how l
 legal pages (imprint, privacy policy, terms of use; templates in
 [deploy/legal/](deploy/legal/README.md)), the account page where users export their data or
 delete their account, and the optional automatic deletion of old data. Selling plans as
-subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md).
+subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
+training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); what
+comes after one server: [docs/scaling.md](docs/scaling.md).
 
 ## Tests
 

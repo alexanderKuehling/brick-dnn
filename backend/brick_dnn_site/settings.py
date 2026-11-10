@@ -199,8 +199,33 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
 # Set BRICKDNN_TRAINING=false to switch the feature off.
 TRAINING_ENABLED = env_bool("BRICKDNN_TRAINING", True)
 TRAINING_DIR = DATA_DIR / "training"
-# Number of trainings that may run at the same time (counted across all users).
+# Number of trainings that may run at the same time (counted across all users) when the web
+# server trains itself; with a worker, its slots (BRICKDNN_WORKER_SLOTS) take that role.
 TRAINING_MAX_RUNS = int(os.environ.get("BRICKDNN_TRAINING_MAX_RUNS", "1"))
+# The job queue (brick_dnn_core.training_queue, docs/training.md): with
+# BRICKDNN_TRAINING_WORKER=true the web server does not start trainings itself. New runs are
+# queued in the database and `manage.py training_worker` (its own process or container) works
+# them off, plans with a higher priority first. Off by default: without a worker process the
+# web server trains itself as before (Docker Compose switches it on and starts the worker).
+TRAINING_WORKER = env_bool("BRICKDNN_TRAINING_WORKER", False)
+# The name of a worker (default: the host name) and the trainings it runs at the same time
+# (0 or unset: from its CPUs and OMP_NUM_THREADS, see training_worker.default_slots).
+WORKER_NAME = os.environ.get("BRICKDNN_WORKER_NAME", "").strip()
+WORKER_SLOTS = int(os.environ.get("BRICKDNN_WORKER_SLOTS") or 0)
+# A worker without a heartbeat for this many seconds is considered dead: its runs go back
+# into the queue (once; after BRICKDNN_WORKER_MAX_RESTARTS restarts in all, a run fails).
+WORKER_TIMEOUT = max(5, int(os.environ.get("BRICKDNN_WORKER_TIMEOUT") or 60))
+WORKER_MAX_RESTARTS = max(0, int(os.environ.get("BRICKDNN_WORKER_MAX_RESTARTS") or 3))
+# A worker that is asked to stop (a deploy) lets its trainings finish for this many seconds,
+# then stops them and puts them back into the queue.
+WORKER_DRAIN_SECONDS = max(0, int(os.environ.get("BRICKDNN_WORKER_DRAIN_SECONDS") or 30))
+# Trainings of one account that may wait in the queue (0: no limit); a plan can set its own
+# with "queued_trainings". Unset: 3 on a server with plans (BRICKDNN_PLANS), no limit without.
+QUEUE_MAX_WAITING: int | None = (
+    max(0, int(os.environ["BRICKDNN_QUEUE_MAX_WAITING"]))
+    if os.environ.get("BRICKDNN_QUEUE_MAX_WAITING", "").strip()
+    else None
+)
 # Largest dataset upload (CSV or ZIP) in megabytes.
 TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.
