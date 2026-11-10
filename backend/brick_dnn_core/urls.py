@@ -8,6 +8,7 @@ from . import (
     approvals,
     billing_views,
     data_views,
+    explain_views,
     legal,
     mcp,
     oauth,
@@ -169,5 +170,11 @@ urlpatterns = [
     path("training/check/", views.training_check, name="training-check"),
     path("data/", data_views.data_status, name="data"),
     path("data/steps/", data_views.data_steps, name="data-steps"),
+    # Explanations of a trained model (explain_views.py).
+    path(
+        "training/runs/<str:pk>/explain/",
+        explain_views.ExplainView.as_view(),
+        name="training-run-explain",
+    ),
     path("", include(router.urls)),
 ]

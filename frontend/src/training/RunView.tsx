@@ -53,6 +53,7 @@ import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { ExplainButton } from '@/explain/ExplainButton';
 import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
@@ -569,6 +570,8 @@ export function RunView({
             Preprocessing (.json)
           </Button>
         )}
+        {/* Explanations of the trained model (src/explain). */}
+        {run.has_weights && !active && <ExplainButton run={run} />}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}

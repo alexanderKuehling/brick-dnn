@@ -116,8 +116,9 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
       deleteNode: noop,
       duplicateNode: noop,
       focusNode,
+      links: doc.edges,
     }),
-    [specs, analysis, focusNode]
+    [specs, analysis, focusNode, doc.edges]
   );
 
   if (!catalog) {

@@ -85,6 +85,10 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
     Raises :class:`PredictionError`.
     """
     run_dir = Path(run_dir)
+    if isinstance(request, dict) and "explain" in request:  # see explain/__init__.py
+        from .explain import run as run_explanation
+
+        return run_explanation(run_dir, request["explain"])
     job = read_job(run_dir)
     if job is None or not isinstance(job.get("graph"), dict):
         raise PredictionError("The network of this run is missing.")
