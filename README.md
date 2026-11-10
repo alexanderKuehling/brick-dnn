@@ -80,7 +80,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   [docs/training.md](docs/training.md#classical-models).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
-- **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
+- **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
+  classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
   tabular regression, multi-input model, Gaussian process regression, SVM classifier and a
   periodic Gaussian process.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
@@ -91,6 +92,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   addresses and security notices ([docs/email.md](docs/email.md)).
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
+- **A short guide** on the first visit (palette, connections, the analysis, code and export,
+  training; skippable, and again with the *?* button), and an empty canvas offers examples to
+  start from.
 - Dark mode, keyboard shortcuts, works on tablets and phones.
 
 <table>
@@ -391,6 +395,13 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
 | `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
+| `BRICKDNN_BACKUP_DIR`          | – (off)                    | Folder for `manage.py backup` (database and files; the cleanup service runs it daily), see [deploy/server](deploy/server/README.md#backups) |
+| `BRICKDNN_BACKUP_KEEP_DAILY` / `_WEEKLY` | `7` / `4`        | Backups kept: the newest of each of the last days / weeks |
+| `BRICKDNN_BACKUP_FILES`        | `archive`                  | The data directory's files as tarball (`archive`), `list` or `none` |
+| `BRICKDNN_BACKUP_MAX_FILES_MB` | `2048`                     | Larger file sets are only listed                     |
+| `BRICKDNN_BACKUP_MAX_AGE_HOURS` | `50`                      | `/api/health/` reports a newest backup older than this |
+| `BRICKDNN_HEALTH_MIN_FREE_MB`  | `1024`                     | `/api/health/` reports `degraded` below this much free space in the data dir (`0`: no check) |
+| `BRICKDNN_HEALTH_TOKEN`        | – (staff only)             | Secret for the `X-Health-Token` header that shows the details of `/api/health/` (only in `.env`) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in

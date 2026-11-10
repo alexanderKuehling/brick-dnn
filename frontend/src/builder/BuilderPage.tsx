@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { IconPlugConnectedX, IconSchool } from '@tabler/icons-react';
+import { IconPlugConnectedX } from '@tabler/icons-react';
 import {
   Background,
   Controls,
@@ -21,9 +21,7 @@ import {
   Button,
   Center,
   Drawer,
-  Group,
   Loader,
-  Paper,
   ScrollArea,
   Stack,
   Text,
@@ -41,6 +39,7 @@ import {
   type GenerateOptions,
   type GraphDocument,
   type LayerSpec,
+  type Params,
   type Project,
   type ProjectConflict,
 } from '@/api';
@@ -83,6 +82,7 @@ import {
 } from './graph';
 import { Inspector } from './Inspector';
 import { connectionProblem, inputSlots, networkFamily, outputKind, slotFor } from './kinds';
+import { EmptyCanvas, guideSeen, guideStartsByItself, OnboardingGuide } from './Onboarding';
 import { Palette } from './Palette';
 import type { Point } from './pointerDrag';
 import { Toolbar } from './Toolbar';
@@ -170,6 +170,7 @@ function Builder() {
   const [paletteOpened, palette] = useDisclosure(false);
   const [inspectorOpened, inspector] = useDisclosure(false);
   const [fitRequest, setFitRequest] = useState(0);
+  const [guideOpened, setGuideOpened] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   // Guards against double saves and against a save finishing after another network was loaded.
@@ -378,6 +379,19 @@ function Builder() {
     }
   }, [examples, loadDocument]);
 
+  // First visit in this browser: the guide, once the builder is on the screen.
+  const guideStarted = useRef(false);
+  useEffect(() => {
+    if (guideStarted.current || !catalog || readOnly || !guideStartsByItself() || guideSeen()) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      guideStarted.current = true;
+      setGuideOpened(true);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [catalog, readOnly]);
+
   // A saved project from the draft (opened in "My networks", or after a reload): get the
   // user's role, the sharing state and the latest version from the server.
   const refreshed = useRef(false);
@@ -566,6 +580,18 @@ function Builder() {
         )
       ),
     [setNodes]
+  );
+
+  const patchParams = useCallback(
+    (id: string, type: string, patch: Params): Params | null => {
+      const node = nodes.find((n) => n.id === id && n.data.type === type);
+      if (!node || readOnly) {
+        return null;
+      }
+      updateNode(id, { params: { ...node.data.params, ...patch } });
+      return node.data.params;
+    },
+    [nodes, readOnly, updateNode]
   );
 
   const deleteNode = useCallback(
@@ -978,6 +1004,7 @@ function Builder() {
       warningsByNode: groupIssues(analysis?.warnings),
       readOnly,
       updateNode,
+      patchParams,
       deleteNode,
       duplicateNode,
       focusNode,
@@ -989,6 +1016,7 @@ function Builder() {
       analysis,
       readOnly,
       updateNode,
+      patchParams,
       deleteNode,
       duplicateNode,
       focusNode,
@@ -1063,6 +1091,7 @@ function Builder() {
             visibleFrom="md"
             w={230}
             style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+            data-tour="palette"
           >
             {paletteView}
           </Box>
@@ -1099,8 +1128,9 @@ function Builder() {
             onShowSummary={showSummary}
             onOpenPalette={palette.open}
             onOpenInspector={inspector.open}
+            onShowGuide={() => setGuideOpened(true)}
           />
-          <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }}>
+          <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }} data-tour="canvas">
             <ReactFlow<LayerFlowNode, Edge>
               nodes={live.displayNodes}
               edges={displayEdges}
@@ -1134,35 +1164,7 @@ function Builder() {
               />
               {nodes.length === 0 && !readOnly && (
                 <Panel position="top-center">
-                  <Paper
-                    withBorder
-                    shadow="sm"
-                    p="lg"
-                    mt={{ base: 'md', sm: 60 }}
-                    // The panel is centred with left: 50%, which would halve its width on phones.
-                    w={{ base: 'calc(100vw - 48px)', xs: 'auto' }}
-                    maw={420}
-                    ta="center"
-                  >
-                    <Title order={4}>Start building</Title>
-                    <Text size="sm" c="dimmed" mt={6}>
-                      Drag an <b>Input</b> layer from the palette onto the canvas, then add layers
-                      by clicking them. Or start from an example:
-                    </Text>
-                    <Group justify="center" mt="md" gap="xs">
-                      {examples.slice(0, 3).map((example) => (
-                        <Button
-                          key={example.id}
-                          size="xs"
-                          variant="light"
-                          leftSection={<IconSchool size={14} />}
-                          onClick={() => loadExample(example)}
-                        >
-                          {example.name}
-                        </Button>
-                      ))}
-                    </Group>
-                  </Paper>
+                  <EmptyCanvas examples={examples} onLoadExample={loadExample} />
                 </Panel>
               )}
             </ReactFlow>
@@ -1234,6 +1236,7 @@ function Builder() {
           />
         </Suspense>
       )}
+      <OnboardingGuide opened={guideOpened} onClose={() => setGuideOpened(false)} />
       <input
         ref={fileInput}
         type="file"

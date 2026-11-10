@@ -30,6 +30,44 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Example *U-Net classifier (Fashion-MNIST)*.** The U-Net example with a classification
+  head: instead of the 1×1 mask convolution, `AdaptiveAvgPool2d` → `Flatten` → `Linear(10)`.
+  Its Input is `[1, 32, 32]` (Fashion-MNIST's 28×28 images are resized, so that three
+  halvings fit) and its filters are halved (16/32/64, bottleneck 128, 482k parameters), so
+  that it trains on a CPU server. It follows the U-Net in the examples; for this task a plain
+  CNN is smaller and faster.
+- **A guide for new users.** On the first visit, the builder walks through five short steps
+  (the palette, connecting layers, the analysis badge and the properties, code and export,
+  training with a built-in dataset) with Mantine's `Tour`: keyboard and screen reader
+  friendly, at phone width it points at the phone's buttons, *Skip* or Escape end it. It is
+  remembered per browser and opens again with the *?* button of the toolbar or *File* →
+  *Guide to the builder*; the online demo shows it too. An empty canvas offers cards to start
+  from an example (MLP on MNIST, CNN, U-Net, Gaussian process).
+- **Kernel hyperparameters at a bound.** After a Gaussian process fit, Brick DNN finds the
+  optimised kernel hyperparameters that ended at one of their bounds (scikit-learn only logs a
+  `ConvergenceWarning`) and stores them in `state.classical.at_bounds` with the brick, the
+  side and a suggested change. The run's results say what it may mean ("Noise level of
+  white_1 ended at its lower bound 1e-05: the model may be overfitting; set custom bounds,
+  e.g. ≥ 0.001"), and a button sets the suggested custom bounds on the brick in the builder,
+  with *Undo*. The MCP tool `get_training_run` includes the messages in its summary.
+- **Backups: `manage.py backup` and `manage.py restore`.** A backup is a folder with the
+  database as of one moment (Django's `dumpdata` in one transaction, which loads into any
+  PostgreSQL or SQLite; `pg_dump` where installed; SQLite's online backup), the files of the
+  data directory as a tarball (only listed above `BRICKDNN_BACKUP_MAX_FILES_MB`) and a
+  manifest. Old backups are rotated (7 daily, 4 weekly). Docker Compose's cleanup service runs
+  it daily after the clean-up when `BRICKDNN_BACKUP_DIR` is set, `/api/health/` reports a
+  failed or old backup, and `restore` puts a backup back (`--database-only`, `--files-only`).
+  brickdnn.com backs up to `/data/backups`. `deploy/server/README.md` has a new section
+  *Backups*: Hetzner's server backups as offsite copy, Supabase's backups, the restore drill.
+- **Uptime monitoring without another service.** A scheduled GitHub Actions workflow
+  (`uptime.yml`, every 15 minutes) checks `DEPLOY_URL/api/health/` and the front page, and
+  when the site is down opens one issue labelled `outage` (GitHub notifies the owner), comments
+  on it while the problem lasts or changes, and closes it when the site is back.
+  `/api/health/` now checks the database (`503` without it), the training worker's heartbeat
+  and the free disk space (`BRICKDNN_HEALTH_MIN_FREE_MB`), and answers `degraded` when one of
+  the latter fails. It names the checks only; the details are for staff accounts and requests
+  with the `X-Health-Token` header (`BRICKDNN_HEALTH_TOKEN`). See
+  [deploy/server/README.md](deploy/server/README.md#monitoring).
 - **Approvals for agents.** Per API token and connected app you decide what an agent may do
   on its own: start trainings up to N estimated CPU minutes (above that, or always with 0, it
   asks), publish (a weights link that works without logging in, sharing a dataset or data

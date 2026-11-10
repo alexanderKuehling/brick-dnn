@@ -84,6 +84,7 @@ import {
   weightsNote,
   weightsSnippet,
 } from './format';
+import { KernelBoundsHint } from './KernelBounds';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
 import classes from './Training.module.css';
 
@@ -973,6 +974,9 @@ function ClassicalResults({
         </Text>
       )}
 
+      {gaussianProcess && fit?.at_bounds?.length ? (
+        <KernelBoundsHint bounds={fit.at_bounds} />
+      ) : null}
       {gaussianProcess && fit?.kernel && <KernelBlock label="Fitted kernel" code={fit.kernel} />}
       {gaussianProcess && fit?.initial_kernel && (
         <KernelBlock label="Starting kernel" code={fit.initial_kernel} dimmed />

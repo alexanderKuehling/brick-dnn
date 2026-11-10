@@ -8,11 +8,32 @@ need an account; saved networks, training and data preparation do.
 | Method | Path              | Description                                                   |
 | ------ | ----------------- | ------------------------------------------------------------- |
 | GET    | `/api/`           | Index of endpoints and version                                |
-| GET    | `/api/health/`    | `{"status": "ok", "version": "1.1.0"}`                        |
+| GET    | `/api/health/`    | `{"status": "ok", "version": "1.1.0", "checks": {...}}`, see below |
 | GET    | `/api/layers/`    | `{"categories": [...], "layers": [LayerSpec, ...]}`           |
 | GET    | `/api/examples/`  | Example networks `[{id, name, description, graph}]`           |
 | POST   | `/api/analyze/`   | Validate a graph, infer shapes                                |
 | POST   | `/api/generate/`  | Generate PyTorch code (scikit-learn for classical models)     |
+
+### `GET /api/health/`
+
+Whether the server works, cheap enough for frequent checks (Docker's health check, the uptime
+workflow in [deploy/server](../deploy/server/README.md#monitoring)):
+
+```json
+{ "status": "degraded", "version": "1.1.0", "checks": { "database": "ok", "worker": "failed", "disk": "ok" } }
+```
+
+| Check      | Fails when                                                                 |
+| ---------- | -------------------------------------------------------------------------- |
+| `database` | `SELECT 1` fails. The answer is then `503` with `"status": "error"`.       |
+| `worker`   | With the training queue: no training worker sent a heartbeat within `BRICKDNN_WORKER_TIMEOUT` seconds. |
+| `disk`     | The data directory has less than `BRICKDNN_HEALTH_MIN_FREE_MB` free (default 1024; `0`: no check). |
+| `backup`   | With `BRICKDNN_BACKUP_DIR`, once `manage.py backup` ran: the last backup failed, or the newest is older than `BRICKDNN_BACKUP_MAX_AGE_HOURS` (default 50). |
+
+A failed check other than the database makes the status `degraded` (still `200`); checks a
+server does not use are left out. Everyone sees only these names and `ok`/`failed`. Staff
+accounts, and requests with the header `X-Health-Token: <BRICKDNN_HEALTH_TOKEN>`, also get a
+`detail` object (free space, seconds since the last heartbeat, error messages).
 
 ### `POST /api/analyze/`
 
