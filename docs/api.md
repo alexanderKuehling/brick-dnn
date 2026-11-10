@@ -84,7 +84,7 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 | Method | Path                       | Body                               | Response                    |
 | ------ | -------------------------- | ---------------------------------- | --------------------------- |
 | POST   | `/api/auth/register/`      | `{username, email, password, accept_terms?}` | `201 {user, access, refresh}` |
-| POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`         |
+| POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`, or a two-factor challenge (below) |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
 | GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined}` |
@@ -93,7 +93,42 @@ Send the access token as `Authorization: Bearer <access>`. Access tokens live 30
 refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
 account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`. If the
 server has terms of use (`GET /api/legal/` says `accept_terms_required`), registration needs
-`accept_terms: true`; the acceptance is stored with the version of the terms.
+`accept_terms: true`; the acceptance is stored with the version of the terms. With e-mail set
+up, sign-up sends a link to confirm the address.
+
+### E-mail, password reset and two-factor authentication
+
+See [email.md](email.md) for what is sent and when an address may receive reset links.
+
+| Method | Path | Body | Response |
+| ------ | ---- | ---- | -------- |
+| POST | `/api/auth/token/two-factor/` | `{challenge, code}` | `{access, refresh}` (plus `recovery_codes_left` after a recovery code) |
+| GET  | `/api/auth/password-reset/` | – | `{available}`: whether this server sends reset links |
+| POST | `/api/auth/password-reset/` | `{login}` (username or e-mail) | `{detail}`, the same for every login; `503` without e-mail |
+| POST | `/api/auth/password-reset/check/` | `{uid, token}` (from the link) | `{valid, username}` |
+| POST | `/api/auth/password-reset/confirm/` | `{uid, token, new_password}` | `{detail, username}`; all logins of the account end; `400 {code: "invalid_link"}` |
+| POST | `/api/auth/account/email/verify/` | `{token}` (from the link) | `{email, email_verified, …}`; only the account the link was sent to (`400 {code: "other_account" \| "other_address" \| "invalid_link"}`) |
+| POST | `/api/auth/account/email/resend/` | – | `{detail}`; `503` without e-mail; `BRICKDNN_EMAIL_VERIFY_RATE` (5/hour) |
+| GET  | `/api/auth/two-factor/` | – | `TwoFactorState` |
+| POST | `/api/auth/two-factor/setup/` | `{password}` | `{secret, otpauth_uri}` (shown once; not on until confirmed) |
+| POST | `/api/auth/two-factor/enable/` | `{code}` | `{recovery_codes, state, access, refresh}`; all other logins end |
+| POST | `/api/auth/two-factor/disable/` | `{password, code}` | `TwoFactorState` |
+| POST | `/api/auth/two-factor/recovery-codes/` | `{password, code}` | `{recovery_codes, state}`; the old codes stop working |
+
+**Logging in with two-factor authentication.** When it is on, `POST /api/auth/token/` with the
+right password answers `{two_factor_required: true, challenge, expires_in}` (no tokens). The
+challenge is signed, valid for 5 minutes and ends with a password change. `POST
+/api/auth/token/two-factor/` with it and a 6-digit code from the app, or a recovery code
+(`xxxx-xxxx-xxxx-xxxx`), returns the tokens. Wrong codes: `400 {code: [...]}`; an expired
+challenge: `400 {code: "challenge_expired"}`; after 5 wrong codes in 15 minutes: `429`. The
+step is limited per IP address too (`BRICKDNN_TWO_FACTOR_RATE`, 30/hour). API tokens and
+OAuth apps are not affected. `TwoFactorState` is `{enabled, enabled_at, recovery_codes_left}`.
+The `/api/auth/two-factor/…` endpoints need a website login and share the account rate limit.
+
+**Password reset** is limited per IP address (`BRICKDNN_PASSWORD_RESET_RATE`, 10/hour) and
+to 3 e-mails an hour per account. The link is `/reset-password#uid=…&token=…` (the fragment
+stays in the browser), valid for an hour and void once the password changed, the account
+logged in or its address changed.
 
 ### The own account
 
@@ -108,8 +143,12 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 | GET    | `/api/auth/account/export/`   | –                                     | a ZIP file with everything stored about the account |
 | POST   | `/api/auth/account/delete/`   | `{password, username}`                | `204`: the account and everything it owns are deleted |
 
-`Account` is `{id, username, email, date_joined, last_login, last_active_at,
-terms_accepted_at, terms_version, privacy_version, stored}`; `stored` counts the projects,
+`Account` is `{id, username, email, email_verified, email_verified_at, email_sending,
+password_reset_available, two_factor, date_joined, last_login, last_active_at,
+terms_accepted_at, terms_version, privacy_version, stored}` (`email_sending`: the server sends
+e-mail; `password_reset_available`: a forgotten password could be reset by e-mail;
+`two_factor`: `TwoFactorState`). Changing the e-mail address makes it unconfirmed and sends a
+link to the new address and a notice to the old one;` `stored` counts the projects,
 memberships, comments, data sources and preparations, datasets, training runs, API tokens,
 connected apps and entries of the agent activity log (`agent_actions`), and the bytes of
 uploaded files. What the export holds and what deleting an
@@ -727,7 +766,10 @@ Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and r
 preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
 1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
 120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour,
-checkout and changes of a paid plan: 60/hour (`BRICKDNN_BILLING_RATE`). Adjust
+checkout and changes of a paid plan: 60/hour (`BRICKDNN_BILLING_RATE`), asking for a password
+reset link: 10/hour per IP address (`BRICKDNN_PASSWORD_RESET_RATE`), sending the confirmation
+link again: 5/hour (`BRICKDNN_EMAIL_VERIFY_RATE`), the second step of a two-factor login:
+30/hour per IP address (`BRICKDNN_TWO_FACTOR_RATE`). Adjust
 with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
 `BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
 `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE`, `BRICKDNN_ACCOUNT_RATE` and
