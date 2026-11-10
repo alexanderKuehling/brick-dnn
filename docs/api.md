@@ -178,7 +178,10 @@ budget_cpu_minutes, used_cpu_minutes}`; `PATCH /api/auth/api-tokens/<id>/
 [Usage and budgets](#usage-and-budgets)).
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
-endpoints need a website login (JWT): an API token cannot manage tokens.
+endpoints need a website login (JWT): an API token cannot manage tokens. A new token gets the
+account's default [approval rule](#approvals). A request with a token whose rule says that
+it needs approval (trainings above its limit, sharing, deleting) is refused with `403`: the
+REST API cannot ask.
 
 ## Agent activity
 
@@ -187,23 +190,51 @@ What AI agents and scripts did with the user's API tokens and connected apps (se
 
 | Method | Path                            | Response                                         |
 | ------ | ------------------------------- | ------------------------------------------------ |
-| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days}`, newest first |
+| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days, approvals}`, newest first |
 | GET    | `/api/agent-activity/summary/`  | `{agents, tools, total, latest_id, latest_at, retention_days}` |
 
 Query parameters of the list: `limit` (default 50, at most 200), `before=<id>` (older
 entries: the next page), `after=<id>` (only newer entries: poll with the last `latest_id`),
 and the filters `agent=token:<id>` or `app:<connection id>`, `tool=<tool or route>`,
-`outcome=ok|error`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
+`outcome=ok|error|pending|approved|denied`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
 time>`. `latest_id` is the user's newest entry whatever the filters. With `after`, `has_more`
 means more new entries than `limit` arrived: load the first page again.
 
 `AgentAction` is `{id, created_at, source ("mcp" | "api"), agent: {kind ("token" | "app"), id,
-key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error"), error,
-status_code, duration_ms, summary, arguments, targets: [{kind, id, name?}], project}`.
+key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error" | "pending" |
+"approved" | "denied"), error, status_code, duration_ms, summary, arguments, targets: [{kind,
+id, name?}], project, approval}`; `approval` is the id of the [approval request](#approvals)
+an entry belongs to (outcomes `pending`, `approved`, `denied`, or `error` when an approved
+action failed).
 `arguments` are summarised and redacted; `targets` kinds are `project`, `run`, `dataset`,
 `data_source` and `data_prep`. The summary's `agents` are `{kind, id, key, name, prefix,
 active, actions, errors, last_at, last_id}`, the most recently active first; `active` is false
 for revoked tokens and disconnected apps.
+
+## Approvals
+
+Actions of agents that wait for the user's approval, and the rules per token and app (see
+[mcp.md](mcp.md#approvals)). Website login (JWT) only: API tokens and apps cannot decide.
+
+| Method | Path                                  | Body                    | Response |
+| ------ | ------------------------------------- | ----------------------- | -------- |
+| GET    | `/api/approvals/`                     | –                       | `{results: [ApprovalRequest], pending_count}`, newest first; `?status=pending\|decided`, `?limit=` (default 50, at most 200) |
+| GET    | `/api/approvals/<id>/`                | –                       | `ApprovalRequest` |
+| POST   | `/api/approvals/<id>/approve/`        | –                       | `ApprovalRequest`, done as the agent: `status` `executed` or `failed`; approving again changes nothing; `409 {detail, approval}` if denied or expired |
+| POST   | `/api/approvals/<id>/deny/`           | `{message?}`            | `ApprovalRequest` (`denied`); `409` if approved or expired |
+| GET    | `/api/approvals/rules/`               | –                       | `{default: Rule, builtin_default: Rule, agents: {"token:<id>" \| "app:<id>": Rule}, gated_tools, expiry_hours}` |
+| PUT    | `/api/approvals/rules/default/`       | `Rule`                  | `Rule`: the default new tokens and apps get |
+| PUT    | `/api/approvals/rules/token/<id>/`    | `Rule`                  | `Rule` of an API token |
+| PUT    | `/api/approvals/rules/app/<id>/`      | `Rule`                  | `Rule` of a connected app |
+
+`Rule` is `{training_cpu_minutes (null: never ask; 0: always), publishing, deleting}`.
+`ApprovalRequest` is `{id, status ("pending" | "approved" | "executed" | "failed" | "denied" |
+"expired"), category ("training" | "publishing" | "deleting"), tool, action, agent: {kind, id,
+key, name, active}, summary, reason, estimate: {cpu_minutes, low_cpu_minutes,
+high_cpu_minutes, cost, currency} | null, limit_cpu_minutes, network, dataset, exposes,
+warning, targets, arguments (summarised as in the activity log), created_at, expires_at,
+decided_at, finished_at, message, error, done}`. `GET /api/agent-activity/` also returns
+`approvals: {pending_count, pending: [ApprovalRequest]}` with every poll.
 
 ## OAuth (MCP sign-in)
 
