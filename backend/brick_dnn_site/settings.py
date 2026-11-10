@@ -233,6 +233,17 @@ QUEUE_MAX_WAITING: int | None = (
 # to requests with the header X-Health-Token: <BRICKDNN_HEALTH_TOKEN> (empty: staff only).
 HEALTH_MIN_FREE_MB = int(os.environ.get("BRICKDNN_HEALTH_MIN_FREE_MB") or 1024)
 HEALTH_TOKEN = os.environ.get("BRICKDNN_HEALTH_TOKEN", "").strip()
+# Backups with `manage.py backup` (brick_dnn_core.backups; the cleanup service of Docker Compose
+# runs it daily): off unless BRICKDNN_BACKUP_DIR names a folder. Keeps the newest backup of each
+# of the last KEEP_DAILY days and KEEP_WEEKLY weeks. FILES: "archive" (a tarball of the data
+# directory, or a list if it is larger than MAX_FILES_MB), "list" or "none". /api/health/
+# reports "degraded" when the newest backup is older than MAX_AGE_HOURS or the last one failed.
+BACKUP_DIR = os.environ.get("BRICKDNN_BACKUP_DIR", "").strip()
+BACKUP_KEEP_DAILY = max(1, int(os.environ.get("BRICKDNN_BACKUP_KEEP_DAILY") or 7))
+BACKUP_KEEP_WEEKLY = max(0, int(os.environ.get("BRICKDNN_BACKUP_KEEP_WEEKLY") or 4))
+BACKUP_FILES = os.environ.get("BRICKDNN_BACKUP_FILES", "").strip().lower() or "archive"
+BACKUP_MAX_FILES_MB = int(os.environ.get("BRICKDNN_BACKUP_MAX_FILES_MB") or 2048)
+BACKUP_MAX_AGE_HOURS = float(os.environ.get("BRICKDNN_BACKUP_MAX_AGE_HOURS") or 50)
 # Largest dataset upload (CSV or ZIP) in megabytes.
 TRAINING_MAX_UPLOAD_MB = int(os.environ.get("BRICKDNN_MAX_UPLOAD_MB", "500"))
 # Command that trains one run; the run directory is appended as the last argument.

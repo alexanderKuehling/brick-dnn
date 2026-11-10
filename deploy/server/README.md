@@ -210,8 +210,82 @@ Servers set up before the legal pages existed: create the folder once with
 `ssh root@SERVER install -d -m 755 -o deploy -g deploy /srv/brick-dnn/legal` (the next deploy
 would otherwise create it, owned by root).
 
-The server keeps files on its disk; turn on Hetzner's backups (or back up the Docker volume
-`brick-dnn_brickdnn-data`) to keep them safe. Accounts and networks are in the database.
+The server keeps files on its disk and accounts and networks are in the database: see
+[Backups](#backups) for keeping both safe.
+
+## Backups
+
+What is kept where, and what is backed up:
+
+| Data | Where | Backed up by |
+| --- | --- | --- |
+| Accounts, networks, runs, usage (the database) | Supabase (`DATABASE_URL`), else SQLite in the data volume | Supabase: **check your plan** (dashboard → *Database* → *Backups*): paid plans keep daily backups for 7 days, the free plan has none you can restore yourself. And `manage.py backup` (below). |
+| Uploads, datasets, trained weights, the generated secret key | Docker volume `brick-dnn_brickdnn-data` on the server's disk | nothing, unless you turn on Hetzner's backups; and `manage.py backup` |
+
+**1. Turn on Hetzner's server backups** (the simplest offsite copy): Hetzner Cloud Console →
+the server → *Backups* → *Enable backups*. One click, about 20 % of the server's price; Hetzner
+copies the whole disk once a day (Docker volumes included) and keeps the last seven. To go
+back, *Backups* → a backup → *Restore* (replaces the disk) or *Convert to image* and create a
+second server from it to take files from. They do not include the Supabase database, which is
+what step 2 is for.
+
+**2. `manage.py backup`, daily.** With `BRICKDNN_BACKUP_DIR` set (brickdnn.com sets
+`/data/backups` in `deploy/sites/brickdnn.com/settings.env`), the cleanup service runs it once a
+day after the clean-up and writes into the data volume a folder `brickdnn-<date and time>`
+with
+
+- the database as of one moment: Django's `dumpdata` in one transaction (`database.json.gz`; it
+  loads into PostgreSQL of any version and into SQLite), `pg_dump` where it is installed (the
+  Docker image has none), or SQLite's own online backup;
+- the files of the data volume as `files.tar.gz` (without the cache and the backups). Above
+  `BRICKDNN_BACKUP_MAX_FILES_MB`, or when they would not fit on the disk, only a list of them
+  (`files.txt`); `BRICKDNN_BACKUP_FILES=list` or `none` chooses that up front, e.g. when
+  Hetzner's backups have the files;
+- `manifest.json`: when, which version, what is inside.
+
+It keeps the newest backup of each of the last 7 days and of each of the last 4 weeks
+(`BRICKDNN_BACKUP_KEEP_DAILY`, `BRICKDNN_BACKUP_KEEP_WEEKLY`) and deletes the others. The
+folder holds password hashes and the secret key: it is readable by the app's user only, and
+copies of it should be kept as carefully. `/api/health/` reports `backup: failed` when the last
+backup failed or the newest is older than 50 hours (`BRICKDNN_BACKUP_MAX_AGE_HOURS`), so the
+uptime check opens an issue. **Mind the disk**: every backup on the server's disk takes space
+(7 + 4 backups of up to 1 GB of files on brickdnn.com); `$C exec cleanup python manage.py backup
+--list` shows their sizes. Without Hetzner's backups these copies are on the same disk as the
+site: they help after a mistake or a broken database, not after losing the server.
+
+**Offsite copies to S3-compatible storage** (Hetzner Object Storage, Backblaze B2 …) are not
+built in: the image has no S3 client (`boto3`). With shell access, `rclone` on the server can
+copy the folder after the daily backup (for example at 05:00 from root's crontab):
+`rclone sync /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups remote:bucket/brickdnn`.
+
+```bash
+$C exec cleanup python manage.py backup --list   # the backups, newest first
+$C exec cleanup python manage.py backup          # one now
+```
+
+**Restore** (replaces the database, and writes the backup's files into the data volume; files
+added later stay):
+
+```bash
+$C stop backend worker realtime cleanup
+$C run --rm --no-deps backend python manage.py restore latest   # or a folder name; asks first
+$C up -d
+```
+
+`--database-only` and `--files-only` restore one part. A backup of newer code than the one
+running restores too, but restore with the same commit (`manifest.json` names the version) or
+newer: `restore` runs `migrate` afterwards.
+
+**Restore drill** (once, and after big changes): copy a backup to your computer and restore it
+into an empty SQLite database, which proves it is complete without touching the site:
+
+```bash
+scp -r root@SERVER:/var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/brickdnn-2026… /tmp/drill-backup
+cd backend
+DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py restore /tmp/drill-backup --no-input
+DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py runserver   # log in, look around
+rm -rf /tmp/drill /tmp/drill-backup   # it holds password hashes
+```
 
 ## Monitoring
 

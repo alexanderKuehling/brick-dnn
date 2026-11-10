@@ -6,6 +6,8 @@ Checks
 - ``worker``: with the training queue (``BRICKDNN_TRAINING_WORKER``), a training worker sent a
   heartbeat within ``BRICKDNN_WORKER_TIMEOUT`` seconds.
 - ``disk``: the data directory has at least ``BRICKDNN_HEALTH_MIN_FREE_MB`` free (0: no check).
+- ``backup``: with ``BRICKDNN_BACKUP_DIR``, once ``manage.py backup`` has run: the last run
+  worked and the newest backup is younger than ``BRICKDNN_BACKUP_MAX_AGE_HOURS`` (backups.py).
 
 The answer is ``{"status": "ok" | "degraded" | "error", "version": …, "checks": {name:
 "ok" | "failed"}}`` (``"error"`` only when the database fails). Everyone sees the names of the
@@ -76,7 +78,13 @@ def _disk() -> tuple[bool, dict[str, Any]] | None:
     }
 
 
-CHECKS = {"database": _database, "worker": _worker, "disk": _disk}
+def _backup() -> tuple[bool, dict[str, Any]] | None:
+    from . import backups
+
+    return backups.health()
+
+
+CHECKS = {"database": _database, "worker": _worker, "disk": _disk, "backup": _backup}
 # Checks that read the database: skipped while it fails.
 NEEDS_DATABASE = {"worker"}
 

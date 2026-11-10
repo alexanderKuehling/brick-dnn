@@ -382,6 +382,11 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
 | `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
+| `BRICKDNN_BACKUP_DIR`          | – (off)                    | Folder for `manage.py backup` (database and files; the cleanup service runs it daily), see [deploy/server](deploy/server/README.md#backups) |
+| `BRICKDNN_BACKUP_KEEP_DAILY` / `_WEEKLY` | `7` / `4`        | Backups kept: the newest of each of the last days / weeks |
+| `BRICKDNN_BACKUP_FILES`        | `archive`                  | The data directory's files as tarball (`archive`), `list` or `none` |
+| `BRICKDNN_BACKUP_MAX_FILES_MB` | `2048`                     | Larger file sets are only listed                     |
+| `BRICKDNN_BACKUP_MAX_AGE_HOURS` | `50`                      | `/api/health/` reports a newest backup older than this |
 | `BRICKDNN_HEALTH_MIN_FREE_MB`  | `1024`                     | `/api/health/` reports `degraded` below this much free space in the data dir (`0`: no check) |
 | `BRICKDNN_HEALTH_TOKEN`        | – (staff only)             | Secret for the `X-Health-Token` header that shows the details of `/api/health/` (only in `.env`) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |

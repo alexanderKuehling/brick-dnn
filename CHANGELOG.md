@@ -27,6 +27,15 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Backups: `manage.py backup` and `manage.py restore`.** A backup is a folder with the
+  database as of one moment (Django's `dumpdata` in one transaction, which loads into any
+  PostgreSQL or SQLite; `pg_dump` where installed; SQLite's online backup), the files of the
+  data directory as a tarball (only listed above `BRICKDNN_BACKUP_MAX_FILES_MB`) and a
+  manifest. Old backups are rotated (7 daily, 4 weekly). Docker Compose's cleanup service runs
+  it daily after the clean-up when `BRICKDNN_BACKUP_DIR` is set, `/api/health/` reports a
+  failed or old backup, and `restore` puts a backup back (`--database-only`, `--files-only`).
+  brickdnn.com backs up to `/data/backups`. `deploy/server/README.md` has a new section
+  *Backups*: Hetzner's server backups as offsite copy, Supabase's backups, the restore drill.
 - **Uptime monitoring without another service.** A scheduled GitHub Actions workflow
   (`uptime.yml`, every 15 minutes) checks `DEPLOY_URL/api/health/` and the front page, and
   when the site is down opens one issue labelled `outage` (GitHub notifies the owner), comments

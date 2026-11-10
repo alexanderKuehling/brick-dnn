@@ -110,7 +110,7 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
 - **Protokoll der Agentenaktionen** (Abschnitt 9): nach 90 Tagen.
 - **Server-Logs:** siehe Abschnitt 4.
-- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank bzw. des Servers enthalten sein, bis diese turnusmäßig überschrieben werden (in der Regel nach wenigen Tagen).
+- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank und der Dateien enthalten sein, bis diese turnusmäßig gelöscht werden: die täglichen Sicherungen auf dem Server nach 7 Tagen, die wöchentlichen nach spätestens 5 Wochen; Sicherungen des Hosters bzw. der Datenbank nach dessen Fristen (in der Regel 7 Tage).
 
 ## 12. Ihre Rechte
 

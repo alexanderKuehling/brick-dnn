@@ -28,6 +28,7 @@ workflow in [deploy/server](../deploy/server/README.md#monitoring)):
 | `database` | `SELECT 1` fails. The answer is then `503` with `"status": "error"`.       |
 | `worker`   | With the training queue: no training worker sent a heartbeat within `BRICKDNN_WORKER_TIMEOUT` seconds. |
 | `disk`     | The data directory has less than `BRICKDNN_HEALTH_MIN_FREE_MB` free (default 1024; `0`: no check). |
+| `backup`   | With `BRICKDNN_BACKUP_DIR`, once `manage.py backup` ran: the last backup failed, or the newest is older than `BRICKDNN_BACKUP_MAX_AGE_HOURS` (default 50). |
 
 A failed check other than the database makes the status `degraded` (still `200`); checks a
 server does not use are left out. Everyone sees only these names and `ok`/`failed`. Staff
