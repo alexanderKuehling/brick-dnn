@@ -106,7 +106,10 @@ Wait until the dashboard shows the domain as verified (minutes to hours).
 
 "Site settings" is `deploy/sites/<domain>/settings.env` in the repository (public!), `.env`
 is `/opt/brick-dnn/.env` on the server. For brickdnn.com the public lines are prepared
-(commented out) in its site settings: remove the `#` and deploy. The secrets go into the
+(commented out) in its site settings: remove the `#` and deploy. Before that, update
+`deploy/sites/brickdnn.com/legal/privacy.md`: it still says the app sends no e-mails. Take the
+e-mail paragraphs from `deploy/legal/privacy.example.md` (section 5, the error reports in
+section 4 and the reminder in section 11) and fill in the provider. The secrets go into the
 server's `.env`:
 
 ```bash
