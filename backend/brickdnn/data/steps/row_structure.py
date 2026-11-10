@@ -256,7 +256,7 @@ class FindGroups(Step):
                 f"({fmt_count(table.n_rows)} here). Use fewer columns, or an existing column "
                 "(e.g. a person id) for the groups."
             )
-        stats = rowstats.compute(
+        stats = rowstats.cached_compute(
             table,
             target=ctx.target,
             mode="columns",
@@ -265,7 +265,6 @@ class FindGroups(Step):
             seed=ctx.seed,
             with_projection=False,
         )
-        stats.features = choice
         threshold = params["threshold"]
         automatic = threshold is None
         warnings: list[str] = []

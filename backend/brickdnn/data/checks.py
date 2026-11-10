@@ -97,6 +97,8 @@ CONFLICT_SHARE = 0.01
 # of rows with a twin / of validation and test rows with a twin in training that is worth a
 # warning.
 STRUCTURE_ROWS = 4_000
+# ... and rows² × feature columns at most (it runs with every preview: about 0.3 s of CPU).
+STRUCTURE_WORK = 5e8
 STRUCTURE_MIN_ROWS = 50
 STRUCTURE_TWIN_SHARE = 0.05
 STRUCTURE_HELD_SHARE = 0.05
@@ -1395,6 +1397,7 @@ def row_structure_issues(
             target=target,
             exclude=[group_by] if group_by else [],
             max_rows=STRUCTURE_ROWS,
+            max_work=STRUCTURE_WORK,
             with_projection=False,
         )
     except DataError:

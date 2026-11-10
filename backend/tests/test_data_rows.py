@@ -480,3 +480,33 @@ def test_readiness_stays_quiet_on_ordinary_tables(seed):
         i["code"] in ("atypical_rows", "near_twins", "group_column_feature")
         for i in ready["issues"]
     )
+
+
+def test_training_reads_the_group_split(tmp_path):
+    torch = pytest.importorskip("torch")
+    from brickdnn.training.data import predefined_split_indices, read_split_file
+    from brickdnn.training.datasets import inspect_csv
+
+    frame, person, _ = people_frame(80, fakes=0)
+    frame["person"] = person
+    t = Table.from_frame(frame)
+    settings = clean_settings({"target": "age", "split": {"group_by": "person"}})
+    items = clean_steps(steps(("drop_columns", {"columns": ["person"]})))
+    result = run_pipeline(t, items, settings)
+    written = write_training_dataset(result.table, settings, result.task, tmp_path)
+    info = inspect_csv(tmp_path / "data.csv")
+    split = read_split_file(tmp_path / "data.csv", info.num_samples, written["split_counts"])
+    train, val, test = predefined_split_indices(split, None, torch.Generator().manual_seed(0))
+    part = np.zeros(len(frame), dtype=int)
+    part[val.numpy()] = VAL
+    part[test.numpy()] = TEST
+    assert (part == TRAIN).sum() == len(train)
+    for p in np.unique(person):
+        assert len(np.unique(part[person == p])) == 1
+
+
+def test_work_budget_limits_the_rows_of_the_checks():
+    frame, _, _ = people_frame(60)
+    t = Table.from_frame(frame)
+    stats = rows.compute(t, target="age", max_work=100 * 100 * 40, with_projection=False)
+    assert stats.sampled and stats.rows == 100

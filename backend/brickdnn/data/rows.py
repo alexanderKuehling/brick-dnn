@@ -53,8 +53,10 @@ from .table import NUMERIC_KINDS, SPLIT_NAMES, DataError, Table
 MAX_ROWS = 20_000
 # ... and at most this many rows × feature columns (memory: float32 values) ...
 MAX_CELLS = 10_000_000
-# ... and at most rows² × feature columns (time: about 1-2 s on a small server).
-MAX_PAIR_WORK = 1.5e11
+# ... and at most rows² × feature columns (time: the neighbour search does this many
+# multiply-adds up to four times; 2e10 is about 1-4 s of CPU on a small server, e.g. 9,000
+# rows with 230 columns).
+MAX_PAIR_WORK = 2e10
 # Feature columns at most (the most strongly partnered / most complete ones are kept).
 MAX_FEATURES = 1_000
 # Neighbours kept per row (groups link a row to these).
@@ -786,6 +788,7 @@ def compute(
     mode: str = "auto",
     columns: list[str] | None = None,
     max_rows: int | None = None,
+    max_work: float | None = None,
     seed: int = SEED,
     fit: str = "train",
     k: int = K_NEIGHBORS,
@@ -807,6 +810,8 @@ def compute(
     limit = row_limit(len(choice.columns))
     if max_rows is not None:
         limit = min(limit, max_rows)
+    if max_work is not None:
+        limit = max(2, min(limit, int(math.sqrt(max_work / len(choice.columns)))))
     sampled = n_total > limit
     if sampled:
         rng = np.random.default_rng(seed)

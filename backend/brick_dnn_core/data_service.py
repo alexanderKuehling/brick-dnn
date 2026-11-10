@@ -573,7 +573,7 @@ def _row_summary(result: PipelineResult, prep_settings: dict[str, Any]) -> dict[
     """A compact summary of the row analysis (MCP previews), on the same rows as the
     readiness check (so it comes from the cache), or None if no number column fits."""
     from brickdnn.data import rows
-    from brickdnn.data.checks import STRUCTURE_ROWS
+    from brickdnn.data.checks import STRUCTURE_ROWS, STRUCTURE_WORK
     from brickdnn.data.table import DataError
 
     table = result.table
@@ -585,6 +585,7 @@ def _row_summary(result: PipelineResult, prep_settings: dict[str, Any]) -> dict[
             target=target if target in table.kinds else None,
             exclude=[group_by] if group_by else [],
             max_rows=STRUCTURE_ROWS,
+            max_work=STRUCTURE_WORK,
             with_projection=False,
         )
     except DataError:
