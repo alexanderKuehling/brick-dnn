@@ -1383,7 +1383,8 @@ def relation_issues(
     )
     message = (
         f"{weak:,} of {found.analysed:,} number features have no strong partner: none of "
-        f"them correlates with any other feature at |ρ| ≥ {found.level:.2f} (Spearman; with "
+        f"them correlates with any other feature at {found.level:.2f} or more (Spearman ρ, "
+        f"either sign; with "
         f"{rows}, unrelated columns reach about {chance:.2f} by chance), while "
         f"{found.strong:,} others have partners at {2 * found.level:.2f} or more. Columns "
         "unrelated to all others are often noise (added on purpose, or broken sensors); "

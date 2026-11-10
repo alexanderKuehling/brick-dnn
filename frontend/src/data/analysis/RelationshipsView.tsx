@@ -48,6 +48,7 @@ const PAGE = 100;
 /** The heatmap of chosen columns shows at most this many. */
 export const MAX_HEATMAP_COLUMNS = 60;
 const DEFAULT_HEATMAP_COLUMNS = 40;
+const SEPARATOR = '\u0000';
 
 export interface RelationshipsViewProps {
   profile: DataProfile;
@@ -137,6 +138,46 @@ const RelationRowView = memo(
   )
 );
 
+/** All columns in the clustered order, in blocks; a click picks the columns of two blocks. */
+const OverviewHeatmap = memo(
+  ({ relations, onPick }: { relations: ColumnRelations; onPick: (columns: string[]) => void }) => {
+    const { overview, order } = relations;
+    if (!overview || !order) {
+      return (
+        <Text size="sm" c="dimmed">
+          Too many columns for the overview; use the table and the heatmap of chosen columns.
+        </Text>
+      );
+    }
+    const n = relations.columns.length;
+    const blockColumns = (b: number) => {
+      const end = overview.starts[b + 1] ?? order.length;
+      return order.slice(overview.starts[b], end).map((i) => relations.columns[i]);
+    };
+    const labels = overview.starts.map((_, b) => {
+      const columns = blockColumns(b);
+      return columns.length === 1 ? columns[0] : `${columns[0]} +${columns.length - 1}`;
+    });
+    return (
+      <Heatmap
+        title="All columns, related ones together"
+        subtitle={
+          overview.starts.length < n
+            ? `${formatCount(n)} columns in ${overview.starts.length} blocks of about ${Math.round(n / overview.starts.length)}; each cell is the mean |ρ| of two blocks. A click shows them in the heatmap below.`
+            : 'Each cell is |ρ| of two columns; a click shows them in the heatmap below.'
+        }
+        rows={labels}
+        columns={labels}
+        values={overview.values}
+        measure="mean |ρ|"
+        scale="sequential"
+        onCellClick={(r, c) => onPick([...new Set([...blockColumns(r), ...blockColumns(c)])])}
+        clickHint="show these columns in the heatmap"
+      />
+    );
+  }
+);
+
 /** The partners of one column and a scatter plot with its strongest partner. */
 function ColumnFocus({
   relations,
@@ -184,6 +225,7 @@ function ColumnFocus({
                 <li key={other}>
                   <UnstyledButton
                     className={classes.pair}
+                    fz="xs"
                     onClick={() => onScatter(other, name)}
                     aria-label={`${other}: Spearman ρ ${formatCoefficient(value)}. Open the scatter plot.`}
                   >
@@ -302,7 +344,9 @@ export function RelationshipsView({
     }
   }, [focus]);
 
-  const heatmapColumns = useMemo(() => {
+  // A key of the chosen names: the heatmap only recomputes when they change (not on every
+  // move of the threshold).
+  const heatmapKey = useMemo(() => {
     if (!relations) {
       return null;
     }
@@ -325,7 +369,55 @@ export function RelationshipsView({
       return first(rows.filter((r) => r.group === group).map((r) => r.name));
     }
     return strongestPairColumns(relations, DEFAULT_HEATMAP_COLUMNS);
-  }, [relations, choice, rows, selected, sorted, block, focus]);
+  }, [relations, choice, rows, selected, sorted, block, focus])?.join(SEPARATOR);
+  const heatmapColumns = useMemo(
+    () =>
+      heatmapKey === undefined || heatmapKey === null
+        ? null
+        : heatmapKey.split(SEPARATOR).filter(Boolean),
+    [heatmapKey]
+  );
+  const pickBlocks = useCallback((columns: string[]) => {
+    setBlock(columns);
+    setChoice('block');
+  }, []);
+
+  const groups = useMemo(
+    () => new Set((relations?.groups ?? []).filter((g) => g >= 0)).size,
+    [relations]
+  );
+  const groupSizes = useMemo(() => {
+    const sizes = new Array<number>(groups).fill(0);
+    rows.forEach((r) => {
+      if (r.group >= 0) {
+        sizes[r.group] += 1;
+      }
+    });
+    return sizes;
+  }, [rows, groups]);
+  const filteredCount = filtered.length;
+  const chooser = useMemo(() => {
+    const options = [
+      { value: 'pairs', label: `Strongest pairs (${DEFAULT_HEATMAP_COLUMNS} columns)` },
+      { value: 'filtered', label: `Table: matching the filter (${formatCount(filteredCount)})` },
+      { value: 'selected', label: `Table: selected (${formatCount(selected.size)})` },
+      ...(focus ? [{ value: 'focus', label: `${focus} and its partners` }] : []),
+      ...(block.length ? [{ value: 'block', label: `Overview blocks (${block.length})` }] : []),
+      ...groupSizes.map((size, g) => ({ value: `group:${g}`, label: `Group ${g + 1} (${size})` })),
+    ];
+    return (
+      <Select
+        size="xs"
+        label="Columns"
+        data={options}
+        value={choice}
+        allowDeselect={false}
+        onChange={(value) => value && setChoice(value as HeatmapChoice)}
+        comboboxProps={{ withinPortal: true }}
+        w={260}
+      />
+    );
+  }, [filteredCount, selected.size, focus, block.length, groupSizes, choice]);
 
   if (!relations || relations.columns.length < 2) {
     return (
@@ -344,7 +436,6 @@ export function RelationshipsView({
   const n = relations.columns.length;
   const rowsText = relations.training_rows ? 'training rows' : 'rows';
   const sampled = relations.rows < relations.pool_rows;
-  const groups = new Set((relations.groups ?? []).filter((g) => g >= 0)).size;
   const markAdded = (key: string) => setAdded({ profile, keys: [...addedKeys, key] });
   const add = (key: string, step: NewStep) => {
     onAddStep(step);
@@ -381,24 +472,6 @@ export function RelationshipsView({
     );
   };
 
-  // The overview: blocks of the clustered order.
-  const overview = relations.overview;
-  const order = relations.order;
-  const blockColumns = (b: number) => {
-    if (!overview || !order) {
-      return [];
-    }
-    const start = overview.starts[b];
-    const end = overview.starts[b + 1] ?? order.length;
-    return order.slice(start, end).map((i) => relations.columns[i]);
-  };
-  const blockLabels = overview
-    ? overview.starts.map((_, b) => {
-        const columns = blockColumns(b);
-        return columns.length === 1 ? columns[0] : `${columns[0]} +${columns.length - 1}`;
-      })
-    : [];
-
   const strengthOptions: { value: StrengthFilter; label: string }[] = [
     { value: 'all', label: 'All columns' },
     { value: 'below', label: `No partner at |ρ| ≥ ${threshold.toFixed(2)}` },
@@ -408,18 +481,7 @@ export function RelationshipsView({
     { value: 'none', label: 'In no group' },
     ...Array.from({ length: groups }, (_, g) => ({
       value: String(g),
-      label: `Group ${g + 1} (${rows.filter((r) => r.group === g).length})`,
-    })),
-  ];
-  const heatmapOptions = [
-    { value: 'pairs', label: `Strongest pairs (${DEFAULT_HEATMAP_COLUMNS} columns)` },
-    { value: 'filtered', label: `Table: matching the filter (${formatCount(filtered.length)})` },
-    { value: 'selected', label: `Table: selected (${formatCount(selected.size)})` },
-    ...(focus ? [{ value: 'focus', label: `${focus} and its partners` }] : []),
-    ...(block.length ? [{ value: 'block', label: `Overview blocks (${block.length})` }] : []),
-    ...Array.from({ length: groups }, (_, g) => ({
-      value: `group:${g}`,
-      label: `Group ${g + 1} (${rows.filter((r) => r.group === g).length})`,
+      label: `Group ${g + 1} (${groupSizes[g]})`,
     })),
   ];
 
@@ -508,30 +570,7 @@ export function RelationshipsView({
               ` ${formatCount(relations.skipped.length)} constant columns are not shown and are dropped by that step too.`}
           </Note>
         </Stack>
-        {overview && order ? (
-          <Heatmap
-            title="All columns, related ones together"
-            subtitle={
-              overview.starts.length < n
-                ? `${formatCount(n)} columns in ${overview.starts.length} blocks of about ${Math.round(n / overview.starts.length)}; each cell is the mean |ρ| of two blocks. A click shows them in the heatmap below.`
-                : 'Each cell is |ρ| of two columns; a click shows them in the heatmap below.'
-            }
-            rows={blockLabels}
-            columns={blockLabels}
-            values={overview.values}
-            measure="mean |ρ|"
-            scale="sequential"
-            onCellClick={(r, c) => {
-              setBlock([...new Set([...blockColumns(r), ...blockColumns(c)])]);
-              setChoice('block');
-            }}
-            clickHint="show these columns in the heatmap"
-          />
-        ) : (
-          <Text size="sm" c="dimmed">
-            Too many columns for the overview; use the table and the heatmap of chosen columns.
-          </Text>
-        )}
+        <OverviewHeatmap relations={relations} onPick={pickBlocks} />
       </SimpleGrid>
 
       {relations.sampled_columns && (
@@ -761,18 +800,7 @@ export function RelationshipsView({
           total={n}
           clustered={clustered}
           onClusteredChange={setClustered}
-          chooser={
-            <Select
-              size="xs"
-              label="Columns"
-              data={heatmapOptions}
-              value={choice}
-              allowDeselect={false}
-              onChange={(value) => value && setChoice(value as HeatmapChoice)}
-              comboboxProps={{ withinPortal: true }}
-              w={260}
-            />
-          }
+          chooser={chooser}
         />
       </Stack>
     </Stack>
