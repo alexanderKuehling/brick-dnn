@@ -909,10 +909,13 @@ def test_export_creates_a_training_dataset(auth_client, prep, data_dirs, monkeyp
     assert info["target_kind"] == "integer"  # class indices
 
     directory = data_dirs / "training" / "datasets" / str(data["id"])
-    assert entries(directory) == ["data.csv", "split.bin"]
+    # prepare/: the steps with what they learned, for predictions from raw rows
+    assert entries(directory) == ["data.csv", "prepare", "split.bin"]
+    assert entries(directory / "prepare") == ["recipe.json"]
     split = (directory / "split.bin").read_bytes()
     assert [split.count(i) for i in range(3)] == expected
-    assert data["size_bytes"] == sum(p.stat().st_size for p in directory.iterdir())
+    files = [p for p in directory.rglob("*") if p.is_file()]
+    assert data["size_bytes"] == sum(p.stat().st_size for p in files)
     assert entries(data_dirs / "training" / "datasets") == [str(data["id"])]
 
     # It is listed with the training datasets, and the preparation lists it.

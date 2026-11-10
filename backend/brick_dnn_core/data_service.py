@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -49,6 +50,8 @@ from .retention import touch
 if TYPE_CHECKING:
     from brickdnn.data.pipeline import PipelineResult
     from brickdnn.data.table import Table
+
+logger = logging.getLogger(__name__)
 
 DISABLED_REASON = "Data preparation is disabled on this server."
 WRONG_FILE_MESSAGE = (
@@ -646,7 +649,8 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         info.predefined_split = [int(n) for n in written["split_counts"]]
         class_names = written.get("class_names")
         info.class_names = [str(c) for c in class_names] if class_names else None
-        size = sum(p.stat().st_size for p in work.iterdir() if p.is_file())
+        _freeze(prep, run, work)
+        size = budgets.folder_size(work)
         budgets.check_storage(prep.owner, size)
         dataset = Dataset.objects.create(
             owner=prep.owner,
@@ -667,6 +671,28 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
             dataset.delete()
         raise
     return dataset
+
+
+def _freeze(prep: DataPrep, run: _Run, work: Path) -> None:
+    """Keep the preparation with the values it learned next to the dataset, so that runs
+    trained on it can predict from raw rows (brickdnn.data.frozen). Without it the dataset
+    still works; only raw predictions are not possible."""
+    from brickdnn.data.frozen import FROZEN_DIR, freeze
+
+    try:
+        freeze(
+            work / FROZEN_DIR,
+            result=run.result,
+            steps=run.steps,
+            source=_load_table(prep.source),
+            source_info=source_info(prep.source),
+            prep={"id": prep.pk, "name": prep.name},
+            load_source=run.sources.load,
+            source_name=run.sources.name,
+        )
+    except Exception:
+        logger.exception("Could not store the preparation %s for raw predictions", prep.pk)
+        shutil.rmtree(work / FROZEN_DIR, ignore_errors=True)
 
 
 def _check_written(info: DatasetInfo, written: dict[str, Any]) -> None:
