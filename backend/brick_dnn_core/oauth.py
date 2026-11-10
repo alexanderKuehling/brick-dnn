@@ -29,6 +29,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from . import notices
 from .api_tokens import (
     PREFIX,
     VISIBLE_CHARS,
@@ -452,6 +453,11 @@ def _exchange_code(request: Request, client: OAuthClient, data: dict[str, Any]) 
         refresh_expires_at=timezone.now(),
     )
     connection.save()
+    # What the app may do without asking: the account's default (approvals.py).
+    from .approvals import adopt_default
+
+    adopt_default(record.owner, connection=connection)
+    notices.app_connected(record.owner, client.name, request)
     return _issue_tokens(connection)
 
 

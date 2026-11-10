@@ -18,10 +18,13 @@ import { DataPage } from './data/DataPage';
 import { DEMO } from './demo';
 import { LegalPage } from './legal/LegalPage';
 import { AuthorizePage } from './oauth/AuthorizePage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { SharedNetworkPage } from './sharing/SharedNetworkPage';
 import { theme } from './theme';
 import { ApiTokensPage } from './tokens/ApiTokensPage';
@@ -101,6 +104,17 @@ export default function App() {
                       <Route path="/share/:token" element={<SharedNetworkPage />} />
                       <Route path="/login" element={<LoginPage />} />
                       <Route path="/register" element={<RegisterPage />} />
+                      {/* Links from e-mails: a forgotten password, confirming the address. */}
+                      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                      <Route path="/reset-password" element={<ResetPasswordPage />} />
+                      <Route
+                        path="/verify-email"
+                        element={
+                          <RequireAuth>
+                            <VerifyEmailPage />
+                          </RequireAuth>
+                        }
+                      />
                     </>
                   )}
                   <Route path="*" element={<NotFoundPage />} />
