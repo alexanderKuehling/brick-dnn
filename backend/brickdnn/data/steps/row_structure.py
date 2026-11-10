@@ -116,7 +116,7 @@ class RemoveAtypicalRows(Step):
 
     def run(self, table: Table, params: dict[str, Any], ctx: StepContext) -> StepResult:
         exclude = [ctx.target] if ctx.target else []
-        choice, medians, scales = rowstats.fit_features(
+        choice, medians, scales = rowstats.cached_fit_features(
             table, params["features"], params["columns"], exclude=exclude, seed=ctx.seed
         )
         spread = rowstats.spreads(table, choice.columns, medians, scales)
@@ -245,7 +245,7 @@ class FindGroups(Step):
         name = params["name"]
         check_new_names(table, [name])
         exclude = [ctx.target] if ctx.target else []
-        choice, _, _ = rowstats.fit_features(
+        choice, _, _ = rowstats.cached_fit_features(
             table, params["features"], params["columns"], exclude=exclude, seed=ctx.seed
         )
         limit = rowstats.row_limit(len(choice.columns))

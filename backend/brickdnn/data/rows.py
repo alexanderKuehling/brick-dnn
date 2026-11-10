@@ -904,9 +904,36 @@ def cached_compute(table: Table, **options: Any) -> RowStats:
     return stats
 
 
+_fit_cache: OrderedDict[str, tuple[FeatureChoice, np.ndarray, np.ndarray]] = OrderedDict()
+FIT_CACHE_ENTRIES = 16
+
+
+def cached_fit_features(
+    table: Table, mode: str = "auto", columns: list[str] | None = None, **options: Any
+) -> tuple[FeatureChoice, np.ndarray, np.ndarray]:
+    """:func:`fit_features` with a small cache (the steps before the split run with every
+    preview; choosing partnered columns costs a correlation matrix). Returns copies."""
+    key = table_digest(table) + repr((mode, columns, sorted(options.items())))
+    with _cache_lock:
+        found = _fit_cache.get(key)
+        if found is not None:
+            _fit_cache.move_to_end(key)
+    if found is None:
+        found = fit_features(table, mode, columns, **options)
+        with _cache_lock:
+            _fit_cache[key] = found
+            while len(_fit_cache) > FIT_CACHE_ENTRIES:
+                _fit_cache.popitem(last=False)
+    choice, medians, scales = found
+    copy = FeatureChoice(**{**choice.__dict__, "columns": list(choice.columns)})
+    copy.left_out = list(choice.left_out)
+    return copy, medians.copy(), scales.copy()
+
+
 def clear_cache() -> None:
     with _cache_lock:
         _cache.clear()
+        _fit_cache.clear()
 
 
 # --------------------------------------------------------------------------- #
