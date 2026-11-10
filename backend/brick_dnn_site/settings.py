@@ -402,8 +402,17 @@ EMAIL_HOST = os.environ.get("BRICKDNN_EMAIL_HOST", "").strip()
 EMAIL_PORT = int(os.environ.get("BRICKDNN_EMAIL_PORT") or 587)
 EMAIL_HOST_USER = os.environ.get("BRICKDNN_EMAIL_USER", "").strip()
 EMAIL_HOST_PASSWORD = os.environ.get("BRICKDNN_EMAIL_PASSWORD", "").strip()
-EMAIL_USE_SSL = env_bool("BRICKDNN_EMAIL_USE_SSL", EMAIL_PORT == 465)
-EMAIL_USE_TLS = env_bool("BRICKDNN_EMAIL_USE_TLS", not EMAIL_USE_SSL) and not EMAIL_USE_SSL
+# Docker Compose passes unset variables as empty strings: those keep the default.
+EMAIL_USE_SSL = (
+    env_bool("BRICKDNN_EMAIL_USE_SSL", EMAIL_PORT == 465)
+    if os.environ.get("BRICKDNN_EMAIL_USE_SSL", "").strip()
+    else EMAIL_PORT == 465
+)
+EMAIL_USE_TLS = not EMAIL_USE_SSL and (
+    env_bool("BRICKDNN_EMAIL_USE_TLS")
+    if os.environ.get("BRICKDNN_EMAIL_USE_TLS", "").strip()
+    else True
+)
 # Seconds to wait for the SMTP server.
 EMAIL_TIMEOUT = int(os.environ.get("BRICKDNN_EMAIL_TIMEOUT") or 10)
 _EMAIL_BACKENDS = {
