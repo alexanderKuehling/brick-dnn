@@ -35,6 +35,9 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
 
 Preparations are saved automatically. Several preparations can use the same file.
 
+AI assistants can do all of this over MCP: import, preview, fix, export and train (see
+[Preparing data](mcp.md#preparing-data)).
+
 ## Importing
 
 | Format | Files | Notes |

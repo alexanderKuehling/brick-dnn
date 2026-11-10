@@ -2,7 +2,35 @@
 
 ## Unreleased
 
+### Changed
+- **Compact MCP answers.** `get_training_options` lists datasets without their columns (new
+  `get_dataset` pages through them), `get_training_run` is a summary (`include` adds the
+  history, at most 50 epochs, the graph, plan, log, trials and preprocessing),
+  `list_training_runs` shows the newest 20 runs one line each (`limit`, `status`,
+  `project_id`), `list_layer_types` one line per parameter (`types` for full specs),
+  `list_examples` names and descriptions (`id` for a graph), and `check_training` and the
+  data tools cap long lists with their totals. A run with 200 epochs went from 71 KB to 1 KB.
+- gunicorn's access log leaves out query strings, so signed download and upload links are not
+  logged.
+
 ### Added
+- **Data preparation over MCP.** AI assistants can go from a file to a trained network
+  without the web app: `import_data` (CSV/JSON as text, Excel, Parquet … as base64, or a public
+  link with the same checks against private addresses), `list_data_sources`,
+  `get_data_source`, `create_data_prep`, `update_data_prep` (replace the steps or add, edit,
+  move and remove single steps; target, task and split), `list_prep_steps` (the step catalogue,
+  one line per parameter), `preview_data_prep` (step reports, column profiles, sample rows and
+  the readiness check, also of unsaved changes), `apply_readiness_fix` (the suggested step by
+  its `fix_id`, or `all`), `export_training_dataset` (returns the dataset reference for
+  training and the feature columns `predict` takes), `get_data_prep_script` (pandas script,
+  recipe or prepared rows), `list_data_preps`, `get_data_prep`, `delete_data_prep` and
+  `delete_data_source`. Same service functions, roles of shared projects, limits, rate limits
+  and messages as the Data tab; the server instructions describe the flow.
+- **Upload links for assistants with a shell.** `create_upload_link` returns a one-time link,
+  valid for 15 minutes, that takes a file with `curl -T` (or `-F file=@…`) without logging in
+  (`PUT`/`POST /api/uploads/?sig=…`) and imports it as a data source or stores it as a
+  training dataset, with the limits of the web app instead of the small MCP text limit. nginx
+  lets large bodies through on `/api/uploads/`.
 - **Agent activity: a log of everything AI agents do.** Every MCP tool call and every API
   request made with an API token or a connected app is recorded for its user: the token or
   app, the client, the tool or route, whether it worked (with the error the agent got), how

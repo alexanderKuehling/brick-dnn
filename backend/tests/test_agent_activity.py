@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import io
 import json
@@ -352,6 +353,21 @@ def test_nothing_is_logged_when_the_log_is_off(ada, settings):
 # --------------------------------------------------------------------------- #
 # Redaction
 # --------------------------------------------------------------------------- #
+
+
+def test_imported_files_are_stored_as_their_size_not_their_content(ada, settings, tmp_path):
+    settings.DATA_PREP_DIR = tmp_path / "prepare"
+    settings.DATA_PREP_ENABLED = True
+    client, _, _ = token_client(ada)
+    ok(client, "import_data", name="Tiny", content="city,pop\nBern,134\n")
+    packed = base64.b64encode(b"city,pop\nBasel,173\n").decode()
+    ok(client, "import_data", filename="basel.csv", content_base64=packed)
+
+    text, binary = log(ada)
+    assert text.arguments == {"name": "Tiny", "content": "18 B, 2 lines, 2 columns"}
+    assert binary.arguments == {"filename": "basel.csv", "content_base64": "file, about 21 B"}
+    stored = stored_text(ada)
+    assert "Bern" not in stored and "Basel" not in stored and packed not in stored
 
 
 def test_uploads_are_stored_as_their_size_not_their_content(ada, training_dir):

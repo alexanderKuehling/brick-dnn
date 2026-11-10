@@ -9,6 +9,8 @@ only gets the tools that change nothing.
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import io
 import json
 import logging
@@ -21,6 +23,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Q, RestrictedError
 from django.http import HttpResponse
 from rest_framework import permissions, serializers
 from rest_framework.exceptions import ParseError
@@ -34,11 +37,15 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
+from . import data_service as data
 from . import downloads, history
+from . import mcp_compact as compact
+from . import mcp_data as data_answers
 from . import training_service as training
+from . import upload_links as links
 from .agent_activity import record_tool_call
 from .api_tokens import uses_api_token
-from .models import ApiToken, Project, TrainingRun
+from .models import ApiToken, DataPrep, DataSource, Project, TrainingRun
 from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
 from .projects import (
@@ -52,16 +59,17 @@ from .projects import (
 from .projects import delete_project as remove_project
 from .retention import touch
 from .serializers import (
-    DatasetSerializer,
+    DataPrepSerializer,
     ProjectSerializer,
-    RunDetailSerializer,
     RunSummarySerializer,
 )
 from .shared_data import (
     can_delete_run,
+    can_edit_prep,
     can_stop_run,
     editable_projects,
     visible_datasets,
+    visible_preps,
     visible_runs,
 )
 
@@ -92,7 +100,20 @@ counts and explains errors), then generate_pytorch_code, save_project, or train 
 dataset (get_training_options, upload_dataset for a small CSV file, check_training,
 start_training, get_training_run). A finished run can predict new samples (predict) and
 its weights can be downloaded with a short-lived link (get_weights_download).
-Saved networks also appear in the user's Brick DNN web app."""
+Saved networks also appear in the user's Brick DNN web app.
+
+Real tables usually need preparing first (missing values, categories, dates, outliers):
+import_data (the text of a CSV or JSON file, base64 for Excel or Parquet, or a public link),
+create_data_prep with the target column (the column to predict), then repeat
+preview_data_prep (column profiles, sample rows and the readiness check: errors, warnings
+and fixes) and apply_readiness_fix or update_data_prep (step types: list_prep_steps) until
+readiness says ready. export_training_dataset then gives the dataset reference for
+check_training and start_training; predict takes the prepared feature columns it lists.
+get_data_prep_script returns the pandas script that prepares new data the same way.
+Files too large to pass as text: create_upload_link gives a one-time link for curl.
+
+Answers are compact: lists are capped with their totals, and arguments such as include,
+columns_offset or types ask for more."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -121,6 +142,41 @@ DATASET_SCHEMA: dict[str, Any] = {
         "id": {"type": ["string", "integer"]},
     },
     "required": ["kind"],
+}
+
+STEP_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": 'A preparation step: {"type": "impute", "params": {"strategy": "median"}}; '
+    'saved steps also have "id" and "enabled". Types and params: list_prep_steps.',
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string"},
+        "enabled": {"type": "boolean"},
+        "params": {"type": "object"},
+    },
+    "required": ["type"],
+}
+
+SPLIT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": "Train/validation/test split (defaults: val 0.15, test 0.15, seed 42, "
+    "stratify true); only the given keys change",
+    "properties": {
+        "val": {"type": "number", "minimum": 0, "maximum": 0.9},
+        "test": {"type": "number", "minimum": 0, "maximum": 0.9},
+        "seed": {"type": "integer", "minimum": 0},
+        "stratify": {"type": "boolean"},
+    },
+}
+
+PREP_SETTINGS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": 'All settings at once: {"target": "price", "task": "auto", "split": {...}}',
+    "properties": {
+        "target": {"type": ["string", "null"]},
+        "task": {"type": "string", "enum": ["auto", "classification", "regression"]},
+        "split": SPLIT_SCHEMA,
+    },
 }
 
 
@@ -207,12 +263,22 @@ def _require_training() -> None:
         raise ToolError(training.DISABLED_REASON)
 
 
+@contextlib.contextmanager
+def _compact_errors():
+    try:
+        yield
+    except compact.CompactError as exc:
+        raise ToolError(str(exc)) from None
+
+
 def list_layer_types(request: Request, args: dict[str, Any]) -> Any:
-    return service.layers()
+    with _compact_errors():
+        return compact.layer_catalog(service.layers(), args.get("types"))
 
 
 def list_examples(request: Request, args: dict[str, Any]) -> Any:
-    return service.examples()
+    with _compact_errors():
+        return compact.examples(service.examples(), args.get("id"))
 
 
 def analyze_network(request: Request, args: dict[str, Any]) -> Any:
@@ -300,12 +366,12 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "reason": capabilities["reason"],
         "devices": capabilities["devices"],
         "builtin_datasets": capabilities["builtin_datasets"],
-        # Your own datasets and the ones shared in your projects (see "owner" and "mine").
-        "your_datasets": DatasetSerializer(
-            visible_datasets(request.user).select_related("owner", "prepared_from"),
-            many=True,
-            context={"user": request.user},
-        ).data,
+        # Your own datasets and the ones shared in your projects (see "owner" and "mine"),
+        # without their columns (get_dataset).
+        "your_datasets": [
+            compact.dataset_summary(dataset, request.user)
+            for dataset in visible_datasets(request.user).select_related("owner")
+        ],
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
@@ -313,6 +379,23 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
         "upload_dataset_max_mb": _megabytes(upload_limit()),
     }
+
+
+def get_dataset(request: Request, args: dict[str, Any]) -> Any:
+    dataset_id = _int_id(args, "a dataset")
+    dataset = (
+        visible_datasets(request.user)
+        .select_related("owner", "prepared_from")
+        .filter(pk=dataset_id)
+        .first()
+    )
+    if dataset is None:
+        raise ToolError("No such dataset. get_training_options lists the user's datasets.")
+    touch(dataset)
+    with _compact_errors():
+        return compact.dataset_detail(
+            dataset, request.user, args.get("columns_limit"), args.get("columns_offset")
+        )
 
 
 def upload_limit() -> int:
@@ -369,10 +452,463 @@ def upload_dataset(request: Request, args: dict[str, Any]) -> Any:
     if project is not None:
         dataset.projects.add(project)
     return {
-        "dataset": DatasetSerializer(dataset, context={"user": request.user}).data,
+        "dataset": compact.dataset_detail(dataset, request.user),
         "reference": {"kind": "upload", "id": dataset.pk},
         "next": "Pass the reference as dataset to check_training and start_training.",
     }
+
+
+def create_upload_link(request: Request, args: dict[str, Any]) -> Any:
+    try:
+        return links.create_link(request, request.user, args["purpose"], args)
+    except links.UploadLinkError as exc:
+        raise ToolError(str(exc)) from None
+
+
+# --------------------------------------------------------------------------- #
+# Data preparation (the Data tab): the same service functions, roles, limits and rate
+# limits as the REST API in data_views.py; mcp_data.py makes the answers compact.
+# --------------------------------------------------------------------------- #
+
+
+class _DataScope:
+    """Previews and downloads of preparations count against the same rate limit as in the
+    web app."""
+
+    throttle_scope = "data"
+
+
+def _require_data() -> None:
+    reason = data.unavailable_reason()
+    if reason is not None:
+        raise ToolError(reason)
+
+
+@contextlib.contextmanager
+def _data_errors():
+    """The messages of the Data tab (and of mcp_data) as tool errors."""
+    try:
+        yield
+    except data.DataInputError as exc:
+        message = str(exc)
+        if exc.sheets:
+            message += f" The sheets of the workbook: {', '.join(exc.sheets)}. Pass 'sheet'."
+        raise ToolError(message) from None
+    except data_answers.DataToolError as exc:
+        raise ToolError(str(exc)) from None
+
+
+def _check_text(args: dict[str, Any]) -> None:
+    """Like the Data tab's API: no text that cannot be stored (e.g. lone surrogates)."""
+    from brickdnn.data.steps.base import valid_text
+
+    if not valid_text(args):
+        raise ToolError("The arguments contain characters that are not valid text.")
+
+
+def _data_id(args: dict[str, Any], key: str, what: str) -> int:
+    value = args.get(key)
+    if isinstance(value, str) and value.isdigit():
+        value = int(value)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ToolError(f"'{key}' must be the number of {what}.")
+    return value
+
+
+def _data_source(request: Request, args: dict[str, Any]) -> DataSource:
+    """One of the user's sources or the source of a preparation shared with them."""
+    user = request.user
+    used = visible_preps(user).values("source")
+    source = (
+        DataSource.objects.filter(Q(owner=user) | Q(pk__in=used))
+        .filter(pk=_data_id(args, "id", "a data source"))
+        .first()
+    )
+    if source is None:
+        raise ToolError("No such data source. list_data_sources shows the user's data sources.")
+    return source
+
+
+def _data_prep(request: Request, args: dict[str, Any], *, edit: bool = False) -> DataPrep:
+    """A preparation the user can see (``edit``: and change)."""
+    prep = (
+        visible_preps(request.user)
+        .select_related("source", "owner")
+        .filter(pk=_data_id(args, "id", "a data preparation"))
+        .first()
+    )
+    if prep is None:
+        raise ToolError("No such data preparation. list_data_preps shows the user's preparations.")
+    if edit and not can_edit_prep(request.user, prep):
+        raise ToolError(
+            f"This data preparation was shared with the user read-only: they view “{prep.name}” "
+            f"of {prep.owner.get_username()} in a project. Only its owner and the project's "
+            "editors can change it."
+        )
+    touch(prep.source)  # an open preparation keeps its data
+    return prep
+
+
+def _sharing_project(request: Request, args: dict[str, Any]) -> Project | None:
+    if args.get("project_id") is None:
+        return None
+    project_id = args["project_id"]
+    if isinstance(project_id, bool) or not isinstance(project_id, int):
+        raise ToolError("'project_id' must be the number of a project.")
+    project = editable_projects(request.user).filter(pk=project_id).first()
+    if project is None:
+        raise ToolError(
+            "Data can only be shared in projects the user owns or edits; list_projects shows "
+            "the user's role in each project."
+        )
+    return project
+
+
+def _quick_check(request: Request, prep: DataPrep) -> dict[str, Any]:
+    """The step reports and the readiness after a change (a preview, rate-limited like
+    previews in the web app)."""
+    if not ScopedRateThrottle().allow_request(request, _DataScope()):
+        return {"skipped": "Too many previews recently; call preview_data_prep later."}
+    try:
+        result = data.preview(prep, {"sample_rows": data.MIN_SAMPLE_ROWS})
+    except data.DataInputError as exc:
+        return {"error": str(exc)}
+    return data_answers.preview_view(result, detail=False)
+
+
+def _prep_answer(request: Request, prep: DataPrep) -> dict[str, Any]:
+    return {
+        "preparation": data_answers.prep_detail(prep, request),
+        "check": _quick_check(request, prep),
+    }
+
+
+def _save_prep(request: Request, prep: DataPrep | None, body: dict[str, Any]) -> DataPrep:
+    """Create or change a preparation with the serializer of the REST API (same checks)."""
+    serializer = DataPrepSerializer(
+        prep, data=body, partial=prep is not None, context={"request": request}
+    )
+    if not serializer.is_valid():
+        raise ToolError(data_answers.serializer_message(serializer.errors))
+    return serializer.save(owner=request.user) if prep is None else serializer.save()
+
+
+def list_data_sources(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    sources = DataSource.objects.filter(owner=request.user)
+    return {
+        "sources": [data_answers.source_summary(source) for source in sources],
+        "import_data": data_answers.import_info(),
+    }
+
+
+def get_data_source(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    source = _data_source(request, args)
+    touch(source)
+    with _data_errors():
+        rows = data_answers.sample_rows_arg(args.get("sample_rows"))
+        offset = data_answers.offset_arg(args.get("columns_offset"))
+        return data_answers.source_detail(source, request.user, rows, offset)
+
+
+def import_data(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    _check_text(args)
+    given = [key for key in ("content", "content_base64", "url") if args.get(key) is not None]
+    if len(given) != 1:
+        raise ToolError(
+            "Pass exactly one of content (the text of a CSV, TSV, JSON or JSON Lines file), "
+            "content_base64 (a binary file such as .xlsx or .parquet, with filename) or url "
+            "(a public link to the file)."
+        )
+    name = args.get("name")
+    if name is not None and (not isinstance(name, str) or len(name.strip()) > 120):
+        raise ToolError("'name' must be a text of at most 120 characters.")
+    fields = {key: args.get(key) for key in ("name", *data.OPTION_FIELDS)}
+    if given == ["url"]:
+        if not settings.DATA_URL_IMPORT_ENABLED:
+            raise ToolError(f"{data.URL_DISABLED_MESSAGE} Send the file as content instead.")
+        if not ScopedRateThrottle().allow_request(request, _UploadScope()):
+            raise ToolError("Too many files were imported recently. Try again later.")
+        # The same download as in the web app, with its checks against requests to
+        # private addresses (url_import.py).
+        with _data_errors():
+            source = data.import_url(request.user, args["url"], fields)
+    else:
+        with _data_errors():
+            content, filename = data_answers.decode_content(args)
+        limit = data_answers.import_limit()
+        if len(content) > limit:
+            raise ToolError(
+                f"The file has {_megabytes(len(content))} MB, but import_data takes at most "
+                f"{_megabytes(limit)} MB as content. Import larger files from a link (url) or "
+                "in the Brick DNN web app."
+            )
+        if not ScopedRateThrottle().allow_request(request, _UploadScope()):
+            raise ToolError("Too many files were imported recently. Try again later.")
+        upload = SimpleUploadedFile(filename, content)
+        with _data_errors():
+            source = data.import_source(request.user, upload, fields)
+    with _data_errors():
+        detail = data_answers.source_detail(source, request.user)
+    return {
+        "source": detail,
+        "next": f"create_data_prep with source_id {source.pk} and the target column (the "
+        "column to predict) checks what the data needs for training.",
+    }
+
+
+def list_data_preps(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    preps = visible_preps(request.user).select_related("source", "owner")
+    return {"preparations": [data_answers.prep_summary(prep, request.user) for prep in preps]}
+
+
+def get_data_prep(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    return data_answers.prep_detail(_data_prep(request, args), request)
+
+
+def list_prep_steps(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    with _data_errors():
+        return data_answers.step_catalog(args.get("type"))
+
+
+def preview_data_prep(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    _check_text(args)
+    prep = _data_prep(request, args)
+    with _data_errors():
+        rows = data_answers.sample_rows_arg(args.get("sample_rows"))
+        columns = data_answers.check_columns(args.get("columns"))
+        offset = data_answers.offset_arg(args.get("columns_offset"))
+        body: dict[str, Any] = {"sample_rows": max(rows, data.MIN_SAMPLE_ROWS)}
+        if args.get("steps") is not None:
+            body["steps"] = data_answers.complete_steps(args["steps"])
+        if (unsaved := data_answers.settings_from(args, prep.settings)) is not None:
+            body["settings"] = unsaved
+        if args.get("upto") is not None:
+            body["upto"] = args["upto"]
+    if not ScopedRateThrottle().allow_request(request, _DataScope()):
+        raise ToolError("Too many previews were made recently. Try again later.")
+    with _data_errors():
+        result = data.preview(prep, body)
+    if (message := data_answers.unknown_columns(columns, result)) is not None:
+        raise ToolError(message)
+    view = data_answers.preview_view(
+        result, detail=True, sample_rows=rows, columns=columns, offset=offset
+    )
+    if "steps" in body or "settings" in body:
+        view["unsaved"] = (
+            "This previews the given steps/settings without saving them; update_data_prep "
+            "saves them. fix_ids refer to the saved preparation only."
+        )
+    return view
+
+
+def get_data_prep_script(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    prep = _data_prep(request, args)
+    fmt = args.get("format") or "python"
+    if fmt not in data.DOWNLOAD_FORMATS:
+        raise ToolError("'format' must be python (pandas script), recipe (JSON) or csv.")
+    max_rows = args.get("max_rows", data_answers.DEFAULT_CSV_ROWS)
+    if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+        raise ToolError(f"'max_rows' must be a whole number from 1 to {data_answers.MAX_CSV_ROWS}.")
+    if not ScopedRateThrottle().allow_request(request, _DataScope()):
+        raise ToolError("Too many downloads were made recently. Try again later.")
+    with _data_errors():
+        file = data.download(prep, fmt)
+    if fmt == "csv":
+        with file.handle:
+            text = data_answers.csv_text(file.handle, min(max_rows, data_answers.MAX_CSV_ROWS))
+        return {"filename": file.filename, **text}
+    content = file.content or b""
+    if data_answers.too_large(content):
+        note = (
+            f"The {fmt} file has {round(len(content) / 1024)} KB, too much for MCP; download it "
+            "in the Brick DNN web app (Data tab → Export)."
+        )
+        if fmt == "recipe":
+            return {"filename": file.filename, "truncated": True, "note": note}
+        cut = content[: data_answers.MAX_DOWNLOAD_BYTES].decode("utf-8", errors="ignore")
+        return f"{cut}\n\n# … cut off here. {note}\n"
+    if fmt == "recipe":
+        return {"filename": file.filename, "recipe": json.loads(content)}
+    return content.decode("utf-8")
+
+
+def create_data_prep(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    _check_text(args)
+    project = _sharing_project(request, args)
+    body: dict[str, Any] = {"source": args["source_id"]}
+    if args.get("name") is not None:
+        body["name"] = args["name"]
+    with _data_errors():
+        if args.get("steps") is not None:
+            body["steps"] = data_answers.complete_steps(args["steps"])
+        if (prep_settings := data_answers.settings_from(args)) is not None:
+            body["settings"] = prep_settings
+    prep = _save_prep(request, None, body)
+    if project is not None:
+        prep.projects.add(project)
+    return _prep_answer(request, prep)
+
+
+STEP_EDITS = ("add_steps", "edit_steps", "move_steps", "remove_steps")
+
+
+def update_data_prep(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    _check_text(args)
+    prep = _data_prep(request, args, edit=True)
+    body: dict[str, Any] = {}
+    edits = [key for key in STEP_EDITS if args.get(key) is not None]
+    with _data_errors():
+        if args.get("steps") is not None:
+            if edits:
+                raise ToolError(
+                    f"Pass either steps (the whole new list) or {', '.join(STEP_EDITS)}, not both."
+                )
+            body["steps"] = data_answers.complete_steps(args["steps"])
+        elif edits:
+            current = prep.steps if isinstance(prep.steps, list) else []
+            body["steps"] = data_answers.edit_steps(current, args)
+        if (prep_settings := data_answers.settings_from(args, prep.settings)) is not None:
+            body["settings"] = prep_settings
+    if args.get("name") is not None:
+        body["name"] = args["name"]
+    if args.get("source_id") is not None:
+        body["source"] = args["source_id"]
+    if not body:
+        raise ToolError(
+            "Nothing to change: pass steps, add_steps, edit_steps, move_steps, remove_steps, "
+            "target, task, split, settings, name or source_id."
+        )
+    return _prep_answer(request, _save_prep(request, prep, body))
+
+
+def apply_readiness_fix(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    prep = _data_prep(request, args, edit=True)
+    wanted = args["fix_id"]
+    if not isinstance(wanted, str) or not wanted.strip():
+        raise ToolError("'fix_id' must be the fix_id of a readiness issue, or 'all'.")
+    if not ScopedRateThrottle().allow_request(request, _DataScope()):
+        raise ToolError("Too many previews were made recently. Try again later.")
+    # The readiness of the saved preparation, as the web app shows it.
+    with _data_errors():
+        result = data.preview(prep, {"sample_rows": data.MIN_SAMPLE_ROWS})
+    readiness = result["readiness"]
+    fixes = data_answers.fixes_of(readiness)
+    if wanted.strip() == "all":  # "Fix all": the fixes of all errors
+        chosen = data_answers.error_fixes(readiness)
+        if not chosen:
+            errors = [i["message"] for i in readiness.get("issues", []) if i["severity"] == "error"]
+            raise ToolError(
+                "No error has a fix. "
+                + (
+                    "The remaining errors: " + " ".join(errors)
+                    if errors
+                    else "The data is ready for training: export_training_dataset."
+                )
+            )
+    elif wanted.strip() in fixes:
+        chosen = [(wanted.strip(), fixes[wanted.strip()])]
+    else:
+        offered = "; ".join(f"{key}: {fix['label']}" for key, (fix, _) in fixes.items())
+        raise ToolError(
+            f"No fix '{wanted}' in the readiness check of the saved preparation (fix ids change "
+            "when the steps or the data change). "
+            + (f"Its fixes now: {offered}." if offered else "It suggests no fixes now.")
+        )
+    steps = list(prep.steps) if isinstance(prep.steps, list) else []
+    applied = []
+    with _data_errors():
+        for key, (fix, _) in chosen:
+            new = {"type": fix["type"], "params": copy.deepcopy(fix.get("params") or {})}
+            steps, created = data_answers.insert_step(steps, new, reports=result["steps"])
+            applied.append(
+                {
+                    "fix_id": key,
+                    "label": fix.get("label"),
+                    "step": created["id"],
+                    "type": fix["type"],
+                }
+            )
+    prep = _save_prep(request, prep, {"steps": steps})
+    return {
+        "applied": applied,
+        "steps": [{"id": s["id"], "type": s["type"]} for s in prep.steps],
+        "check": _quick_check(request, prep),
+    }
+
+
+def export_training_dataset(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    _require_training()
+    _check_text(args)
+    prep = _data_prep(request, args, edit=True)
+    if not ScopedRateThrottle().allow_request(request, _UploadScope()):
+        raise ToolError("Too many datasets were created recently. Try again later.")
+    try:
+        dataset = data.export_dataset(prep, args.get("name"))
+    except data.DataInputError as exc:
+        message = str(exc)
+        if exc.issues:
+            errors = [i["message"] for i in exc.issues if i.get("severity") == "error"]
+            message = (
+                f"The data is not ready for training: {' '.join(errors) or message} "
+                "preview_data_prep lists the problems with their fixes (apply_readiness_fix)."
+            )
+        raise ToolError(message) from None
+    return data_answers.export_answer(dataset, request.user)
+
+
+def delete_data_prep(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    prep_id = _data_id(args, "id", "a data preparation")
+    prep = visible_preps(request.user).select_related("owner").filter(pk=prep_id).first()
+    if prep is None:
+        raise ToolError("No such data preparation. list_data_preps shows the user's preparations.")
+    if prep.owner_id != request.user.pk:
+        raise ToolError(
+            f"Only its owner ({prep.owner.get_username()}) can delete “{prep.name}”; it is "
+            "shared with the user in a project."
+        )
+    kept = prep.datasets.count()
+    deleted = {"deleted": True, "id": prep.pk, "name": prep.name}
+    prep.delete()  # the same as DELETE /api/data/preps/<id>/
+    if kept:
+        deleted["note"] = (
+            f"The {kept} training dataset{'s' if kept > 1 else ''} made from it "
+            f"{'are' if kept > 1 else 'is'} kept."
+        )
+    return deleted
+
+
+def delete_data_source(request: Request, args: dict[str, Any]) -> Any:
+    _require_data()
+    source = _data_source(request, args)
+    if source.owner_id != request.user.pk:
+        raise ToolError(
+            f"Only its owner ({source.owner.get_username()}) can delete this data source; the "
+            "user sees it through a preparation shared in a project."
+        )
+    # As DELETE /api/data/sources/<id>/: not while a preparation uses it.
+    hint = " delete_data_prep deletes a preparation (ask the user first)."
+    preps = data.preps_using(source)
+    if preps:
+        raise ToolError(data.in_use_message(preps) + hint)
+    deleted = {"deleted": True, "id": source.pk, "name": source.name}
+    try:
+        source.delete()  # the files are removed by a post_delete signal
+    except RestrictedError:  # a preparation was created in the meantime
+        raise ToolError(data.in_use_message(data.preps_using(source)) + hint) from None
+    return deleted
 
 
 def check_training(request: Request, args: dict[str, Any]) -> Any:
@@ -383,7 +919,11 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
         config = training.parse_config(args.get("config"))
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
-    return training.check(args["graph"], dataset, config).to_dict()
+    result = training.check(args["graph"], dataset, config).to_dict()
+    if isinstance(result.get("plan"), dict):  # up to 1,000 class names
+        plan = result["plan"]
+        plan["class_names"] = compact.capped_names(plan.get("class_names"))
+    return result
 
 
 class _TrainingScope:
@@ -420,11 +960,27 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
     runs = visible_runs(request.user).select_related("owner")
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
-    return RunSummarySerializer(runs, many=True).data
+    limit = args.get("limit", 20)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ToolError("'limit' must be a whole number from 1 to 100.")
+    if args.get("status") is not None:
+        runs = runs.filter(status=args["status"])
+    if args.get("project_id") is not None:
+        runs = runs.filter(project_id=_data_id(args, "project_id", "a project"))
+    runs = runs.order_by("-created_at")
+    total = runs.count()
+    shown = [compact.run_summary(run) for run in runs[:limit]]
+    answer: dict[str, Any] = {"total": total, "runs": shown}
+    if total > len(shown):
+        answer["note"] = f"The newest {len(shown)} of {total} runs; raise limit to see more."
+    return answer
 
 
 def get_training_run(request: Request, args: dict[str, Any]) -> Any:
-    return RunDetailSerializer(_run(request, args)).data
+    run = _run(request, args)
+    with _compact_errors():
+        includes = compact.run_includes(args.get("include"))
+        return compact.run_detail(run, training.state_of(run), includes, args.get("log_lines"))
 
 
 def stop_training(request: Request, args: dict[str, Any]) -> Any:
@@ -510,17 +1066,26 @@ TOOLS: dict[str, Tool] = {
             "classical models such as GaussianProcessRegressor or SVC) with their parameters: "
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
-            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes.",
+            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes. "
+            "Compact by default (one line per parameter); types gives the full specs with "
+            "help texts of some types.",
             list_layer_types,
-            {},
+            {
+                "types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Full specs of these types, e.g. ['Conv2d', 'LSTM']",
+                }
+            },
         ),
         Tool(
             "list_examples",
             "List example networks",
-            "Example networks with their graphs (MLP, CNN, ResNet block, LSTM, Transformer, "
-            "Gaussian process regression, SVM classifier, …): good starting points.",
+            "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
+            "regression, SVM classifier, …): good starting points. Lists names and "
+            "descriptions; id gives one example with its graph.",
             list_examples,
-            {},
+            {"id": {"type": "string", "description": "An example id: returns its graph"}},
         ),
         Tool(
             "analyze_network",
@@ -606,9 +1171,25 @@ TOOLS: dict[str, Tool] = {
             "PyTorch; classical: Gaussian processes and SVMs with scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "
-            "the hyperparameter search options (tuning, neural networks only).",
+            "the hyperparameter search options (tuning, neural networks only). Datasets are "
+            "summaries (rows, features, target, task, classes, reference); get_dataset shows "
+            "the columns of one.",
             get_training_options,
             {},
+        ),
+        Tool(
+            "get_dataset",
+            "Show a dataset",
+            "One training dataset: rows, task, target, the class names (capped) and its "
+            "columns, a page at a time (columns_limit, default 50; columns_offset), with the "
+            "total in n_columns. The features come first, the target is the last column.",
+            get_dataset,
+            {
+                "id": {"type": "integer", "description": "Dataset id from get_training_options"},
+                "columns_limit": {"type": "integer", "minimum": 0, "maximum": 500},
+                "columns_offset": {"type": "integer", "minimum": 0},
+            },
+            ("id",),
         ),
         Tool(
             "upload_dataset",
@@ -618,7 +1199,8 @@ TOOLS: dict[str, Tool] = {
             "tab-separated, optionally with a header row; every column except the last is a "
             "numeric feature, the last column is the target: numbers for regression, class "
             "labels or class indices for classification. At least 4 rows. It is checked like "
-            'an upload in the web app; train on it with {"kind": "upload", "id": <id>}.',
+            'an upload in the web app; train on it with {"kind": "upload", "id": <id>}. Data '
+            "with missing values, text categories or dates needs preparing first: import_data.",
             upload_dataset,
             {
                 "name": {"type": "string", "maxLength": 120, "description": "Dataset name"},
@@ -631,6 +1213,400 @@ TOOLS: dict[str, Tool] = {
             },
             ("name", "csv"),
             writes=True,
+        ),
+        Tool(
+            "create_upload_link",
+            "Create an upload link",
+            "A one-time link (valid 15 minutes, no login needed) to upload a local file "
+            "with a shell command such as curl, for files too large to pass as text. "
+            "purpose data_source imports it into the Data tab like import_data (any format "
+            "import_data reads, with its options); training_dataset stores a CSV or ZIP file "
+            "like upload_dataset. Returns the url and ready-to-run curl commands; the curl "
+            "answer is the JSON that import_data or upload_dataset would return (with the "
+            "new id or the dataset reference). The size limit is that of the web app. Which "
+            "way to send a file: small file (up to the import_data limit) as text or base64; "
+            "a local file and a shell: this link; a public file: import_data with url; "
+            "otherwise ask the user to upload it in the Brick DNN web app.",
+            create_upload_link,
+            {
+                "purpose": {"type": "string", "enum": list(links.PURPOSES)},
+                "filename": {
+                    "type": "string",
+                    "description": "Name of the file with its ending, e.g. sales.xlsx (the "
+                    "ending decides the format)",
+                },
+                "name": {"type": "string", "maxLength": 120, "description": "Default: file name"},
+                "project_id": {
+                    "type": "integer",
+                    "description": "training_dataset: also share it in this project",
+                },
+                "delimiter": {"type": "string", "description": "data_source: CSV delimiter"},
+                "decimal": {"type": "string", "description": "data_source: '.' or ','"},
+                "header": {"type": "string", "enum": ["auto", "yes", "no"]},
+                "encoding": {"type": "string", "description": "data_source: auto, utf-8 …"},
+                "missing_values": {"type": "array", "items": {"type": "string"}},
+                "sheet": {"type": "string", "description": "data_source: sheet of a workbook"},
+            },
+            ("purpose", "filename"),
+            writes=True,
+        ),
+        Tool(
+            "list_data_sources",
+            "List imported data files",
+            "The user's imported data files for data preparation (data sources): id, name, "
+            "file, format, rows and columns, newest first. Also what import_data accepts on "
+            "this server: the size limit, the file types and whether links can be imported.",
+            list_data_sources,
+            {},
+        ),
+        Tool(
+            "get_data_source",
+            "Show an imported data file",
+            "One data source: its columns with their types (numeric, boolean, datetime, "
+            "categorical, text) and missing values, 50 at a time (columns_offset for more), "
+            "what the import detected (format, delimiter, decimal mark, header, sheet, "
+            "warnings), its first rows and the preparations that use it.",
+            get_data_source,
+            {
+                "id": {"type": "integer", "description": "Source id from list_data_sources"},
+                "sample_rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": data_answers.MAX_SAMPLE_ROWS,
+                    "description": f"First rows to show (default {data_answers.DEFAULT_SAMPLE_ROWS})",
+                },
+                "columns_offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": f"Show the columns from this one on "
+                    f"({data_answers.COLUMN_PAGE} at a time)",
+                },
+            },
+            ("id",),
+        ),
+        Tool(
+            "import_data",
+            "Import a data file",
+            "Import a data file as a data source for data preparation, like Import in the web "
+            "app's Data tab. Pass exactly one of: content, the text of a CSV/TSV, JSON or JSON "
+            "Lines file (filename defaults to data.csv; name a JSON file e.g. orders.json); "
+            "content_base64, a binary file (Excel .xlsx/.xls, OpenDocument .ods, Parquet, "
+            "Feather, or packed as .gz/.zip) with its filename; or url, a public http(s) link "
+            "that the server downloads (share links of Google Sheets, Google Drive, GitHub and "
+            "Dropbox work). Delimiter, decimal mark, header, encoding and missing-value markers "
+            "are detected: pass the options only to override them. Every column gets a type. "
+            "Returns the source with its columns and first rows; list_data_sources shows the "
+            "size limit. Next: create_data_prep.",
+            import_data,
+            {
+                "content": {"type": "string", "description": "Text of a CSV or JSON file"},
+                "content_base64": {"type": "string", "description": "A binary file as base64"},
+                "url": {"type": "string", "description": "Public link to the file"},
+                "filename": {
+                    "type": "string",
+                    "description": "File name with its ending, e.g. sales.xlsx (decides the "
+                    "format; required with content_base64)",
+                },
+                "name": {"type": "string", "maxLength": 120, "description": "Default: file name"},
+                "delimiter": {
+                    "type": "string",
+                    "description": "CSV: auto (default), ',', ';', 'tab' or '|'",
+                },
+                "decimal": {"type": "string", "description": "CSV: auto (default), '.' or ','"},
+                "header": {
+                    "type": "string",
+                    "enum": ["auto", "yes", "no"],
+                    "description": "Whether the first row holds the column names (CSV, sheets)",
+                },
+                "encoding": {
+                    "type": "string",
+                    "description": "Only content_base64 and url: auto, utf-8, cp1252 or latin-1",
+                },
+                "missing_values": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Cell values that mean missing, e.g. ['-999', 'n/a'] "
+                    "(default: empty cells, NA, N/A, null, -, ? …)",
+                },
+                "sheet": {
+                    "type": "string",
+                    "description": "Sheet of a workbook (default: the first one with values)",
+                },
+            },
+            writes=True,
+        ),
+        Tool(
+            "list_data_preps",
+            "List data preparations",
+            "The user's data preparations and the ones shared with them in projects: id, name, "
+            "source, target, task, number of steps, owner and the user's role (owner, editor, "
+            "viewer), last changed first.",
+            list_data_preps,
+            {},
+        ),
+        Tool(
+            "get_data_prep",
+            "Show a data preparation",
+            "One data preparation: its source, settings (target, task, split), steps with "
+            "their ids and params, the training datasets exported from it (with their "
+            "references for training), owner and role. preview_data_prep runs it.",
+            get_data_prep,
+            {"id": {"type": "integer", "description": "Preparation id from list_data_preps"}},
+            ("id",),
+        ),
+        Tool(
+            "list_prep_steps",
+            "List preparation steps",
+            "The step types of data preparation (join and append tables; drop, keep, rename, "
+            "cast columns, formulas, replace values; filter, sort and deduplicate rows; fill "
+            "missing values; outliers and clipping; scale and transform numbers, bins; encode "
+            "categories; date parts; balance classes; feature selection) with one line per "
+            "parameter: what it accepts, its default and when it applies. With type: the help "
+            "texts of that step type and an example.",
+            list_prep_steps,
+            {"type": {"type": "string", "description": "A step type, e.g. impute"}},
+        ),
+        Tool(
+            "preview_data_prep",
+            "Preview a data preparation",
+            "Run a preparation and look at the result: a report per step (what it did, rows "
+            "and columns added or removed, or why it failed, with the columns it saw), the "
+            "columns after all steps with profiles (missing, unique, min/max/mean/median/std, "
+            "top values, association with the target), the target (classes or distribution), "
+            "sample rows with their split, and the readiness for training: errors that block "
+            "the export, warnings (target leakage, duplicates, rare classes, imbalance …) and "
+            "suggestions, each with a fix_id where a step fixes it (apply_readiness_fix). "
+            "steps and/or target, task, split, settings try changes without saving them; upto "
+            "shows the data after that step. Wide tables are shown in pages: 50 columns, "
+            "profiles and samples of the first 20 of them; columns_offset or columns (names) "
+            "choose others.",
+            preview_data_prep,
+            {
+                "id": {"type": "integer", "description": "Preparation id"},
+                "steps": {
+                    "type": "array",
+                    "items": STEP_SCHEMA,
+                    "description": "Unsaved steps to try instead of the saved ones",
+                },
+                "target": {"type": ["string", "null"], "description": "Unsaved target column"},
+                "task": {"type": "string", "enum": ["auto", "classification", "regression"]},
+                "split": SPLIT_SCHEMA,
+                "settings": PREP_SETTINGS_SCHEMA,
+                "upto": {"type": "string", "description": "Show the data after this step id"},
+                "columns": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Only these columns in profiles and samples",
+                },
+                "columns_offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": f"Columns from this one on ({data_answers.COLUMN_PAGE} at a "
+                    f"time; profiles and samples of the first {data_answers.MAX_PROFILES})",
+                },
+                "sample_rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": data_answers.MAX_SAMPLE_ROWS,
+                    "description": f"Sample rows (default {data_answers.DEFAULT_SAMPLE_ROWS})",
+                },
+            },
+            ("id",),
+        ),
+        Tool(
+            "get_data_prep_script",
+            "Download a data preparation",
+            "The saved preparation as a file: python (default) is a standalone pandas script "
+            "whose prepare(df) applies the same steps with the values learned from the "
+            "training rows, so new data (e.g. rows to predict) is prepared exactly like the "
+            "training data; recipe the steps with their learned values as JSON; csv the "
+            "prepared rows with a split column (the first max_rows rows).",
+            get_data_prep_script,
+            {
+                "id": {"type": "integer", "description": "Preparation id"},
+                "format": {"type": "string", "enum": list(data.DOWNLOAD_FORMATS)},
+                "max_rows": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": data_answers.MAX_CSV_ROWS,
+                    "description": f"csv: rows to return (default {data_answers.DEFAULT_CSV_ROWS})",
+                },
+            },
+            ("id",),
+        ),
+        Tool(
+            "create_data_prep",
+            "Create a data preparation",
+            "Start preparing one of the user's data sources for training: the target column "
+            "(what a model should predict), the task (auto, classification or regression), "
+            "the train/validation/test split and optional first steps. Returns the "
+            "preparation and a check: the report of every step and the readiness for "
+            "training (errors that block the export, warnings and suggestions, with fix_ids). "
+            "Next: apply_readiness_fix or update_data_prep until it is ready; "
+            "preview_data_prep shows profiles and sample rows.",
+            create_data_prep,
+            {
+                "source_id": {"type": "integer", "description": "Source id (import_data)"},
+                "name": {"type": "string", "maxLength": 120, "description": "Default: source"},
+                "target": {"type": "string", "description": "The column to predict"},
+                "task": {
+                    "type": "string",
+                    "enum": ["auto", "classification", "regression"],
+                    "description": "Default auto: classes for text and few whole numbers",
+                },
+                "split": SPLIT_SCHEMA,
+                "steps": {
+                    "type": "array",
+                    "items": STEP_SCHEMA,
+                    "description": "First steps (list_prep_steps)",
+                },
+                "project_id": {
+                    "type": "integer",
+                    "description": "Also share it in this project (owner or editor): its "
+                    "members see it, its editors can change it",
+                },
+            },
+            ("source_id",),
+            writes=True,
+        ),
+        Tool(
+            "update_data_prep",
+            "Change a data preparation",
+            "Change a preparation (its owner, or the editors of a project it is shared in) and "
+            "save it right away; the web app shows the change. Steps: either steps (the whole "
+            "new list; steps without id are new and get the defaults of their type) or the "
+            "edits remove_steps, edit_steps (params are merged, null resets one), move_steps "
+            "and add_steps (at the end or after a step), applied in this order. Settings: "
+            "target, task and split (changed on top of the current ones) or settings (all). "
+            "Also name and source_id. Returns the preparation and the check: the report of "
+            "every step (a failing step says why, e.g. a wrong column name with the columns "
+            "it sees; later steps are skipped) and the readiness with fix_ids.",
+            update_data_prep,
+            {
+                "id": {"type": "integer", "description": "Preparation id"},
+                "steps": {
+                    "type": "array",
+                    "items": STEP_SCHEMA,
+                    "description": "Replaces all steps",
+                },
+                "add_steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "params": {"type": "object"},
+                            "enabled": {"type": "boolean"},
+                            "after": {
+                                "type": "string",
+                                "description": "Insert after this step id (default: at the end)",
+                            },
+                        },
+                        "required": ["type"],
+                    },
+                    "description": 'e.g. [{"type": "impute", "params": {"strategy": "mean"}}]',
+                },
+                "edit_steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "params": {"type": "object"},
+                            "enabled": {"type": "boolean"},
+                        },
+                        "required": ["id"],
+                    },
+                    "description": 'e.g. [{"id": "s2", "params": {"k": 3}}]',
+                },
+                "move_steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "after": {
+                                "type": ["string", "null"],
+                                "description": "Step id to follow, null for the top",
+                            },
+                        },
+                        "required": ["id"],
+                    },
+                },
+                "remove_steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Step ids",
+                },
+                "target": {"type": ["string", "null"], "description": "The column to predict"},
+                "task": {"type": "string", "enum": ["auto", "classification", "regression"]},
+                "split": SPLIT_SCHEMA,
+                "settings": PREP_SETTINGS_SCHEMA,
+                "name": {"type": "string", "maxLength": 120},
+                "source_id": {"type": "integer", "description": "Another source of the owner"},
+            },
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
+            "apply_readiness_fix",
+            "Apply a readiness fix",
+            "Add the step that fixes a readiness issue, like its button in the web app: a "
+            "fix_id from the readiness of the saved preparation (create_data_prep, "
+            "update_data_prep, preview_data_prep without unsaved changes), or 'all' for the "
+            "fixes of all errors at once (Fix all). The step goes to the end, in front of a "
+            "failing step. Saves the preparation; returns the added steps and the new check.",
+            apply_readiness_fix,
+            {
+                "id": {"type": "integer", "description": "Preparation id"},
+                "fix_id": {"type": "string", "description": "A fix_id, or 'all'"},
+            },
+            ("id", "fix_id"),
+            writes=True,
+        ),
+        Tool(
+            "export_training_dataset",
+            "Create a training dataset",
+            "Turn the saved preparation into a training dataset (owner or editor) once its "
+            "readiness says ready: the numeric feature columns, the target last and the "
+            "split of the preparation. Returns the dataset reference for check_training and "
+            "start_training, the task, the target, the feature columns in order (what "
+            "predict takes) and the class names. Data that is not ready is refused with the "
+            "errors that remain.",
+            export_training_dataset,
+            {
+                "id": {"type": "integer", "description": "Preparation id"},
+                "name": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Dataset name (default: the preparation's)",
+                },
+            },
+            ("id",),
+            writes=True,
+        ),
+        Tool(
+            "delete_data_prep",
+            "Delete a data preparation",
+            "Delete a data preparation for good (only its owner can). Its data source and "
+            "the training datasets made from it are kept. Ask the user first.",
+            delete_data_prep,
+            {"id": {"type": "integer", "description": "Preparation id from list_data_preps"}},
+            ("id",),
+            writes=True,
+            destructive=True,
+        ),
+        Tool(
+            "delete_data_source",
+            "Delete an imported data file",
+            "Delete one of the user's data sources with its files for good. Not possible "
+            "while a preparation uses it (delete those first). Ask the user first.",
+            delete_data_source,
+            {"id": {"type": "integer", "description": "Source id from list_data_sources"}},
+            ("id",),
+            writes=True,
+            destructive=True,
         ),
         Tool(
             "check_training",
@@ -670,20 +1646,51 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "list_training_runs",
             "List training runs",
-            "The user's training runs with status, progress and final metrics, newest first.",
+            "The user's training runs, newest first: status, epochs done, final metrics, one "
+            "line each, with the total. At most limit runs (default 20); status and "
+            "project_id filter them.",
             list_training_runs,
-            {},
+            {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "starting",
+                        "preparing",
+                        "running",
+                        "completed",
+                        "stopped",
+                        "failed",
+                    ],
+                },
+                "project_id": {"type": "integer", "description": "Runs of this project only"},
+            },
         ),
         Tool(
             "get_training_run",
             "Show a training run",
-            "One training run with its settings, its history of metrics per epoch and its "
-            "status. Regressions report the RMSE (in the units of the target) and R² "
-            "(val_rmse, val_r2; test_rmse, test_r2 in metrics). Classical models have one "
-            "entry (the fit) and state.classical with the fitted kernel, log marginal "
-            "likelihood or support vectors.",
+            "One training run, as a summary by default: status and message, settings, epochs "
+            "done, the best epoch, the final and test metrics (loss, accuracy; for regressions "
+            "the RMSE in the units of the target and R²), "
+            "the rows per split, tuning (trials and the best one), classical (the fitted "
+            "kernel, log marginal likelihood or support vectors) and the end of the log if "
+            "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
+            "epochs plus the best and the last), graph, plan, log (the last log_lines "
+            "lines), trials and preprocessing.",
             get_training_run,
-            {"id": {"type": "string"}},
+            {
+                "id": {"type": "string"},
+                "include": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": list(compact.RUN_INCLUDES)},
+                },
+                "log_lines": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": compact.MAX_LOG_LINES,
+                    "description": f"With include log (default {compact.DEFAULT_LOG_LINES})",
+                },
+            },
             ("id",),
         ),
         Tool(
@@ -934,12 +1941,13 @@ class McpView(APIView):
 
 
 def _body_limit() -> int | None:
-    """Largest MCP request in bytes: upload_dataset carries a CSV file as JSON text, which
-    escapes quotes and line breaks, so the usual limit for JSON requests is not enough."""
+    """Largest MCP request in bytes: upload_dataset and import_data carry a file as JSON text
+    (which escapes quotes and line breaks) or base64, so the usual limit for JSON requests is
+    not enough."""
     default = settings.DATA_UPLOAD_MAX_MEMORY_SIZE
     if default is None:
         return None
-    return max(default, 2 * upload_limit() + 64 * 1024)
+    return max(default, 2 * max(upload_limit(), data_answers.import_limit()) + 64 * 1024)
 
 
 def _read_body(request: Request, limit: int | None) -> bool:

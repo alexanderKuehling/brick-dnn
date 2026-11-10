@@ -468,6 +468,7 @@ shapes are documented in `frontend/src/api/types.ts` (section "Data preparation"
 | POST   | `/api/data/preps/<id>/preview/`        | Run the (unsaved) pipeline: reports, profile, sample, readiness |
 | POST   | `/api/data/preps/<id>/export/`         | Create a training dataset from the saved preparation `{name?}` |
 | GET    | `/api/data/preps/<id>/download/?format=…` | `csv` (prepared data), `recipe` (JSON) or `python` (pandas script) |
+| PUT / POST | `/api/uploads/?sig=…`              | Upload with a one-time link of the MCP tool `create_upload_link` (no login): the file as the body or multipart `file` |
 
 **Import.** `file` may be CSV / TSV / text (`.csv`, `.tsv`, `.tab`, `.psv`, `.txt`), Excel
 (`.xlsx`, `.xlsm`, `.xls`), OpenDocument (`.ods`), JSON (`.json`), JSON Lines (`.jsonl`,
@@ -566,6 +567,16 @@ classification) plus `split.bin`, the split of the preparation. Its `info.predef
 **Downloads** are attachments named after the preparation: `<name>.csv` (the prepared table
 with a last column `split`), `<name>.recipe.json` (sources, settings, steps with their fitted
 values) and `<name>_prepare.py` (a standalone pandas script that prepares new data the same way).
+
+**Upload links.** `PUT /api/uploads/?sig=…` with the file as the body (`curl -T file`) or
+`POST` with a multipart field `file` (`curl -F file=@file`) needs no login: the signed link
+(MCP tool `create_upload_link`, see [mcp.md](mcp.md#uploading-a-dataset)) names the user, the
+purpose (`data_source` or `training_dataset`), the file name and the import options, and works
+once within 15 minutes. The upload is imported like `POST /api/data/sources/` or
+`POST /api/training/datasets/` (same limits, checks and rate limit) and answered with `201` and
+the compact JSON of the MCP tools (`source`, or `dataset` with its `reference`). `403` for an
+expired, invalid or used link or an inactive user, `413` for a file over the limit, `429` when
+too many files were uploaded.
 
 All data endpoints except `GET /api/data/` answer `503` when data preparation is switched off
 (`BRICKDNN_DATA_PREP=false`) or pandas is not installed; `GET /api/data/` then says why
