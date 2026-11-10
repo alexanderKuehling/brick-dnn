@@ -7,7 +7,8 @@ A server set up with [deploy/server](../server/README.md) reads the folder of it
   terms of use (templates and a checklist in [deploy/legal](../legal/README.md)). Files in
   `/srv/brick-dnn/legal/` on the server take precedence.
 - `settings.env`: `BRICKDNN_…=value` lines, defaults for the backend, the training worker and
-  the cleanup service, e.g. the plans and the periods of the automatic deletion. A value set
+  the cleanup service, e.g. the plans, the periods of the automatic deletion and the
+  administrators (`BRICKDNN_ADMIN_USERS`: usernames of accounts that get admin rights). A value set
   in the server's `.env` wins. Never put secrets here: the repository is public.
 
 Both go online with the next deploy, like the code. Only the server of that domain uses its
