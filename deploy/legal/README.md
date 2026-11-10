@@ -92,7 +92,17 @@ streichen.
       Dauer, User-Agent, betroffene Objekte, zusammengefasste Argumente ohne Inhalte und
       Geheimnisse), nur für den Nutzer sichtbar; Speicherdauer `BRICKDNN_AGENT_LOG_DAYS`
       (Standard 90 Tage), im Export enthalten, mit dem Konto gelöscht.
-- [ ] **Keine E-Mails:** Die App versendet keine.
+- [ ] **E-Mails** ([docs/email.md](../../docs/email.md)): ohne `BRICKDNN_EMAIL_HOST`
+      versendet die App keine. Mit E-Mail-Versand: Bestätigungslinks, Links zum Zurücksetzen
+      des Passworts, Sicherheitshinweise, Erinnerung vor dem Löschen inaktiver Konten;
+      gespeichert werden Bestätigungszeitpunkt und letzte Erinnerung, nicht die E-Mails.
+      Den **E-Mail-Versanddienstleister** mit Name und Anschrift nennen, AV-Vertrag
+      abschließen, bei Sitz oder Verarbeitung außerhalb der EU die Grundlage der Übermittlung
+      angeben. Mit `BRICKDNN_ADMIN_EMAIL` gehen Fehlerberichte (mit Benutzername und
+      Adresse der Anfrage) an den Betreiber.
+- [ ] **Zwei-Faktor-Anmeldung** (freiwillig): verschlüsselter Schlüssel, Einrichtungszeitpunkt,
+      zuletzt verwendeter Code-Zeitschritt, Wiederherstellungscodes als Hash; gelöscht beim
+      Ausschalten oder mit dem Konto. Art. 6 Abs. 1 lit. b.
 - [ ] **Kostenpflichtige Tarife über Paddle**, nur falls eingeschaltet
       ([docs/billing.md](../../docs/billing.md)): Paddle (Paddle.com Market Ltd, Vereinigtes
       Königreich) ist Verkäufer (Merchant of Record) und für Zahlung, Rechnung und Steuer

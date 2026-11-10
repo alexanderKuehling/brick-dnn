@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Changed
+- **Logging in with two-factor authentication** answers `{two_factor_required, challenge}`
+  instead of tokens for accounts that turned it on; clients of `POST /api/auth/token/` that
+  log in such an account need the second step. Accounts without it log in as before.
 - **Compact MCP answers.** `get_training_options` lists datasets without their columns (new
   `get_dataset` pages through them), `get_training_run` is a summary (`include` adds the
   history, at most 50 epochs, the graph, plan, log, trials and preprocessing),
@@ -43,6 +46,46 @@
   sample through the network brick by brick with the shapes before and after and what each
   brick computes; the inspector shows how a brick's parameters add up (`3×3×32×64 + 64 =
   18,496`) and the receptive field of bricks in a convolution stack.
+- **Approvals for agents.** Per API token and connected app you decide what an agent may do
+  on its own: start trainings up to N estimated CPU minutes (above that, or always with 0, it
+  asks), publish (a weights link that works without logging in, sharing a dataset or data
+  preparation in a project) and, optionally, delete. Such a call does nothing yet: the agent
+  gets the id of an approval request (not an error) and follows it with the new MCP tools
+  `get_approval` and `list_approvals`. Waiting requests show at the top of *Agent activity*
+  (with the estimate, the agent, network and dataset, and what would become visible) and as a
+  count in the account menu; *Approve* does it right away on the server as that agent, with
+  its budgets checked again, and stores the result (e.g. the run) for `get_approval`; *Deny*
+  takes a message for the agent. Requests expire after 24 hours. New tokens and apps get the
+  account's default (unless changed: trainings above 15 CPU minutes and publishing ask);
+  existing ones ask for nothing until you set a rule. The REST API refuses what a token's rule
+  covers. See docs/mcp.md (*Approvals*) and `/api/approvals/` in docs/api.md.
+- **E-mail, password reset and confirmed addresses.** With an SMTP provider configured
+  (`BRICKDNN_EMAIL_HOST`, `_PORT`, `_USER`, `_PASSWORD` (secret, `.env` only), `_FROM`,
+  `_REPLY_TO`; off without them) the app sends e-mail in one plain-text + HTML layout, in a
+  background thread so that no request waits. "Forgot password?" on the login page sends a
+  one-hour, one-time link (the same answer for every login, limited per IP address and per
+  account); the new password ends every login of the account. New and changed addresses get a
+  link that confirms them for the logged-in account it was sent to; reset links only go to a
+  confirmed address or the unchanged address of an account from before this release. Short
+  security notices: password or e-mail address changed (to the old address), two-factor
+  authentication on or off, API token created, app connected. Without e-mail the reset page
+  says that the server cannot send links. `manage.py send_test_email <address>` checks the
+  settings; [docs/email.md](docs/email.md) explains providers, DNS records and which values
+  are secret.
+- **Warnings before inactive accounts are deleted.** With e-mail, owners of inactive accounts
+  are warned 14 and 3 days before (`BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS`), and an account
+  with an address is only deleted once it was warned: accounts that are overdue when e-mail is
+  switched on are warned first and deleted 3 days later.
+- **Server errors by e-mail.** Unhandled errors (HTTP 500) are mailed to
+  `BRICKDNN_ADMIN_EMAIL`, at most one e-mail per kind of error an hour.
+- **Two-factor authentication.** Every account can turn on codes from an authenticator app
+  (TOTP) on the account page: a QR code, ten recovery codes shown once. Logging in then
+  answers a short-lived challenge (`two_factor_required`) instead of tokens, and
+  `POST /api/auth/token/two-factor/` with a code completes it; the OAuth consent page and the
+  Django admin ask for the code too. Codes work once, with one time step of drift; five wrong
+  codes lock the account for 15 minutes. `BRICKDNN_REQUIRE_2FA_FOR_STAFF=true` keeps staff
+  accounts without it out of the Django admin. `manage.py reset_two_factor <username>` turns it
+  off for someone who lost phone and codes.
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public
