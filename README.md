@@ -361,6 +361,13 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_BUDGET_STORAGE_MB`   | `0` (unlimited)            | Without plans: storage per account                   |
 | `BRICKDNN_STAFF_UNLIMITED`     | `true`                     | Staff and superusers have no limits                  |
 | `BRICKDNN_PRICE_PER_CPU_HOUR` / `_PER_GB_MONTH` / `BRICKDNN_PRICE_CURRENCY` | unset / `EUR` | Show usage in money |
+| `BRICKDNN_PADDLE_ENV`          | – (paid plans off)         | `sandbox` or `live`: sell the plans with Paddle, see [docs/billing.md](docs/billing.md) |
+| `BRICKDNN_PADDLE_CLIENT_TOKEN` | –                          | Paddle's client-side token for the checkout (public) |
+| `BRICKDNN_PADDLE_PRICES`       | –                          | The Paddle price of each paid plan: `starter=pri_…,plus=pri_…` |
+| `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | –                       | Paddle product that compute beyond the allowance is billed as |
+| `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
+| `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
+| `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
@@ -369,7 +376,8 @@ PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server 
 people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
 legal pages (imprint, privacy policy, terms of use; templates in
 [deploy/legal/](deploy/legal/README.md)), the account page where users export their data or
-delete their account, and the optional automatic deletion of old data.
+delete their account, and the optional automatic deletion of old data. Selling plans as
+subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md).
 
 ## Tests
 

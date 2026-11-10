@@ -435,8 +435,9 @@ class UserProfile(models.Model):
     terms_version = models.CharField(max_length=64, blank=True)
     privacy_version = models.CharField(max_length=64, blank=True)
     # The plan the limits come from (a key of BRICKDNN_PLANS; empty: the default plan) and
-    # whether the account has no limits at all (empty: only staff and superusers). Billing
-    # will set the plan; for now the operator does (Django admin, `manage.py set_plan`).
+    # whether the account has no limits at all (empty: only staff and superusers). The
+    # operator sets the plan (Django admin, `manage.py set_plan`), or a paid subscription
+    # does (billing.py).
     plan = models.CharField(
         max_length=40,
         blank=True,
@@ -612,3 +613,128 @@ class AgentAction(models.Model):
 
     def __str__(self) -> str:
         return f"{self.agent_name} ({self.owner}): {self.summary}"
+
+
+class BillingCustomer(models.Model):
+    """An account at Paddle (billing.py): its customer there and, once it bought a plan, its
+    subscription as Paddle last reported it. There is at most one subscription per account.
+
+    The plan the account really has is ``UserProfile.plan``; billing sets it from ``status``
+    and ``plan`` here. Paddle keeps the payment data, addresses and invoices.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="billing"
+    )
+    # "sandbox" or "live": ids of one are unknown in the other.
+    environment = models.CharField(max_length=10)
+    customer_id = models.CharField(max_length=64, unique=True)
+    subscription_id = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    # Paddle's status: active, trialing, past_due, paused, canceled; empty: no subscription.
+    status = models.CharField(max_length=20, blank=True)
+    # The plan the subscription pays for (a key of BRICKDNN_PLANS) and its Paddle price.
+    plan = models.CharField(max_length=40, blank=True)
+    price_id = models.CharField(max_length=64, blank=True)
+    # The plan billing last gave the account for it (empty: the default plan). Billing only
+    # changes the account's plan when this changes, so a plan the operator sets by hand
+    # afterwards stays.
+    granted_plan = models.CharField(max_length=40, blank=True)
+    # The period that is paid for; it renews at its end unless a cancellation is scheduled.
+    current_period_start = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    next_billed_at = models.DateTimeField(null=True, blank=True)
+    # Cancelled to the end of the period: when the subscription ends.
+    cancel_at = models.DateTimeField(null=True, blank=True)
+    canceled_at = models.DateTimeField(null=True, blank=True)
+    # A payment failed and Paddle is retrying: the plan is kept for a grace period.
+    past_due_since = models.DateTimeField(null=True, blank=True)
+    payment_failed_at = models.DateTimeField(null=True, blank=True)
+    # When Paddle said so: the newest event (or API answer) that was applied. Older events
+    # that arrive later are ignored.
+    last_event_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.user}: {self.plan or 'no plan'} ({self.status or 'no subscription'})"
+
+
+class BillingEvent(models.Model):
+    """A notification from Paddle that was received (billing.py): every event is processed
+    once. Only what is needed to follow what happened is kept, not the event's content."""
+
+    OUTCOMES = [
+        ("applied", "Applied"),
+        ("stale", "Older than what is known"),
+        ("ignored", "Not needed"),
+        ("unknown", "No account for it"),
+        ("rejected", "Does not belong to the account"),
+    ]
+
+    event_id = models.CharField(max_length=64, unique=True)
+    event_type = models.CharField(max_length=60)
+    occurred_at = models.DateTimeField()
+    received_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="billing_events",
+    )
+    subscription_id = models.CharField(max_length=64, blank=True)
+    outcome = models.CharField(max_length=10, choices=OUTCOMES)
+    note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ["-occurred_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} ({self.event_id}): {self.outcome}"
+
+
+class OverageCharge(models.Model):
+    """Compute beyond the allowance of a month, billed to the account's subscription
+    (billing.py). The row is saved as ``pending`` before Paddle is asked and updated with the
+    answer, so that a crash in between cannot charge twice: a pending row is never charged
+    again by itself (the operator decides in the Django admin)."""
+
+    STATUSES = [
+        ("pending", "Pending: Paddle was asked, the answer is unknown"),
+        ("charged", "Charged"),
+        ("failed", "Refused by Paddle"),
+        ("skipped", "Not charged"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="overage_charges"
+    )
+    subscription_id = models.CharField(max_length=64, blank=True)
+    # The first day of the calendar month (UTC) the usage belongs to, as in UsageRecord.
+    period = models.DateField()
+    # What this row bills: CPU seconds beyond the allowance, their price and the amount.
+    cpu_seconds = models.FloatField()
+    price_per_cpu_hour = models.DecimalField(max_digits=10, decimal_places=4)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3)
+    status = models.CharField(max_length=10, choices=STATUSES, default="pending")
+    detail = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            # At most one charge per account and month whose outcome is unknown.
+            models.UniqueConstraint(
+                fields=["user", "period"],
+                condition=models.Q(status="pending"),
+                name="one_pending_overage_charge",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} {self.period:%Y-%m}: {self.amount} {self.currency} ({self.status})"

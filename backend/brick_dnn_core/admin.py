@@ -3,7 +3,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.db.models import Q
 
-from . import budgets
+from . import billing_admin, budgets  # noqa: F401 (billing_admin registers its models)
 from .models import (
     AgentAction,
     ApiToken,

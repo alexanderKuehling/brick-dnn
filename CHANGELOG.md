@@ -76,6 +76,31 @@
   entries until then. API: `GET /api/agent-activity/` (filters, pages, `?after=` for polling)
   and `/api/agent-activity/summary/`. Logging happens after the response and never breaks a
   call.
+- **Paid plans with Paddle** (off unless configured; [docs/billing.md](docs/billing.md)). A
+  server can sell its plans as monthly subscriptions through Paddle Billing, which is the
+  seller (merchant of record) and handles payment, invoice and tax. With
+  `BRICKDNN_PADDLE_ENV`, `BRICKDNN_PADDLE_CLIENT_TOKEN`, `BRICKDNN_PADDLE_PRICES` and the
+  secrets `BRICKDNN_PADDLE_API_KEY` and `BRICKDNN_PADDLE_WEBHOOK_SECRET` (only from the
+  server's `.env`), the header links to a pricing page (`/pricing`: the plans, what they
+  include, prices incl. VAT, the overage price), and the account page gets "Plan & billing":
+  the plan and when it renews or ends, changing the plan (with the amount Paddle charges or
+  credits), cancelling to the end of the paid month, taking that back, and Paddle's customer
+  portal for payment method and invoices. Paddle's checkout opens in an overlay; Paddle.js is
+  only loaded then. A paid subscription sets the account's plan: Paddle's signed
+  notifications (`/api/billing/paddle/webhook/`) are processed once and in order, a
+  subscription only counts for the account whose Paddle customer it belongs to, a failed
+  payment keeps the plan for `BRICKDNN_PADDLE_GRACE_DAYS` (7), and a cancelled or paused
+  subscription means the free plan again, without deleting anything. Unlimited accounts need
+  no plan and are never changed. Compute beyond the allowance (overage) is billed to the
+  subscription as a one-time charge after each month, up to the account's cap, recorded
+  before Paddle is asked so that nothing is billed twice. `manage.py billing_sync` (daily in
+  the cleanup service) re-reads all subscriptions, ends grace periods and bills overage;
+  `--check` verifies the settings and the prices at Paddle. Deleting an account cancels its
+  subscription first, the data export holds `billing.json`, and the Django admin lists
+  customers, notifications and overage charges read-only. New endpoints: `GET /api/billing/`
+  and `/api/billing/{subscription,checkout,change-plan,cancel,reactivate,portal,refresh}/`.
+  The German templates for the privacy policy and the terms of use have sections on Paddle
+  and paid plans.
 - **Classical models: Gaussian processes and support vector machines.** New bricks next to
   the neural layers: kernels (`RBF`, `Matern`, `RationalQuadratic`, `ExpSineSquared`,
   `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum` and

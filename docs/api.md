@@ -115,6 +115,39 @@ connected apps and entries of the agent activity log (`agent_actions`), and the 
 uploaded files. What the export holds and what deleting an
 account deletes: [privacy.md](privacy.md).
 
+### Paid plans (Paddle)
+
+Only on a server that sells plans, see [billing.md](billing.md). Without it,
+`GET /api/billing/` answers `{"enabled": false}` and every other path below `404`.
+
+| Method | Path                            | Body              | Response                         |
+| ------ | ------------------------------- | ----------------- | -------------------------------- |
+| GET    | `/api/billing/`                 | –                 | `BillingInfo` (public)           |
+| GET    | `/api/billing/subscription/`    | –                 | `BillingState`                   |
+| POST   | `/api/billing/checkout/`        | `{plan}`          | `{plan, price_id, customer_id, custom_data}` for Paddle's checkout |
+| POST   | `/api/billing/change-plan/`     | `{plan, preview?}` | `BillingState`; with `preview` `{plan, upgrade, now, next_billed_at}` and nothing changes |
+| POST   | `/api/billing/cancel/`          | –                 | `BillingState`: cancelled to the end of the paid period |
+| POST   | `/api/billing/reactivate/`      | –                 | `BillingState`: the cancellation is taken back |
+| POST   | `/api/billing/portal/`          | –                 | `{url}`: Paddle's customer portal, logged in |
+| POST   | `/api/billing/refresh/`         | –                 | `BillingState`, after asking Paddle |
+| POST   | `/api/billing/paddle/webhook/`  | Paddle's event    | `{received, new, outcome}`; for Paddle only |
+
+`BillingInfo` is `{enabled, provider: "paddle", environment: "sandbox"|"live", client_token,
+currency, prices_include_tax, overage_billed, plans}`; a plan is a plan of
+`GET /api/account/usage/` plus `purchasable` and `default`. `BillingState` is
+`{plan, unlimited, subscription, can_subscribe, has_billing_profile, email_missing}` with
+`subscription` `null` or `{status, plan, plan_name, renews_at, ends_at, ended_at,
+current_period_end, payment_failed, grace_until, can_change_plan, can_cancel,
+can_reactivate}`; `status` is Paddle's (`active`, `trialing`, `past_due`, `paused`,
+`canceled`). `now` of a preview is `{action: "charge"|"credit", amount, currency}` or `null`.
+
+All but the first and the last need a website login (JWT), not an API token; changes are
+limited to `BRICKDNN_BILLING_RATE` (60/hour). `409` means that the request does not fit the
+subscription (e.g. a checkout while subscribed, a plan change while a payment is open), `503`
+that Paddle did not answer or refused: nothing was changed. The webhook accepts only requests
+with a valid `Paddle-Signature` (`403` otherwise), at most 256 KB, and
+`BRICKDNN_BILLING_WEBHOOK_RATE` (600/minute per IP address).
+
 ### Legal pages (public)
 
 | Method | Path                    | Response                                                       |
@@ -386,6 +419,7 @@ See [training.md](training.md#usage-and-budgets).
           "concurrent_trainings": 1, "priority": 0, "overage_price_per_cpu_hour": null},
  "unlimited": false,
  "plans": [ …the plans with prices, if the server has several… ],
+ "upgrade_url": null,
  "overage": {"available": false, "enabled": false, "price_per_cpu_hour": null,
              "currency": "EUR", "cap_cpu_hours": null, "used_cpu_minutes": 0, "cost": null},
  "compute": {"unit": "cpu_minutes", "used": 12.5, "limit": 30, "remaining": 17.5,
@@ -407,7 +441,10 @@ or the own budget, whichever is lower; null: unlimited), `available` what the ca
 use with its token's or app's budget, `caller` only with an API token or app. A budget of
 `null` removes it; 0 allows nothing. `ApiToken` and connections have `budget_cpu_minutes` and
 `used_cpu_minutes` (this month). Only a website login can change budgets, so an agent cannot
-raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour`.
+raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour` and, on a
+server with [paid plans](billing.md), a subscription that is paid and not cancelled.
+`upgrade_url` is the pricing page on such a server (else null); the `403` of a used-up
+allowance or a full storage carries it too.
 
 The check also takes the `config` (optional) to check what depends on it, e.g. `max_samples`
 against the row limit of a classical model. For classical models, only the Input layer's
@@ -653,7 +690,8 @@ Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and r
 20/minute, starting training runs: 120/hour, dataset uploads, data imports (files and links) and exports of
 preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
 1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
-120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour. Adjust
+120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour,
+checkout and changes of a paid plan: 60/hour (`BRICKDNN_BILLING_RATE`). Adjust
 with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
 `BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
 `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE`, `BRICKDNN_ACCOUNT_RATE` and

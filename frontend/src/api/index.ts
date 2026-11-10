@@ -9,6 +9,9 @@ import type {
   Analysis,
   ApiToken,
   ApiTokenInput,
+  BillingCheckout,
+  BillingInfo,
+  BillingState,
   CommentInput,
   Compatibility,
   DataPrep,
@@ -31,6 +34,7 @@ import type {
   OAuthConnection,
   OAuthDecision,
   OAuthRequest,
+  PlanChangePreview,
   PrepDownloadFormat,
   PreviewRequest,
   PreviewResult,
@@ -139,6 +143,44 @@ const serverApi = {
         body: { overage_enabled: enabled, overage_cap_cpu_hours: capCpuHours },
         auth: true,
       }),
+  },
+
+  /** Paid plans (Paddle). Only `info` answers on a server that sells none. */
+  billing: {
+    /** Public: whether the server sells plans, the plans and what the checkout needs. */
+    info: () => request<BillingInfo>('/api/billing/'),
+    /** The account's plan and subscription (website login only, like all below). */
+    state: (signal?: AbortSignal) =>
+      request<BillingState>('/api/billing/subscription/', { auth: true, signal }),
+    /** What Paddle's checkout needs to sell `plan` to this account. */
+    checkout: (plan: string) =>
+      request<BillingCheckout>('/api/billing/checkout/', {
+        method: 'POST',
+        body: { plan },
+        auth: true,
+      }),
+    /** What moving the subscription to `plan` would cost; changes nothing. */
+    previewChange: (plan: string) =>
+      request<PlanChangePreview>('/api/billing/change-plan/', {
+        method: 'POST',
+        body: { plan, preview: true },
+        auth: true,
+      }),
+    changePlan: (plan: string) =>
+      request<BillingState>('/api/billing/change-plan/', {
+        method: 'POST',
+        body: { plan },
+        auth: true,
+      }),
+    /** Cancels to the end of the period that is paid for. */
+    cancel: () => request<BillingState>('/api/billing/cancel/', { method: 'POST', auth: true }),
+    /** Takes a cancellation back. */
+    reactivate: () =>
+      request<BillingState>('/api/billing/reactivate/', { method: 'POST', auth: true }),
+    /** A link to Paddle's customer portal (payment method, invoices), valid for a short time. */
+    portal: () => request<{ url: string }>('/api/billing/portal/', { method: 'POST', auth: true }),
+    /** Asks Paddle for the subscription now, instead of waiting for its notification. */
+    refresh: () => request<BillingState>('/api/billing/refresh/', { method: 'POST', auth: true }),
   },
 
   /** Imprint, privacy policy and terms of use, as far as the server has them (public). */

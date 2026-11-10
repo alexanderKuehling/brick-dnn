@@ -447,7 +447,7 @@ object of plans by key; `BRICKDNN_DEFAULT_PLAN` is the plan of accounts without 
 
 | Key | Meaning (missing or 0: unlimited) |
 | --- | --- |
-| `name`, `price` | Shown on the account page; `price` per month in `BRICKDNN_PRICE_CURRENCY` (display only, there is no payment yet) |
+| `name`, `price` | Shown on the account page; `price` per month in `BRICKDNN_PRICE_CURRENCY` (for display; with [paid plans](billing.md) the customer pays the price set in Paddle) |
 | `cpu_hours_per_month` | Compute allowance per calendar month (UTC) |
 | `storage_gb` | Storage quota |
 | `cpu_minutes_per_run` | The most compute one training may use |
@@ -469,9 +469,10 @@ in [`deploy/sites/brickdnn.com/settings.env`](../deploy/sites/brickdnn.com/setti
 
 The paid plans offer compute beyond the allowance at 0.40 EUR per CPU hour (*overage*). It is
 off for every account until its user switches it on on the account page (optionally with a cap
-in CPU hours); the ledger marks the part of the usage beyond the allowance (`overage`), to be
-billed at the end of the month once billing exists. Without the switch a run stops when the
-allowance is used up.
+in CPU hours); the ledger marks the part of the usage beyond the allowance (`overage`). With
+[paid plans](billing.md#overage-compute-beyond-the-allowance) it is billed to the account's
+subscription after the month, and it can only be switched on while there is a subscription to
+bill it to. Without the switch a run stops when the allowance is used up.
 
 **Changing plans and unlimited accounts.** The operator sets an account's plan in the Django
 admin (*User profiles*: plan, *unlimited*, and overrides of single limits) or on the server:
@@ -489,8 +490,10 @@ profiles filters by plan and *limits* and has the bulk actions *Make unlimited* 
 the limits of their plan*. A change takes effect at once, also for running trainings. **Staff
 members and superusers are unlimited** unless marked otherwise (`BRICKDNN_STAFF_UNLIMITED=false`
 switches that off). Unlimited accounts are still measured and see their usage; budgets their
-users set themselves (for the account or a token) still apply. Billing will call
-`budgets.set_plan(user, key)`; `budgets.limits_for(user)` gives the limits that apply.
+users set themselves (for the account or a token) still apply. With
+[paid plans](billing.md), a subscription at Paddle sets the plan (`budgets.set_plan(user,
+key)`) and budget messages name the pricing page; `budgets.limits_for(user)` gives the limits
+that apply.
 
 **Budgets of users and agents.** On the account page users can set a monthly budget for their
 whole account, and on the API tokens page one for each API token and each connected app (an

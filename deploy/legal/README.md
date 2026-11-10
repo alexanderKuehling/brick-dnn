@@ -93,6 +93,16 @@ streichen.
       Geheimnisse), nur für den Nutzer sichtbar; Speicherdauer `BRICKDNN_AGENT_LOG_DAYS`
       (Standard 90 Tage), im Export enthalten, mit dem Konto gelöscht.
 - [ ] **Keine E-Mails:** Die App versendet keine.
+- [ ] **Kostenpflichtige Tarife über Paddle**, nur falls eingeschaltet
+      ([docs/billing.md](../../docs/billing.md)): Paddle (Paddle.com Market Ltd, Vereinigtes
+      Königreich) ist Verkäufer (Merchant of Record) und für Zahlung, Rechnung und Steuer
+      selbst verantwortlich. Der Server übermittelt E-Mail-Adresse und Kontonummer an
+      Paddle; Zahlungsdaten und Anschrift gibt der Käufer dort ein. Skript und
+      Bezahlformular von Paddle werden erst beim Öffnen des Bezahlvorgangs geladen (dann
+      sieht Paddle die IP-Adresse und kann Cookies setzen). Gespeichert werden Kunden- und
+      Abonummer, Tarif, Status, Zeiträume, Art und Zeitpunkt der Mitteilungen von Paddle und
+      abgerechnete zusätzliche Rechenzeit; alles im Daten-Export, gelöscht mit dem Konto.
+      Art. 6 Abs. 1 lit. b. Die Aussagen „keine Inhalte Dritter“ und „kostenlos“ anpassen.
 - [ ] **Speicherdauer:** bis zur Löschung durch die Nutzer; automatische Löschung nach
       `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` / `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS`, falls
       eingestellt; abgelaufene Logins täglich; Backups (Hetzner-Backups: 7 Stände) angeben.
@@ -101,6 +111,28 @@ streichen.
       zuständige Aufsichtsbehörde Ihres Bundeslandes.
 - [ ] **Keine automatisierten Entscheidungen**, Pflicht zur Bereitstellung (nur für ein Konto).
 - [ ] **Stand** (Datum).
+
+## Kostenpflichtige Tarife: was die Nutzungsbedingungen brauchen
+
+Nur mit eingeschalteter Abrechnung über Paddle. `terms.example.md` hat dafür Abschnitt 7;
+er beschreibt, was die Software tut:
+
+- [ ] Tarife, Preise (pro Monat, inkl. USt.) und Leistungen laut Seite „Pricing“;
+      Rechenzeit je Kalendermonat, verfällt am Monatsende.
+- [ ] Paddle als Verkäufer; dessen Bedingungen für Kauf, Widerruf und Erstattung gelten.
+      Paddle verlangt für die Freischaltung der Website eine sichtbare Erstattungsregelung.
+- [ ] Monatliche Laufzeit, Kündigung jederzeit zum Ende des bezahlten Monats, Rücknahme der
+      Kündigung bis dahin.
+- [ ] Tarifwechsel sofort, mit anteiliger Berechnung bzw. Gutschrift.
+- [ ] Zusätzliche Rechenzeit nur nach eigenem Einschalten, mit Obergrenze, Abrechnung nach
+      Monatsende.
+- [ ] Fehlgeschlagene Zahlung: Tarif bleibt `BRICKDNN_PADDLE_GRACE_DAYS` Tage.
+- [ ] Nach dem Ende eines Abos gelten die Grenzen des kostenlosen Tarifs; nichts wird
+      gelöscht.
+- [ ] **Prüfen lassen:** Mit bezahlten Tarifen ist der Dienst nicht mehr „privat, nicht
+      kommerziell“ und nicht mehr nur „unentgeltlich“ (Abschnitte 1, 2 und Haftung der
+      Vorlage); Impressumspflicht mit ladungsfähiger Anschrift, Gewerbeanmeldung und Steuern
+      sind Sache des Betreibers.
 
 ## Was außerdem zu tun bleibt (nicht technisch)
 

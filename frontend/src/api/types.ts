@@ -304,7 +304,7 @@ export interface UsageSource {
 export interface Plan {
   key: string;
   name: string;
-  /** Per month, in `currency` (only shown: there is no payment yet). */
+  /** Per month, in `currency`, incl. VAT (with paid plans, Paddle charges it). */
   price: number | null;
   currency: string | null;
   cpu_hours_per_month: number | null;
@@ -326,6 +326,8 @@ export interface Usage {
   unlimited?: boolean;
   /** The plans with prices, when the server offers several (else empty). */
   plans?: Plan[];
+  /** Where plans can be bought, on a server that sells them (the pricing page); else null. */
+  upgrade_url?: string | null;
   /** Compute beyond the monthly allowance (paid plans), switched on by the user. */
   overage?: {
     available: boolean;
@@ -1617,3 +1619,87 @@ export interface PreviewResult {
 }
 
 export type PrepDownloadFormat = 'csv' | 'recipe' | 'python';
+
+// --------------------------------------------------------------------------
+// Paid plans (Paddle), see docs/billing.md
+// --------------------------------------------------------------------------
+
+/** A plan on the pricing page. */
+export interface BillingPlan extends Plan {
+  /** It can be bought (the others are the free plan). */
+  purchasable: boolean;
+  /** The plan of accounts without a subscription. */
+  default: boolean;
+}
+
+/** GET /api/billing/ (public): whether the server sells plans, and what the checkout needs. */
+export type BillingInfo =
+  | { enabled: false }
+  | {
+      enabled: true;
+      provider: 'paddle';
+      /** `sandbox`: test mode, no real payments. */
+      environment: 'sandbox' | 'live';
+      /** The client-side token for Paddle.js. */
+      client_token: string;
+      currency: string;
+      prices_include_tax: boolean;
+      /** Compute beyond the allowance can be billed (plans offer overage). */
+      overage_billed: boolean;
+      plans: BillingPlan[];
+    };
+
+/** The server's billing settings when it sells plans. */
+export type BillingEnabled = Extract<BillingInfo, { enabled: true }>;
+
+/** The account's subscription as Paddle last reported it. */
+export interface BillingSubscription {
+  status: 'active' | 'trialing' | 'past_due' | 'paused' | 'canceled' | (string & {});
+  /** The plan it pays for. */
+  plan: string | null;
+  plan_name: string | null;
+  /** The next payment (null: it does not renew). */
+  renews_at: string | null;
+  /** Cancelled to the end of the paid period: when it ends. */
+  ends_at: string | null;
+  /** When it ended, once it has. */
+  ended_at: string | null;
+  current_period_end: string | null;
+  payment_failed: boolean;
+  /** After a failed payment: the plan is kept until then while Paddle retries. */
+  grace_until: string | null;
+  can_change_plan: boolean;
+  can_cancel: boolean;
+  can_reactivate: boolean;
+}
+
+/** GET /api/billing/subscription/: the account's plan and subscription. */
+export interface BillingState {
+  /** The plan the account has now. */
+  plan: Plan;
+  /** No limits apply: the account needs no plan. */
+  unlimited: boolean;
+  subscription: BillingSubscription | null;
+  /** A checkout can be opened (no subscription yet, not unlimited). */
+  can_subscribe: boolean;
+  /** The account has a customer at Paddle (payment method, invoices). */
+  has_billing_profile: boolean;
+  email_missing: boolean;
+}
+
+/** POST /api/billing/checkout/: what Paddle's checkout is opened with. */
+export interface BillingCheckout {
+  plan: string;
+  price_id: string;
+  customer_id: string;
+  custom_data: Record<string, string>;
+}
+
+/** POST /api/billing/change-plan/ with `preview`: what changing the plan would cost. */
+export interface PlanChangePreview {
+  plan: Plan;
+  upgrade: boolean;
+  /** Charged now, or credited to the next invoice; null if Paddle did not say. */
+  now: { action: 'charge' | 'credit'; amount: number; currency: string } | null;
+  next_billed_at: string | null;
+}
