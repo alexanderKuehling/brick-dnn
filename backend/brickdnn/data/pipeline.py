@@ -45,12 +45,14 @@ from .checks import (
     issue,
     numbers_in_text,
     regression_target_issues,
+    relation_issues,
     row_issues,
     sort_issues,
     step_fix,
     string_feature_issues,
     target_variant_issues,
 )
+from .relations import Relations
 from .steps import REGISTRY, StepContext, StepResult, get_step
 from .table import MAX_NEW_COLUMNS, NUMERIC_KINDS, TEST, TRAIN, VAL, DataError, Table
 
@@ -653,7 +655,12 @@ def _mostly_numbers(series: pd.Series) -> dict[str, Any] | None:
 
 
 def readiness(
-    table: Table, settings: dict[str, Any], task: str | None, *, checks: bool = True
+    table: Table,
+    settings: dict[str, Any],
+    task: str | None,
+    *,
+    checks: bool = True,
+    relations: Relations | None = None,
 ) -> dict[str, Any]:
     """Can ``table`` be exported as a training dataset? See ``Readiness`` in
     ``frontend/src/api/types.ts``.
@@ -671,6 +678,8 @@ def readiness(
     ``{"code", "severity", "column", "columns", "message", "fix"}`` with ``fix`` ``{"type":
     step type, "params": {...}, "label": "Impute 3 columns (median)"}`` or None. ``checks``
     False leaves out the sanity checks (only the errors decide whether data can be exported).
+    ``relations``: the column relations (:mod:`brickdnn.data.relations`) if already computed
+    for the preview, for the check of columns without a strong partner.
     """
     target = settings.get("target") or None
     errors: list[dict[str, Any]] = []
@@ -981,6 +990,7 @@ def readiness(
                 )
             )
             warnings.extend(row_issues(table, target if has_target else None, task, len(features)))
+            warnings.extend(relation_issues(table, target if has_target else None, task, relations))
 
     # ---- rows and split
     if table.n_rows < MIN_ROWS:

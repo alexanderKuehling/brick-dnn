@@ -3,7 +3,8 @@
 Statistics come from the training rows (at most ``MAX_ROWS`` of them, a seeded random
 sample). Association with the target, depending on the column types: |Pearson r| (number vs
 number), the correlation ratio η (number vs categories) or Cramér's V (categories vs
-classes), all between 0 and 1.
+classes), all between 0 and 1. The method "no strong partner" uses the column relations of
+:mod:`brickdnn.data.relations` (the same rows and numbers as the Relationships view).
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ..relations import WEAK_LEVEL, column_relations, without_partner
 from ..table import DataError, Table
 from .base import Param, Step, StepContext, StepResult, register
 from .outliers import fmt_number, fmt_share, name_list, plural
@@ -110,11 +112,14 @@ class FeatureSelectionStep(Step):
                 ("variance", "With (almost) no variance"),
                 ("missing", "With many missing values"),
                 ("target_correlation", "With little association with the target"),
+                ("no_partner", "That correlate with no other feature (noise)"),
             ),
             help=(
                 "Of two strongly correlated features, the one less associated with the "
                 "target is dropped (without a target, the later one). Association: |Pearson "
-                "r|, the correlation ratio η or Cramér's V, from 0 (none) to 1."
+                "r|, the correlation ratio η or Cramér's V, from 0 (none) to 1. No strong "
+                "partner: number features whose strongest correlation with any other number "
+                "feature stays below a threshold; it needs no target."
             ),
         ),
         Param(
@@ -167,6 +172,33 @@ class FeatureSelectionStep(Step):
                 "Text and date columns are kept."
             ),
         ),
+        Param(
+            "min_partner",
+            "number",
+            "Min. |correlation| with the strongest partner",
+            default=WEAK_LEVEL,
+            min=0,
+            max=1,
+            step=0.01,
+            visible_if={"param": "method", "values": ["no_partner"]},
+            help=(
+                "Number and yes/no features whose strongest |correlation| with every other "
+                "number feature is below this are dropped, as are constant ones. Unrelated "
+                "columns reach about 0.1 by chance with a few hundred rows: the histogram in "
+                "Analysis → Relationships shows where the gap is. Other columns are kept."
+            ),
+        ),
+        Param(
+            "partner_method",
+            "select",
+            "Correlation",
+            default="spearman",
+            options=(
+                ("spearman", "Spearman ρ (any monotonic relation)"),
+                ("pearson", "Pearson r (linear relations)"),
+            ),
+            visible_if={"param": "method", "values": ["no_partner"]},
+        ),
     )
 
     def clean(self, table: Table, ctx: StepContext) -> dict[str, Any]:
@@ -193,6 +225,7 @@ class FeatureSelectionStep(Step):
             numeric_target = table.kinds[target] in NUMBERS
             task = (ctx.task or "regression") if numeric_target else "classification"
         dropped: dict[str, str] = {}
+        warnings: list[str] = []
         if method == "variance":
             summary_rule = f"with a variance of at most {fmt_number(params['min_variance'])}"
             none_text = f"no feature has a variance of at most {fmt_number(params['min_variance'])}"
@@ -224,6 +257,14 @@ class FeatureSelectionStep(Step):
             columns = numeric + ([target] if target else [])
             frame = _training_frame(table, columns, ctx.seed)
             dropped = _correlated(frame, table.kinds, numeric, target, task, limit)
+        elif method == "no_partner":
+            limit = params["min_partner"]
+            measure = "|ρ|" if params["partner_method"] == "spearman" else "|r|"
+            summary_rule = f"without a partner at {measure} ≥ {fmt_number(limit)}"
+            none_text = f"every number feature has a partner at {measure} ≥ {fmt_number(limit)}"
+            dropped, warning = _without_partner(table, target, params, measure)
+            if warning:
+                warnings.append(warning)
         else:
             limit = params["min_association"]
             summary_rule = f"with an association below {fmt_number(limit)} with '{target}'"
@@ -246,7 +287,7 @@ class FeatureSelectionStep(Step):
             )
         else:
             summary = f"Kept all {plural(len(features), 'feature')}: {none_text}."
-        return StepResult(table.drop(drop), summary, details, {"drop": drop})
+        return StepResult(table.drop(drop), summary, details, {"drop": drop}, warnings)
 
     def to_pandas(
         self, params: dict[str, Any], fitted: dict[str, Any] | None, ctx: StepContext
@@ -255,6 +296,31 @@ class FeatureSelectionStep(Step):
         if not drop:
             return ["# No feature dropped."]
         return [f"df = df.drop(columns={drop!r})"]
+
+
+def _without_partner(
+    table: Table, target: str | None, params: dict[str, Any], measure: str
+) -> tuple[dict[str, str], str | None]:
+    """Number features without a partner at ``min_partner`` on the training rows (all
+    columns; the rows of the Relationships view)."""
+    relations = column_relations(
+        table, target, method=params["partner_method"], cluster=False, sample_columns=False
+    )
+    if len(relations.columns) < 2:
+        return {}, "Fewer than two number features vary: there is nothing to compare."
+    dropped: dict[str, str] = {}
+    for name in without_partner(relations, params["min_partner"]):
+        if name in relations.skipped:
+            dropped[name] = "constant"
+            continue
+        i = relations.columns.index(name)
+        partner = int(relations.best[i])
+        if partner < 0:
+            dropped[name] = "no partner with enough rows"
+        else:
+            value = abs(float(relations.best_value[i]))
+            dropped[name] = f"{measure} {value:.3f} with '{relations.columns[partner]}'"
+    return dropped, None
 
 
 def _correlated(
