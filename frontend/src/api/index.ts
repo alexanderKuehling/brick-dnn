@@ -29,11 +29,13 @@ import type {
   LegalInfo,
   LegalPage,
   LegalPageName,
+  LoginResult,
   MemberRole,
   NewApiToken,
   OAuthConnection,
   OAuthDecision,
   OAuthRequest,
+  PasswordResetLink,
   PlanChangePreview,
   PrepDownloadFormat,
   PreviewRequest,
@@ -46,6 +48,7 @@ import type {
   ProjectMembers,
   ProjectVersion,
   ProjectVersionDetail,
+  RecoveryCodes,
   RunDetail,
   RunInput,
   RunPreviews,
@@ -57,6 +60,9 @@ import type {
   TrainingConfig,
   TrainingStatus,
   TuningInput,
+  TwoFactorEnabled,
+  TwoFactorSetup,
+  TwoFactorState,
   Usage,
   User,
 } from './types';
@@ -95,8 +101,36 @@ const serverApi = {
   generate: (graph: GraphDocument, options: GenerateOptions = {}) =>
     request<GenerateResult>('/api/generate/', { method: 'POST', body: { graph, options } }),
 
+  /** Tokens, or a challenge for the second step if two-factor authentication is on. */
   login: (username: string, password: string) =>
-    request<Tokens>('/api/auth/token/', { method: 'POST', body: { username, password } }),
+    request<LoginResult>('/api/auth/token/', { method: 'POST', body: { username, password } }),
+  /** The second step: a code from the authenticator app or a recovery code. */
+  loginWithCode: (challenge: string, code: string) =>
+    request<Tokens & { recovery_codes_left?: number }>('/api/auth/token/two-factor/', {
+      method: 'POST',
+      body: { challenge, code },
+    }),
+  /** Forgotten passwords: a link by e-mail (only on servers that send e-mail). */
+  passwordReset: {
+    available: () => request<{ available: boolean }>('/api/auth/password-reset/'),
+    /** `login`: username or e-mail address. The answer is the same for any account. */
+    request: (login: string) =>
+      request<{ detail: string }>('/api/auth/password-reset/', {
+        method: 'POST',
+        body: { login },
+      }),
+    /** Whether a link still works (a POST: the token stays out of access logs). */
+    check: (uid: string, token: string) =>
+      request<PasswordResetLink>('/api/auth/password-reset/check/', {
+        method: 'POST',
+        body: { uid, token },
+      }),
+    confirm: (uid: string, token: string, newPassword: string) =>
+      request<{ detail: string; username: string }>('/api/auth/password-reset/confirm/', {
+        method: 'POST',
+        body: { uid, token, new_password: newPassword },
+      }),
+  },
   /** `acceptTerms` is required when the server has terms of use (LegalInfo). */
   register: (username: string, email: string, password: string, acceptTerms = false) =>
     request<Tokens & { user: User }>('/api/auth/register/', {
@@ -117,6 +151,19 @@ const serverApi = {
       request<Tokens>('/api/auth/account/password/', {
         method: 'POST',
         body: { current_password: currentPassword, new_password: newPassword },
+        auth: true,
+      }),
+    /** Confirm the e-mail address with the token from the link in the e-mail. */
+    verifyEmail: (token: string) =>
+      request<Partial<Account>>('/api/auth/account/email/verify/', {
+        method: 'POST',
+        body: { token },
+        auth: true,
+      }),
+    /** Send the link that confirms the e-mail address again. */
+    resendVerification: () =>
+      request<{ detail: string }>('/api/auth/account/email/resend/', {
+        method: 'POST',
         auth: true,
       }),
     /** A ZIP file with everything stored about the account. */
@@ -142,6 +189,38 @@ const serverApi = {
       request<Usage>('/api/account/usage/', {
         method: 'PATCH',
         body: { overage_enabled: enabled, overage_cap_cpu_hours: capCpuHours },
+        auth: true,
+      }),
+  },
+
+  /** Two-factor authentication with an authenticator app (website login only). */
+  twoFactor: {
+    state: () => request<TwoFactorState>('/api/auth/two-factor/', { auth: true }),
+    /** A new secret for the app; shown once. */
+    setup: (password: string) =>
+      request<TwoFactorSetup>('/api/auth/two-factor/setup/', {
+        method: 'POST',
+        body: { password },
+        auth: true,
+      }),
+    /** Turn it on with a code from the app; ends every other login. */
+    enable: (code: string) =>
+      request<TwoFactorEnabled>('/api/auth/two-factor/enable/', {
+        method: 'POST',
+        body: { code },
+        auth: true,
+      }),
+    disable: (password: string, code: string) =>
+      request<TwoFactorState>('/api/auth/two-factor/disable/', {
+        method: 'POST',
+        body: { password, code },
+        auth: true,
+      }),
+    /** New recovery codes; the old ones stop working. */
+    recoveryCodes: (password: string, code: string) =>
+      request<RecoveryCodes>('/api/auth/two-factor/recovery-codes/', {
+        method: 'POST',
+        body: { password, code },
         auth: true,
       }),
   },

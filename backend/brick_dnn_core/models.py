@@ -570,9 +570,49 @@ class UserProfile(models.Model):
         validators=[MinValueValidator(0)],
         help_text="The user's own monthly budget in CPU minutes (set on the account page).",
     )
+    # E-mail (recovery.py): when and which address was verified (a link sent to it was
+    # opened by the logged-in account). It is the account's address only while they match.
+    email_verified_at = models.DateTimeField(null=True, blank=True)
+    email_verified_for = models.EmailField(max_length=254, blank=True)
+    # The address was entered before addresses were verified and has not changed since:
+    # password reset links may still go to it (see recovery.trusted_email).
+    email_legacy = models.BooleanField(
+        default=False,
+        help_text="The e-mail address dates from before addresses were verified; password "
+        "reset links may go to it while it is unverified.",
+    )
+    # The last warning that the inactive account will be deleted (retention.py).
+    deletion_warned_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"Profile of {self.user}"
+
+
+class TwoFactorAuth(models.Model):
+    """Two-factor authentication of an account with an authenticator app (two_factor.py).
+
+    The TOTP secret is stored encrypted with a key derived from the server's secret key and is
+    never shown again after the setup. The recovery codes are stored as SHA-256 hashes; each
+    works once. Until ``confirmed_at`` is set (the user typed a code), it is not switched on.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="two_factor"
+    )
+    secret = models.TextField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    # The time step (30 s) of the last accepted code: a code works only once.
+    last_used_step = models.BigIntegerField(default=0)
+    recovery_codes = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "two-factor authentication"
+        verbose_name_plural = "two-factor authentication"
+
+    def __str__(self) -> str:
+        state = "on" if self.confirmed_at else "being set up"
+        return f"Two-factor authentication of {self.user} ({state})"
 
 
 class UsageRecord(models.Model):

@@ -56,6 +56,27 @@ x-paddle: &paddle
   BRICKDNN_PADDLE_WEBHOOK_SECRET: ${BRICKDNN_PADDLE_WEBHOOK_SECRET:-}
   BRICKDNN_PADDLE_GRACE_DAYS: ${BRICKDNN_PADDLE_GRACE_DAYS:-}
 
+# E-mail (docs/email.md); unset: the app sends none. The backend sends links and notices, the
+# cleanup service the warnings before inactive accounts are deleted. The login, the password
+# and the operator's address only belong into .env; the others can also be in the settings of
+# the domain (deploy/sites/<domain>/settings.env).
+x-email: &email
+  BRICKDNN_EMAIL_HOST: ${BRICKDNN_EMAIL_HOST:-}
+  BRICKDNN_EMAIL_PORT: ${BRICKDNN_EMAIL_PORT:-}
+  BRICKDNN_EMAIL_USER: ${BRICKDNN_EMAIL_USER:-}
+  BRICKDNN_EMAIL_PASSWORD: ${BRICKDNN_EMAIL_PASSWORD:-}
+  BRICKDNN_EMAIL_USE_TLS: ${BRICKDNN_EMAIL_USE_TLS:-}
+  BRICKDNN_EMAIL_USE_SSL: ${BRICKDNN_EMAIL_USE_SSL:-}
+  BRICKDNN_EMAIL_FROM: ${BRICKDNN_EMAIL_FROM:-}
+  BRICKDNN_EMAIL_REPLY_TO: ${BRICKDNN_EMAIL_REPLY_TO:-}
+  # Server errors (HTTP 500) go to this address, at most one e-mail per kind of error an hour.
+  BRICKDNN_ADMIN_EMAIL: ${BRICKDNN_ADMIN_EMAIL:-}
+  # Days before the deletion of an inactive account its owner is warned (empty: 14,3).
+  BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS: ${BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS:-}
+  # The public address for links in e-mails, e.g. https://brickdnn.com (empty: from each
+  # request; the cleanup service has none).
+  BRICKDNN_PUBLIC_URL: ${BRICKDNN_PUBLIC_URL:-}
+
 services:
   backend:
     build:
@@ -69,7 +90,9 @@ services:
     # worker) whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: [*retention, *budgets, *paddle, *training]
+      <<: [*retention, *budgets, *paddle, *training, *email]
+      # Staff accounts need two-factor authentication for the Django admin (docs/email.md).
+      BRICKDNN_REQUIRE_2FA_FOR_STAFF: ${BRICKDNN_REQUIRE_2FA_FOR_STAFF:-}
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -159,7 +182,8 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # Once a day: deletes old data if BRICKDNN_DELETE_* is set, and expired logins; with paid
+  # Once a day: deletes old data if BRICKDNN_DELETE_* is set (with e-mail, after warning the
+  # owners of inactive accounts), and expired logins; with paid
   # plans (docs/billing.md) it also checks the subscriptions and bills overage. The same
   # image; it sleeps most of the time. The first run is ten minutes after a start (the backend
   # migrates the database first). `docker compose logs cleanup` shows what it did.
@@ -173,7 +197,7 @@ services:
       - -c
       - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; sleep 86400; done"
     environment:
-      <<: [*retention, *budgets, *paddle]
+      <<: [*retention, *budgets, *paddle, *email]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:

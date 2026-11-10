@@ -28,7 +28,9 @@ def env_list(name: str, default: str = "") -> list[str]:
 
 
 # Secrets are never read from the site settings file: it is in the public repository.
-SITE_ENV_SECRETS = frozenset({"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET"})
+SITE_ENV_SECRETS = frozenset(
+    {"BRICKDNN_PADDLE_API_KEY", "BRICKDNN_PADDLE_WEBHOOK_SECRET", "BRICKDNN_EMAIL_PASSWORD"}
+)
 
 
 def load_site_settings(environ=os.environ) -> None:
@@ -92,7 +94,8 @@ CORS_ALLOWED_ORIGINS = env_list(
 INSTALLED_APPS = [
     # First: `manage.py runserver` then also serves WebSockets (live editing).
     "daphne",
-    "django.contrib.admin",
+    # The Django admin, whose login asks for the two-factor code (brick_dnn_core.admin_site).
+    "brick_dnn_core.admin_apps.AdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -352,6 +355,14 @@ REST_FRAMEWORK = {
         # Paddle's notifications (per IP address: Paddle sends them from a few servers, and
         # several per payment).
         "billing_webhook": os.environ.get("BRICKDNN_BILLING_WEBHOOK_RATE", "600/minute"),
+        # Asking for a password reset link (per IP address; each account also gets at most
+        # a few links an hour, see recovery.py).
+        "password_reset": os.environ.get("BRICKDNN_PASSWORD_RESET_RATE", "10/hour"),
+        # Sending the link that verifies the e-mail address again (per account).
+        "email_verify": os.environ.get("BRICKDNN_EMAIL_VERIFY_RATE", "5/hour"),
+        # The second step of a login with two-factor authentication (per IP address; wrong
+        # codes are also limited per account, see two_factor.py).
+        "two_factor": os.environ.get("BRICKDNN_TWO_FACTOR_RATE", "30/hour"),
     },
 }
 
@@ -372,6 +383,67 @@ ALLOW_REGISTRATION = env_bool("BRICKDNN_ALLOW_REGISTRATION", True)
 # Usernames of accounts that are administrators (staff and superuser): they get the rights
 # when the backend starts, and nobody can register these names (see site_admins.py).
 ADMIN_USERS = env_list("BRICKDNN_ADMIN_USERS")
+# The name of the site in e-mails (with the domain of BRICKDNN_PUBLIC_URL).
+SITE_NAME = os.environ.get("BRICKDNN_SITE_NAME", "").strip() or "Brick DNN"
+
+# E-mail (brick_dnn_core.mail, docs/email.md): password reset links, verifying addresses,
+# security notices, warnings before inactive accounts are deleted, and server errors for the
+# operator. Off unless BRICKDNN_EMAIL_HOST is set: then nothing is sent and what needs e-mail
+# says so (e.g. "Password reset is not available on this server"). Any SMTP provider works.
+#   BRICKDNN_EMAIL_HOST, _PORT    the SMTP server, e.g. smtp-relay.brevo.com and 587
+#   BRICKDNN_EMAIL_USER           its login
+#   BRICKDNN_EMAIL_PASSWORD       SECRET: its password or key (only in the environment)
+#   BRICKDNN_EMAIL_USE_TLS/_SSL   STARTTLS (default, port 587) or TLS from the start (465)
+#   BRICKDNN_EMAIL_FROM           the sender, e.g. Brick DNN <no-reply@brickdnn.com>
+#   BRICKDNN_EMAIL_REPLY_TO       where answers go (optional)
+# BRICKDNN_EMAIL_BACKEND=console (to the log) or file (BRICKDNN_EMAIL_FILE_PATH) is for trying
+# it out without a provider: e-mail then counts as working.
+EMAIL_HOST = os.environ.get("BRICKDNN_EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.environ.get("BRICKDNN_EMAIL_PORT") or 587)
+EMAIL_HOST_USER = os.environ.get("BRICKDNN_EMAIL_USER", "").strip()
+EMAIL_HOST_PASSWORD = os.environ.get("BRICKDNN_EMAIL_PASSWORD", "").strip()
+# Docker Compose passes unset variables as empty strings: those keep the default.
+EMAIL_USE_SSL = (
+    env_bool("BRICKDNN_EMAIL_USE_SSL", EMAIL_PORT == 465)
+    if os.environ.get("BRICKDNN_EMAIL_USE_SSL", "").strip()
+    else EMAIL_PORT == 465
+)
+EMAIL_USE_TLS = not EMAIL_USE_SSL and (
+    env_bool("BRICKDNN_EMAIL_USE_TLS")
+    if os.environ.get("BRICKDNN_EMAIL_USE_TLS", "").strip()
+    else True
+)
+# Seconds to wait for the SMTP server.
+EMAIL_TIMEOUT = int(os.environ.get("BRICKDNN_EMAIL_TIMEOUT") or 10)
+_EMAIL_BACKENDS = {
+    "smtp": "django.core.mail.backends.smtp.EmailBackend",
+    "console": "django.core.mail.backends.console.EmailBackend",
+    "file": "django.core.mail.backends.filebased.EmailBackend",
+}
+_email_backend = os.environ.get("BRICKDNN_EMAIL_BACKEND", "").strip().lower() or "smtp"
+if _email_backend not in _EMAIL_BACKENDS:
+    raise ImproperlyConfigured("BRICKDNN_EMAIL_BACKEND must be smtp, console or file.")
+EMAIL_BACKEND = _EMAIL_BACKENDS[_email_backend]
+EMAIL_FILE_PATH = os.environ.get("BRICKDNN_EMAIL_FILE_PATH", "").strip() or str(DATA_DIR / "emails")
+# Whether this server sends e-mail at all.
+EMAIL_ENABLED = bool(EMAIL_HOST) if _email_backend == "smtp" else True
+DEFAULT_FROM_EMAIL = os.environ.get("BRICKDNN_EMAIL_FROM", "").strip() or (
+    f"{SITE_NAME} <no-reply@localhost>"
+)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+EMAIL_REPLY_TO = env_list("BRICKDNN_EMAIL_REPLY_TO")
+EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
+# E-mails are handed to the SMTP server in a background thread, so that no request waits for
+# it (and the answer to "forgot password" takes as long for any address). false: right away.
+EMAIL_IN_BACKGROUND = env_bool("BRICKDNN_EMAIL_BACKGROUND", True)
+# Unhandled server errors (HTTP 500) are mailed to these addresses (comma-separated), at most
+# one e-mail per kind of error an hour (brick_dnn_core.error_mails).
+ADMINS = [("Operator", address) for address in env_list("BRICKDNN_ADMIN_EMAIL")]
+# Password reset links are valid this long (and only once).
+PASSWORD_RESET_TIMEOUT = 3600
+# Two-factor authentication (brick_dnn_core.two_factor): true lets staff accounts into the Django
+# admin only once they have set it up. Turn it on in the account, then set this.
+REQUIRE_2FA_FOR_STAFF = env_bool("BRICKDNN_REQUIRE_2FA_FOR_STAFF", False)
 
 # Privacy and legal pages (see docs/privacy.md). The imprint, privacy policy and terms of use
 # are Markdown files in LEGAL_DIR (imprint.md, privacy.md, terms.md), read on every request:
@@ -384,6 +456,12 @@ DELETE_UNUSED_UPLOADS_DAYS = int(os.environ.get("BRICKDNN_DELETE_UNUSED_UPLOADS_
 # Accounts (with everything they own) that nobody has logged in to or used for this many days.
 # Staff accounts are never deleted automatically.
 DELETE_INACTIVE_ACCOUNTS_DAYS = int(os.environ.get("BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS") or 0)
+# With e-mail, accounts are warned this many days before (comma-separated), and an account with
+# an e-mail address is only deleted once it was warned (see retention.py).
+INACTIVE_ACCOUNT_WARNING_DAYS = sorted(
+    {int(days) for days in env_list("BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS", "14,3")} - {0},
+    reverse=True,
+)
 # The data export of an account includes uploaded files up to this many MB in total; larger
 # files are listed only.
 EXPORT_MAX_FILES_MB = float(os.environ.get("BRICKDNN_EXPORT_MAX_FILES_MB", "200"))
@@ -433,6 +511,19 @@ if not DEBUG:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        # Server errors to ADMINS, if e-mail is set up (and at most one per kind an hour).
+        "mail_admins": {
+            "class": "brick_dnn_core.error_mails.ThrottledAdminEmailHandler",
+            "level": "ERROR",
+        },
+    },
+    "loggers": {
+        # Instead of Django's own handlers (its unthrottled mail_admins among them); messages
+        # still reach the console through the root logger.
+        "django": {"handlers": [], "level": "INFO"},
+        "django.request": {"handlers": ["mail_admins"]},
+    },
     "root": {"handlers": ["console"], "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO")},
 }
