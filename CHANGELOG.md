@@ -27,6 +27,13 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Kernel hyperparameters at a bound.** After a Gaussian process fit, Brick DNN finds the
+  optimised kernel hyperparameters that ended at one of their bounds (scikit-learn only logs a
+  `ConvergenceWarning`) and stores them in `state.classical.at_bounds` with the brick, the
+  side and a suggested change. The run's results say what it may mean ("Noise level of
+  white_1 ended at its lower bound 1e-05: the model may be overfitting; set custom bounds,
+  e.g. ≥ 0.001"), and a button sets the suggested custom bounds on the brick in the builder,
+  with *Undo*. The MCP tool `get_training_run` includes the messages in its summary.
 - **Backups: `manage.py backup` and `manage.py restore`.** A backup is a folder with the
   database as of one moment (Django's `dumpdata` in one transaction, which loads into any
   PostgreSQL or SQLite; `pg_dump` where installed; SQLite's online backup), the files of the

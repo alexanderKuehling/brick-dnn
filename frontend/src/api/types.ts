@@ -1216,6 +1216,29 @@ export interface ClassicalRunState {
   support_vectors: number | null;
   /** The metrics on the training rows. */
   train: ClassicalMetrics | null;
+  /** Gaussian processes: kernel hyperparameters the fit left at a bound (older servers: none). */
+  at_bounds?: KernelBound[] | null;
+}
+
+/** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */
+export interface KernelBound {
+  /** The kernel brick (null: the default kernel of a Gaussian process without kernel bricks). */
+  node: string | null;
+  /** Its name in the network, e.g. "white_1". */
+  name: string;
+  type: string;
+  /** E.g. "noise_level", with its label "Noise level". */
+  parameter: string;
+  label: string;
+  value: number;
+  bound: number;
+  side: 'lower' | 'upper';
+  /** Classifiers with one kernel per class: the classes whose kernel hit the bound. */
+  classes: string[] | null;
+  /** New parameters for the brick: custom bounds that move this bound. */
+  suggestion: Params | null;
+  /** "Noise level of white_1 ended at its lower bound 1e-05: the model may be overfitting; …" */
+  message: string;
 }
 
 export interface RunDetail extends RunSummary {

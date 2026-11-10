@@ -41,6 +41,7 @@ import {
   type GenerateOptions,
   type GraphDocument,
   type LayerSpec,
+  type Params,
   type Project,
   type ProjectConflict,
 } from '@/api';
@@ -568,6 +569,18 @@ function Builder() {
     [setNodes]
   );
 
+  const patchParams = useCallback(
+    (id: string, type: string, patch: Params): Params | null => {
+      const node = nodes.find((n) => n.id === id && n.data.type === type);
+      if (!node || readOnly) {
+        return null;
+      }
+      updateNode(id, { params: { ...node.data.params, ...patch } });
+      return node.data.params;
+    },
+    [nodes, readOnly, updateNode]
+  );
+
   const deleteNode = useCallback(
     (id: string) => {
       setNodes((current) => current.filter((node) => node.id !== id));
@@ -978,6 +991,7 @@ function Builder() {
       warningsByNode: groupIssues(analysis?.warnings),
       readOnly,
       updateNode,
+      patchParams,
       deleteNode,
       duplicateNode,
       focusNode,
@@ -989,6 +1003,7 @@ function Builder() {
       analysis,
       readOnly,
       updateNode,
+      patchParams,
       deleteNode,
       duplicateNode,
       focusNode,
