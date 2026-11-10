@@ -6,6 +6,7 @@
  */
 import type {
   ColumnProfile,
+  ColumnRelations,
   DataPrep,
   DataProfile,
   DataSample,
@@ -1085,4 +1086,45 @@ export const PREVIEW: PreviewResult = {
   readiness: READINESS,
   warnings: [],
   duration_ms: 42,
+};
+
+/** Column relations: three related columns (a, b, c) and two noise columns. */
+export const RELATIONS: ColumnRelations = {
+  method: 'spearman',
+  columns: ['a', 'b', 'c', 'noise1', 'noise2'],
+  skipped: ['flat'],
+  total: 6,
+  rows: 840,
+  pool_rows: 840,
+  training_rows: true,
+  sampled_columns: false,
+  best: [1, 0, 0, 2, 0],
+  best_rho: [0.9, 0.9, -0.6, 0.05, 0.08],
+  best_r: [0.88, 0.88, -0.5, 0.04, 0.07],
+  partners: [2, 1, 1, 0, 0],
+  partner_level: 0.3,
+  top: [[1, 2], [0], [0], [2], [0]],
+  top_rho: [[0.9, -0.6], [0.9], [-0.6], [0.05], [0.08]],
+  histogram: {
+    edges: Array.from({ length: 51 }, (_, i) => i / 50),
+    counts: Array.from({ length: 50 }, (_, i) =>
+      i === 2 || i === 4 ? 1 : i === 30 || i === 45 ? 1 : 0
+    ),
+  },
+  weak_level: 0.15,
+  suggested_level: 0.15,
+  chance: 0.09,
+  chance_high: 0.14,
+  order: [3, 0, 1, 2, 4],
+  groups: [0, 0, 0, -1, -1],
+  overview: {
+    starts: [0, 1, 2, 3, 4],
+    values: [
+      [null, 0.1, 0.1, 0.1, 0.05],
+      [0.1, null, 0.9, 0.6, 0.1],
+      [0.1, 0.9, null, 0.5, 0.1],
+      [0.1, 0.6, 0.5, null, 0.1],
+      [0.05, 0.1, 0.1, 0.1, null],
+    ],
+  },
 };

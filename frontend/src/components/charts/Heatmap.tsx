@@ -2,7 +2,14 @@ import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { ChartFrame, ChartTooltip, GradientLegend, TooltipRow } from './ChartFrame';
-import { divergingColor, textOn, TRACK, useChartScheme } from './colors';
+import {
+  divergingColor,
+  SEQUENTIAL,
+  sequentialColor,
+  textOn,
+  TRACK,
+  useChartScheme,
+} from './colors';
 import { formatCoefficient } from './format';
 import { textWidth, truncate } from './marks';
 import { useChartCursor } from './useChartCursor';
@@ -23,6 +30,13 @@ export interface HeatmapProps {
   /** What a click does, for the keyboard hint (e.g. "open the scatter plot"). */
   clickHint?: string;
   width?: number;
+  /**
+   * diverging (default): values in [-1, 1], −1 red, 0 gray, +1 blue. sequential: values in
+   * [0, 1] (e.g. |ρ|) on a one-hue ramp.
+   */
+  scale?: 'diverging' | 'sequential';
+  /** Format of the values in cells, tooltips and the table (default: coefficients). */
+  format?: (value: number) => string;
 }
 
 const MAX_CELL = 44;
@@ -63,6 +77,8 @@ export function Heatmap({
   onCellClick,
   clickHint,
   width: fixedWidth,
+  scale = 'diverging',
+  format = formatCoefficient,
 }: HeatmapProps) {
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
@@ -98,7 +114,7 @@ export function Heatmap({
   const valueAt = (r: number, c: number) => values[r]?.[c] ?? null;
   const cellText = (r: number, c: number) => {
     const value = valueAt(r, c);
-    return `${rows[r]} × ${columns[c]}: ${measure} ${value === null ? 'not defined' : formatCoefficient(value)}`;
+    return `${rows[r]} × ${columns[c]}: ${measure} ${value === null ? 'not defined' : format(value)}`;
   };
   const top3 = strongestPairs(rows, values, 3)
     .map((p) => `${rows[p.a]} and ${rows[p.b]} (${formatCoefficient(p.value)})`)
@@ -119,21 +135,32 @@ export function Heatmap({
       caption={caption}
       controls={controls}
       legendExtra={
-        <GradientLegend
-          label="Colour scale: −1 red, 0 gray, +1 blue"
-          stops={[
-            'var(--chart-diverging-negative)',
-            'var(--chart-diverging-midpoint)',
-            'var(--chart-diverging-positive)',
-          ]}
-          labels={['−1', '0', '+1']}
-        />
+        scale === 'sequential' ? (
+          <GradientLegend
+            label="Colour scale: 0 light, 1 dark"
+            stops={[SEQUENTIAL[scheme].fillLow, SEQUENTIAL[scheme].high]}
+            labels={['0', '1']}
+          />
+        ) : (
+          <GradientLegend
+            label="Colour scale: −1 red, 0 gray, +1 blue"
+            stops={[
+              'var(--chart-diverging-negative)',
+              'var(--chart-diverging-midpoint)',
+              'var(--chart-diverging-positive)',
+            ]}
+            labels={['−1', '0', '+1']}
+          />
+        )
       }
       table={() => ({
         head: ['', ...columns],
         rows: rows.map((row, r) => [
           row,
-          ...columns.map((_, c) => formatCoefficient(valueAt(r, c))),
+          ...columns.map((_, c) => {
+            const value = valueAt(r, c);
+            return value === null ? '–' : format(value);
+          }),
         ]),
       })}
     >
@@ -176,7 +203,12 @@ export function Heatmap({
             {rows.map((_, r) =>
               columns.map((__, c) => {
                 const value = valueAt(r, c);
-                const fill = value === null ? TRACK[scheme] : divergingColor(value, scheme);
+                const fill =
+                  value === null
+                    ? TRACK[scheme]
+                    : scale === 'sequential'
+                      ? sequentialColor(value, scheme, true)
+                      : divergingColor(value, scheme);
                 const x = left + c * cell + gap / 2;
                 const y = top + r * cell + gap / 2;
                 const size = Math.max(1, cell - gap);
@@ -200,7 +232,7 @@ export function Heatmap({
                         fill={value === null ? 'var(--mantine-color-dimmed)' : textOn(fill)}
                         style={{ fontVariantNumeric: 'tabular-nums' }}
                       >
-                        {value === null ? '–' : formatCoefficient(value)}
+                        {value === null ? '–' : format(value)}
                       </text>
                     )}
                   </g>
@@ -256,7 +288,7 @@ export function Heatmap({
             <TooltipRow
               value={(() => {
                 const value = valueAt(activeRow, activeColumn);
-                return value === null ? 'not defined' : formatCoefficient(value);
+                return value === null ? 'not defined' : format(value);
               })()}
               label={measure}
             />

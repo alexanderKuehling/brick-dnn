@@ -1,18 +1,10 @@
-import { useMemo, useState } from 'react';
-import { IconSearch } from '@tabler/icons-react';
-import {
-  Badge,
-  Group,
-  SegmentedControl,
-  Stack,
-  Text,
-  TextInput,
-  UnstyledButton,
-} from '@mantine/core';
-import type { DataProfile } from '@/api/types';
+import { useMemo, type ReactNode } from 'react';
+import { Badge, Group, SegmentedControl, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
+import type { DataProfile, DataSample } from '@/api/types';
 import { divergingColor, useChartScheme } from '@/components/charts/colors';
-import { formatCoefficient } from '@/components/charts/format';
+import { formatCoefficient, formatCount } from '@/components/charts/format';
 import { Heatmap, strongestPairs } from '@/components/charts/Heatmap';
+import { clusterOrder, sampleMatrix } from './relations';
 import { analysisNote } from './sampleData';
 import { Note } from './shared';
 import classes from './AnalysisPanel.module.css';
@@ -21,10 +13,20 @@ export type CorrelationMethod = 'pearson' | 'spearman';
 
 export interface CorrelationsViewProps {
   profile: DataProfile;
+  sample: DataSample;
   method: CorrelationMethod;
   onMethodChange: (method: CorrelationMethod) => void;
   /** Open the scatter plot of two columns. */
   onScatter: (x: string, y: string) => void;
+  /** The columns to show (null: those of the profile's correlation matrices). */
+  columns?: string[] | null;
+  /** Number and yes/no columns in all, for "showing N of M". */
+  total?: number;
+  /** Order related columns next to each other (hierarchical clustering). */
+  clustered: boolean;
+  onClusteredChange: (clustered: boolean) => void;
+  /** Controls choosing the columns, shown above the heatmap. */
+  chooser?: ReactNode;
 }
 
 const METHOD_LABELS: Record<CorrelationMethod, string> = {
@@ -32,102 +34,128 @@ const METHOD_LABELS: Record<CorrelationMethod, string> = {
   spearman: 'Spearman',
 };
 
-/** Correlation heatmap (Pearson or Spearman) and the strongest pairs; a click opens the scatter plot. */
+interface ShownMatrix {
+  columns: string[];
+  values: (number | null)[][];
+  /** Where the values come from, for the note. */
+  basis: string;
+}
+
+/**
+ * The correlation heatmap of chosen columns (Pearson or Spearman) and their strongest pairs;
+ * a click opens the scatter plot. Columns of the profile's matrices use those (all analysis
+ * rows); other choices are computed from the training rows of the preview sample.
+ */
 export function CorrelationsView({
   profile,
+  sample,
   method,
   onMethodChange,
   onScatter,
+  columns = null,
+  total,
+  clustered,
+  onClusteredChange,
+  chooser,
 }: CorrelationsViewProps) {
   const scheme = useChartScheme();
-  const [query, setQuery] = useState('');
-  const available = profile.correlations.map((c) => c.method);
-  const matrix =
-    profile.correlations.find((c) => c.method === method) ?? profile.correlations[0] ?? null;
+  const server = profile.correlations.find((c) => c.method === method) ?? null;
 
-  const filtered = useMemo(() => {
-    if (!matrix) {
+  const shown = useMemo((): ShownMatrix | null => {
+    const wanted = columns ?? server?.columns ?? [];
+    if (wanted.length < 2) {
       return null;
     }
-    const q = query.trim().toLowerCase();
-    const keep = matrix.columns
-      .map((name, i) => ({ name, i }))
-      .filter(({ name }) => !q || name.toLowerCase().includes(q));
+    let matrix: ShownMatrix;
+    const index = new Map((server?.columns ?? []).map((name, i) => [name, i]));
+    if (server && wanted.every((name) => index.has(name))) {
+      const at = wanted.map((name) => index.get(name)!);
+      matrix = {
+        columns: wanted,
+        values: at.map((i) => at.map((j) => server.matrix[i]?.[j] ?? null)),
+        basis: analysisNote(profile),
+      };
+    } else {
+      const computed = sampleMatrix(sample, wanted, method);
+      matrix = {
+        columns: wanted,
+        values: computed.values,
+        basis: `Computed on the ${formatCount(computed.rows)} ${computed.trainingRows ? 'training rows' : 'rows'} of the preview sample.`,
+      };
+    }
+    if (!clustered || matrix.columns.length < 3) {
+      return matrix;
+    }
+    const order = clusterOrder(matrix.values);
     return {
-      columns: keep.map((k) => k.name),
-      values: keep.map(({ i }) => keep.map(({ i: j }) => matrix.matrix[i]?.[j] ?? null)),
+      ...matrix,
+      columns: order.map((i) => matrix.columns[i]),
+      values: order.map((i) => order.map((j) => matrix.values[i][j])),
     };
-  }, [matrix, query]);
+  }, [columns, server, sample, method, clustered, profile]);
+
   const pairs = useMemo(
-    () => (matrix ? strongestPairs(matrix.columns, matrix.matrix, 10) : []),
-    [matrix]
+    () => (shown ? strongestPairs(shown.columns, shown.values, 10) : []),
+    [shown]
   );
 
-  if (!matrix || matrix.columns.length < 2 || !filtered) {
-    return (
-      <Text size="sm" c="dimmed">
-        Correlations need at least two number or yes/no columns.
-      </Text>
-    );
-  }
-  const label = METHOD_LABELS[matrix.method];
-  const measure = matrix.method === 'pearson' ? 'Pearson r' : 'Spearman ρ';
+  const measure = method === 'pearson' ? 'Pearson r' : 'Spearman ρ';
+  const all = total ?? server?.columns.length ?? shown?.columns.length ?? 0;
 
   return (
     <Stack gap="md">
-      <Group gap="sm" wrap="wrap">
-        {available.length > 1 && (
-          <SegmentedControl
-            size="xs"
-            aria-label="Correlation method"
-            value={matrix.method}
-            onChange={(value) => onMethodChange(value as CorrelationMethod)}
-            data={available.map((m) => ({ value: m, label: METHOD_LABELS[m] }))}
-          />
-        )}
-        {matrix.columns.length > 8 && (
-          <TextInput
-            size="xs"
-            placeholder="Filter columns"
-            aria-label="Filter the heatmap columns"
-            leftSection={<IconSearch size={14} />}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            style={{ flex: '0 1 220px' }}
-          />
-        )}
+      <Group gap="sm" wrap="wrap" align="flex-end">
+        <SegmentedControl
+          size="xs"
+          aria-label="Correlation method"
+          value={method}
+          onChange={(value) => onMethodChange(value as CorrelationMethod)}
+          data={(['pearson', 'spearman'] as const).map((m) => ({
+            value: m,
+            label: METHOD_LABELS[m],
+          }))}
+        />
+        <Switch
+          size="xs"
+          label="Group related columns"
+          checked={clustered}
+          onChange={(event) => onClusteredChange(event.currentTarget.checked)}
+        />
+        {chooser}
       </Group>
 
-      {filtered.columns.length > 0 ? (
+      {shown ? (
         <Heatmap
-          title={`${label} correlation`}
-          subtitle={`${filtered.columns.length} number and yes/no columns. ${analysisNote(profile)}`}
-          rows={filtered.columns}
-          columns={filtered.columns}
-          values={filtered.values}
+          title={`${METHOD_LABELS[method]} correlation`}
+          subtitle={`Showing ${formatCount(shown.columns.length)} of ${formatCount(all)} number and yes/no columns${clustered ? ', related ones next to each other' : ''}. ${shown.basis}`}
+          rows={shown.columns}
+          columns={shown.columns}
+          values={shown.values}
           measure={measure}
           onCellClick={(r, c) => {
             if (r !== c) {
-              onScatter(filtered.columns[c], filtered.columns[r]);
+              onScatter(shown.columns[c], shown.columns[r]);
             }
           }}
           clickHint="open the scatter plot"
         />
       ) : (
         <Text size="sm" c="dimmed">
-          No column matches the filter.
+          {columns
+            ? 'Choose at least two columns.'
+            : 'Correlations need at least two number or yes/no columns.'}
         </Text>
       )}
 
-      {pairs.length > 0 && (
+      {pairs.length > 0 && shown && (
         <Stack gap={4}>
           <Text size="sm" fw={600}>
             Strongest pairs
           </Text>
           <ul className={classes.pairList}>
             {pairs.map((p) => {
-              const a = matrix.columns[p.a];
-              const b = matrix.columns[p.b];
+              const a = shown.columns[p.a];
+              const b = shown.columns[p.b];
               const size = Math.abs(p.value);
               return (
                 <li key={`${a}|${b}`}>
@@ -165,7 +193,7 @@ export function CorrelationsView({
       )}
 
       <Note>
-        {matrix.method === 'pearson'
+        {method === 'pearson'
           ? 'Pearson r measures linear relations (sensitive to outliers).'
           : 'Spearman ρ is the correlation of ranks: it finds any monotonic relation and is robust to outliers.'}{' '}
         −1 = perfectly opposite, 0 = no relation, +1 = perfectly together. Constant columns have no

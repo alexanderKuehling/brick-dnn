@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@test-utils';
 import type { ColumnProfile, DataProfile, DataSample } from '@/api/types';
-import { PROFILE, SAMPLE } from '@/data/fixtures';
+import { PROFILE, RELATIONS, SAMPLE } from '@/data/fixtures';
 import { AnalysisPanel, type AnalysisPanelProps } from './AnalysisPanel';
 
 beforeAll(() => {
@@ -177,14 +177,28 @@ describe('AnalysisPanel', () => {
 
   it('shows correlations; a pair opens the scatter plot', () => {
     setup({ view: undefined });
-    openView('Correlations');
+    openView('Relationships');
+    expect(screen.getByText('Spearman correlation')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Pearson' }));
     expect(screen.getByText('Pearson correlation')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: 'Spearman' }));
-    expect(screen.getByText('Spearman correlation')).toBeInTheDocument();
-    const pair = screen.getByRole('button', { name: /age and income: Spearman ρ 0\.51/ });
+    const pair = screen.getByRole('button', {
+      name: /(age and income|income and age): Spearman ρ 0\.51/,
+    });
     fireEvent.click(pair);
-    expect(screen.getByText('income vs age')).toBeInTheDocument();
+    expect(screen.getByText(/^(income vs age|age vs income)$/)).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Scatter' })).toBeChecked();
+  });
+
+  it('explores the relationships of the columns and acts on them', () => {
+    const { onAddStep } = setup({ profile: { ...PROFILE, relations: RELATIONS } });
+    openView('Relationships');
+    expect(screen.getByText('Strongest partner of each column')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Drop the 2 without a partner' }));
+    expect(onAddStep).toHaveBeenCalledWith({
+      type: 'feature_selection',
+      params: { method: 'no_partner', min_partner: 0.15, partner_method: 'spearman' },
+    });
   });
 
   it('plots two columns of the sample against each other', () => {
