@@ -1,7 +1,10 @@
 # Additions for a public server: Caddy in front of the app, with HTTPS from Let's Encrypt.
 #   docker compose -f docker-compose.yml -f deploy/server/compose.yml up -d --build
 # Settings come from .env next to docker-compose.yml (written by setup.sh), see README.md.
-# The BRICKDNN_BACKEND_* limits are written there by every deploy (deploy.sh).
+# Every deploy writes the limits of the containers there (deploy.sh): BRICKDNN_BACKEND_* (three
+# quarters of the server, which the worker's CPUs and threads default to) and, with the
+# deploy.sh of this version, BRICKDNN_WEB_* and BRICKDNN_WORKER_*. Without the latter the fixed
+# defaults below apply, which fit a server with 2 CPUs and 4 GB.
 
 # At most 3 × 10 MB of logs per container (Caddy's own; the others are in docker-compose.yml).
 x-logging: &logging
@@ -16,8 +19,9 @@ services:
       # Caddy and nginx are in front of Django (for the client address in rate limits).
       BRICKDNN_NUM_PROXIES: 2
       DJANGO_SECURE_COOKIES: "true"
-      # PyTorch and NumPy: one thread per whole CPU of the backend, not one per CPU of the server.
-      OMP_NUM_THREADS: ${BRICKDNN_BACKEND_THREADS:?see deploy/server/README.md}
+      # NumPy (data preparation) and PyTorch (predictions): not one thread per CPU of the
+      # server. The same number as the worker's, so both count unreported CPU time alike.
+      OMP_NUM_THREADS: ${BRICKDNN_WORKER_THREADS:-${BRICKDNN_BACKEND_THREADS:?see deploy/server/README.md}}
       # Imprint, privacy policy and terms of use (deploy/legal/): Markdown files in
       # /srv/brick-dnn/legal on the server (setup.sh creates the folder), else the ones of this
       # domain in the repository, deploy/sites/<BRICKDNN_DOMAIN>/legal/ (deployed with the code).
@@ -27,12 +31,32 @@ services:
     volumes:
       - /srv/brick-dnn/legal:/legal:ro
       - ./deploy/sites:/sites:ro
-    # Django with all its trainings gets at most three quarters of the CPUs and the memory,
-    # the rest stays free for Caddy and nginx: the site answers while a training runs.
-    # No swap: a training that needs more memory is stopped instead of slowing everything down.
-    cpus: ${BRICKDNN_BACKEND_CPUS:?see deploy/server/README.md}
-    mem_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
-    memswap_limit: ${BRICKDNN_BACKEND_MEMORY:?see deploy/server/README.md}
+    # Django trains nothing itself any more (the worker does): it serves the API, prepares
+    # data and runs predictions (a short process each, with PyTorch). A CPU and a gigabyte of
+    # its own, and more CPU time than the worker when both want it: the site answers while
+    # trainings run. No swap: what needs more memory is stopped instead of slowing everything
+    # down.
+    cpus: ${BRICKDNN_WEB_CPUS:-1.0}
+    cpu_shares: 2048
+    mem_limit: ${BRICKDNN_WEB_MEMORY:-1024m}
+    memswap_limit: ${BRICKDNN_WEB_MEMORY:-1024m}
+
+  # The trainings: at most three quarters of the CPUs (as the backend had when it trained
+  # itself) and a fixed share of the memory, so they cannot take what the site needs. It gets
+  # the CPU last when the server is busy, and a training that needs more memory than the
+  # worker has is stopped by the kernel (the run fails; the worker goes on).
+  worker:
+    environment:
+      # PyTorch and NumPy: one thread per whole CPU of the worker.
+      OMP_NUM_THREADS: ${BRICKDNN_WORKER_THREADS:-${BRICKDNN_BACKEND_THREADS:?see deploy/server/README.md}}
+      # The plans of this domain (deploy/sites/README.md): the worker checks budgets too.
+      BRICKDNN_SITE_ENV: /sites/${BRICKDNN_DOMAIN:-none}/settings.env
+    volumes:
+      - ./deploy/sites:/sites:ro
+    cpus: ${BRICKDNN_WORKER_CPUS:-${BRICKDNN_BACKEND_CPUS:?see deploy/server/README.md}}
+    cpu_shares: 512
+    mem_limit: ${BRICKDNN_WORKER_MEMORY:-1792m}
+    memswap_limit: ${BRICKDNN_WORKER_MEMORY:-1792m}
 
   # Live editing only passes small messages on: little CPU and memory.
   realtime:
