@@ -16,7 +16,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
-from . import approvals, downloads, shared_data
+from . import approvals, downloads, notices, recovery, shared_data
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
@@ -100,6 +100,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        recovery.after_signup(user, request)  # a link to confirm the e-mail address
         return Response(
             {"user": UserSerializer(user).data, **tokens_for(user)},
             status=status.HTTP_201_CREATED,
@@ -155,6 +156,7 @@ class ApiTokenViewSet(
         token, key = create_token(request.user, **serializer.validated_data)
         # What it may do without asking: the account's default (approvals.py).
         approvals.adopt_default(request.user, token=token)
+        notices.api_token_created(request.user, token.name, request)
         return Response(
             {**ApiTokenSerializer(token).data, "token": key}, status=status.HTTP_201_CREATED
         )

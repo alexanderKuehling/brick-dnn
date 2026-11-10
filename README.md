@@ -86,7 +86,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and
-  delete unused data automatically ([docs/privacy.md](docs/privacy.md)).
+  delete unused data automatically ([docs/privacy.md](docs/privacy.md)). Optional two-factor
+  login with an authenticator app, and with an e-mail provider password reset, confirmed
+  addresses and security notices ([docs/email.md](docs/email.md)).
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
 - Dark mode, keyboard shortcuts, works on tablets and phones.
@@ -362,7 +364,14 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
 | `BRICKDNN_GPC_MAX_ROWS`        | `2000`                     | Training rows a Gaussian process classifier is fitted on at most |
 | `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
-| `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
+| `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
+| `BRICKDNN_EMAIL_HOST` / `_PORT` | – (no e-mail) / `587`     | SMTP server of an e-mail provider: password reset, confirming addresses, notices ([docs/email.md](docs/email.md)) |
+| `BRICKDNN_EMAIL_USER` / `_PASSWORD` | –                     | SMTP login and password (secret; only in `.env`)     |
+| `BRICKDNN_EMAIL_FROM` / `_REPLY_TO` | `Brick DNN <no-reply@localhost>` / – | Sender of the e-mails, e.g. `Brick DNN <no-reply@brickdnn.com>` |
+| `BRICKDNN_EMAIL_USE_TLS` / `_USE_SSL` | STARTTLS (TLS on port 465) | How to connect to the SMTP server              |
+| `BRICKDNN_ADMIN_EMAIL`         | unset                      | Where server errors (HTTP 500) are mailed, at most one per kind an hour |
+| `BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS` | `14,3`           | With e-mail: days before an inactive account is deleted that its owner is warned |
+| `BRICKDNN_REQUIRE_2FA_FOR_STAFF` | `false`                  | Staff accounts need two-factor authentication for the Django admin |
 | `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …); several separated by `:`, the first with a page wins |
 | `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |
 | `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` | `0` (off)        | Delete accounts unused for this many days, with everything they own |
@@ -390,7 +399,9 @@ PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server 
 people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
 legal pages (imprint, privacy policy, terms of use; templates in
 [deploy/legal/](deploy/legal/README.md)), the account page where users export their data or
-delete their account, and the optional automatic deletion of old data. Selling plans as
+delete their account, and the optional automatic deletion of old data. E-mail (password
+reset, confirming addresses, notices) and two-factor login: [docs/email.md](docs/email.md).
+Selling plans as
 subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
 training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); what
 comes after one server: [docs/scaling.md](docs/scaling.md).

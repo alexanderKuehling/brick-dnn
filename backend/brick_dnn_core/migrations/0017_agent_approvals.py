@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("brick_dnn_core", "0014_training_queue"),
+        ("brick_dnn_core", "0016_accounts_email_2fa"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

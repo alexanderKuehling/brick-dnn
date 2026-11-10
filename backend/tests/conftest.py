@@ -1,5 +1,8 @@
 import pytest
 
+# E-mail switched on (in memory), and the clock of two-factor codes (mail_helpers.py).
+from .mail_helpers import email_on, frozen_clock  # noqa: F401
+
 
 @pytest.fixture(autouse=True)
 def _isolated_cache(request):

@@ -158,12 +158,63 @@ export interface Tokens {
   refresh: string;
 }
 
+/** The answer of the password login when the account has two-factor authentication on. */
+export interface TwoFactorChallenge {
+  two_factor_required: true;
+  /** Signed, valid for `expires_in` seconds: send it with the code. */
+  challenge: string;
+  expires_in: number;
+}
+
+export type LoginResult = Tokens | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(result: LoginResult): result is TwoFactorChallenge {
+  return (result as TwoFactorChallenge).two_factor_required === true;
+}
+
+export interface TwoFactorState {
+  enabled: boolean;
+  enabled_at: string | null;
+  recovery_codes_left: number;
+}
+
+/** The start of the setup: shown once, never again. */
+export interface TwoFactorSetup {
+  secret: string;
+  /** For the QR code. */
+  otpauth_uri: string;
+}
+
+/** Two-factor authentication is on: the recovery codes (shown once) and new tokens. */
+export interface TwoFactorEnabled extends Tokens {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface RecoveryCodes {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface PasswordResetLink {
+  valid: boolean;
+  username: string | null;
+}
+
 // --------------------------------------------------------------------------
 // The own account and the legal pages
 // --------------------------------------------------------------------------
 
 /** The logged-in user's account (page /account) and how much the server stores for it. */
 export interface Account extends User {
+  /** The address was confirmed with a link sent to it (and has not changed since). */
+  email_verified: boolean;
+  email_verified_at: string | null;
+  /** Whether the server sends e-mail at all. */
+  email_sending: boolean;
+  /** Whether a forgotten password could be reset by e-mail (needs a confirmed address). */
+  password_reset_available: boolean;
+  two_factor: TwoFactorState;
   last_login: string | null;
   last_active_at: string | null;
   /** When the terms of use were accepted at sign-up; null if the server had none then. */
