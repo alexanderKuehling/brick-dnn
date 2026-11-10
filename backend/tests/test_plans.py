@@ -296,6 +296,16 @@ def test_overage(web, ada, site, controlled):
     data = wait_for(web, run_id)
     assert data["usage"]["stop_reason"] == "budget"
 
+    # The cap cannot go below what is used already: that would shrink the bill afterwards.
+    used = UsageRecord.objects.get(run_id=run_id).overage / 3600
+    assert used >= 0.5
+    response = web.patch("/api/account/usage/", {"overage_cap_cpu_hours": 0.1}, format="json")
+    assert response.status_code == 400
+    assert "cannot be lower" in response.data["overage_cap_cpu_hours"][0]
+    for cap in (0.5, 2, None):  # the same, a higher one or none are fine
+        response = web.patch("/api/account/usage/", {"overage_cap_cpu_hours": cap}, format="json")
+        assert response.status_code == 200, response.data
+
     # Switched off again: the allowance applies.
     web.patch("/api/account/usage/", {"overage_enabled": False}, format="json")
     assert not budgets.limits_for(ada).overage
