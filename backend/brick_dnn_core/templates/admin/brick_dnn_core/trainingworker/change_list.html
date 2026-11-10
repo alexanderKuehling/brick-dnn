@@ -1,0 +1,117 @@
+{% extends "admin/change_list.html" %}
+{# The queue overview above the list of workers (training_admin.py). #}
+{% block content %}
+<div id="training-queue" style="margin-bottom: 24px; overflow-x: auto;">
+  {% if not queue.enabled %}
+    <p class="help">
+      The training queue is off (BRICKDNN_TRAINING_WORKER): the web server starts trainings
+      itself.
+    </p>
+  {% elif queue.message %}
+    <p class="errornote">{{ queue.message }}</p>
+  {% endif %}
+
+  <h2>Last {{ queue.stats.days }} days</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Plan</th>
+        <th>Trainings started</th>
+        <th>Wait for a slot: median</th>
+        <th>95th percentile</th>
+        <th>Longest</th>
+        <th>Worker utilisation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>All</td>
+        <td>{{ queue.stats.started }}</td>
+        <td>{{ queue.stats.median }}</td>
+        <td>{{ queue.stats.p95 }}</td>
+        <td>{{ queue.stats.longest }}</td>
+        <td>
+          {{ queue.stats.utilisation_percent }}
+          ({{ queue.stats.busy }} busy of {{ queue.stats.available }} slot time)
+        </td>
+      </tr>
+      {% for plan in queue.stats.by_plan %}
+      <tr>
+        <td>{{ plan.plan }}</td>
+        <td>{{ plan.started }}</td>
+        <td>{{ plan.median }}</td>
+        <td>{{ plan.p95 }}</td>
+        <td></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="help">
+    Long waits with a utilisation near 100 % mean that the worker is too small for the
+    demand: more slots (BRICKDNN_WORKER_SLOTS), a larger server or a second worker.
+  </p>
+
+  <h2>Waiting ({{ queue.waiting|length }})</h2>
+  {% if queue.waiting %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Training</th><th>Account</th><th>Plan</th><th>Priority</th>
+        <th>Waiting</th><th>Starts in about</th><th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in queue.waiting %}
+      <tr>
+        <td>{{ run.position }}</td>
+        <td><a href="{% url 'admin:brick_dnn_core_trainingrun_change' run.id %}">{{ run.name }}</a></td>
+        <td>{{ run.account }}</td>
+        <td>{{ run.plan }}</td>
+        <td>{{ run.priority }}</td>
+        <td>{{ run.since }}</td>
+        <td>{{ run.estimate }}</td>
+        <td>
+          {% if run.blocked %}waits for a training of the same account{% endif %}
+          {% if run.restarts %}restart {{ run.restarts }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No training is waiting.</p>
+  {% endif %}
+
+  <h2>Running ({{ queue.running|length }} of {{ queue.slots }} slot{{ queue.slots|pluralize }})</h2>
+  {% if queue.running %}
+  <table>
+    <thead>
+      <tr>
+        <th>Training</th><th>Account</th><th>Plan</th><th>Priority</th><th>Status</th>
+        <th>For</th><th>CPU minutes</th><th>Worker</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in queue.running %}
+      <tr>
+        <td><a href="{% url 'admin:brick_dnn_core_trainingrun_change' run.id %}">{{ run.name }}</a></td>
+        <td>{{ run.account }}</td>
+        <td>{{ run.plan }}</td>
+        <td>{{ run.priority }}</td>
+        <td>{{ run.status }}</td>
+        <td>{{ run.since }}</td>
+        <td>{{ run.cpu_minutes }}</td>
+        <td>{{ run.worker|default:"-" }}{% if not run.worker_alive %} (gone){% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No training is running.</p>
+  {% endif %}
+
+  <h2>Workers</h2>
+</div>
+{{ block.super }}
+{% endblock %}

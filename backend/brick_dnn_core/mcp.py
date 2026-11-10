@@ -34,7 +34,7 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
-from brickdnn.training import ACTIVE_STATUSES, DatasetError, inference
+from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
 from . import budgets, downloads, history
@@ -119,7 +119,11 @@ columns_offset or types ask for more.
 Trainings and predictions use compute (CPU time), which can be limited per month: for the
 account, and for your API token or app. get_usage shows what is left; check_training
 estimates what a training will use. A training stops by itself (keeping its weights) when
-the budget runs out. Only the user can raise budgets, in the web app."""
+the budget runs out. Only the user can raise budgets, in the web app.
+
+A server may queue trainings: start_training then returns the run as queued, with its
+position and a rough estimate of the wait (queue), and it trains when a worker is free.
+get_training_run shows where it stands; stop_training cancels it while it waits."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -366,10 +370,15 @@ def delete_project(request: Request, args: dict[str, Any]) -> Any:
 
 
 def get_training_options(request: Request, args: dict[str, Any]) -> Any:
-    capabilities = training.capabilities()
+    capabilities = training.capabilities(request.user)
+    queue = capabilities["queue"]
     return {
         "available": capabilities["available"],
         "reason": capabilities["reason"],
+        # With a training worker: trainings wait in a queue (whether a worker is online, its
+        # slots, how many trainings run and wait); null: the server trains one at a time and
+        # refuses a start while it is busy.
+        "queue": {k: v for k, v in queue.items() if v is not None} if queue else None,
         "devices": capabilities["devices"],
         "builtin_datasets": capabilities["builtin_datasets"],
         # Your own datasets and the ones shared in your projects (see "owner" and "mine"),
@@ -977,7 +986,9 @@ def get_usage(request: Request, args: dict[str, Any]) -> Any:
 
 
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
-    runs = visible_runs(request.user).select_related("owner", "api_token", "connection__client")
+    runs = visible_runs(request.user).select_related(
+        "owner", "api_token", "connection__client", "worker"
+    )
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
     limit = args.get("limit", 20)
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
@@ -988,7 +999,8 @@ def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
         runs = runs.filter(project_id=_data_id(args, "project_id", "a project"))
     runs = runs.order_by("-created_at")
     total = runs.count()
-    shown = [compact.run_summary(run) for run in runs[:limit]]
+    context: dict[str, Any] = {}  # one look at the queue for all runs
+    shown = [compact.run_summary(run, context) for run in runs[:limit]]
     answer: dict[str, Any] = {"total": total, "runs": shown}
     if total > len(shown):
         answer["note"] = f"The newest {len(shown)} of {total} runs; raise limit to see more."
@@ -1050,9 +1062,9 @@ def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
             "project can delete it."
         )
     deleted = {"deleted": True, "id": str(run.pk), "name": run.name}
-    was_active = run.status in ACTIVE_STATUSES
+    was_training = run.status in RUNNING_STATUSES
     training.delete_run(run)
-    return {**deleted, "killed_running_training": was_active}
+    return {**deleted, "killed_running_training": was_training}
 
 
 def delete_dataset(request: Request, args: dict[str, Any]) -> Any:
@@ -1638,7 +1650,9 @@ TOOLS: dict[str, Tool] = {
             "returns estimate (the rough CPU time the training would use, in CPU minutes, "
             "with a low-high range) and budget: whether the compute budgets allow it "
             "(allowed, reason, warning, run_limit_cpu_minutes: the most it may use). Pass "
-            "config and tuning as for start_training for a precise estimate.",
+            "config and tuning as for start_training for a precise estimate. On a server "
+            "with a training queue, queue says where the run would wait (position) and "
+            "roughly how long (estimated_wait_seconds, an estimate; null if unknown).",
             check_training,
             {
                 "graph": GRAPH_SCHEMA,
@@ -1652,7 +1666,10 @@ TOOLS: dict[str, Tool] = {
             "start_training",
             "Start a training",
             "Train a network on the server. Runs in the background: follow it with "
-            "get_training_run. config overrides the defaults from get_training_options "
+            "get_training_run. On a server with a training queue the run starts as queued "
+            "(queue: its position and the estimated wait) and trains when a worker is "
+            "free; stop_training cancels it. config overrides the defaults from "
+            "get_training_options "
             "(epochs, batch_size, learning_rate, …); tuning turns the run into a "
             "hyperparameter search. A classical model is fitted once (no epochs): only "
             "val_split, test_split, max_samples and seed apply, and tuning is not available. "
@@ -1697,6 +1714,7 @@ TOOLS: dict[str, Tool] = {
                 "status": {
                     "type": "string",
                     "enum": [
+                        "queued",
                         "starting",
                         "preparing",
                         "running",
@@ -1711,7 +1729,8 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "get_training_run",
             "Show a training run",
-            "One training run, as a summary by default: status and message, settings, epochs "
+            "One training run, as a summary by default: status and message (queued runs: "
+            "queue with the position and the estimated wait), settings, epochs "
             "done, the best epoch, the final and test metrics (loss, accuracy; for regressions "
             "the RMSE in the units of the target and R²), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
@@ -1738,7 +1757,8 @@ TOOLS: dict[str, Tool] = {
         Tool(
             "stop_training",
             "Stop a training",
-            "Stop a running training after the current batch; the weights trained so far are kept.",
+            "Stop a running training after the current batch; the weights trained so far are "
+            "kept. A training that still waits in the queue is cancelled.",
             stop_training,
             {"id": {"type": "string"}},
             ("id",),

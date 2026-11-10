@@ -507,14 +507,26 @@ def _headline(metrics: Any) -> str:
     return ""
 
 
+def _queue_place(run: Mapping) -> str:
+    """', position 3 in the queue' of a run that waits for a training worker."""
+    waiting = run.get("queue")
+    position = waiting.get("position") if isinstance(waiting, Mapping) else None
+    if isinstance(position, int) and not isinstance(position, bool):
+        return f", position {position} in the queue"
+    return ""
+
+
 def _run_progress(run: Mapping) -> str:
-    """': running, epoch 3 of 20' or ': completed, test accuracy 96.7 %'."""
+    """': running, epoch 3 of 20', ': queued, position 3 in the queue' or ': completed,
+    test accuracy 96.7 %'."""
     status = run.get("status")
     if not isinstance(status, str):
         return ""
     text = f": {status}"
     tuning = run.get("tuning")
-    if status == "running" and isinstance(tuning, Mapping) and tuning.get("trials"):
+    if status == "queued":
+        text += _queue_place(run)
+    elif status == "running" and isinstance(tuning, Mapping) and tuning.get("trials"):
         text += f", trial {run.get('trials_done', 0)} of {tuning['trials']}"
     elif status == "running" and run.get("family") != "classical" and run.get("epochs"):
         text += f", epoch {run.get('epochs_done', 0)} of {run['epochs']}"
@@ -666,7 +678,11 @@ def _start_training(user, args, result) -> Described:
     )
     if isinstance(run.get("tuning"), Mapping) and run["tuning"].get("trials"):
         text = f", hyperparameter search with {count(run['tuning']['trials'], 'trial')}"
-    return Described(phrase, result=text, targets=targets)
+    done = None
+    if run.get("status") == "queued":
+        # With a training worker the run waits for a free slot first.
+        done = f"Queued {phrase.removeprefix('start ')}{text}{_queue_place(run)}"
+    return Described(phrase, result=text, targets=targets, done=done)
 
 
 def _list_runs(user, args, result) -> Described:
