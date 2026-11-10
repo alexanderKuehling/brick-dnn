@@ -18,17 +18,19 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import type { Optimizer, TrainingDevice, TuningMethod } from '@/api';
+import type { Optimizer, SegmentationLoss, TrainingDevice, TuningMethod } from '@/api';
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
   BATCH_SIZE_PRESETS,
   LIMITS,
+  LOSSES,
   LR_PRESETS,
   OPTIMIZERS,
   parseField,
   plannedTrials,
   tunedSettings,
   WEIGHT_DECAY_PRESETS,
+  type SegmentationScope,
   type SettingsErrors,
   type SettingsValues,
 } from './settings';
@@ -48,10 +50,16 @@ interface SettingsFormProps {
    */
   builtin: boolean;
   /**
-   * Rows for training, validation and test of a dataset made in the Data tab. Training uses
-   * this split, so the share fields are shown but cannot be changed.
+   * Rows for training, validation and test of a dataset made in the Data tab, or the images
+   * in the train/, val/ and test/ folders of a segmentation dataset. Training uses this split,
+   * so the share fields are shown but cannot be changed.
    */
   predefinedSplit?: number[] | null;
+  /**
+   * The data has a class for every pixel: the batch size is the one for segmentation (with
+   * the largest that fits into memory, if known) and the loss can be chosen.
+   */
+  segmentation?: SegmentationScope | null;
   /**
    * A classical model (scikit-learn) is fitted once: only the splits, Max. samples and the
    * seed apply. `maxRows`: the most training rows it is fitted on on this server.
@@ -82,6 +90,7 @@ export function SettingsForm({
   builtin,
   predefinedSplit = null,
   classical = null,
+  segmentation = null,
 }: SettingsFormProps) {
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
@@ -92,6 +101,7 @@ export function SettingsForm({
   const setNumber = (key: keyof SettingsValues) => (value: number | string) =>
     onChange({ ...values, [key]: value });
   const tuned = tunedSettings(values);
+  const maxBatch = segmentation?.maxBatch ?? null;
 
   const automatic = devices.find((device) => device.id === defaultDevice)?.label;
   const deviceOptions = [
@@ -134,11 +144,13 @@ export function SettingsForm({
       <Switch
         label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
         description={
-          fixed
-            ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
-            : builtin
-              ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
-              : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
+          fixed && segmentation
+            ? `This dataset brings its own split, the folders train, val and test: ${formatSplit(fixed)} images for training, validation and test. Training uses it as it is.`
+            : fixed
+              ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
+              : builtin
+                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
+                : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
         }
         checked={testEnabled}
         disabled={fixed !== null || builtin}
@@ -235,19 +247,39 @@ export function SettingsForm({
           allowNegative={false}
           error={errors.epochs}
         />
-        <NumberInput
-          label="Batch size"
-          description="Samples per optimizer step"
-          value={tuned.batch_size ? '' : values.batch_size}
-          placeholder={tuned.batch_size ? SEARCHED : undefined}
-          disabled={tuned.batch_size}
-          onChange={setNumber('batch_size')}
-          min={LIMITS.batch_size.min}
-          max={LIMITS.batch_size.max}
-          allowDecimal={false}
-          allowNegative={false}
-          error={errors.batch_size}
-        />
+        {segmentation ? (
+          <NumberInput
+            label="Batch size"
+            description={
+              maxBatch !== null && maxBatch >= 1
+                ? `Images per optimizer step; up to ${maxBatch.toLocaleString('en-US')} fit into memory`
+                : 'Images per optimizer step (8 to 16 is usual for segmentation)'
+            }
+            value={tuned.batch_size ? '' : values.segmentation_batch_size}
+            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            disabled={tuned.batch_size}
+            onChange={setNumber('segmentation_batch_size')}
+            min={LIMITS.batch_size.min}
+            max={LIMITS.batch_size.max}
+            allowDecimal={false}
+            allowNegative={false}
+            error={errors.segmentation_batch_size}
+          />
+        ) : (
+          <NumberInput
+            label="Batch size"
+            description="Samples per optimizer step"
+            value={tuned.batch_size ? '' : values.batch_size}
+            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            disabled={tuned.batch_size}
+            onChange={setNumber('batch_size')}
+            min={LIMITS.batch_size.min}
+            max={LIMITS.batch_size.max}
+            allowDecimal={false}
+            allowNegative={false}
+            error={errors.batch_size}
+          />
+        )}
         <NumberInput
           label="Learning rate"
           value={tuned.learning_rate ? '' : values.learning_rate}
@@ -278,6 +310,16 @@ export function SettingsForm({
           allowDeselect={false}
         />
         {validationField}
+        {segmentation && (
+          <Select
+            label="Loss"
+            description="The Dice term helps classes that cover only a few pixels"
+            data={LOSSES}
+            value={values.loss}
+            onChange={(value) => value && set('loss')(value as SegmentationLoss)}
+            allowDeselect={false}
+          />
+        )}
       </SimpleGrid>
 
       {testFields}

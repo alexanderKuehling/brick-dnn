@@ -3,6 +3,7 @@ import type {
   Dataset,
   DatasetRef,
   Optimizer,
+  SegmentationLoss,
   TrainingConfig,
   TrainingStatus,
   TuningInput,
@@ -40,6 +41,13 @@ export interface SettingsValues {
   patience: NumberField;
   /** Keep the weights of the epoch with the lowest validation loss (not the last one). */
   restore_best: boolean;
+  /**
+   * Segmentation has a batch size of its own: every layer keeps its output for all pixels of
+   * a batch, so batches are much smaller than for other data.
+   */
+  segmentation_batch_size: NumberField;
+  /** Segmentation: the cross-entropy per pixel, or that plus a Dice term. */
+  loss: SegmentationLoss;
 
   /** Hyperparameter search instead of a single training. */
   search: boolean;
@@ -63,6 +71,7 @@ export interface SettingsValues {
 const NUMBER_FIELDS = [
   'epochs',
   'batch_size',
+  'segmentation_batch_size',
   'learning_rate',
   'val_split',
   'test_split',
@@ -104,6 +113,8 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   seed: '',
   patience: '',
   restore_best: true,
+  segmentation_batch_size: 16,
+  loss: 'cross_entropy',
   search: false,
   search_method: 'random',
   search_trials: 10,
@@ -141,6 +152,33 @@ export const OPTIMIZERS: { value: Optimizer; label: string }[] = [
   { value: 'adamw', label: 'AdamW' },
   { value: 'sgd', label: 'SGD' },
 ];
+
+export const LOSSES: { value: SegmentationLoss; label: string }[] = [
+  { value: 'cross_entropy', label: 'Cross-entropy' },
+  { value: 'cross_entropy_dice', label: 'Cross-entropy + Dice' },
+];
+
+/**
+ * A segmentation training: its batch size is a setting of its own, and `maxBatch` is the
+ * largest batch that fits into the memory of a training on this server (null: not known).
+ */
+export interface SegmentationScope {
+  maxBatch: number | null;
+}
+
+/**
+ * The largest batch of a segmentation that fits into `memoryMb` (the server's limit), from the
+ * plan of the training check: a step needs about `fixed_bytes + batch × sample_bytes`.
+ */
+export function maxSegmentationBatch(
+  plan: { fixed_bytes: number; sample_bytes: number } | null | undefined,
+  memoryMb: number | null | undefined
+): number | null {
+  if (!plan || !memoryMb || !(plan.sample_bytes > 0)) {
+    return null;
+  }
+  return Math.floor((memoryMb * 1024 * 1024 - plan.fixed_bytes) / plan.sample_bytes);
+}
 
 export type SettingsErrors = Partial<Record<keyof SettingsValues, string>>;
 
@@ -293,7 +331,10 @@ function validateClassical(values: SettingsValues, { maxRows }: ClassicalScope):
 
 export function validateSettings(
   values: SettingsValues,
-  { classical = null }: { classical?: ClassicalScope | null } = {}
+  {
+    classical = null,
+    segmentation = null,
+  }: { classical?: ClassicalScope | null; segmentation?: SegmentationScope | null } = {}
 ): SettingsErrors {
   if (classical) {
     return validateClassical(values, classical);
@@ -306,7 +347,21 @@ export function validateSettings(
   };
   const tuned = tunedSettings(values);
   set('epochs', wholeNumber(values.epochs, LIMITS.epochs, true));
-  if (!tuned.batch_size) {
+  const maxBatch = segmentation?.maxBatch ?? null;
+  const tooLarge = (size: number) =>
+    maxBatch !== null && size > maxBatch
+      ? maxBatch >= 1
+        ? `At most ${maxBatch.toLocaleString('en-US')}: larger batches do not fit into memory`
+        : 'No batch fits into memory: make the Input smaller'
+      : null;
+  if (!tuned.batch_size && segmentation) {
+    const size = parseField(values.segmentation_batch_size);
+    set(
+      'segmentation_batch_size',
+      wholeNumber(values.segmentation_batch_size, LIMITS.batch_size, true) ??
+        (typeof size === 'number' ? tooLarge(size) : null)
+    );
+  } else if (!tuned.batch_size) {
     set('batch_size', wholeNumber(values.batch_size, LIMITS.batch_size, true));
   }
   const learningRate = (lr: number) => lr > 0 && lr <= LIMITS.learning_rate.max;
@@ -350,6 +405,8 @@ export function validateSettings(
     }
     if (tuned.batch_size && values.batch_sizes.length === 0) {
       errors.batch_sizes = 'Choose at least one';
+    } else if (tuned.batch_size && segmentation) {
+      set('batch_sizes', tooLarge(Math.max(...values.batch_sizes)));
     }
     if (tuned.optimizer && values.optimizers.length === 0) {
       errors.optimizers = 'Choose at least one';
@@ -373,11 +430,16 @@ const fraction = (percent: number) => Number((percent / 100).toFixed(4));
 /**
  * The training settings for the API. Built-in datasets (`builtin`) always test on their
  * official test images, so they need no test split. Settings varied by a search are left
- * out; the search sets them. A `classical` model only gets the settings that apply to it.
+ * out; the search sets them. A `classical` model only gets the settings that apply to it; a
+ * `segmentation` uses its own batch size and has a loss to choose.
  */
 export function toConfig(
   values: SettingsValues,
-  { builtin = false, classical = false }: { builtin?: boolean; classical?: boolean } = {}
+  {
+    builtin = false,
+    classical = false,
+    segmentation = false,
+  }: { builtin?: boolean; classical?: boolean; segmentation?: boolean } = {}
 ): Partial<TrainingConfig> {
   const number = (field: NumberField) => {
     const value = parseField(field);
@@ -395,9 +457,10 @@ export function toConfig(
       seed: number(values.seed),
     };
   }
+  const batchSize = segmentation ? values.segmentation_batch_size : values.batch_size;
   return {
     epochs: number(values.epochs) ?? undefined,
-    batch_size: tuned.batch_size ? undefined : (number(values.batch_size) ?? undefined),
+    batch_size: tuned.batch_size ? undefined : (number(batchSize) ?? undefined),
     learning_rate: tuned.learning_rate ? undefined : (number(values.learning_rate) ?? undefined),
     optimizer: tuned.optimizer ? undefined : values.optimizer,
     weight_decay: tuned.weight_decay ? undefined : (number(values.weight_decay) ?? 0),
@@ -408,6 +471,7 @@ export function toConfig(
     seed: number(values.seed),
     patience: number(values.patience),
     restore_best: values.restore_best,
+    ...(segmentation ? { loss: values.loss } : {}),
   };
 }
 
@@ -565,6 +629,9 @@ export function loadSettings(): SettingsValues {
   }
   if (typeof values.device !== 'string' || !values.device) {
     values.device = DEFAULT_SETTINGS.device;
+  }
+  if (!LOSSES.some((option) => option.value === values.loss)) {
+    values.loss = DEFAULT_SETTINGS.loss;
   }
   for (const key of BOOLEAN_FIELDS) {
     if (typeof values[key] !== 'boolean') {

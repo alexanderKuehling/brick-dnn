@@ -146,11 +146,55 @@ export function datasetDetails(dataset: Dataset): string {
     } else if (info.target_kind === 'number') {
       parts.push('numeric target');
     }
+  } else if (dataset.kind === 'segmentation') {
+    const pairs = count(info.num_samples, 'image');
+    parts.push(pairs ? `${pairs} with masks` : '', count(info.num_classes, 'class') ?? '');
   } else {
     parts.push(count(info.num_samples, 'image') ?? '', count(info.num_classes, 'class') ?? '');
   }
   parts.push(formatBytes(dataset.size_bytes));
   return parts.filter(Boolean).join(' · ');
+}
+
+/**
+ * The classes of a segmentation dataset with the share of their pixels, largest first:
+ * "background 86%, circle 6%, square 5% …" (at most `max` classes). Null if not known.
+ */
+export function classShares(dataset: Dataset, max = 4): string | null {
+  const names = dataset.info.class_names ?? [];
+  const shares = dataset.info.segmentation?.class_pixel_share ?? [];
+  if (names.length === 0 || shares.length !== names.length) {
+    return null;
+  }
+  const sorted = names
+    .map((name, index) => ({ name, share: shares[index] }))
+    .sort((a, b) => b.share - a.share);
+  const percent = (share: number) =>
+    share > 0 && share < 0.005 ? '<1%' : `${Math.round(share * 100)}%`;
+  const shown = sorted.slice(0, max).map((entry) => `${entry.name} ${percent(entry.share)}`);
+  return shown.join(', ') + (sorted.length > max ? ' …' : '');
+}
+
+/**
+ * What the inspection of a segmentation dataset left out or found odd: "2 images without a
+ * mask · 1 mask resized to its image". Null if there is nothing to say.
+ */
+export function segmentationNotes(dataset: Dataset): string | null {
+  const found = dataset.info.segmentation;
+  if (!found) {
+    return null;
+  }
+  const say = (n: number | undefined, one: string, many: string) =>
+    n ? `${n.toLocaleString('en-US')} ${n === 1 ? one : many}` : null;
+  const notes = [
+    say(found.unmatched_images, 'image without a mask', 'images without a mask'),
+    say(found.unmatched_masks, 'mask without an image', 'masks without an image'),
+    say(found.mask_size_mismatches, 'mask resized to its image', 'masks resized to their images'),
+    found.ignore_index !== null && found.ignore_index !== undefined
+      ? `pixels with the value ${found.ignore_index} are ignored`
+      : null,
+  ].filter(Boolean);
+  return notes.length > 0 ? notes.join(' · ') : null;
 }
 
 /** Rows of a predefined split (datasets from the Data tab): "840 / 180 / 180". */
@@ -278,12 +322,24 @@ export function progressLabel(run: RunSummary): string {
   return STATUS_LABELS[run.status];
 }
 
+/**
+ * Whether the run predicts a class for every pixel: it reports mean IoU, Dice and pixel
+ * accuracy instead of an accuracy or an RMSE.
+ */
+export function isSegmentation(run: RunSummary, history: HistoryEntry[] = []): boolean {
+  return (
+    run.task === 'segmentation' ||
+    typeof run.metrics?.val_iou === 'number' ||
+    history.some((entry) => typeof entry.val_iou === 'number')
+  );
+}
+
 /** Whether the run is about classes (accuracy) rather than values (RMSE). */
 export function isClassification(run: RunSummary, history: HistoryEntry[] = []): boolean {
   if (run.task === 'classification') {
     return true;
   }
-  if (run.task === 'regression') {
+  if (run.task === 'regression' || run.task === 'segmentation') {
     return false;
   }
   return (
@@ -312,6 +368,7 @@ export function reportsR2(run: RunSummary, history: HistoryEntry[]): boolean {
 export function hasTestResult(metrics: RunMetrics | null | undefined): boolean {
   return (
     typeof metrics?.test_accuracy === 'number' ||
+    typeof metrics?.test_iou === 'number' ||
     typeof metrics?.test_rmse === 'number' ||
     typeof metrics?.test_loss === 'number'
   );
@@ -328,6 +385,10 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   if (typeof metrics.test_accuracy === 'number') {
     return [formatPercent(metrics.test_accuracy), 'test accuracy'];
   }
+  // Segmentation: the mean IoU says more than the pixel accuracy (most pixels are background).
+  if (typeof metrics.test_iou === 'number') {
+    return [formatPercent(metrics.test_iou), 'test mean IoU'];
+  }
   // Regression: R² says more than an RMSE in the units of the target.
   if (typeof metrics.test_r2 === 'number') {
     return [formatR2(metrics.test_r2), 'test R²'];
@@ -340,6 +401,9 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   }
   if (typeof metrics.val_accuracy === 'number') {
     return [formatPercent(metrics.val_accuracy), 'validation accuracy'];
+  }
+  if (typeof metrics.val_iou === 'number') {
+    return [formatPercent(metrics.val_iou), 'validation mean IoU'];
   }
   if (typeof metrics.val_r2 === 'number') {
     return [formatR2(metrics.val_r2), 'validation R²'];
@@ -508,7 +572,20 @@ export function weightsSnippet(run: RunDetail, scriptName: string, weightsName: 
   lines.push('', 'with torch.no_grad():', '    output = model(x)');
   const targetMean = pre.target_mean;
   const targetStd = pre.target_std;
-  if (classNames && classNames.length > 0 && pre.kind !== 'demo') {
+  const mask = plan.targets?.[0]?.kind === 'mask' ? plan.targets[0] : null;
+  if (mask && classNames && pre.kind !== 'demo') {
+    // Segmentation: one class per pixel, saved as an image whose pixel values are the classes.
+    lines.push(
+      '',
+      `classes = ${pyStrings(classNames)}`,
+      mask.binary
+        ? 'mask = (output[0, 0] > 0).to(torch.uint8)  # 1 where the score is positive'
+        : 'mask = output.argmax(dim=1)[0].to(torch.uint8)  # the class of every pixel',
+      'for index, name in enumerate(classes):',
+      '    print(f"{name}: {(mask == index).float().mean().item():.1%} of the pixels")',
+      'Image.fromarray(mask.numpy()).save("mask.png")'
+    );
+  } else if (classNames && classNames.length > 0 && pre.kind !== 'demo') {
     lines.push(
       '',
       `classes = ${pyStrings(classNames)}`,

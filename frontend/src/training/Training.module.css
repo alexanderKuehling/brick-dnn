@@ -43,3 +43,36 @@
   flex: none;
   width: calc(1.75rem * var(--mantine-scale));
 }
+
+/* Segmentation: the colour of a class next to its name. */
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+  border-radius: 2px;
+}
+
+/* Segmentation previews: image, mask, prediction and overlay side by side. */
+.previewHead,
+.previewRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.previewHead {
+  padding: 0 7px;
+}
+
+.previewImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-7));
+  border-radius: 2px;
+
+  /* Inputs are small (e.g. 64 × 64): show their pixels instead of a blur. */
+  image-rendering: pixelated;
+}

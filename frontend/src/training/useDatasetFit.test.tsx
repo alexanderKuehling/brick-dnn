@@ -281,7 +281,9 @@ describe('useDatasetFit', () => {
   it('does not change other layers on its own', async () => {
     vi.mocked(api.training.check).mockResolvedValue({
       ...serverCheck(MLP),
-      fixes: [INPUT_FIX, { ...OUTPUT_FIX, type: 'Conv2d', params: { out_channels: 3 } }],
+      // Only the Input and the size of the output are changed without asking (for a
+      // segmentation also the output channels of the last convolution), nothing else.
+      fixes: [INPUT_FIX, { ...OUTPUT_FIX, type: 'Conv2d', params: { kernel_size: [1, 1] } }],
     });
     const { rerender } = render(<Harness onFit={capture} />);
     rerender(<Harness selection={1} opened onFit={capture} />);
