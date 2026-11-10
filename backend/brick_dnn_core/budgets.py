@@ -16,7 +16,9 @@ it one plan from ``BRICKDNN_BUDGET_…``, unlimited by default). A plan has
 - a monthly compute allowance (CPU hours);
 - the most compute one training run may use;
 - a storage quota;
-- how many trainings may run at the same time, and a queue priority (not used yet);
+- how many trainings may run at the same time and how many may wait in the queue, and a
+  queue priority: with a training worker (training_queue.py) the runs of plans with a
+  higher priority start first;
 - optionally a price per CPU hour beyond the allowance (*overage*), which users of the plan
   can switch on for their account, with a cap of their own.
 
@@ -34,9 +36,11 @@ also shown in money.
 that of the token or app starting it) has CPU time left, and the storage quota is not used
 up. The run gets the CPU time that is left as its limit (at most the per-run limit), which
 the runner enforces itself: it stops like after a stop request, keeping the weights trained
-so far. Runs that are active at the same time reserve what their limits allow, so two runs
-started at once cannot spend the same remaining time; starts are serialised by the start
-lock of training_service. Every look at an active run also compares the counted usage with
+so far. Runs that are active at the same time (waiting in the queue or training) reserve what
+their limits allow, so two runs started at once cannot spend the same remaining time; starts
+are serialised by the start lock of training_service. A run that waited in the queue is
+checked again when a worker takes it: it gets what is left then, or ends with the budget's
+message if nothing is. Every look at an active run also compares the counted usage with
 the budgets (e.g. after one was lowered) and stops the run when one is used up.
 Predictions need compute left, uploads and imports room in the storage quota.
 """
@@ -177,6 +181,7 @@ PLAN_FIELDS = {
     "storage_gb": float,
     "cpu_minutes_per_run": float,
     "concurrent_trainings": int,
+    "queued_trainings": int,
     "priority": int,
     "overage_price_per_cpu_hour": float,
 }
@@ -188,8 +193,10 @@ class Plan:
 
     ``price`` per month and ``overage_price_per_cpu_hour`` are in BRICKDNN_PRICE_CURRENCY.
     The price is for display (with paid plans the customer pays the price set in Paddle, see
-    billing.py); overage is billed at its price. ``priority`` is for the job queue (higher
-    goes first); nothing uses it yet."""
+    billing.py); overage is billed at its price. ``priority`` is for the job queue
+    (training_queue.py): runs of plans with a higher priority start first.
+    ``queued_trainings``: how many trainings of an account may wait in the queue (None: the
+    server's default, BRICKDNN_QUEUE_MAX_WAITING)."""
 
     key: str
     name: str
@@ -200,6 +207,7 @@ class Plan:
     concurrent_trainings: int | None = None
     priority: int = 0
     overage_price_per_cpu_hour: float | None = None
+    queued_trainings: int | None = None
 
     @property
     def unlimited(self) -> bool:
@@ -220,6 +228,7 @@ class Plan:
             "storage_gb": self.storage_gb,
             "cpu_minutes_per_run": self.cpu_minutes_per_run,
             "concurrent_trainings": self.concurrent_trainings,
+            "queued_trainings": self.queued_trainings,
             "priority": self.priority,
             "overage_price_per_cpu_hour": self.overage_price_per_cpu_hour,
         }
@@ -331,6 +340,8 @@ class Limits:
     plan: Plan = Plan(IMPLICIT_PLAN, "Default")
     unlimited: bool = False
     concurrent_trainings: int | None = None
+    # Trainings that may wait in the queue of the training worker (None: no limit).
+    queued_trainings: int | None = None
     # Overage switched on (only with a plan that has an overage price): usage beyond the
     # allowance is allowed up to the cap (None: no cap).
     overage: bool = False
@@ -375,6 +386,7 @@ def limits_for(user) -> Limits:
         storage_bytes=storage,
         plan=plan,
         concurrent_trainings=plan.concurrent_trainings,
+        queued_trainings=plan.queued_trainings or default_waiting(),
         overage=overage,
         overage_cap_seconds=cap * 3600 if cap is not None else None,
     )
@@ -407,6 +419,36 @@ def concurrency_refusal(user, active: int) -> str | None:
     return (
         f"Your plan ({limits.plan.name}) allows {count} at a time. Wait until your running "
         "training finishes, or stop it."
+    )
+
+
+# Trainings of an account that may wait in the queue on a server with plans, unless
+# BRICKDNN_QUEUE_MAX_WAITING or the plan ("queued_trainings") says otherwise.
+DEFAULT_WAITING = 3
+
+
+def default_waiting() -> int | None:
+    """How many trainings of an account may wait in the queue if its plan does not say
+    (None: no limit): BRICKDNN_QUEUE_MAX_WAITING, else 3 on a server with plans and no limit
+    on one without (a server of your own)."""
+    configured = settings.QUEUE_MAX_WAITING
+    if configured is not None:
+        return configured or None
+    return DEFAULT_WAITING if settings.PLANS else None
+
+
+def waiting_refusal(user, waiting: int) -> str | None:
+    """Why the account cannot put another training into the queue while ``waiting`` of its
+    trainings wait there, or None."""
+    limits = limits_for(user)
+    allowed = limits.queued_trainings
+    if allowed is None or waiting < allowed:
+        return None
+    count = "1 training" if allowed == 1 else f"{allowed} trainings"
+    where = "This server" if limits.plan.key == IMPLICIT_PLAN else f"Your plan ({limits.plan.name})"
+    return (
+        f"{where} lets {count} of an account wait in the queue. Wait until one of yours has "
+        "started, or cancel one."
     )
 
 
@@ -650,7 +692,8 @@ class RunLimit:
 
 
 def _reserved(runs) -> float:
-    """CPU time the active ``runs`` may still use within their limits."""
+    """CPU time the active ``runs`` (waiting in the queue or training) may still use within
+    their limits."""
     return sum(
         max(0.0, run.cpu_limit_seconds - run.cpu_seconds)
         for run in runs

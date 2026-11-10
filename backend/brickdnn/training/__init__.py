@@ -25,7 +25,7 @@ from .datasets import (
     inspect_image_folder,
     random_info,
 )
-from .state import ACTIVE_STATUSES, STATUSES, TERMINAL_STATUSES
+from .state import ACTIVE_STATUSES, QUEUED, RUNNING_STATUSES, STATUSES, TERMINAL_STATUSES
 
 
 def torch_installed() -> bool:
@@ -49,6 +49,8 @@ __all__ = [
     "DEVICES",
     "IMAGE_EXTENSIONS",
     "OPTIMIZERS",
+    "QUEUED",
+    "RUNNING_STATUSES",
     "STATUSES",
     "TERMINAL_STATUSES",
     "BuiltinDataset",

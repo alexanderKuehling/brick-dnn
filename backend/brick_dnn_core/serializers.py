@@ -237,12 +237,25 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "started_by",
             "started_via",
             "usage",
+            "queue",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
     started_via = serializers.SerializerMethodField()
     usage = serializers.SerializerMethodField()
+    queue = serializers.SerializerMethodField()
+
+    def get_queue(self, obj: TrainingRun) -> dict | None:
+        """While the run waits for a training worker (status ``queued``): its position, a
+        rough estimate of when it starts and whether a worker is running at all (see
+        training_queue.run_info). Null otherwise."""
+        if obj.status != "queued":
+            return None
+        from . import training_queue
+
+        # One look at the queue per request, also for a list of runs.
+        return training_queue.run_info(obj, training_queue.snapshot_in(self.context))
 
     def get_started_by(self, obj: TrainingRun) -> str:
         return obj.owner.get_username()

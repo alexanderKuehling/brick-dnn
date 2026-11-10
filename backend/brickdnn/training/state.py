@@ -132,7 +132,13 @@ WEIGHTS_FILE = "weights.pt"
 CLASSICAL_WEIGHTS_FILE = "model.joblib"
 LOG_FILE = "output.log"
 
-ACTIVE_STATUSES = ("starting", "preparing", "running")
+# A run that waits in the queue of the server for a free worker. Only the server sets it: a
+# runner starts with "starting" and never reports "queued".
+QUEUED = "queued"
+# A training process exists for the run (or is being started right now).
+RUNNING_STATUSES = ("starting", "preparing", "running")
+# Not finished yet: waiting or training.
+ACTIVE_STATUSES = (QUEUED, *RUNNING_STATUSES)
 TERMINAL_STATUSES = ("completed", "stopped", "failed")
 STATUSES = ACTIVE_STATUSES + TERMINAL_STATUSES
 

@@ -201,8 +201,9 @@ def _disabled_response() -> Response | None:
 
 @api_view(["GET"])
 def training_info(request: Request) -> Response:
-    """Whether training is possible on this server: PyTorch version, devices, datasets."""
-    return Response(training.capabilities())
+    """Whether training is possible on this server: PyTorch version, devices, datasets,
+    and with a training worker the state of the queue (``queue``)."""
+    return Response(training.capabilities(request.user))
 
 
 @api_view(["POST"])
@@ -327,7 +328,7 @@ class TrainingRunViewSet(
 
     def get_queryset(self):
         runs = shared_data.visible_runs(self.request.user).select_related(
-            "owner", "api_token", "connection__client"
+            "owner", "api_token", "connection__client", "worker"
         )
         project = self.request.query_params.get("project")
         if project is not None and project.isdigit():
@@ -355,7 +356,10 @@ class TrainingRunViewSet(
     def create(self, request: Request) -> Response:
         """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?, "project"?}``.
 
-        With ``project`` (a project you own or edit), the run belongs to that project too."""
+        With ``project`` (a project you own or edit), the run belongs to that project too.
+        With a training worker the run is ``queued`` at first (``queue`` says where); 409
+        then means that the account has as many trainings waiting as it may. Without one,
+        409 means that the server is busy with another training."""
         data = request.data if isinstance(request.data, dict) else {}
         try:
             run = training.start_run(
@@ -392,7 +396,8 @@ class TrainingRunViewSet(
 
     @action(detail=True, methods=["post"])
     def stop(self, request: Request, pk=None) -> Response:
-        """Stop after the current batch; the weights trained so far are kept."""
+        """Stop after the current batch; the weights trained so far are kept. A run that
+        still waits in the queue is cancelled (it ends as stopped, without using compute)."""
         run = self.get_object()
         if not shared_data.can_stop_run(request.user, run):
             raise PermissionDenied("Only who started it and the project's editors can stop it.")
