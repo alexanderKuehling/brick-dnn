@@ -7,6 +7,7 @@ import {
   api,
   type AgentAction,
   type AgentActivitySummary,
+  type ApprovalRequest,
   type AgentActivityPage as Page,
   type Project,
 } from '@/api';
@@ -18,6 +19,7 @@ vi.mock('@/api', async (importOriginal) => {
     ...actual,
     api: {
       agentActivity: { list: vi.fn(), summary: vi.fn() },
+      approvals: { approve: vi.fn(), deny: vi.fn() },
       projects: { get: vi.fn() },
     },
   };
@@ -392,4 +394,74 @@ test('a network that is gone says so', async () => {
       expect.objectContaining({ color: 'red', message: expect.stringContaining('deleted') })
     )
   );
+});
+
+const WAITING: ApprovalRequest = {
+  id: 12,
+  status: 'pending',
+  category: 'training',
+  tool: 'start_training',
+  action: 'start_training',
+  agent: { ...LAPTOP, active: true },
+  summary: 'Start training “Big” on random demo data',
+  reason: 'Every training needs approval (estimated 42 CPU min).',
+  estimate: {
+    cpu_minutes: 42,
+    low_cpu_minutes: 14,
+    high_cpu_minutes: 126,
+    cost: null,
+    currency: null,
+  },
+  limit_cpu_minutes: 0,
+  network: '4 layers (Input, Linear ×2, Activation), 3 connections',
+  dataset: 'random demo data',
+  exposes: null,
+  warning: null,
+  targets: [],
+  arguments: {},
+  created_at: minutesAgo(1),
+  expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  decided_at: null,
+  finished_at: null,
+  message: '',
+  error: '',
+  done: null,
+};
+
+const ASKED = action(4, {
+  tool: 'start_training',
+  writes: true,
+  outcome: 'pending',
+  approval: 12,
+  summary: 'Asked for approval to start training “Big” on random demo data (request #12)',
+});
+
+test('requests waiting for approval are on top and in the log', async () => {
+  const user = userEvent.setup();
+  answer(
+    page([ASKED, SAVED], { approvals: { pending_count: 1, pending: [WAITING] } }),
+    page([], { latest_id: 4, approvals: { pending_count: 1, pending: [WAITING] } })
+  );
+  vi.mocked(api.approvals.approve).mockResolvedValue({
+    ...WAITING,
+    status: 'executed',
+    done: 'Started training “Big” on random demo data, approved by you (request #12)',
+  });
+  renderPage();
+  const panel = await screen.findByRole('region', { name: 'Waiting for your approval' });
+  expect(within(panel).getByText('Start training “Big” on random demo data')).toBeInTheDocument();
+  expect(within(panel).getByText('42 CPU min (14–126)')).toBeInTheDocument();
+  const asked = screen.getByRole('listitem', { name: ASKED.summary });
+  expect(asked).toHaveAttribute('data-pending');
+  expect(within(asked).getByText('Waiting for approval #12')).toBeInTheDocument();
+
+  await user.click(within(panel).getByRole('button', { name: /^Approve/ }));
+  await waitFor(() =>
+    expect(screen.queryByRole('region', { name: 'Waiting for your approval' })).toBeNull()
+  );
+  expect(api.approvals.approve).toHaveBeenCalledWith(12);
+  // The next poll still lists it (the server was asked before): it stays gone.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 80)));
+  expect(screen.queryByRole('region', { name: 'Waiting for your approval' })).toBeNull();
+  expect(within(asked).getByText('Asked for approval #12')).toBeInTheDocument();
 });
