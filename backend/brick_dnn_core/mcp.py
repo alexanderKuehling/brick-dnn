@@ -1843,6 +1843,8 @@ TOOLS: dict[str, Tool] = {
     ]
 }
 
+# explain_prediction and get_layer_activations (they add themselves to TOOLS).
+from . import mcp_explain  # noqa: E402, F401
 
 # --------------------------------------------------------------------------- #
 # JSON-RPC
