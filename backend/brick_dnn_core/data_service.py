@@ -331,6 +331,12 @@ def _load_table(source: DataSource) -> Table:
     return load_table_cached(directory)
 
 
+def source_table(source: DataSource) -> Table:
+    """The stored table of ``source`` (counts as a use). Raises :class:`DataInputError`."""
+    with _user_errors():
+        return _load_table(source)
+
+
 def source_info(source: DataSource) -> dict[str, Any]:
     """How to read the file of ``source`` again (``SourceInfo`` in brickdnn.data.export)."""
     from brickdnn.data.io import DEFAULT_MISSING

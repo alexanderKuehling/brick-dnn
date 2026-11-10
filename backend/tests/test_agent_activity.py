@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import io
 import json
@@ -15,6 +16,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.core.signals import request_finished
+from django.db import close_old_connections
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -352,6 +355,21 @@ def test_nothing_is_logged_when_the_log_is_off(ada, settings):
 # --------------------------------------------------------------------------- #
 # Redaction
 # --------------------------------------------------------------------------- #
+
+
+def test_imported_files_are_stored_as_their_size_not_their_content(ada, settings, tmp_path):
+    settings.DATA_PREP_DIR = tmp_path / "prepare"
+    settings.DATA_PREP_ENABLED = True
+    client, _, _ = token_client(ada)
+    ok(client, "import_data", name="Tiny", content="city,pop\nBern,134\n")
+    packed = base64.b64encode(b"city,pop\nBasel,173\n").decode()
+    ok(client, "import_data", filename="basel.csv", content_base64=packed)
+
+    text, binary = log(ada)
+    assert text.arguments == {"name": "Tiny", "content": "18 B, 2 lines, 2 columns"}
+    assert binary.arguments == {"filename": "basel.csv", "content_base64": "file, about 21 B"}
+    stored = stored_text(ada)
+    assert "Bern" not in stored and "Basel" not in stored and packed not in stored
 
 
 def test_uploads_are_stored_as_their_size_not_their_content(ada, training_dir):
@@ -767,6 +785,12 @@ def test_entries_are_written_after_the_response_was_sent(ada):
     response = HttpResponse("done")
     agent_activity._defer(response, [call_])
     assert AgentAction.objects.count() == 0
-    response.close()  # what the server does once the response is out
+    # Closing a response also gives the database connection back (request_finished), which
+    # would end the transaction this test runs in: left out here, as in Django's test client.
+    request_finished.disconnect(close_old_connections)
+    try:
+        response.close()  # what the server does once the response is out
+    finally:
+        request_finished.connect(close_old_connections)
     (written,) = log(ada)
     assert written.summary == "Listed the saved networks" and written.duration_ms == 3

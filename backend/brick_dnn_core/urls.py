@@ -2,7 +2,17 @@ from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView
 
-from . import accounts, agent_activity, data_views, legal, mcp, oauth, projects, views
+from . import (
+    accounts,
+    agent_activity,
+    data_views,
+    legal,
+    mcp,
+    oauth,
+    projects,
+    upload_links,
+    views,
+)
 
 router = DefaultRouter(trailing_slash=True)
 router.include_root_view = False
@@ -54,6 +64,8 @@ urlpatterns = [
     # POST to the URL as given, and Django cannot redirect a POST to add the slash.
     path("mcp/", mcp.McpView.as_view(), name="mcp"),
     path("mcp", mcp.McpView.as_view(), name="mcp-no-slash"),
+    # Uploads with a signed one-time link (MCP tool create_upload_link), without logging in.
+    path("uploads/", upload_links.UploadLinkView.as_view(), name="upload-link"),
     # OAuth sign-in for MCP clients (the consent page itself is /oauth/authorize in the UI).
     path("oauth/register/", oauth.RegisterClientView.as_view(), name="oauth-register"),
     path("oauth/authorize/", oauth.AuthorizeView.as_view(), name="oauth-authorize"),

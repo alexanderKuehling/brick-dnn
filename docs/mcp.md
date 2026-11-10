@@ -2,8 +2,9 @@
 
 Brick DNN has a built-in [MCP](https://modelcontextprotocol.io) server, so AI assistants such
 as Claude can build networks (and classical models: Gaussian processes, SVMs), check them,
-generate PyTorch or scikit-learn code, save them in your account, train them on your server,
-predict with the trained networks and hand you their weights. The
+generate PyTorch or scikit-learn code, save them in your account, prepare data files for
+training (the Data tab), train them on your server, predict with the trained networks and hand
+you their weights. The
 server is at `https://<your domain>/api/mcp/`
 (Streamable HTTP). Assistants sign in with **OAuth**, like "Sign in with …" on other sites;
 scripts and clients without OAuth use personal **API tokens**.
@@ -48,10 +49,10 @@ How it works (OAuth 2.1 as in the MCP authorization spec):
 
 Log in, open the account menu → **API tokens** and create a token:
 
-- **Full access** can also save and delete networks, upload and delete datasets and start,
-  stop or delete trainings. **Read only** can look at everything (layers, examples, your
-  networks and training runs), analyse networks, generate code, predict with trained networks
-  and download their weights, but change nothing.
+- **Full access** can also save and delete networks, upload and delete datasets, import and
+  prepare data and start, stop or delete trainings. **Read only** can look at everything
+  (layers, examples, your networks, data and training runs), analyse networks, generate code,
+  predict with trained networks and download their weights, but change nothing.
 - Choose an expiry (7, 30, 90 days, 1 year or never). You can revoke a token at any time;
   apps using it stop working immediately.
 - The token (`bdnn_…`) is shown **once**. Treat it like a password.
@@ -87,28 +88,69 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 
 | Tool                    | Access | Destructive | What it does                                                    |
 | ----------------------- | ------ | ----------- | --------------------------------------------------------------- |
-| `list_layer_types`      | read   |             | All layer types with their parameters, kernel bricks and classical models |
-| `list_examples`         | read   |             | Example networks with their graphs                              |
+| `list_layer_types`      | read   |             | All layer types with one line per parameter (`types`: full specs), kernel bricks and classical models |
+| `list_examples`         | read   |             | Example networks: names and descriptions (`id`: one with its graph) |
 | `analyze_network`       | read   |             | Validate a graph, infer shapes and parameter counts, explain errors |
 | `generate_pytorch_code` | read   |             | PyTorch script for a valid graph (scikit-learn for a classical model) |
 | `list_projects`         | read   |             | Your saved networks and the ones shared with you                |
 | `get_project`           | read   |             | One saved network with its graph                                |
 | `save_project`          | full   | yes         | Create a network or update one (owner, editors)                 |
 | `delete_project`        | full   | yes         | Delete a network (owner only)                                   |
-| `get_training_options`  | read   |             | Whether training is available, datasets, default settings, search, upload limit |
+| `get_training_options`  | read   |             | Whether training is available, datasets (summaries), default settings, search, upload limit |
+| `get_dataset`           | read   |             | One dataset: rows, task, classes and its columns, a page at a time |
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
+| `create_upload_link`    | full   |             | One-time link to upload a local file with curl (data source or training dataset) |
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
+| `list_data_sources`     | read   |             | Your imported data files, and what `import_data` accepts        |
+| `get_data_source`       | read   |             | One imported file: columns with types, import report, first rows |
+| `import_data`           | full   |             | Import a file (CSV/JSON text, base64 for Excel/Parquet …, or a public link) |
+| `delete_data_source`    | full   | yes         | Delete an imported file (owner; not while a preparation uses it) |
+| `list_data_preps`       | read   |             | Your data preparations and the ones shared with you             |
+| `get_data_prep`         | read   |             | One preparation: source, settings, steps, exported datasets     |
+| `list_prep_steps`       | read   |             | The step catalogue with one line per parameter (`type`: help texts) |
+| `preview_data_prep`     | read   |             | Run a preparation (also unsaved changes): step reports, profiles, sample rows, readiness with fixes |
+| `get_data_prep_script`  | read   |             | The pandas script (or the recipe, or prepared rows as CSV)      |
+| `create_data_prep`      | full   |             | Start a preparation: target, task, split, first steps            |
+| `update_data_prep`      | full   | yes         | Change steps (replace, add, edit, move, remove) and settings (owner, editors) |
+| `apply_readiness_fix`   | full   |             | Add the step that fixes a readiness issue (`fix_id`, or `all`)  |
+| `export_training_dataset` | full |             | Turn a ready preparation into a training dataset (owner, editors) |
+| `delete_data_prep`      | full   | yes         | Delete a preparation (owner only)                               |
 | `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer, the estimated CPU time and whether the budgets allow it |
 | `get_usage`             | read   |             | This month's usage, the plan and its limits, what is left (also of your token's or app's budget), when it resets |
 | `start_training`        | full   |             | Train in the background                                         |
-| `list_training_runs`    | read   |             | Your training runs with status and metrics (regressions: RMSE and R²) |
-| `get_training_run`      | read   |             | One run with its metrics per epoch                              |
+| `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R² (`limit`, `status`, `project_id`) |
+| `get_training_run`      | read   |             | One run as a summary (`include`: history, graph, plan, log, trials, preprocessing) |
 | `stop_training`         | full   |             | Stop a run after the current batch (starter, project editors)   |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
 | `predict`               | read   |             | Run a trained network on up to 64 samples                       |
 
 Read-only tokens and apps allowed read-only access only see the read tools. Networks use the [graph format](graph-format.md).
+
+**Compact answers.** Tool results go into the assistant's context, so they are summaries by
+default, and every capped list says how long it is and how to see more:
+
+- `get_training_options` lists each dataset with what it takes to choose one (rows, features,
+  target, task, number of classes, size, `reference`), no column lists; `get_dataset {id,
+  columns_limit?, columns_offset?}` pages through the columns (50 at a time) and shows the
+  class names (at most 50).
+- `get_training_run` is a summary: status, settings, epochs done, the best epoch, final and
+  test metrics, rows per split, tuning (trials, best trial), the classical fit, and the end of
+  the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
+  "preprocessing"]` adds those parts; `history` has at most 50 evenly spaced epochs plus the
+  best and the last, `log` the last `log_lines` lines (default 20, at most 200).
+  `list_training_runs {limit?, status?, project_id?}` shows the newest 20 runs, one line each,
+  with the total.
+- `list_layer_types` gives one line per parameter (`types` gives the full specs with help
+  texts), `list_examples` names and descriptions (`id` gives one example with its graph),
+  `check_training` at most 50 class names.
+- Data tools show wide tables in pages: 50 columns (`columns_offset` for more), profiles and
+  sample rows of 20 of them (`columns` chooses which), and readiness issues name at most 10
+  columns ("… and 812 more").
+
+A dataset with 800 columns took 17 KB in `get_training_options` before and 3.4 KB now (most of
+it the training settings); a run with 200 epochs took 71 KB in `get_training_run` and now
+takes 1 KB. The REST API and the web app keep their full answers.
 
 **Classical models.** The same tools work for Gaussian processes and support vector machines
 ([graph-format.md](graph-format.md#classical-models)): the instructions and
@@ -153,6 +195,15 @@ never count.
 
 ### Uploading a dataset
 
+Which way to send a file:
+
+| File | Tool |
+| ---- | ---- |
+| Small (up to `BRICKDNN_MCP_UPLOAD_MB`, 5 MB) | as text: `upload_dataset` (a CSV file ready for training) or `import_data` (any file to prepare first; binary files as base64) |
+| Larger, on a computer where the assistant can run a shell command | `create_upload_link`, then `curl` |
+| Public on the internet | `import_data {url}` |
+| Anything else | ask the user to upload it in the web app |
+
 `upload_dataset {name, csv, project_id?}` takes the content of a CSV file as text: features in
 all columns but the last, the target in the last one (see [training.md](training.md)). It is
 stored and checked exactly like an upload in the web app and returned like
@@ -162,7 +213,77 @@ CSV text can have up to `BRICKDNN_MCP_UPLOAD_MB` (default 5 MB, at most
 `BRICKDNN_MAX_UPLOAD_MB`); the MCP endpoint accepts requests of about twice that size, while
 other JSON requests stay limited to 1 MB. The bundled nginx lets requests to `/api/mcp` through
 up to 12 MB.
-Larger files belong in the web app.
+
+**Upload links.** Assistants cannot put megabytes into a tool call, but those with a shell
+(Claude Code and others) can run curl. `create_upload_link {purpose, filename, name?,
+project_id?, …import options}` returns a one-time link, valid for 15 minutes, and the commands
+to use it:
+
+```bash
+curl --fail-with-body -T "sales.csv" "https://example.com/api/uploads/?sig=…"   # the file as the body
+curl --fail-with-body -F "file=@sales.csv" "https://example.com/api/uploads/?sig=…"  # or multipart
+```
+
+`purpose` `data_source` imports the file into the Data tab like `import_data` (every format it
+reads, with its options: `delimiter`, `decimal`, `header`, `encoding`, `missing_values`,
+`sheet`); `training_dataset` stores a CSV or ZIP file like `upload_dataset` (optionally shared
+in `project_id`). The answer of curl is the JSON the inline tool returns: the new source with
+its columns, or the dataset with its `reference`. The upload goes through the same functions,
+limits (`BRICKDNN_DATA_MAX_UPLOAD_MB` and `BRICKDNN_MAX_UPLOAD_MB`, not the MCP text limit),
+checks and rate limit (`BRICKDNN_UPLOAD_RATE`) as in the web app. The file is read under the
+`filename` of the link, whose ending decides the format.
+
+The link works **without logging in**. Its signature binds it to the user who asked for it,
+the purpose, the file name, the options and a random id; it works once (a failed upload, e.g.
+an unreadable file, can be sent again), the user must still be active, and sharing in a
+project needs editing rights in it at upload time. Only tokens and apps with write access get
+the tool. The signature is in the query string, which neither nginx nor gunicorn writes to
+its access log. Treat the link like a password while it is valid.
+
+## Preparing data
+
+Real tables need work before a network can learn from them: missing values, categories as
+text, dates, outliers, several files. The Data tab ([data-preparation.md](data-preparation.md))
+does that step by step, and the same is available over MCP, with the same roles (viewers of a
+shared preparation look, editors change and export, only the owner deletes), limits, rate
+limits and validation as the web app; changes show up in the web app right away.
+
+1. **Import:** `import_data` takes the text of a CSV, TSV, JSON or JSON Lines file
+   (`content`), a binary file as base64 (`content_base64` with `filename`: Excel, OpenDocument,
+   Parquet, Feather, packed files), or a public link (`url`, downloaded with the checks of
+   [link imports](data-preparation.md#security-of-link-imports); off with
+   `BRICKDNN_DATA_URL_IMPORT=false`). Separator, decimal mark, header, encoding and
+   missing-value markers are detected. Larger local files go through `create_upload_link`.
+2. **Prepare:** `create_data_prep {source_id, target, task?, split?, steps?}` answers with the
+   report of every step and the **readiness**: errors that block the export, warnings (target
+   leakage, duplicates, rare classes …) and suggestions, each with a `fix_id` where a step
+   fixes it. `preview_data_prep` adds column profiles, the target and sample rows, also for
+   unsaved `steps`/`settings`.
+3. **Fix:** `apply_readiness_fix {id, fix_id}` adds the suggested step (`"all"`: the fixes of
+   all errors, like *Fix all*). `update_data_prep` changes the steps: the whole list
+   (`steps`), or `add_steps` (`{type, params?, after?}`), `edit_steps` (`{id, params?,
+   enabled?}`, params are merged, `null` resets one), `move_steps` (`{id, after}`) and
+   `remove_steps`; and the settings (`target`, `task`, `split`, or `settings`). New steps get
+   the ids `s1`, `s2` … and the defaults of their type, as in the web app. A step with wrong
+   settings fails in the report with the reason and the columns it saw; `list_prep_steps`
+   explains every step type.
+4. **Export:** `export_training_dataset` turns the ready preparation into a training dataset
+   and returns its `reference`, the task, the target and the feature columns in order.
+5. **Train and predict:** `check_training` and `start_training` with the `reference`; `predict`
+   takes the prepared feature columns (e.g. rows from the sample of `preview_data_prep`).
+   `get_data_prep_script` returns the pandas script whose `prepare(df)` prepares new raw data
+   the same way.
+
+```text
+import_data {content: "<sales.csv>", filename: "sales.csv"}         → source 7: date (datetime), store (categorical), temperature (numeric, 6 missing), sales …
+create_data_prep {source_id: 7, target: "sales"}                    → prep 3, readiness: 3 errors with fix_ids (one-hot store, date parts, impute temperature)
+apply_readiness_fix {id: 3, fix_id: "all"}                          → steps s1–s3 added, ready: regression, 8 features, split 84/18/18
+preview_data_prep {id: 3}                                           → profiles, sample rows with their split
+export_training_dataset {id: 3}                                     → reference {"kind": "upload", "id": 12}, features date_year … temperature
+check_training {graph: Input [8] → Linear 16 → ReLU → Linear 1, dataset: {"kind": "upload", "id": 12}} → ok
+start_training {…, config: {epochs: 30}} · get_training_run {id}     → completed, val_rmse …
+predict {run_id, inputs: [{"date_year": 2024, "date_month": 3, …}]} → values in the units of sales
+```
 
 ### Downloading the weights
 

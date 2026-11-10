@@ -102,6 +102,9 @@ SECRET_VALUE = re.compile(
 # Texts kept in full (up to MAX_NAME characters); other texts longer than MAX_SHORT characters
 # are stored as their length only.
 NAME_KEYS = {"name", "class_name", "label", "filename"}
+# The content of files (upload_dataset, import_data): only their size is stored.
+FILE_TEXT_KEYS = {"csv", "content"}
+FILE_BASE64_KEYS = {"content_base64"}
 # Texts only stored as their length: free text of the user (and e-mail addresses of others).
 LENGTH_ONLY_KEYS = {"description", "text", "user", "email", "query"}
 UUID = re.compile(r"^[0-9a-fA-F]{8}-?([0-9a-fA-F]{4}-?){3}[0-9a-fA-F]{12}$")
@@ -235,8 +238,10 @@ def summarize_value(key: str, value: Any, depth: int = 0) -> Any:
         return f"{clean_text(value.name or 'file', MAX_SHORT)}, {size_text(value.size or 0)}"
     if name == "graph":
         return graph_summary(value)
-    if name == "csv" and isinstance(value, str):
+    if name in FILE_TEXT_KEYS and isinstance(value, str):
         return csv_summary(value)
+    if name in FILE_BASE64_KEYS and isinstance(value, str):
+        return f"file, about {size_text(len(value) * 3 // 4)}"
     if name == "inputs" and isinstance(value, list):
         return inputs_summary(value)
     if isinstance(value, str):

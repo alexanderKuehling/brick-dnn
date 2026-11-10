@@ -266,8 +266,8 @@ def test_upload_dataset(team, mcps, training_dir):
     assert result["reference"] == {"kind": "upload", "id": dataset["id"]}
     assert dataset["name"] == "Iris flowers" and dataset["kind"] == "csv"
     assert dataset["mine"] is True and dataset["shared_in"] == []
-    assert dataset["info"]["num_features"] == 4
-    assert dataset["info"]["class_names"] == ["setosa", "versicolor", "virginica"]
+    assert dataset["features"] == 4 and dataset["target"] == "species"
+    assert dataset["class_names"] == ["setosa", "versicolor", "virginica"]
     assert (training_dir / "datasets" / str(dataset["id"]) / "data.csv").read_text() == IRIS
 
     # It is listed like an upload in the web app and can be trained on.
@@ -340,7 +340,7 @@ def test_mcp_requests_may_carry_larger_csv_files(team, mcps, training_dir, setti
     big = "\n".join(rows) + "\n"
     assert 1.2 * 1024**2 < len(big) < 2 * 1024**2
     result = ok(mcps["ada"], "upload_dataset", name="Big", csv=big)
-    assert result["dataset"]["info"]["num_samples"] == 100_000
+    assert result["dataset"]["rows"] == 100_000
 
     # Larger requests are refused with a JSON-RPC error, before they are read.
     settings.MCP_UPLOAD_MAX_MB = 0.1
