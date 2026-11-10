@@ -2,7 +2,7 @@
   "id": "multi_input",
   "name": "Multi-input model",
   "description": "Combines an image and a vector of metadata with Concat, e.g. for price prediction from a photo and attributes.",
-  "order": 6,
+  "order": 7,
   "graph": {
     "version": 1,
     "nodes": [

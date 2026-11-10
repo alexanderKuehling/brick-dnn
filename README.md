@@ -245,7 +245,7 @@ For graphs with branches, every layer gets its own variable (`added_1 = batchnor
 | ------------- | --------------------------------------------------------------------------------------- |
 | Input         | `Input` (any shape, `float` or `long` token ids)                                          |
 | Basic         | `Linear`, `Flatten`, `Reshape`, `Dropout`, `Activation` (ReLU, LeakyReLU, GELU, ELU, SELU, SiLU, Mish, Sigmoid, Tanh, Softplus, Softmax, LogSoftmax) |
-| Convolution   | `Conv1d`, `Conv2d`, `MaxPool1d`, `MaxPool2d`, `AvgPool2d`, `AdaptiveAvgPool2d`             |
+| Convolution   | `Conv1d`, `Conv2d`, `ConvTranspose2d`, `MaxPool1d`, `MaxPool2d`, `AvgPool2d`, `AdaptiveAvgPool2d` |
 | Normalization | `BatchNorm1d`, `BatchNorm2d`, `LayerNorm`                                                |
 | Sequence      | `Embedding`, `PositionalEmbedding`, `RNN`, `LSTM`, `GRU`, `TransformerEncoder`, `SequencePool` |
 | Merge         | `Add` (residual connections), `Concat`                                                   |
@@ -412,7 +412,7 @@ the Docker images.
 
 Ideas for future versions, contributions welcome:
 
-- More layers: `GroupNorm`, `ConvTranspose2d`, `MultiheadAttention`, `Upsample`
+- More layers: `GroupNorm`, `MultiheadAttention`, `Upsample`
 - Grouping layers into reusable blocks
 - Undo/redo
 - Import of existing PyTorch models

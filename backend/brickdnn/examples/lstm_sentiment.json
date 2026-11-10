@@ -2,7 +2,7 @@
   "id": "lstm_sentiment",
   "name": "LSTM text classifier",
   "description": "Token ids \u2192 embeddings \u2192 bidirectional LSTM \u2192 positive/negative sentiment.",
-  "order": 3,
+  "order": 4,
   "graph": {
     "version": 1,
     "nodes": [

@@ -2,7 +2,7 @@
   "id": "gp_regression",
   "name": "Gaussian process regression (RBF + noise)",
   "description": "A classical model (scikit-learn): predicts one number from 8 features with its uncertainty. The kernel is a scaled RBF plus white noise, whose hyperparameters are fitted to the data. Train it on a small CSV file (up to a few thousand rows).",
-  "order": 7,
+  "order": 8,
   "graph": {
     "version": 1,
     "nodes": [
