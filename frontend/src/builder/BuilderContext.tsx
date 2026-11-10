@@ -30,6 +30,8 @@ export interface BuilderContextValue {
   presence?: PresenceStore | null;
   /** The selected Input layer and the training data, if a dataset is chosen. */
   inputFit?: InputFit | null;
+  /** The connections (for the receptive fields in the inspector). */
+  links?: { source: string; target: string }[];
 }
 
 export const BuilderContext = createContext<BuilderContextValue | null>(null);

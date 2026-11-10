@@ -49,6 +49,7 @@ import { Collaboration } from '@/collab/Collaboration';
 import { CollabProvider } from '@/collab/context';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DEMO } from '@/demo';
+import { DataFlowTour } from '@/explain/DataFlowTour';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
 import { useDatasetFit } from '@/training/useDatasetFit';
@@ -983,8 +984,10 @@ function Builder() {
       focusNode,
       presence,
       inputFit: datasetFit.inputFit,
+      links: edges,
     }),
     [
+      edges,
       specs,
       analysis,
       readOnly,
@@ -1132,6 +1135,8 @@ function Builder() {
                 // Live, the server's `replaced` message brings the restored state.
                 onRestored={(restored) => !live.isTracking() && loadProject(restored)}
               />
+              {/* For learners: step a sample through the network (src/explain). */}
+              <DataFlowTour analysis={analysis} specs={specs} links={edges} focusNode={focusNode} />
               {nodes.length === 0 && !readOnly && (
                 <Panel position="top-center">
                   <Paper
