@@ -1226,6 +1226,124 @@ export interface RunDetail extends RunSummary {
   budget_warning?: string | null;
 }
 
+// --------------------------------------------------------------------------
+// Predictions with a trained run (POST /api/training/runs/<id>/predict/)
+// --------------------------------------------------------------------------
+
+/** A cell value of an input row: numbers, text, true/false; null for a missing value. */
+export type PredictionCell = string | number | boolean | null;
+
+/** A row from the data with its actual target value, to try the model with. */
+export interface PredictionSample {
+  values: Record<string, PredictionCell>;
+  target?: PredictionCell;
+}
+
+/** A column of the source table of a data preparation (raw rows), from its training rows. */
+export interface RawColumn {
+  name: string;
+  kind: ColumnKind;
+  /** Text columns: the values of the training rows, most frequent first. */
+  categories?: string[];
+  /** There are more categories than listed. */
+  more_categories?: boolean;
+  /** Numbers and dates (ISO text): the range of the training rows. */
+  min?: number | string | null;
+  max?: number | string | null;
+  /** Numbers that were all whole numbers. */
+  integer?: boolean;
+  /** The training rows have missing values here. */
+  missing?: boolean;
+  /** false: the preparation drops the column before anything reads it. */
+  used?: boolean;
+}
+
+/** GET /api/training/runs/<id>/predict-form/: what the prediction panel shows. */
+export interface PredictionForm {
+  available: boolean;
+  /** Why the run cannot predict (no weights, unknown preprocessing …). */
+  reason: string | null;
+  kind: 'tabular' | 'image' | 'demo' | null;
+  task: 'classification' | 'regression' | null;
+  class_names: string[] | null;
+  /** Rows per request; more rows are sent in several requests. */
+  max_rows: number;
+  /** Rows of a pasted or uploaded CSV file at most. */
+  max_form_rows: number;
+  max_top_k: number;
+  /** Set when a compute budget is used up (the server refuses predictions then). */
+  budget_note: string | null;
+  /** Tabular: the target column. */
+  target?: string | null;
+  gaussian_process?: boolean;
+  /** Tabular: the feature columns of the training dataset (standardised by the server). */
+  prepared?: {
+    columns: { name: string; mean: number; std: number }[];
+    samples: PredictionSample[];
+  };
+  /** Runs on a dataset from a data preparation: rows in the columns of its source table. */
+  raw?: {
+    prep: { id: number; name: string } | null;
+    source: string | null;
+    target: string | null;
+    columns: RawColumn[];
+    samples: PredictionSample[];
+    /** Steps that only change the training rows and do not apply to new rows. */
+    skipped_steps: string[];
+    /** Tables joined by the preparation (stored with the dataset). */
+    joined: string[];
+  };
+  /** From a preparation, but exported before raw rows were supported. */
+  raw_note?: string;
+  image?: { channels: 1 | 3; height: number; width: number };
+}
+
+export interface PredictedClass {
+  class: string;
+  index?: number;
+  probability: number;
+}
+
+/** One prediction: a class with its probability and the top classes, or a value. */
+export interface Prediction {
+  class?: string | null;
+  index?: number | null;
+  probability?: number | null;
+  top?: PredictedClass[];
+  /** Regression: in the units of the target. */
+  value?: number | number[] | null;
+  /** Gaussian processes: the predictive standard deviation. */
+  std?: number | null;
+}
+
+export interface PredictionRequest {
+  inputs: unknown;
+  input_format?: 'prepared' | 'raw';
+  /** Images: 'raw' for pixels 0–255. */
+  input_scale?: 'raw' | 'unit' | 'normalized';
+  top_k?: number;
+}
+
+export interface PredictionResult {
+  run: { id: string; name: string };
+  task: 'classification' | 'regression' | null;
+  predictions: Prediction[];
+  target?: string | null;
+  note?: string;
+  std_note?: string;
+  /** Raw rows: unknown categories, rows unlike the training rows … */
+  warnings?: string[];
+}
+
+/** The answer when inputs are invalid (HTTP 400). */
+export interface PredictionErrorBody {
+  detail: string;
+  /** What the run takes. */
+  inputs?: string | null;
+  /** Raw rows: every problem, per row and column. */
+  errors?: string[];
+}
+
 export interface RunInput {
   name: string;
   graph: GraphDocument;

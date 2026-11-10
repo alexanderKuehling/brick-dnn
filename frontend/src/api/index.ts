@@ -35,6 +35,9 @@ import type {
   OAuthDecision,
   OAuthRequest,
   PlanChangePreview,
+  PredictionForm,
+  PredictionRequest,
+  PredictionResult,
   PrepDownloadFormat,
   PreviewRequest,
   PreviewResult,
@@ -465,6 +468,17 @@ const serverApi = {
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
         requestFile(`/api/training/runs/${id}/weights/`, { auth: true }),
+      /** What the prediction panel needs (everyone who can see the run). */
+      predictForm: (id: string, signal?: AbortSignal) =>
+        request<PredictionForm>(`/api/training/runs/${id}/predict-form/`, { auth: true, signal }),
+      /** Predict up to `max_rows` samples; HTTP 400 answers with PredictionErrorBody. */
+      predict: (id: string, body: PredictionRequest, signal?: AbortSignal) =>
+        request<PredictionResult>(`/api/training/runs/${id}/predict/`, {
+          method: 'POST',
+          body,
+          auth: true,
+          signal,
+        }),
     },
   },
 
