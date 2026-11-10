@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView
 from . import (
     accounts,
     agent_activity,
+    approvals,
     billing_views,
     data_views,
     legal,
@@ -51,6 +52,23 @@ urlpatterns = [
         agent_activity.AgentActivitySummaryView.as_view(),
         name="agent-activity-summary",
     ),
+    # Actions of agents that wait for the user's approval (website login only).
+    path("approvals/", approvals.ApprovalListView.as_view(), name="approval-list"),
+    path("approvals/rules/", approvals.ApprovalRulesView.as_view(), name="approval-rules"),
+    path(
+        "approvals/rules/default/",
+        approvals.ApprovalRuleView.as_view(),
+        {"kind": "default"},
+        name="approval-rule-default",
+    ),
+    path(
+        "approvals/rules/<str:kind>/<int:pk>/",
+        approvals.ApprovalRuleView.as_view(),
+        name="approval-rule",
+    ),
+    path("approvals/<int:pk>/", approvals.ApprovalDetailView.as_view(), name="approval-detail"),
+    path("approvals/<int:pk>/approve/", approvals.ApproveView.as_view(), name="approval-approve"),
+    path("approvals/<int:pk>/deny/", approvals.DenyView.as_view(), name="approval-deny"),
     # Paid plans with Paddle (billing.py). Only the first one answers while billing is off.
     path("billing/", billing_views.billing_info, name="billing"),
     path("billing/subscription/", billing_views.SubscriptionView.as_view(), name="billing-state"),

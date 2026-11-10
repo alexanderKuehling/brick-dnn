@@ -615,6 +615,7 @@ def test_pages_filters_and_polling(ada):
         "arguments",
         "targets",
         "project",
+        "approval",
     }
     assert item["agent"] == {
         "kind": "token",

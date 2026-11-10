@@ -148,7 +148,7 @@ def purge(
     users by id only. With ``dry_run``, nothing is deleted. ``agent_log_days``: how long the
     activity log of agents is kept (default BRICKDNN_AGENT_LOG_DAYS; 0: the log is off, all
     of it is deleted)."""
-    from . import agent_activity
+    from . import agent_activity, approvals
     from .accounts import delete_account
 
     now = now or timezone.now()
@@ -203,6 +203,9 @@ def purge(
     if agent_log_days is None:
         agent_log_days = settings.AGENT_LOG_DAYS
     result.agent_actions = agent_activity.purge(now, agent_log_days, dry_run)
+    approval_requests = approvals.purge(now, dry_run)
+    if approval_requests:
+        say(f"{verb} {approval_requests} approval requests older than {approvals.KEEP_DAYS} days")
     if result.agent_actions:
         kept = f"older than {agent_log_days} days" if agent_log_days > 0 else "(the log is off)"
         say(f"{verb} {result.agent_actions} entries of the agent activity log {kept}")
