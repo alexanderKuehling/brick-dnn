@@ -294,7 +294,7 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
         },
     }
     builtin = data["builtin_datasets"]
-    assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10"]
+    assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes"]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]
 
 
@@ -434,7 +434,8 @@ def test_upload_wrong_extension(auth_client, training_dir):
     response = upload(auth_client, "data.txt", b"1,2\n3,4\n")
     assert response.status_code == 400
     assert response.data["detail"] == (
-        "Upload a .csv file or a .zip file with one folder per class."
+        "Upload a .csv file or a .zip file: with one folder of images per class, or for "
+        "segmentation with the folders images/ and masks/."
     )
     response = auth_client.post("/api/training/datasets/", {"name": "x"}, format="multipart")
     assert response.status_code == 400

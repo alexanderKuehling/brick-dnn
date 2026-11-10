@@ -61,6 +61,8 @@ def _whole(value: Any, name: str, default: int, low: int, high: int) -> int:
 
 
 def _task(info: dict[str, Any], dataset: Dataset) -> str | None:
+    if dataset.kind == "segmentation":
+        return "segmentation"
     if dataset.kind == "images":
         return "classification"
     if dataset.prepared_from_id is not None or info.get("predefined_split"):
@@ -88,7 +90,9 @@ def dataset_summary(dataset: Dataset, user) -> dict[str, Any]:
         "mine": dataset.owner_id == user.pk,
         "rows": info.get("num_samples"),
         "features": info.get("num_features"),
-        "image_shape": info.get("sample_shape") if dataset.kind == "images" else None,
+        "image_shape": (
+            info.get("sample_shape") if dataset.kind in ("images", "segmentation") else None
+        ),
         "target": str(columns[-1]) if dataset.kind == "csv" and columns else None,
         "task": _task(info, dataset),
         "classes": len(classes) if classes else None,
@@ -133,7 +137,39 @@ def dataset_detail(dataset: Dataset, user, limit: Any = None, offset: Any = None
         detail[key] = info.get(key)
     if dataset.kind == "images":
         detail["class_counts"] = capped_names(info.get("class_counts"))
+    if dataset.kind == "segmentation":
+        detail.update(segmentation_details(info))
     return _no_none(detail)
+
+
+def segmentation_details(info: dict[str, Any]) -> dict[str, Any]:
+    """What the inspection of a segmentation dataset found: how the masks are read, the
+    share of the pixels of every class, the image sizes and what was left out."""
+    found = info.get("segmentation") if isinstance(info.get("segmentation"), dict) else {}
+    names = info.get("class_names") or []
+    shares = found.get("class_pixel_share") or []
+    sizes = found.get("image_sizes") if isinstance(found.get("image_sizes"), dict) else {}
+    details: dict[str, Any] = {
+        "rows_note": "rows are images with a mask; image_shape is channels, height, width "
+        "of the most common image size (images are resized to the Input).",
+        "mask_format": found.get("mask_format"),
+        "ignore_index": found.get("ignore_index"),
+        "class_pixel_share": {str(name): share for name, share in zip(names, shares, strict=False)}
+        or None,
+        "image_sizes": _no_none(
+            {
+                "most_common": sizes.get("most_common"),
+                "min": sizes.get("min") if sizes.get("different", 1) > 1 else None,
+                "max": sizes.get("max") if sizes.get("different", 1) > 1 else None,
+            }
+        )
+        or None,
+        "unmatched_images": found.get("unmatched_images") or None,
+        "unmatched_masks": found.get("unmatched_masks") or None,
+        "unmatched_examples": found.get("unmatched_examples") or None,
+        "mask_size_mismatches": found.get("mask_size_mismatches") or None,
+    }
+    return _no_none(details)
 
 
 # --------------------------------------------------------------------------- #
@@ -160,7 +196,8 @@ def _epochs(run: TrainingRun) -> int | None:
 def _metrics(values: Any) -> dict[str, Any] | None:
     if not isinstance(values, dict):
         return None
-    kept = {k: v for k, v in values.items() if v is not None}
+    # Lists (the per-class values of a segmentation) are shown once, by class name.
+    kept = {k: v for k, v in values.items() if v is not None and not isinstance(v, list)}
     return kept or None
 
 
@@ -324,6 +361,8 @@ def run_detail(
     }
     if isinstance(state.get("classical"), dict):
         detail["classical"] = {k: _short(v) for k, v in state["classical"].items()}
+    if isinstance(state.get("segmentation"), dict):
+        detail["segmentation"] = segmentation_results(state["segmentation"])
     if run.tuning or state.get("trials"):
         detail["tuning"] = _no_none(
             {
@@ -370,6 +409,38 @@ def run_detail(
     if missing:
         detail["more"] = f"include: {missing} adds these parts (history is downsampled)."
     return _no_none(detail)
+
+
+def _per_class(names: list[Any], values: Any) -> dict[str, Any] | None:
+    """``{class name: value}`` with rounded values (None for classes that do not occur)."""
+    if not isinstance(values, list):
+        return None
+    return {
+        str(name): round(value, 4) if isinstance(value, (int, float)) else None
+        for name, value in zip(names, values, strict=False)
+    }
+
+
+def segmentation_results(found: dict[str, Any]) -> dict[str, Any]:
+    """The results of a segmentation run per class (IoU of the kept weights on the validation
+    and the test data) and how many preview images there are (the web app shows them)."""
+    names = found.get("class_names") or []
+    results: dict[str, Any] = {
+        "loss": found.get("loss"),
+        "binary": found.get("binary") or None,
+        "ignore_index": found.get("ignore_index"),
+    }
+    for split in ("validation", "test"):
+        part = found.get(split)
+        if isinstance(part, dict):
+            results[f"{split}_class_iou"] = _per_class(names, part.get("class_iou"))
+    previews = found.get("previews")
+    if isinstance(previews, dict) and previews.get("count"):
+        results["previews"] = (
+            f"{previews['count']} validation images with true and predicted masks, shown in "
+            "the web app (REST: GET /api/training/runs/<id>/previews/)."
+        )
+    return _no_none(results)
 
 
 # --------------------------------------------------------------------------- #
