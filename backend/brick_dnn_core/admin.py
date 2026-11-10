@@ -16,6 +16,7 @@ from .models import (
     Project,
     ProjectMember,
     TrainingRun,
+    TwoFactorAuth,
     UsageRecord,
     UserProfile,
 )
@@ -234,10 +235,29 @@ class UserProfileAdmin(admin.ModelAdmin):
             {"fields": ("cpu_minutes_per_month", "cpu_minutes_per_run", "storage_mb")},
         ),
         ("Set by the user", {"fields": ("budget_cpu_minutes",)}),
+        (
+            "E-mail",
+            {
+                "fields": (
+                    "email_verified_at",
+                    "email_verified_for",
+                    "email_legacy",
+                    "deletion_warned_at",
+                )
+            },
+        ),
     )
 
     def get_readonly_fields(self, request, obj=None):
-        fixed = ("last_active_at", "terms_accepted_at", "terms_version", "privacy_version")
+        fixed = (
+            "last_active_at",
+            "terms_accepted_at",
+            "terms_version",
+            "privacy_version",
+            "email_verified_at",
+            "email_verified_for",
+            "deletion_warned_at",
+        )
         # A new profile (e.g. for an account created in the admin) needs its user.
         return fixed if obj is None else ("user", *fixed)
 
@@ -299,6 +319,28 @@ class AgentActionAdmin(admin.ModelAdmin):
     list_filter = ("outcome", "source", "agent_kind")
     search_fields = ("owner__username", "agent_name", "tool", "summary")
     raw_id_fields = ("owner",)
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
+
+
+@admin.register(TwoFactorAuth)
+class TwoFactorAuthAdmin(admin.ModelAdmin):
+    """Who has two-factor authentication (two_factor.py). The secret and the recovery codes
+    are never shown. Deleting an entry turns it off for that account, e.g. when someone lost
+    their phone and their recovery codes (check who is asking first)."""
+
+    list_display = ("user", "confirmed_at", "created_at", "recovery_codes_left")
+    search_fields = ("user__username", "user__email")
+    exclude = ("secret", "recovery_codes", "last_used_step")
+    readonly_fields = ("user", "confirmed_at", "created_at")
+
+    @admin.display(description="Recovery codes left")
+    def recovery_codes_left(self, record: TwoFactorAuth) -> int:
+        return len(record.recovery_codes)
 
     def has_add_permission(self, request) -> bool:
         return False
