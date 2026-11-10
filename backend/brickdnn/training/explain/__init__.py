@@ -711,8 +711,8 @@ class _Context:
         features = [
             {
                 "name": columns[i],
-                "mean": render.sig(result["mean"][i]),
-                "std": render.sig(result["std"][i]),
+                "mean": render.sig(round(float(result["mean"][i]), 9)),
+                "std": render.sig(round(float(result["std"][i]), 9)),
             }
             for i in range(len(columns))
         ]
@@ -803,11 +803,10 @@ class _Context:
                 spread = np.concatenate(
                     [std_fn(chunk) for chunk in np.array_split((raw - mean) / std, 4)]
                 )
-                top = float(spread.max()) or 1.0
+                low_std, high_std = float(spread.min()), float(spread.max())
+                unit_std = (spread - low_std) / max(high_std - low_std, 1e-12)
                 answer["std"] = {
-                    "png": render.data_url(
-                        render.heat_rgba((spread / top).reshape(n, n), alpha=False)
-                    ),
+                    "png": render.data_url(render.heat_rgba(unit_std.reshape(n, n), alpha=False)),
                     "range": [render.sig(spread.min()), render.sig(spread.max())],
                 }
         if self.demo:

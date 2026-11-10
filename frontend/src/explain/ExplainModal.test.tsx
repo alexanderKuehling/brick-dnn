@@ -203,8 +203,8 @@ describe('Explaining a model trained on a CSV file', () => {
     expect(await screen.findByText('Pick a row')).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: 'petal: +0.35' })).toBeInTheDocument();
     expect(run).toHaveBeenCalledWith(IRIS.id, { method: 'tabular', sample: 0 }, expect.anything());
-    expect(screen.getByText(/^the probability of 'setosa':/)).toHaveTextContent(
-      "the probability of 'setosa': 0.5 for an average row (the mean of the training rows), 0.9 for this one."
+    expect(screen.getByText(/^The probability of 'setosa':/)).toHaveTextContent(
+      "The probability of 'setosa': 0.5 for an average row (the mean of the training rows), 0.9 for this one."
     );
 
     // Integrated gradients instead of Shapley values.
@@ -233,8 +233,8 @@ describe('Explaining a model trained on a CSV file', () => {
     render(<ExplainContent run={IRIS} />);
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Feature importance' }));
-    expect(await screen.findByRole('img', { name: 'petal: 42 % ± 3 %' })).toBeInTheDocument();
-    expect(screen.getByText(/Validation accuracy 95 % on 30 rows/)).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'petal: 42.0 % ± 3.0 %' })).toBeInTheDocument();
+    expect(screen.getByText(/Validation accuracy 95.0 % on 30 rows/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Decision boundary' }));
     const plot = await screen.findByRole('img', { name: 'Decision boundary over petal and sepal' });

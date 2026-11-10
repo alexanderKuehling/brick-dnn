@@ -2,6 +2,13 @@
   image-rendering: pixelated;
 }
 
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-width: 900px;
+}
+
 .thumb {
   display: flex;
   flex-direction: column;

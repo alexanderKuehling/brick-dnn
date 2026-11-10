@@ -133,7 +133,7 @@ export function ImageSamplePicker({
       )}
       {samples && (
         <>
-          <SimpleGrid cols={{ base: 4, xs: 6, sm: 8 }} spacing={6} verticalSpacing={6}>
+          <div className={classes.thumbs}>
             {samples.samples.map((sample) => (
               <Tooltip
                 key={sample.index}
@@ -161,7 +161,7 @@ export function ImageSamplePicker({
                 </UnstyledButton>
               </Tooltip>
             ))}
-          </SimpleGrid>
+          </div>
           <Text size="xs" c="dimmed">
             Validation images the model did not train on, with its guess (✓ right, ✗ wrong). The
             last ones are mistakes: interesting to explain.

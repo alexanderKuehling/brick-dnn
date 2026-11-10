@@ -105,8 +105,9 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
         )}
       </Group>
       <Text size="sm">
-        {answer.explains}: <b>{formatValue(answer.base_value, 4)}</b> for an average row (the mean
-        of the training rows), <b>{formatValue(answer.value, 4)}</b> for this one.
+        {answer.explains.charAt(0).toUpperCase() + answer.explains.slice(1)}:{' '}
+        <b>{formatValue(answer.base_value, 4)}</b> for an average row (the mean of the training
+        rows), <b>{formatValue(answer.value, 4)}</b> for this one.
       </Text>
       <Table fz="xs" verticalSpacing={4} withRowBorders={false}>
         <Table.Thead>
@@ -160,8 +161,15 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
 export function PermutationView({ answer }: { answer: PermutationAnswer }) {
   const top = Math.max(1e-12, ...answer.features.map((f) => Math.abs(f.mean ?? 0) + (f.std ?? 0)));
   const metric = answer.metric === 'accuracy' ? 'accuracy' : 'R²';
+  // Drops are differences of scores: round away the floating-point noise.
   const show = (value: number | null) =>
-    answer.metric === 'accuracy' ? percent(value) : formatValue(value);
+    value === null
+      ? '–'
+      : answer.metric === 'accuracy'
+        ? `${(value * 100).toFixed(1)} %`
+        : Math.abs(value) < 5e-4
+          ? '0'
+          : value.toFixed(3);
   return (
     <Stack gap="sm">
       <Text size="sm">
@@ -202,7 +210,7 @@ export function PermutationView({ answer }: { answer: PermutationAnswer }) {
                     )}
                   </div>
                 </Table.Td>
-                <Table.Td w={120} ta="right" ff="monospace">
+                <Table.Td w={150} ta="right" ff="monospace" style={{ whiteSpace: 'nowrap' }}>
                   {show(mean)} ± {show(std)}
                 </Table.Td>
               </Table.Tr>
@@ -217,7 +225,7 @@ export function PermutationView({ answer }: { answer: PermutationAnswer }) {
   );
 }
 
-const PLOT = { width: 420, height: 420, left: 48, bottom: 36, top: 8, right: 8 };
+const PLOT = { width: 430, height: 420, left: 62, bottom: 36, top: 8, right: 8 };
 
 function ticks(low: number, high: number, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => low + ((high - low) * i) / (count - 1));
@@ -287,9 +295,9 @@ export function BoundaryView({ answer }: { answer: BoundaryAnswer }) {
             cx={px(x)}
             cy={py(y)}
             r={3.2}
-            fill={pointColor(label)}
-            stroke="white"
-            strokeWidth={0.9}
+            fill={view === 'std' ? 'white' : pointColor(label)}
+            stroke="#1a1b1e"
+            strokeWidth={0.8}
           />
         ))}
         {ticks(x0, x1).map((t) => (
@@ -326,12 +334,12 @@ export function BoundaryView({ answer }: { answer: BoundaryAnswer }) {
           {answer.features[0]}
         </text>
         <text
-          x={12}
+          x={10}
           y={top + innerH / 2}
           fontSize={11}
           textAnchor="middle"
           fill="currentColor"
-          transform={`rotate(-90 12 ${top + innerH / 2})`}
+          transform={`rotate(-90 10 ${top + innerH / 2})`}
         >
           {answer.features[1]}
         </text>
