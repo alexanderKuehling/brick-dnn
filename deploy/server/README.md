@@ -210,5 +210,116 @@ Servers set up before the legal pages existed: create the folder once with
 `ssh root@SERVER install -d -m 755 -o deploy -g deploy /srv/brick-dnn/legal` (the next deploy
 would otherwise create it, owned by root).
 
-The server keeps files on its disk; turn on Hetzner's backups (or back up the Docker volume
-`brick-dnn_brickdnn-data`) to keep them safe. Accounts and networks are in the database.
+The server keeps files on its disk and accounts and networks are in the database: see
+[Backups](#backups) for keeping both safe.
+
+## Backups
+
+What is kept where, and what is backed up:
+
+| Data | Where | Backed up by |
+| --- | --- | --- |
+| Accounts, networks, runs, usage (the database) | Supabase (`DATABASE_URL`), else SQLite in the data volume | Supabase: **check your plan** (dashboard → *Database* → *Backups*): paid plans keep daily backups for 7 days, the free plan has none you can restore yourself. And `manage.py backup` (below). |
+| Uploads, datasets, trained weights, the generated secret key | Docker volume `brick-dnn_brickdnn-data` on the server's disk | nothing, unless you turn on Hetzner's backups; and `manage.py backup` |
+
+**1. Turn on Hetzner's server backups** (the simplest offsite copy): Hetzner Cloud Console →
+the server → *Backups* → *Enable backups*. One click, about 20 % of the server's price; Hetzner
+copies the whole disk once a day (Docker volumes included) and keeps the last seven. To go
+back, *Backups* → a backup → *Restore* (replaces the disk) or *Convert to image* and create a
+second server from it to take files from. They do not include the Supabase database, which is
+what step 2 is for.
+
+**2. `manage.py backup`, daily.** With `BRICKDNN_BACKUP_DIR` set (brickdnn.com sets
+`/data/backups` in `deploy/sites/brickdnn.com/settings.env`), the cleanup service runs it once a
+day after the clean-up and writes into the data volume a folder `brickdnn-<date and time>`
+with
+
+- the database as of one moment: Django's `dumpdata` in one transaction (`database.json.gz`; it
+  loads into PostgreSQL of any version and into SQLite), `pg_dump` where it is installed (the
+  Docker image has none), or SQLite's own online backup;
+- the files of the data volume as `files.tar.gz` (without the cache and the backups). Above
+  `BRICKDNN_BACKUP_MAX_FILES_MB`, or when they would not fit on the disk, only a list of them
+  (`files.txt`); `BRICKDNN_BACKUP_FILES=list` or `none` chooses that up front, e.g. when
+  Hetzner's backups have the files;
+- `manifest.json`: when, which version, what is inside.
+
+It keeps the newest backup of each of the last 7 days and of each of the last 4 weeks
+(`BRICKDNN_BACKUP_KEEP_DAILY`, `BRICKDNN_BACKUP_KEEP_WEEKLY`) and deletes the others. The
+folder holds password hashes and the secret key: it is readable by the app's user only, and
+copies of it should be kept as carefully. `/api/health/` reports `backup: failed` when the last
+backup failed or the newest is older than 50 hours (`BRICKDNN_BACKUP_MAX_AGE_HOURS`), so the
+uptime check opens an issue. **Mind the disk**: every backup on the server's disk takes space
+(7 + 4 backups of up to 1 GB of files on brickdnn.com); `$C exec cleanup python manage.py backup
+--list` shows their sizes. Without Hetzner's backups these copies are on the same disk as the
+site: they help after a mistake or a broken database, not after losing the server.
+
+**Offsite copies to S3-compatible storage** (Hetzner Object Storage, Backblaze B2 …) are not
+built in: the image has no S3 client (`boto3`). With shell access, `rclone` on the server can
+copy the folder after the daily backup (for example at 05:00 from root's crontab):
+`rclone sync /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups remote:bucket/brickdnn`.
+
+```bash
+$C exec cleanup python manage.py backup --list   # the backups, newest first
+$C exec cleanup python manage.py backup          # one now
+```
+
+**Restore** (replaces the database, and writes the backup's files into the data volume; files
+added later stay):
+
+```bash
+$C stop backend worker realtime cleanup
+$C run --rm --no-deps backend python manage.py restore latest   # or a folder name; asks first
+$C up -d
+```
+
+`--database-only` and `--files-only` restore one part. A backup of newer code than the one
+running restores too, but restore with the same commit (`manifest.json` names the version) or
+newer: `restore` runs `migrate` afterwards.
+
+**Restore drill** (once, and after big changes): copy a backup to your computer and restore it
+into an empty SQLite database, which proves it is complete without touching the site:
+
+```bash
+scp -r root@SERVER:/var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/brickdnn-2026… /tmp/drill-backup
+cd backend
+DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py restore /tmp/drill-backup --no-input
+DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py runserver   # log in, look around
+rm -rf /tmp/drill /tmp/drill-backup   # it holds password hashes
+```
+
+## Monitoring
+
+GitHub checks the site every 15 minutes, without any other service or account
+(`.github/workflows/uptime.yml`, script `deploy/server/uptime.py`):
+
+- `DEPLOY_URL/api/health/` must answer `"status": "ok"` and the front page must load. A failed
+  check is tried twice more, 30 seconds apart, so a deploy does not count as an outage.
+- When the site is down, the workflow opens **one issue** labelled `outage` ("brickdnn.com is
+  down") with the failed checks. While the outage lasts it comments on that issue when the
+  problem changes and every six hours, never opening a second one. When the site is back it
+  comments how long the outage took and closes the issue.
+- GitHub sends you an e-mail and a notification in the GitHub app for the new issue and its
+  comments, **if you watch the repository**: on the repository page, *Watch* → *All Activity*
+  (or *Custom* → *Issues*), and in your GitHub settings under *Notifications* have e-mail (and
+  the mobile app's push notifications) on for *Watching*. Test it once: *Actions* → *Uptime* →
+  *Run workflow*.
+- It needs only the variable `DEPLOY_URL` (set for deploys); without it nothing runs. Public
+  repositories pay nothing for these runs. GitHub may start scheduled runs some minutes late,
+  and **switches schedules off after 60 days without any commit** to the repository: GitHub
+  says so by e-mail, and *Actions* → *Uptime* → *Enable workflow* turns it on again.
+
+What the checks mean:
+
+| Check | Fails when | Look at |
+| --- | --- | --- |
+| `database` (answer `503`, status `error`) | Django cannot run `SELECT 1`: Supabase paused (free projects pause after a week without use) or unreachable, wrong `DATABASE_URL` | the Supabase dashboard; `$C logs backend` |
+| `worker` (status `degraded`) | no training worker sent a heartbeat in the last minute: trainings wait | *Training workers* in the Django admin; `$C ps worker`, `$C logs worker` |
+| `disk` (status `degraded`) | less than 1 GB free in the data volume (`BRICKDNN_HEALTH_MIN_FREE_MB`) | `df -h`, `docker system df`; `docker system prune` removes old images |
+| front page | Caddy, nginx or the server is down, or the certificate fails | `$C ps`, `$C logs caddy`; the Hetzner console |
+
+Everyone can see the names of the checks and whether they passed (the repository is public, so
+the issue says no more than that). The numbers behind them (free space, seconds since the last
+heartbeat, the database's error message) are shown to staff accounts: log in to the site as an
+administrator and open `https://DOMAIN/api/health/`. For scripts, set a secret
+`BRICKDNN_HEALTH_TOKEN=…` in `/opt/brick-dnn/.env` (`$C up -d`) and send it as header:
+`curl -H "X-Health-Token: …" https://DOMAIN/api/health/`.

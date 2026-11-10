@@ -330,7 +330,20 @@ history and API, but **fitted once instead of epoch by epoch**:
   accuracy or the RMSE and R², the test result if there is a test set, the fit time, the
   fitted kernel and log marginal likelihood of a Gaussian process (one kernel per class for
   a classifier with more than two classes) or the number of support vectors of an SVM, and
-  warnings of the fit in the log (e.g. a hyperparameter that ended at its bound).
+  warnings of the fit in the log.
+- **Hyperparameters at a bound**: scikit-learn only warns when the optimiser stops at a bound
+  of a kernel hyperparameter. Brick DNN compares every optimised hyperparameter with its
+  bounds after the fit and reports the ones that ended there (in log space, within 0.1 %) in
+  `state.classical.at_bounds`, in the log, in the run's results and in the MCP tool
+  `get_training_run`: *"Noise level of white_1 ended at its lower bound 1e-05: the model may
+  be overfitting; set custom bounds, e.g. ≥ 0.001."* A noise level or length scale at its
+  lower bound usually means the model follows every training point; at the upper bound, the
+  fit wanted a larger value (a length scale there often means the kernel does not matter).
+  In the builder, a button on the hint switches the brick to *custom bounds* with the
+  suggested bound (two orders of magnitude further in, or out for an upper bound) and
+  selects it; *Undo* puts the old settings back. Each entry has the brick (`node`, `name`,
+  `type`), `parameter`, `value`, `bound`, `side` (`lower`/`upper`), the classes of a
+  multi-class classifier, the `suggestion` (new brick parameters) and the `message`.
 - **Stopping**: scikit-learn cannot be interrupted, so stopping during the fit ends the
   training process at once and nothing is saved.
 - **The model**: the fitted pipeline is saved with joblib as `model.joblib` (download:

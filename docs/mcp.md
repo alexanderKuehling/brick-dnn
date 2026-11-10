@@ -139,7 +139,8 @@ default, and every capped list says how long it is and how to see more:
   columns_limit?, columns_offset?}` pages through the columns (50 at a time) and shows the
   class names (at most 50).
 - `get_training_run` is a summary: status, settings, epochs done, the best epoch, final and
-  test metrics, rows per split, tuning (trials, best trial), the classical fit, and the end of
+  test metrics, rows per split, tuning (trials, best trial), the classical fit (with
+  `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), and the end of
   the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
   "preprocessing"]` adds those parts; `history` has at most 50 evenly spaced epochs plus the
   best and the last, `log` the last `log_lines` lines (default 20, at most 200).

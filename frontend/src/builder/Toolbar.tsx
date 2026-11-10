@@ -10,6 +10,7 @@ import {
   IconFileExport,
   IconFileImport,
   IconFilePlus,
+  IconHelp,
   IconLayoutGrid,
   IconLayoutSidebar,
   IconPlayerPlay,
@@ -77,6 +78,8 @@ interface ToolbarProps {
   onShowSummary: () => void;
   onOpenPalette: () => void;
   onOpenInspector: () => void;
+  /** Opens the guide to the builder again (Onboarding.tsx). */
+  onShowGuide?: () => void;
 }
 
 function Status({
@@ -88,7 +91,7 @@ function Status({
 }: Pick<ToolbarProps, 'analysis' | 'analyzing' | 'analysisError' | 'empty' | 'onShowSummary'>) {
   if (empty) {
     return (
-      <Badge color="gray" variant="light" tt="none" style={{ flexShrink: 0 }}>
+      <Badge color="gray" variant="light" tt="none" style={{ flexShrink: 0 }} data-tour="status">
         Empty
       </Badge>
     );
@@ -96,7 +99,7 @@ function Status({
   if (analysisError) {
     return (
       <Tooltip label={analysisError} multiline w={260}>
-        <Badge color="red" variant="light" tt="none" style={{ flexShrink: 0 }}>
+        <Badge color="red" variant="light" tt="none" style={{ flexShrink: 0 }} data-tour="status">
           Server unreachable
         </Badge>
       </Tooltip>
@@ -115,6 +118,7 @@ function Status({
         tt="none"
         style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
         onClick={onShowSummary}
+        data-tour="status"
       >
         {/* Phones keep the space for the network name: the check says it is valid. */}
         <Box component="span" visibleFrom="xs">
@@ -132,6 +136,7 @@ function Status({
       tt="none"
       style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
       onClick={onShowSummary}
+      data-tour="status"
     >
       {count === 1 ? '1 problem' : `${count} problems`}
     </Badge>
@@ -162,6 +167,7 @@ export function Toolbar(props: ToolbarProps) {
               size="lg"
               onClick={props.onOpenPalette}
               aria-label="Show layers"
+              data-tour="palette-button"
             >
               <IconLayoutSidebar size={18} />
             </ActionIcon>
@@ -279,6 +285,11 @@ export function Toolbar(props: ToolbarProps) {
             >
               View code
             </Menu.Item>
+            {props.onShowGuide && (
+              <Menu.Item leftSection={<IconHelp size={16} />} onClick={props.onShowGuide}>
+                Guide to the builder
+              </Menu.Item>
+            )}
             <Menu.Divider />
             <Menu.Label>Examples</Menu.Label>
             {examples.map((example) => (
@@ -341,6 +352,7 @@ export function Toolbar(props: ToolbarProps) {
           leftSection={<IconCode size={16} />}
           onClick={props.onShowCode}
           visibleFrom="sm"
+          data-tour="code"
         >
           Code
         </Button>
@@ -350,6 +362,7 @@ export function Toolbar(props: ToolbarProps) {
             leftSection={<IconDownload size={16} />}
             onClick={props.onExportPython}
             className={classes.exportLabelled}
+            data-tour="export"
           >
             Export .py
           </Button>
@@ -360,10 +373,25 @@ export function Toolbar(props: ToolbarProps) {
             onClick={props.onExportPython}
             className={classes.exportIcon}
             aria-label={`Download the ${library} script`}
+            data-tour="export-icon"
           >
             <IconDownload size={18} />
           </ActionIcon>
         </Tooltip>
+        {props.onShowGuide && (
+          <Tooltip label="Guide to the builder">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="lg"
+              onClick={props.onShowGuide}
+              visibleFrom="sm"
+              aria-label="Show the guide"
+            >
+              <IconHelp size={18} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <Tooltip label="Properties">
           <ActionIcon
             hiddenFrom="lg"
@@ -394,6 +422,7 @@ function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => 
           leftSection={run ? <Loader size={14} /> : <IconPlayerPlay size={16} />}
           onClick={onClick}
           visibleFrom="sm"
+          data-tour="train"
         >
           {run ? progressLabel(run) : 'Train'}
         </Button>
@@ -405,6 +434,7 @@ function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => 
           onClick={onClick}
           hiddenFrom="sm"
           aria-label={run ? `Training: ${progressLabel(run)}` : 'Train'}
+          data-tour="train-icon"
         >
           {run ? <Loader size={16} /> : <IconPlayerPlay size={18} />}
         </ActionIcon>
