@@ -37,7 +37,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
-from . import budgets, downloads, history
+from . import budgets, downloads, history, raw_predictions
 from . import data_service as data
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
@@ -109,7 +109,8 @@ create_data_prep with the target column (the column to predict), then repeat
 preview_data_prep (column profiles, sample rows and the readiness check: errors, warnings
 and fixes) and apply_readiness_fix or update_data_prep (step types: list_prep_steps) until
 readiness says ready. export_training_dataset then gives the dataset reference for
-check_training and start_training; predict takes the prepared feature columns it lists.
+check_training and start_training. predict then takes raw rows of the source table
+(input_format "raw"): the server prepares them like the training rows.
 get_data_prep_script returns the pandas script that prepares new data the same way.
 Files too large to pass as text: create_upload_link gives a one-time link for curl.
 
@@ -1038,20 +1039,30 @@ def predict(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args, "run_id")
     try:
         prediction = training.prepare_prediction(
-            run, args["inputs"], args.get("input_scale"), args.get("top_k")
+            run,
+            args["inputs"],
+            args.get("input_scale"),
+            args.get("top_k"),
+            input_format=args.get("input_format"),
         )
     except training.TrainingInputError as exc:
+        message = str(exc)
+        if isinstance(exc, raw_predictions.RawRowsError) and len(exc.errors) > 1:
+            message = "\n".join(exc.errors)
         expected = training.describe_inputs(run)
-        raise ToolError(f"{exc}\nExpected inputs: {expected}" if expected else str(exc)) from None
+        raise ToolError(
+            f"{message}\nExpected inputs: {expected}" if expected else message
+        ) from None
     except (training.TrainingUnavailable, training.PredictionUnavailable) as exc:
         raise ToolError(str(exc)) from None
     # Only calls that start a process count against the rate limit.
     if not ScopedRateThrottle().allow_request(request, _PredictScope()):
         raise ToolError("Too many predictions were made recently. Try again later.")
     try:
-        return training.run_prediction(prediction, budgets.Actor.of(request))
+        answer = training.run_prediction(prediction, budgets.Actor.of(request))
     except (training.TrainingBusy, training.PredictionFailed) as exc:
         raise ToolError(str(exc)) from None
+    return compact.prediction_answer(answer)
 
 
 def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
@@ -1785,8 +1796,14 @@ TOOLS: dict[str, Tool] = {
             f"{inference.MAX_SAMPLES} samples on the server. Classification: the most likely "
             "class with its probability and the top_k classes; regression: the predicted "
             "value in the units of the target column (a Gaussian process adds std, its "
-            "uncertainty). Inputs of a network or classical model trained on a CSV "
-            "file: one row per sample, as an object {column: value} or a list of the feature "
+            "uncertainty). Runs trained on a dataset exported from a data preparation: send "
+            "raw rows with input_format 'raw', one object {column: value} per sample in the "
+            "columns of the imported source table (as in the file, before the preparation; "
+            "dates as 2024-05-31, the target left out); the server applies the preparation "
+            "with the values it learned from the training rows, so do not compute prepared "
+            "columns (one-hot, date parts, scaling …) yourself. Other runs trained on a CSV "
+            "file (and prepared rows, input_format 'prepared', the default): one row per "
+            "sample, as an object {column: value} or a list of the feature "
             "values in column order, raw as in the CSV file (they are standardised like in "
             "training). Inputs of an image network: one image per sample as a nested array of "
             "channels×height×width (grayscale also height×width) or in the shape of its Input "
@@ -1812,6 +1829,13 @@ TOOLS: dict[str, Tool] = {
                     "minimum": 1,
                     "maximum": inference.MAX_TOP_K,
                     "description": f"Classes listed per sample (default {inference.DEFAULT_TOP_K})",
+                },
+                "input_format": {
+                    "type": "string",
+                    "enum": list(raw_predictions.INPUT_FORMATS),
+                    "description": "'raw': rows in the columns of the source table of a data "
+                    "preparation, prepared by the server like the training rows; 'prepared' "
+                    "(default): the feature columns of the training dataset",
                 },
             },
             ("run_id", "inputs"),

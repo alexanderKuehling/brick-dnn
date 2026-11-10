@@ -455,3 +455,38 @@ def examples(found: list[dict[str, Any]], example_id: Any = None) -> Any:
             return example
     known = ", ".join(str(e.get("id")) for e in found)
     raise CompactError(f"Unknown example '{example_id}'. The examples: {known}.")
+
+
+# --------------------------------------------------------------------------- #
+# Predictions
+# --------------------------------------------------------------------------- #
+
+MAX_WARNINGS = 10
+
+
+def _compact_prediction(item: Any) -> Any:
+    """A prediction without the class indices (the class names say the same)."""
+    if not isinstance(item, dict):
+        return item
+    if isinstance(item.get("outputs"), list):
+        return {**item, "outputs": [_compact_prediction(o) for o in item["outputs"]]}
+    if "top" not in item:
+        return item
+    top = [
+        {"class": t.get("class"), "probability": t.get("probability")}
+        for t in item.get("top") or []
+        if isinstance(t, dict)
+    ]
+    rest = {k: v for k, v in item.items() if k not in ("index", "top")}
+    return {**rest, "top": top} if len(top) > 1 else rest
+
+
+def prediction_answer(answer: dict[str, Any]) -> dict[str, Any]:
+    """The answer of ``predict``: without class indices, at most MAX_WARNINGS warnings."""
+    result = dict(answer)
+    result["predictions"] = [_compact_prediction(p) for p in answer.get("predictions") or []]
+    warnings = answer.get("warnings")
+    if isinstance(warnings, list) and len(warnings) > MAX_WARNINGS:
+        more = len(warnings) - MAX_WARNINGS
+        result["warnings"] = [*warnings[:MAX_WARNINGS], f"… and {more:,} more"]
+    return result
