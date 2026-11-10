@@ -963,17 +963,17 @@ TOOL_DESCRIPTIONS.update(
         "get_data_source": _data_tool("look at", "data_source", answer=("source",)),
         "import_data": _import_data,
         "list_data_preps": lambda user, args, result: Described("list its data preparations"),
-        "get_data_prep": _data_tool("look at", "data_prep", answer=("prep",)),
+        "get_data_prep": _data_tool("look at", "data_prep", answer=("preparation", "prep")),
         "list_prep_steps": lambda user, args, result: Described(
             "look up the data preparation steps"
         ),
         "preview_data_prep": _data_tool("preview", "data_prep"),
         "get_data_prep_script": _data_tool("get the script of", "data_prep"),
-        "create_data_prep": _data_tool("create", "data_prep", answer=("prep",)),
-        "update_data_prep": _data_tool("change", "data_prep", answer=("prep",)),
+        "create_data_prep": _data_tool("create", "data_prep", answer=("preparation", "prep")),
+        "update_data_prep": _data_tool("change", "data_prep", answer=("preparation", "prep")),
         "apply_readiness_fix": _data_tool("apply a suggested fix to", "data_prep"),
         "export_training_dataset": _data_tool("create a training dataset from", "data_prep"),
-        "delete_data_prep": _data_tool("delete", "data_prep", answer=("prep",)),
+        "delete_data_prep": _data_tool("delete", "data_prep", answer=("preparation", "prep")),
         "delete_data_source": _data_tool("delete", "data_source", answer=("source",)),
         "get_usage": lambda user, args, result: Described("look up its usage and budget"),
     }

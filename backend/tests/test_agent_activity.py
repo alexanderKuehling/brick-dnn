@@ -750,7 +750,7 @@ def test_failures_of_the_log_do_not_break_the_action(ada, monkeypatch, caplog):
         created = ok(client, "save_project", name="Still saved", graph=GRAPH)
         assert client.get("/api/projects/").status_code == 200
     assert Project.objects.get(pk=created["id"]).name == "Still saved"
-    assert "Could not write 1 entries of the agent activity log" in caplog.phrase
+    assert "Could not write 1 entries of the agent activity log" in caplog.text
     monkeypatch.undo()
 
     # Describing an action can fail too: that entry is left out, the others are written.
