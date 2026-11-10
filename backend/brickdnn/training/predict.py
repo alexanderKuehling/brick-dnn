@@ -10,8 +10,10 @@ prepared like the training data (see :func:`.inference.prepare_inputs`)::
 It prints one line of JSON: the raw outputs of the network, one nested list per output
 (NaN and infinity become null), or an error for the user::
 
-    {"outputs": [[[0.1, 2.3, -1.0], [1.2, -0.3, 0.4]]]}
-    {"error": "The trained weights do not fit the network of this run: ..."}
+    {"outputs": [[[0.1, 2.3, -1.0], [1.2, -0.3, 0.4]]], "cpu_seconds": 1.9}
+    {"error": "The trained weights do not fit the network of this run: ...", "cpu_seconds": 1.2}
+
+``cpu_seconds`` is the CPU time the process used (for the server's usage records).
 
 Classical models (scikit-learn) load ``RUN_DIR/model.joblib`` instead and need NumPy and
 scikit-learn, not PyTorch. Their request also says how the inputs were prepared
@@ -38,7 +40,7 @@ from typing import Any
 from .job import graph_family
 from .reporting import short_error
 from .runner import lower_priority
-from .state import CLASSICAL_WEIGHTS_FILE, WEIGHTS_FILE, finite, read_job
+from .state import CLASSICAL_WEIGHTS_FILE, WEIGHTS_FILE, cpu_seconds, finite, read_job
 
 # Outputs larger than this (numbers of all samples together) are not returned.
 MAX_OUTPUT_VALUES = 250_000
@@ -195,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         traceback.print_exc()
         result = {"error": f"The prediction failed: {short_error(exc)}"}
+    # The CPU time of this process (all threads), for the server's usage records.
+    result["cpu_seconds"] = round(cpu_seconds(), 3)
     print(json.dumps(result, allow_nan=False), flush=True)
     return 0
 

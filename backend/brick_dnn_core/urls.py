@@ -41,6 +41,8 @@ urlpatterns = [
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
+    # Usage and budgets this month (any login; changing the budget: website login only).
+    path("account/usage/", accounts.UsageView.as_view(), name="account-usage"),
     # What AI agents did with the user's API tokens and connected apps (website login only).
     path("agent-activity/", agent_activity.AgentActivityView.as_view(), name="agent-activity"),
     path(

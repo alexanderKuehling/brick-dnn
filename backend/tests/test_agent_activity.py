@@ -16,6 +16,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.core.signals import request_finished
+from django.db import close_old_connections
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -783,6 +785,12 @@ def test_entries_are_written_after_the_response_was_sent(ada):
     response = HttpResponse("done")
     agent_activity._defer(response, [call_])
     assert AgentAction.objects.count() == 0
-    response.close()  # what the server does once the response is out
+    # Closing a response also gives the database connection back (request_finished), which
+    # would end the transaction this test runs in: left out here, as in Django's test client.
+    request_finished.disconnect(close_old_connections)
+    try:
+        response.close()  # what the server does once the response is out
+    finally:
+        request_finished.connect(close_old_connections)
     (written,) = log(ada)
     assert written.summary == "Listed the saved networks" and written.duration_ms == 3

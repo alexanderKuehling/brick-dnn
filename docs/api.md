@@ -139,7 +139,10 @@ generate, training check, predictions, MCP). The MCP server for AI assistants is
 | POST   | `/api/auth/api-tokens/`      | `{name, read_only?, expires_in_days?}`       | `201 {...ApiToken, token}`     |
 | DELETE | `/api/auth/api-tokens/<id>/` | –                                            | `204`, the token stops working |
 
-`ApiToken` is `{id, name, prefix, read_only, created_at, last_used_at, expires_at}`.
+`ApiToken` is `{id, name, prefix, read_only, created_at, last_used_at, expires_at,
+budget_cpu_minutes, used_cpu_minutes}`; `PATCH /api/auth/api-tokens/<id>/
+{budget_cpu_minutes}` sets its monthly compute budget (see
+[Usage and budgets](#usage-and-budgets)).
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
 endpoints need a website login (JWT): an API token cannot manage tokens.
@@ -276,7 +279,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
-| POST   | `/api/training/check/`                 | `{graph, dataset, config?}`: does the network fit the data? |
+| POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
 | POST   | `/api/training/runs/`                  | Start a run `{name, graph, dataset, config, tuning?}` |
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
@@ -343,6 +346,68 @@ applied together (empty when it fits or when other layers would have to change):
 Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed;
 a fix for surplus class outputs can also come with `"ok": true`. See
 [training.md](training.md#adapting-the-network-to-the-data).
+
+The check also has `estimate` and `budget` (pass `config` and `tuning` as for the start):
+
+```json
+"estimate": {"cpu_minutes": 2.1, "low_cpu_minutes": 0.7, "high_cpu_minutes": 6.3,
+             "cost": 0.02, "currency": "EUR", "basis": "48,000 training and …",
+             "note": "A rough estimate …", "details": {"train_samples": 48000, …}},
+"budget": {"allowed": true, "reason": null, "warning": null, "run_limit_cpu_minutes": 15,
+           "limit_reason": "run_limit", "remaining_cpu_minutes": 27.5,
+           "resets_at": "2026-12-01T00:00:00Z"}
+```
+
+`estimate` is a rough estimate of the CPU time (null if the network does not fit; `cost` only
+with a price), `budget.allowed` false with `reason` and `code` (`budget_exceeded`,
+`storage_quota_exceeded`, `estimate_too_high`) if a start would be refused, `warning` if the
+run will probably be stopped by its limit, `run_limit_cpu_minutes` the most it may use. A start
+refused by a budget answers `403 {detail, code, …}`; the plan's limit of trainings at a time
+answers `409`. Runs have `usage: {cpu_minutes, limit_cpu_minutes, estimated_cpu_minutes,
+stop_reason}` (`stop_reason`: `user`, `budget` or `run_limit`) and `started_via` (`{source:
+"token" | "app", name}`, null in the web app); the answer to a start adds `budget_warning`.
+See [training.md](training.md#usage-and-budgets).
+
+## Usage and budgets
+
+| Method | Path                          | Body                                  | Response                    |
+| ------ | ----------------------------- | ------------------------------------- | --------------------------- |
+| GET    | `/api/account/usage/`         | –                                     | `Usage` (any login, also an API token) |
+| PATCH  | `/api/account/usage/`         | `{budget_cpu_minutes?, overage_enabled?, overage_cap_cpu_hours?}` | `Usage` (website login only) |
+| PATCH  | `/api/auth/api-tokens/<id>/`  | `{budget_cpu_minutes}`                | `ApiToken` (website login only) |
+| PATCH  | `/api/auth/connections/<id>/` | `{budget_cpu_minutes}`                | the connection (website login only) |
+
+`Usage` is this calendar month's (UTC) usage, in CPU minutes and bytes:
+
+```json
+{"period": {"start": "2026-11-01", "resets_at": "2026-12-01T00:00:00Z"},
+ "plan": {"key": "free", "name": "Free", "price": 0, "currency": "EUR",
+          "cpu_hours_per_month": 0.5, "storage_gb": 1, "cpu_minutes_per_run": 15,
+          "concurrent_trainings": 1, "priority": 0, "overage_price_per_cpu_hour": null},
+ "unlimited": false,
+ "plans": [ …the plans with prices, if the server has several… ],
+ "overage": {"available": false, "enabled": false, "price_per_cpu_hour": null,
+             "currency": "EUR", "cap_cpu_hours": null, "used_cpu_minutes": 0, "cost": null},
+ "compute": {"unit": "cpu_minutes", "used": 12.5, "limit": 30, "remaining": 17.5,
+             "available": 7.5, "allowance": 30, "own_budget": null, "run_limit": 15,
+             "reserved_by_active_runs": 0,
+             "by_kind": {"training": 12, "prediction": 0.5},
+             "by_source": [{"source": "token", "id": 3, "name": "agent", "deleted": false,
+                            "used_cpu_minutes": 10, "budget_cpu_minutes": 10, "cost": null}]},
+ "storage": {"used_bytes": 1048576, "limit_bytes": 1073741824, "remaining_bytes": …,
+             "by_kind": {"data_sources": 0, "datasets": 1000000, "training_runs": 48576}},
+ "prices": {"currency": null, "per_cpu_hour": null, "per_gb_month": null,
+            "compute_cost": null, "compute_limit_cost": null, "storage_cost_per_month": null},
+ "caller": {"source": "token", "id": 3, "name": "agent", "used_cpu_minutes": 10,
+            "budget_cpu_minutes": 10, "remaining_cpu_minutes": 0}}
+```
+
+`limit` is the account's limit this month (the plan's allowance, with overage up to its cap,
+or the own budget, whichever is lower; null: unlimited), `available` what the caller can still
+use with its token's or app's budget, `caller` only with an API token or app. A budget of
+`null` removes it; 0 allows nothing. `ApiToken` and connections have `budget_cpu_minutes` and
+`used_cpu_minutes` (this month). Only a website login can change budgets, so an agent cannot
+raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour`.
 
 The check also takes the `config` (optional) to check what depends on it, e.g. `max_samples`
 against the row limit of a classical model. For classical models, only the Input layer's

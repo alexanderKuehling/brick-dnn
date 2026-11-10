@@ -41,8 +41,8 @@ from brickdnn.data import (
 )
 from brickdnn.training import DatasetError, DatasetInfo, inspect_csv
 
+from . import budgets, url_import
 from . import training_service as training
-from . import url_import
 from .models import DataPrep, Dataset, DataSource
 from .retention import touch
 
@@ -154,8 +154,10 @@ def max_upload_bytes() -> int:
 
 def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
     """Store and read an uploaded data file. ``fields`` are the form fields (``name`` and the
-    import options). Raises :class:`DataInputError`."""
+    import options). Raises :class:`DataInputError`, or
+    :class:`budgets.StorageQuotaExceeded` if it does not fit into the account's storage."""
     filename = Path(upload.name or "").name
+    budgets.check_storage(user, int(upload.size or 0))
 
     def save(work: Path) -> tuple[Path, str]:
         if not _known_suffix(filename):
@@ -174,6 +176,7 @@ def import_url(user, url: Any, fields: dict[str, Any]) -> DataSource:
     like an upload. Raises :class:`DataInputError`."""
     if not settings.DATA_URL_IMPORT_ENABLED:
         raise DataInputError(URL_DISABLED_MESSAGE)
+    budgets.check_storage(user)  # the size is known after the download
     try:
         given = url_import.check_url(url)
     except url_import.LinkError as exc:
@@ -252,6 +255,7 @@ def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataS
     source = None
     try:
         original, filename = save(work)
+        budgets.check_storage(user, original.stat().st_size)
         name = fields.get("name")
         name = (str(name or "").strip() or _stem(filename) or "Data")[:120]
         with _user_errors():
@@ -614,6 +618,7 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
     if len(name) > 120:
         raise DataInputError("The name can be at most 120 characters long.")
 
+    budgets.check_storage(prep.owner)  # the dataset belongs to the owner of the preparation
     run = _run(prep)
     if (failed := _failed_step(run)) is not None:
         raise DataInputError(f"{failed} Fix it before creating a training dataset.")
@@ -642,6 +647,7 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         class_names = written.get("class_names")
         info.class_names = [str(c) for c in class_names] if class_names else None
         size = sum(p.stat().st_size for p in work.iterdir() if p.is_file())
+        budgets.check_storage(prep.owner, size)
         dataset = Dataset.objects.create(
             owner=prep.owner,
             name=name,

@@ -61,6 +61,7 @@ Gespeichert werden die Inhalte, die Sie anlegen:
 - **Freigaben:** Personen, die Sie einladen, sehen das Netz, seinen Verlauf und die Kommentare. Mit einem Freigabe-Link kann jede Person mit dem Link das Netz ansehen;
 - **hochgeladene Daten:** Dateien des Daten-Tabs (CSV, Excel, JSON, Parquet u. a.) und Trainingsdaten (CSV oder ZIP mit Bildern) als Dateien auf dem Server, dazu Aufbereitungsschritte und Einstellungen. Beim Import über einen Link ruft der Server die Datei bei dem Anbieter ab, auf den der Link zeigt (z. B. GitHub, Google Drive, Dropbox); dieser sieht dabei die IP-Adresse des Servers, nicht Ihre. Gespeichert wird der Link ohne seinen Query-Teil (alles ab „?“);
 - **Trainings:** Netz, Einstellungen, Verlauf der Kennzahlen, Protokoll und trainierte Gewichte. Trainings laufen auf diesem Server; die Daten verlassen ihn dafür nicht.
+- **Nutzung:** die Rechenzeit (CPU-Zeit) jedes Trainings und jeder Vorhersage je Kalendermonat, der Anteil über dem Kontingent Ihres Tarifs, welches API-Token oder welche App sie ausgelöst hat (mit deren Namen) und der Name des Trainings; dazu Ihr Tarif, Ihre Budgets und Grenzen. Damit werden die Grenzen Ihres Tarifs und Ihre Budgets durchgesetzt und Ihnen Ihr Verbrauch angezeigt.
 
 **Bitte laden Sie keine personenbezogenen oder vertraulichen Daten hoch.** Die App weist beim Hochladen darauf hin.
 
@@ -83,7 +84,7 @@ Diese Einträge sind für die von Ihnen gewünschten Funktionen unbedingt erford
 
 ## 9. API-Token und verbundene Apps (KI-Assistenten)
 
-Sie können API-Token anlegen oder Apps (z. B. KI-Assistenten über MCP) mit Ihrem Konto verbinden. Gespeichert werden Name, Anfang des Tokens, Zeitpunkte von Erstellung und letzter Nutzung sowie der Name der App – vom Token selbst nur ein Hash.
+Sie können API-Token anlegen oder Apps (z. B. KI-Assistenten über MCP) mit Ihrem Konto verbinden. Gespeichert werden Name, Anfang des Tokens, Zeitpunkte von Erstellung und letzter Nutzung, der Name der App und ein Monatsbudget, falls Sie eines festlegen – vom Token selbst nur ein Hash.
 
 Verbinden Sie eine App, ruft diese auf Ihre Veranlassung Daten Ihres Kontos ab und verarbeitet sie bei ihrem Anbieter (z. B. Anthropic bei Claude). Dafür gelten die Datenschutzbestimmungen dieses Anbieters. Sie können die Verbindung jederzeit unter „API tokens“ trennen.
 
@@ -91,9 +92,10 @@ Verbinden Sie eine App, ruft diese auf Ihre Veranlassung Daten Ihres Kontos ab u
 
 ## 10. Speicherdauer und Löschung
 
-- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps und das Protokoll der Agentenaktionen gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
+- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen und Nutzungsdaten gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
 - [Falls eingestellt:] **Ungenutzte Uploads und Trainings** werden nach [X] Tagen ohne Nutzung automatisch gelöscht.
 - [Falls eingestellt:] **Inaktive Konten** werden nach [Y] Tagen ohne Login mit allen Inhalten automatisch gelöscht.
+- **Nutzungsdaten** bleiben gespeichert, solange Ihr Konto besteht, auch wenn ein Training, Token oder eine App gelöscht wird (sie gehören zum Verbrauch des Monats).
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
 - **Protokoll der Agentenaktionen:** nach [90] Tagen (`BRICKDNN_AGENT_LOG_DAYS`).
 - **Server-Logs:** siehe Abschnitt 4.

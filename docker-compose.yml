@@ -16,6 +16,18 @@ x-retention: &retention
   # Days the activity log of AI agents is kept (empty: 90; 0: no log).
   BRICKDNN_AGENT_LOG_DAYS: ${BRICKDNN_AGENT_LOG_DAYS:-}
 
+# Plans and budgets per account (docs/training.md); unset: no limits.
+x-budgets: &budgets
+  BRICKDNN_PLANS: ${BRICKDNN_PLANS:-}
+  BRICKDNN_DEFAULT_PLAN: ${BRICKDNN_DEFAULT_PLAN:-}
+  BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH: ${BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH:-}
+  BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN: ${BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN:-}
+  BRICKDNN_BUDGET_STORAGE_MB: ${BRICKDNN_BUDGET_STORAGE_MB:-}
+  BRICKDNN_STAFF_UNLIMITED: ${BRICKDNN_STAFF_UNLIMITED:-true}
+  BRICKDNN_PRICE_PER_CPU_HOUR: ${BRICKDNN_PRICE_PER_CPU_HOUR:-}
+  BRICKDNN_PRICE_PER_GB_MONTH: ${BRICKDNN_PRICE_PER_GB_MONTH:-}
+  BRICKDNN_PRICE_CURRENCY: ${BRICKDNN_PRICE_CURRENCY:-}
+
 services:
   backend:
     build:
@@ -28,7 +40,7 @@ services:
     # A minimal init process reaps training processes whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: *retention
+      <<: [*retention, *budgets]
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}

@@ -9,7 +9,8 @@ limited (``account`` scope). Deleting an account deletes everything it owns:
   trainings are stopped first);
 - its memberships in other people's projects, its comments on them (replies of others to a
   thread it started go with it, as when it deletes the thread itself), API tokens,
-  connected apps and the activity log of its agents.
+  connected apps and the activity log of its agents;
+- its usage records (the compute it used, see budgets.py) and budgets.
 
 Other people's projects it worked on stay; their history keeps the versions it saved, without
 saying who. All its logins end: its refresh tokens are blacklisted. See docs/privacy.md.
@@ -51,7 +52,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from brickdnn.training import ACTIVE_STATUSES
 
-from . import data_service, live
+from . import budgets, data_service, live
 from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
@@ -177,6 +178,8 @@ data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
 training_runs.json       your trainings: network, settings, status and metrics
+usage.json               the compute (CPU time) your trainings and predictions used, per
+                         month, with the API token or app that caused it, and your limits
 files.json               the uploaded files: where they are in this ZIP file, or why not
 files/                   the uploaded files themselves
 
@@ -373,6 +376,8 @@ def _runs(user) -> list[dict[str, Any]]:
             "best": run.best,
             "best_trial": run.best_trial,
             "has_weights": run.has_weights,
+            "cpu_seconds": run.cpu_seconds,
+            "stop_reason": run.stop_reason or None,
             "created_at": run.created_at,
             "started_at": run.started_at,
             "finished_at": run.finished_at,
@@ -460,6 +465,7 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "data_preparations.json", _data_preps(user))
         _json(archive, "datasets.json", _datasets(user))
         _json(archive, "training_runs.json", _runs(user))
+        _json(archive, "usage.json", budgets.export_records(user))
         _json(archive, "files.json", _write_files(user, archive))
 
 
@@ -583,6 +589,69 @@ class ExportView(AccountApiView):
         )
         response["Cache-Control"] = "private, no-store"
         return response
+
+
+class UsagePermission(IsLoggedInUser):
+    """Reading the usage works with any login, also an API token (agents check their budget
+    before training); changing the budget only with a website login."""
+
+    message = "Change budgets after logging in on the website; API tokens cannot do this."
+
+    def has_permission(self, request, view) -> bool:
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return bool(request.user and request.user.is_authenticated)
+        return super().has_permission(request, view)
+
+
+class AccountBudgetSerializer(serializers.Serializer):
+    """What users set for their own account; every field is optional."""
+
+    budget_cpu_minutes = serializers.FloatField(
+        min_value=0, max_value=10_000_000, allow_null=True, required=False
+    )
+    overage_enabled = serializers.BooleanField(required=False)
+    overage_cap_cpu_hours = serializers.FloatField(
+        min_value=0, max_value=1_000_000, allow_null=True, required=False
+    )
+
+    def validate_overage_enabled(self, value: bool) -> bool:
+        user = self.context["user"]
+        plan = budgets.plan_of(user)
+        if value and (plan.overage_price_per_cpu_hour is None or budgets.is_unlimited(user)):
+            raise serializers.ValidationError(
+                "Your plan has no compute beyond its monthly allowance."
+            )
+        return value
+
+
+class UsageView(AccountApiView):
+    """``GET``: this month's usage, the plan, its limits and what is left
+    (budgets.usage_summary; with an API token also that token's or app's own budget).
+    ``PATCH {"budget_cpu_minutes"?, "overage_enabled"?, "overage_cap_cpu_hours"?}``: the
+    monthly budget for the own account (null: none) and, with a plan that offers it, usage
+    beyond the allowance (to be billed) up to an own cap in CPU hours (null: no cap)."""
+
+    permission_classes = [UsagePermission]
+    unthrottled_methods = ("GET", "HEAD", "OPTIONS")
+
+    def get(self, request: Request) -> Response:
+        return Response(usage_data(request))
+
+    def patch(self, request: Request) -> Response:
+        serializer = AccountBudgetSerializer(data=request.data, context={"user": request.user})
+        serializer.is_valid(raise_exception=True)
+        if serializer.validated_data:
+            UserProfile.objects.update_or_create(
+                user=request.user, defaults=serializer.validated_data
+            )
+        return Response(usage_data(request))
+
+
+def usage_data(request: Request) -> dict[str, Any]:
+    """budgets.usage_summary for the caller, after counting what its active runs used."""
+    active = TrainingRun.objects.filter(owner=request.user, status__in=ACTIVE_STATUSES)
+    training.sync_runs(active)  # count what the running trainings used until now
+    return budgets.usage_summary(budgets.Actor.of(request))
 
 
 class DeleteAccountSerializer(serializers.Serializer):

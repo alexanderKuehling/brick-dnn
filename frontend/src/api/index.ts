@@ -49,7 +49,10 @@ import type {
   ShareLink,
   StepCatalog,
   Tokens,
+  TrainingConfig,
   TrainingStatus,
+  TuningInput,
+  Usage,
   User,
 } from './types';
 
@@ -120,6 +123,22 @@ const serverApi = {
         body: { password, username },
         auth: true,
       }),
+    /** This month's usage (compute and storage), the limits and what is left. */
+    usage: (signal?: AbortSignal) => request<Usage>('/api/account/usage/', { auth: true, signal }),
+    /** The monthly budget for the own account in CPU minutes; null removes it. */
+    setBudget: (cpuMinutes: number | null) =>
+      request<Usage>('/api/account/usage/', {
+        method: 'PATCH',
+        body: { budget_cpu_minutes: cpuMinutes },
+        auth: true,
+      }),
+    /** Compute beyond the plan's allowance (to be billed), up to a cap in CPU hours. */
+    setOverage: (enabled: boolean, capCpuHours: number | null) =>
+      request<Usage>('/api/account/usage/', {
+        method: 'PATCH',
+        body: { overage_enabled: enabled, overage_cap_cpu_hours: capCpuHours },
+        auth: true,
+      }),
   },
 
   /** Imprint, privacy policy and terms of use, as far as the server has them (public). */
@@ -137,6 +156,13 @@ const serverApi = {
     /** Revoked tokens stop working immediately. */
     revoke: (id: number) =>
       request<void>(`/api/auth/api-tokens/${id}/`, { method: 'DELETE', auth: true }),
+    /** The token's monthly compute budget in CPU minutes; null removes it. */
+    setBudget: (id: number, cpuMinutes: number | null) =>
+      request<ApiToken>(`/api/auth/api-tokens/${id}/`, {
+        method: 'PATCH',
+        body: { budget_cpu_minutes: cpuMinutes },
+        auth: true,
+      }),
   },
 
   /**
@@ -164,6 +190,13 @@ const serverApi = {
     /** The app loses access immediately (its tokens are revoked). */
     revoke: (id: number) =>
       request<void>(`/api/auth/connections/${id}/`, { method: 'DELETE', auth: true }),
+    /** The app's monthly compute budget in CPU minutes; null removes it. */
+    setBudget: (id: number, cpuMinutes: number | null) =>
+      request<OAuthConnection>(`/api/auth/connections/${id}/`, {
+        method: 'PATCH',
+        body: { budget_cpu_minutes: cpuMinutes },
+        auth: true,
+      }),
   },
 
   /** What AI agents did with the user's API tokens and apps (website login only). */
@@ -354,6 +387,23 @@ const serverApi = {
       request<Compatibility>('/api/training/check/', {
         method: 'POST',
         body: { graph, dataset },
+        auth: true,
+        signal,
+      }),
+    /**
+     * The check with the planned settings: its `estimate` (CPU time) and `budget` (whether
+     * the budgets allow the run) are for exactly these settings.
+     */
+    estimate: (
+      graph: GraphDocument,
+      dataset: DatasetRef,
+      config: Partial<TrainingConfig>,
+      tuning: TuningInput | null,
+      signal?: AbortSignal
+    ) =>
+      request<Compatibility>('/api/training/check/', {
+        method: 'POST',
+        body: { graph, dataset, config, ...(tuning ? { tuning } : {}) },
         auth: true,
         signal,
       }),

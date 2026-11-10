@@ -164,6 +164,33 @@ def _metrics(values: Any) -> dict[str, Any] | None:
     return kept or None
 
 
+def _usage(run: TrainingRun) -> dict[str, Any] | None:
+    """The CPU minutes a run used, the most it may use, the estimate before it started and
+    why it stopped (user, budget, run_limit): see budgets.py."""
+
+    def minutes(seconds: float | None) -> float | None:
+        return round(seconds / 60, 2) if seconds is not None else None
+
+    usage = _no_none(
+        {
+            "cpu_minutes": minutes(run.cpu_seconds or 0.0),
+            "limit_cpu_minutes": minutes(run.cpu_limit_seconds),
+            "estimated_cpu_minutes": minutes(run.estimated_cpu_seconds),
+            "stop_reason": run.stop_reason or None,
+        }
+    )
+    return usage or None
+
+
+def _started_via(run: TrainingRun) -> str | None:
+    """The name of the app or API token that started the run (None: the web app)."""
+    if run.connection_id is not None:
+        return run.connection.client.name if run.connection else None
+    if run.api_token_id is not None:
+        return run.api_token.name if run.api_token else None
+    return None
+
+
 def run_summary(run: TrainingRun) -> dict[str, Any]:
     """One line of list_training_runs."""
     plan = run.plan if isinstance(run.plan, dict) else {}
@@ -249,6 +276,8 @@ def run_detail(
         "class_names": capped_names(state.get("class_names") or plan.get("class_names")),
         "total_params": run.total_params,
         "device": state.get("device_label") or state.get("device"),
+        "usage": _usage(run),
+        "started_via": _started_via(run),
         "has_weights": run.has_weights,
         "started_by": run.owner.get_username(),
         "project": run.project_id,

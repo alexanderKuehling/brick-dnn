@@ -18,6 +18,7 @@ vi.mock('@/api', async (importOriginal) => {
         status: vi.fn(),
         datasets: { list: vi.fn(), upload: vi.fn(), remove: vi.fn() },
         check: vi.fn(),
+        estimate: vi.fn(),
         runs: {
           list: vi.fn(),
           get: vi.fn(),

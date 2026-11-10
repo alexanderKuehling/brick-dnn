@@ -31,6 +31,35 @@
   (`PUT`/`POST /api/uploads/?sig=…`) and imports it as a data source or stores it as a
   training dataset, with the limits of the web app instead of the small MCP text limit. nginx
   lets large bodies through on `/api/uploads/`.
+- **Plans, budgets and cost limits per account.** Trainings and predictions are measured in
+  CPU time: the runner reports its own (`usage` in `state.json`, also counted when another
+  server process reaped the run), predictions report theirs, and both go into a ledger
+  (`UsageRecord`) per account, calendar month (UTC) and the API token or connected app that
+  caused them. An account's limits come from its plan (`BRICKDNN_PLANS`, JSON:
+  compute per month, storage, compute per training, trainings at a time, a queue priority for
+  later, optional prices and an overage price; `BRICKDNN_DEFAULT_PLAN`); without plans a
+  server has no limits unless `BRICKDNN_BUDGET_*` are set. brickdnn.com has the plans Free
+  (0.5 CPU hours, 1 GB, 15 CPU min per training), Starter, Plus and Pro. Operators change
+  plans and mark accounts as unlimited in the Django admin (filters, bulk actions) or with
+  `manage.py set_plan <user> --plan plus | --unlimited | --limited`; staff and superusers are
+  unlimited by default (`BRICKDNN_STAFF_UNLIMITED`); unlimited accounts are still measured.
+  Users can set a monthly budget for their account and for every API token and connected app
+  (the budgets of agents; website login only, so an agent cannot raise its own), and with a
+  paid plan switch on compute beyond the allowance with an own cap (marked in the ledger for
+  billing later). Trainings (web, REST, MCP) are refused when a budget is used up, the storage
+  is full or the plan allows no further training at a time; a run gets what is left as a CPU
+  limit its runner enforces itself (stopping like a user stop, keeping the best weights), and
+  every look at an active run stops it once a budget is used up. Active runs reserve their
+  limits, so concurrent starts cannot spend the same rest. `POST /api/training/check/` and the
+  MCP tool `check_training` return a rough estimate of the planned run's CPU time and whether
+  the budgets allow it (a run clearly beyond its limit is refused); predictions need compute
+  left, uploads and imports room in the storage quota. New: `GET`/`PATCH
+  /api/account/usage/`, `PATCH` on API tokens and connections, the MCP tool `get_usage`,
+  optional prices (`BRICKDNN_PRICE_PER_CPU_HOUR`, `_PER_GB_MONTH`). In the web app: *Usage &
+  budget* on the account page (plan, compute and storage bars, reset date, own budget,
+  overage), usage and budgets of tokens and apps on the API tokens page, the estimated
+  compute and what is left in the training panel, and why a run was stopped. Usage records
+  are part of the data export and are deleted with the account.
 - **Agent activity: a log of everything AI agents do.** Every MCP tool call and every API
   request made with an API token or a connected app is recorded for its user: the token or
   app, the client, the tool or route, whether it worked (with the error the agent got), how

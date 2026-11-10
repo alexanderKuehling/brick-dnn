@@ -1,5 +1,9 @@
+from django import forms
+from django.conf import settings
 from django.contrib import admin
+from django.db.models import Q
 
+from . import budgets
 from .models import (
     AgentAction,
     ApiToken,
@@ -11,6 +15,7 @@ from .models import (
     Project,
     ProjectMember,
     TrainingRun,
+    UsageRecord,
     UserProfile,
 )
 
@@ -66,6 +71,13 @@ class TrainingRunAdmin(admin.ModelAdmin):
         "created_at",
         "started_at",
         "finished_at",
+        "api_token",
+        "connection",
+        "cpu_seconds",
+        "cpu_limit_seconds",
+        "estimated_cpu_seconds",
+        "stop_reason",
+        "size_bytes",
     )
 
 
@@ -146,19 +158,122 @@ class OAuthConnectionAdmin(admin.ModelAdmin):
         return False
 
 
+class UserProfileForm(forms.ModelForm):
+    """The plan is chosen from the plans of this server (BRICKDNN_PLANS)."""
+
+    plan = forms.ChoiceField(required=False)
+
+    class Meta:
+        model = UserProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = [("", f"Default plan ({budgets.default_plan().name})")]
+        choices += [(key, plan.name) for key, plan in budgets.plans().items()]
+        current = self.initial.get("plan")
+        if current and current not in dict(choices):
+            choices.append((current, f"{current} (no longer configured)"))
+        self.fields["plan"].choices = choices
+
+
+class UnlimitedFilter(admin.SimpleListFilter):
+    title = "limits"
+    parameter_name = "limits"
+
+    def lookups(self, request, model_admin):
+        return [("unlimited", "Unlimited"), ("plan", "Limited by the plan")]
+
+    def queryset(self, request, queryset):
+        staff = Q(user__is_staff=True) | Q(user__is_superuser=True)
+        default = Q(unlimited__isnull=True) & (staff if settings.STAFF_UNLIMITED else Q(pk=None))
+        unlimited = Q(unlimited=True) | default
+        if self.value() == "unlimited":
+            return queryset.filter(unlimited)
+        if self.value() == "plan":
+            return queryset.exclude(unlimited)
+        return queryset
+
+
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    """When accounts were last used and which terms they accepted (see retention.py)."""
+    """When accounts were last used and which terms they accepted (see retention.py), and
+    the plan and limits of each account (see budgets.py)."""
 
-    list_display = ("user", "last_active_at", "terms_accepted_at", "terms_version")
-    search_fields = ("user__username",)
-    readonly_fields = (
+    form = UserProfileForm
+    list_display = (
         "user",
+        "plan_name",
+        "is_unlimited",
         "last_active_at",
         "terms_accepted_at",
-        "terms_version",
-        "privacy_version",
+        "budget_cpu_minutes",
     )
+    list_filter = (UnlimitedFilter, "plan", "overage_enabled")
+    search_fields = ("user__username", "user__email")
+    raw_id_fields = ("user",)
+    actions = ["make_unlimited", "back_to_plan", "default_limits"]
+    fieldsets = (
+        (None, {"fields": ("user", "last_active_at")}),
+        ("Terms", {"fields": ("terms_accepted_at", "terms_version", "privacy_version")}),
+        ("Plan", {"fields": ("plan", "unlimited", "overage_enabled", "overage_cap_cpu_hours")}),
+        (
+            "Overrides of the plan's limits (empty: the plan's, 0: unlimited)",
+            {"fields": ("cpu_minutes_per_month", "cpu_minutes_per_run", "storage_mb")},
+        ),
+        ("Set by the user", {"fields": ("budget_cpu_minutes",)}),
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        fixed = ("last_active_at", "terms_accepted_at", "terms_version", "privacy_version")
+        # A new profile (e.g. for an account created in the admin) needs its user.
+        return fixed if obj is None else ("user", *fixed)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("user")
+
+    @admin.display(description="Plan")
+    def plan_name(self, profile: UserProfile) -> str:
+        return budgets.plan_of(profile.user, profile).name
+
+    @admin.display(description="Unlimited", boolean=True)
+    def is_unlimited(self, profile: UserProfile) -> bool:
+        return budgets.is_unlimited(profile.user, profile)
+
+    @admin.action(description="Make unlimited (still measured)")
+    def make_unlimited(self, request, queryset):
+        count = queryset.update(unlimited=True)
+        self.message_user(request, f"{count} accounts are unlimited now.")
+
+    @admin.action(description="Back to the limits of their plan")
+    def back_to_plan(self, request, queryset):
+        count = queryset.update(unlimited=False)
+        self.message_user(request, f"{count} accounts have the limits of their plan again.")
+
+    @admin.action(description="Default (unlimited only for staff and superusers)")
+    def default_limits(self, request, queryset):
+        count = queryset.update(unlimited=None)
+        self.message_user(request, f"{count} accounts follow the default again.")
+
+
+@admin.register(UsageRecord)
+class UsageRecordAdmin(admin.ModelAdmin):
+    """The ledger of compute usage (see budgets.py). Written by the server only."""
+
+    list_display = (
+        "period",
+        "user",
+        "kind",
+        "quantity",
+        "overage",
+        "unit",
+        "source",
+        "via",
+        "run_name",
+    )
+    list_filter = ("period", "kind", "source")
+    search_fields = ("user__username", "via", "run_name")
+    date_hierarchy = "created_at"
 
     def has_add_permission(self, request) -> bool:
         return False

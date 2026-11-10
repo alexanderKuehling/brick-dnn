@@ -111,11 +111,43 @@ class RegisterSerializer(serializers.ModelSerializer):
 # --------------------------------------------------------------------------- #
 
 
-class ApiTokenSerializer(serializers.ModelSerializer):
+class UsageMixin(serializers.Serializer):
+    """``used_cpu_minutes`` this month, from the ``usage`` in the context (budgets.token_usage)."""
+
+    usage_key = "token"
+    used_cpu_minutes = serializers.SerializerMethodField()
+
+    def get_used_cpu_minutes(self, obj) -> float:
+        usage = self.context.get("usage") or {}
+        return round(usage.get((self.usage_key, obj.pk), 0.0), 2)
+
+
+class ApiTokenSerializer(UsageMixin, serializers.ModelSerializer):
     class Meta:
         model = ApiToken
-        fields = ["id", "name", "prefix", "read_only", "created_at", "last_used_at", "expires_at"]
+        fields = [
+            "id",
+            "name",
+            "prefix",
+            "read_only",
+            "created_at",
+            "last_used_at",
+            "expires_at",
+            "budget_cpu_minutes",
+            "used_cpu_minutes",
+        ]
         read_only_fields = fields
+
+
+class BudgetSerializer(serializers.Serializer):
+    """A monthly compute budget in CPU minutes; null removes it."""
+
+    budget_cpu_minutes = serializers.FloatField(
+        min_value=0,
+        max_value=10_000_000,
+        allow_null=True,
+        error_messages={"invalid": "The budget must be a number of CPU minutes, or null."},
+    )
 
 
 class ApiTokenCreateSerializer(serializers.Serializer):
@@ -203,13 +235,41 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "finished_at",
             "project",
             "started_by",
+            "started_via",
+            "usage",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
+    started_via = serializers.SerializerMethodField()
+    usage = serializers.SerializerMethodField()
 
     def get_started_by(self, obj: TrainingRun) -> str:
         return obj.owner.get_username()
+
+    def get_started_via(self, obj: TrainingRun) -> dict | None:
+        """The API token or connected app that started the run (None: the web app)."""
+        if obj.connection_id is not None:
+            connection = obj.connection
+            return {"source": "app", "name": connection.client.name if connection else None}
+        if obj.api_token_id is not None:
+            token = obj.api_token
+            return {"source": "token", "name": token.name if token else None}
+        return None
+
+    def get_usage(self, obj: TrainingRun) -> dict:
+        """CPU minutes used so far, the most it may use and the estimate before it started;
+        ``stop_reason`` says why a stopped run stopped (user, budget, run_limit)."""
+
+        def minutes(seconds: float | None) -> float | None:
+            return round(seconds / 60, 2) if seconds is not None else None
+
+        return {
+            "cpu_minutes": minutes(obj.cpu_seconds or 0.0),
+            "limit_cpu_minutes": minutes(obj.cpu_limit_seconds),
+            "estimated_cpu_minutes": minutes(obj.estimated_cpu_seconds),
+            "stop_reason": obj.stop_reason or None,
+        }
 
     def get_task(self, obj: TrainingRun) -> str | None:
         return obj.plan.get("task") if isinstance(obj.plan, dict) else None

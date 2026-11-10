@@ -37,12 +37,13 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
+from . import budgets, downloads, history
 from . import data_service as data
-from . import downloads, history
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
 from . import training_service as training
 from . import upload_links as links
+from .accounts import usage_data
 from .agent_activity import record_tool_call
 from .api_tokens import uses_api_token
 from .models import ApiToken, DataPrep, DataSource, Project, TrainingRun
@@ -113,7 +114,12 @@ get_data_prep_script returns the pandas script that prepares new data the same w
 Files too large to pass as text: create_upload_link gives a one-time link for curl.
 
 Answers are compact: lists are capped with their totals, and arguments such as include,
-columns_offset or types ask for more."""
+columns_offset or types ask for more.
+
+Trainings and predictions use compute (CPU time), which can be limited per month: for the
+account, and for your API token or app. get_usage shows what is left; check_training
+estimates what a training will use. A training stops by itself (keeping its weights) when
+the budget runs out. Only the user can raise budgets, in the web app."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -917,13 +923,18 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
         training.validate_graph(args["graph"])
         dataset = training.resolve_dataset(request.user, args["dataset"])
         config = training.parse_config(args.get("config"))
+        search = training.parse_tuning(args.get("tuning"))
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
-    result = training.check(args["graph"], dataset, config).to_dict()
-    if isinstance(result.get("plan"), dict):  # up to 1,000 class names
-        plan = result["plan"]
+    result = training.check(args["graph"], dataset, config)
+    cost = training.budget_check(
+        budgets.Actor.of(request), args["graph"], dataset, config, result, search
+    )
+    answer = result.to_dict()
+    if isinstance(answer.get("plan"), dict):  # up to 1,000 class names
+        plan = answer["plan"]
         plan["class_names"] = compact.capped_names(plan.get("class_names"))
-    return result
+    return {**answer, **cost}
 
 
 class _TrainingScope:
@@ -945,6 +956,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
             args.get("config"),
             args.get("tuning"),
             args.get("project_id"),
+            actor=budgets.Actor.of(request),
         )
     except training.IncompatibleNetwork as exc:
         raise ToolError(json.dumps({"detail": str(exc), **exc.compatibility.to_dict()})) from None
@@ -954,11 +966,18 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
         training.TrainingBusy,
     ) as exc:
         raise ToolError(str(exc)) from None
-    return RunSummarySerializer(run).data
+    data = dict(RunSummarySerializer(run).data)
+    if run.budget_warning:
+        data["budget_warning"] = run.budget_warning
+    return data
+
+
+def get_usage(request: Request, args: dict[str, Any]) -> Any:
+    return usage_data(request)
 
 
 def list_training_runs(request: Request, args: dict[str, Any]) -> Any:
-    runs = visible_runs(request.user).select_related("owner")
+    runs = visible_runs(request.user).select_related("owner", "api_token", "connection__client")
     training.sync_runs(runs.filter(status__in=ACTIVE_STATUSES))
     limit = args.get("limit", 20)
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
@@ -1018,7 +1037,7 @@ def predict(request: Request, args: dict[str, Any]) -> Any:
     if not ScopedRateThrottle().allow_request(request, _PredictScope()):
         raise ToolError("Too many predictions were made recently. Try again later.")
     try:
-        return training.run_prediction(prediction)
+        return training.run_prediction(prediction, budgets.Actor.of(request))
     except (training.TrainingBusy, training.PredictionFailed) as exc:
         raise ToolError(str(exc)) from None
 
@@ -1615,9 +1634,18 @@ TOOLS: dict[str, Tool] = {
             "classical models: tabular data and the right task) before training. Returns ok, "
             "errors, warnings, the plan (task, classes) and fixes: the params to set on the "
             "Input layer and the last layer to make it fit. Pass config to also check the "
-            "settings (e.g. max_samples against the row limit of classical models).",
+            "settings (e.g. max_samples against the row limit of classical models). Also "
+            "returns estimate (the rough CPU time the training would use, in CPU minutes, "
+            "with a low-high range) and budget: whether the compute budgets allow it "
+            "(allowed, reason, warning, run_limit_cpu_minutes: the most it may use). Pass "
+            "config and tuning as for start_training for a precise estimate.",
             check_training,
-            {"graph": GRAPH_SCHEMA, "dataset": DATASET_SCHEMA, "config": {"type": "object"}},
+            {
+                "graph": GRAPH_SCHEMA,
+                "dataset": DATASET_SCHEMA,
+                "config": {"type": "object"},
+                "tuning": {"type": "object"},
+            },
             ("graph", "dataset"),
         ),
         Tool(
@@ -1627,7 +1655,10 @@ TOOLS: dict[str, Tool] = {
             "get_training_run. config overrides the defaults from get_training_options "
             "(epochs, batch_size, learning_rate, …); tuning turns the run into a "
             "hyperparameter search. A classical model is fitted once (no epochs): only "
-            "val_split, test_split, max_samples and seed apply, and tuning is not available.",
+            "val_split, test_split, max_samples and seed apply, and tuning is not available. "
+            "Refused when a compute budget is used up (get_usage); the run stops by itself, "
+            "keeping its weights, when it has used what is left (budget_warning says if that "
+            "is likely).",
             start_training,
             {
                 "graph": GRAPH_SCHEMA,
@@ -1642,6 +1673,17 @@ TOOLS: dict[str, Tool] = {
             },
             ("graph", "dataset"),
             writes=True,
+        ),
+        Tool(
+            "get_usage",
+            "Show usage and budgets",
+            "This month's compute usage (CPU minutes of trainings and predictions) and storage "
+            "of the user's account, its limits and what is left, when the budgets reset (the "
+            "first day of the next month, UTC), the usage per API token and app, and the "
+            "budget of the token or app you are using (caller). Check it before training. "
+            "Reading it costs nothing.",
+            get_usage,
+            {},
         ),
         Tool(
             "list_training_runs",
@@ -1821,6 +1863,9 @@ def _run_tool(tool: Tool, request: Request, args: dict[str, Any]) -> tuple[Any, 
         return tool.run(request, args), None
     except ToolError as exc:
         return None, str(exc)
+    except budgets.BudgetError as exc:
+        # A budget or the storage quota does not allow it: say which, and how to get more.
+        return None, f"{exc.message}\nget_usage shows the usage and budgets of this month."
     except Exception:
         logger.exception("MCP tool %s failed", tool.name)
         return None, "Internal error in the Brick DNN server."

@@ -115,7 +115,8 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `apply_readiness_fix`   | full   |             | Add the step that fixes a readiness issue (`fix_id`, or `all`)  |
 | `export_training_dataset` | full |             | Turn a ready preparation into a training dataset (owner, editors) |
 | `delete_data_prep`      | full   | yes         | Delete a preparation (owner only)                               |
-| `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer |
+| `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer, the estimated CPU time and whether the budgets allow it |
+| `get_usage`             | read   |             | This month's usage, the plan and its limits, what is left (also of your token's or app's budget), when it resets |
 | `start_training`        | full   |             | Train in the background                                         |
 | `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R² (`limit`, `status`, `project_id`) |
 | `get_training_run`      | read   |             | One run as a summary (`include`: history, graph, plan, log, trials, preprocessing) |
@@ -165,6 +166,21 @@ networks, datasets and runs and the ones shared with them, with the same roles, 
 validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login-required)).
 Destructive tools are marked as such for the client (`destructiveHint`), so it can ask you
 before it uses them.
+
+### Budgets
+
+Trainings and predictions use compute (CPU time), which the account's plan and the budgets of
+the account and of each token and app limit per month (see
+[training.md](training.md#usage-and-budgets)). `get_usage` shows what is left, under `caller`
+also the budget of the token or app the assistant uses; `check_training` (with `config` and
+`tuning`) returns `estimate`, a rough estimate of the CPU time, and `budget`: whether a start
+would be allowed (`allowed`, `reason`), a `warning` if the run will probably be stopped by its
+limit, and `run_limit_cpu_minutes`, the most it may use. A refused start or prediction is a
+tool error that names the budget, how much is used, when it resets and who can raise it; a
+training that runs out stops by itself and keeps its weights (`get_training_run`:
+`usage.stop_reason` `budget` or `run_limit`). Only the user can change budgets, in the web app
+(account page, API tokens page): a token cannot raise its own. Checks, analyses and listings
+never count.
 
 ### Deleting
 

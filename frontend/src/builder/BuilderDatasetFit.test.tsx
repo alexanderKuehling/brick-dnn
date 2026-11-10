@@ -28,7 +28,7 @@ vi.mock('@/api', async (importOriginal) => {
     ...actual,
     api: {
       projects: { get: vi.fn(), members: { list: vi.fn() } },
-      training: { check: vi.fn() },
+      training: { check: vi.fn(), estimate: vi.fn() },
     },
   };
 });

@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -224,6 +225,33 @@ class TrainingRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     # Opened, predicted with or its weights downloaded (see retention.py).
     last_used_at = models.DateTimeField(default=timezone.now)
+    # Started with a personal API token or by an app connected with OAuth (both empty: in the
+    # web app). Its usage counts against their budgets too (see budgets.py).
+    api_token = models.ForeignKey(
+        "ApiToken",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="training_runs",
+    )
+    connection = models.ForeignKey(
+        "OAuthConnection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="training_runs",
+    )
+    # CPU time counted in the usage records so far (the runner measures it, see budgets.py),
+    # the CPU time after which the runner stops by itself (null: no limit) and the estimate
+    # made before it started.
+    cpu_seconds = models.FloatField(default=0)
+    cpu_limit_seconds = models.FloatField(null=True, blank=True)
+    estimated_cpu_seconds = models.FloatField(null=True, blank=True)
+    # Why a stopped run stopped: "user", "budget" (a monthly budget was used up) or
+    # "run_limit" (the most one run may use); empty otherwise.
+    stop_reason = models.CharField(max_length=20, blank=True)
+    # Bytes of its files (weights, log) once it has finished, for the storage quota.
+    size_bytes = models.BigIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -260,6 +288,9 @@ class ApiToken(models.Model):
         blank=True,
         related_name="access_tokens",
     )
+    # Monthly compute budget of this token in CPU minutes, set by its owner (null: none,
+    # only the account's limits apply). Not used for the access tokens of apps.
+    budget_cpu_minutes = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -313,6 +344,8 @@ class OAuthConnection(models.Model):
     refresh_expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
+    # Monthly compute budget of this app in CPU minutes, set by the user (null: none).
+    budget_cpu_minutes = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -401,9 +434,115 @@ class UserProfile(models.Model):
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     terms_version = models.CharField(max_length=64, blank=True)
     privacy_version = models.CharField(max_length=64, blank=True)
+    # The plan the limits come from (a key of BRICKDNN_PLANS; empty: the default plan) and
+    # whether the account has no limits at all (empty: only staff and superusers). Billing
+    # will set the plan; for now the operator does (Django admin, `manage.py set_plan`).
+    plan = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text="A plan of BRICKDNN_PLANS, e.g. free or plus. Empty: the default plan.",
+    )
+    unlimited = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Yes: no limits of the plan apply (usage is still measured). Empty: only staff "
+        "members and superusers are unlimited.",
+    )
+    # Paid plans: usage beyond the monthly allowance is allowed (and billed later) when the
+    # user switched it on, up to their own cap in CPU hours (empty: no cap).
+    overage_enabled = models.BooleanField(default=False)
+    overage_cap_cpu_hours = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(0)]
+    )
+    # Limits of this account set by the operator (see budgets.py): empty = those of its plan,
+    # 0 = unlimited.
+    cpu_minutes_per_month = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Monthly compute allowance in CPU minutes. Empty: the server's setting "
+        "(BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH); 0: unlimited.",
+    )
+    cpu_minutes_per_run = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="The most CPU minutes one training may use. Empty: the server's setting "
+        "(BRICKDNN_BUDGET_CPU_MINUTES_PER_RUN); 0: unlimited.",
+    )
+    storage_mb = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Storage quota in MB. Empty: the server's setting (BRICKDNN_BUDGET_STORAGE_MB); "
+        "0: unlimited.",
+    )
+    # The monthly budget the user set for their own account (account page), in CPU minutes;
+    # empty: none. It can only lower the allowance.
+    budget_cpu_minutes = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="The user's own monthly budget in CPU minutes (set on the account page).",
+    )
 
     def __str__(self) -> str:
         return f"Profile of {self.user}"
+
+
+class UsageRecord(models.Model):
+    """Compute an account used: the ledger behind budgets (and billing; see budgets.py).
+
+    One row per training run and calendar month, whose quantity grows while the run is
+    active, and one per prediction. ``quantity`` is in ``unit`` (CPU seconds). The API token
+    or connected app that caused it is kept for the budgets of agents; its name is copied
+    (``via``), so that the row still says where it came from once the token is deleted.
+    """
+
+    KINDS = [("training", "Training"), ("prediction", "Prediction")]
+    SOURCES = [("web", "Web app"), ("token", "API token"), ("app", "Connected app")]
+    UNITS = [("cpu_second", "CPU seconds")]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="usage_records"
+    )
+    source = models.CharField(max_length=10, choices=SOURCES, default="web")
+    api_token = models.ForeignKey(
+        ApiToken, on_delete=models.SET_NULL, null=True, blank=True, related_name="usage_records"
+    )
+    connection = models.ForeignKey(
+        OAuthConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="usage_records",
+    )
+    # The name of the token or app at the time (empty for the web app).
+    via = models.CharField(max_length=200, blank=True)
+    kind = models.CharField(max_length=20, choices=KINDS)
+    quantity = models.FloatField(default=0)
+    # The part of ``quantity`` beyond the monthly allowance of the plan, used with overage
+    # switched on (billed at the plan's overage price).
+    overage = models.FloatField(default=0)
+    unit = models.CharField(max_length=20, choices=UNITS, default="cpu_second")
+    run = models.ForeignKey(
+        TrainingRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="usage_records"
+    )
+    run_name = models.CharField(max_length=120, blank=True)
+    # The first day of the calendar month (UTC) the usage belongs to.
+    period = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "period"], name="usage_user_period"),
+            models.Index(fields=["period"], name="usage_period"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} of {self.user}: {self.quantity:.1f} {self.unit} ({self.period})"
 
 
 class AgentAction(models.Model):
