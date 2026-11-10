@@ -53,6 +53,11 @@
     small PNG or run-lengths and the share of every class.
   - `brickdnn train` reads the new datasets and has `--loss` and `--previews`; the MCP tools
     and the activity log know the new datasets and metrics.
+- **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
+  become staff and superusers when the backend starts (Django admin, no limits by default).
+  Nobody can register a listed name; removing a name takes no rights away. A public
+  server can set it in `deploy/sites/<domain>/settings.env`, so no shell on the server is
+  needed. brickdnn.com names its owner's account.
 - **U-Net example and `ConvTranspose2d`.** A new brick for transposed 2-D convolutions
   (learned upsampling: kernel 2 with stride 2 doubles the size; padding and output padding
   as in PyTorch), and the example *U-Net (image segmentation)*: three levels down with

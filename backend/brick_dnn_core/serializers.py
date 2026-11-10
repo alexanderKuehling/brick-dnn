@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
-from . import legal
+from . import legal, site_admins
 from .api_tokens import EXPIRY_DAYS
 from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun, UserProfile
 
@@ -82,6 +82,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value: str) -> str:
         return clean_email(value)
+
+    def validate_username(self, value: str) -> str:
+        if site_admins.is_reserved(value):
+            # As for a name that is taken: nothing says whose it is.
+            raise serializers.ValidationError("A user with that username already exists.")
+        return value
 
     def validate(self, attrs):
         self.legal_versions = legal.versions()

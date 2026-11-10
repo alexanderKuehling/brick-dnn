@@ -11,7 +11,10 @@ class BrickDnnCoreConfig(AppConfig):
         # Connects the signal handlers that delete training and data files with their objects.
         # billing: its check of the Paddle settings.
         from . import billing, data_service, training_service  # noqa: F401
+        from .site_admins import promote_after_migrate
         from .supabase import protect_after_migrate
 
         # On Supabase, hide the tables from its Data API after every migrate (see supabase.py).
         post_migrate.connect(protect_after_migrate, sender=self, dispatch_uid="brickdnn-supabase")
+        # The operator's administrators (BRICKDNN_ADMIN_USERS, see site_admins.py).
+        post_migrate.connect(promote_after_migrate, sender=self, dispatch_uid="brickdnn-admins")
