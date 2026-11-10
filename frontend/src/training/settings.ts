@@ -113,7 +113,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   seed: '',
   patience: '',
   restore_best: true,
-  segmentation_batch_size: 16,
+  segmentation_batch_size: 8,
   loss: 'cross_entropy',
   search: false,
   search_method: 'random',

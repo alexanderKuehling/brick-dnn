@@ -502,7 +502,7 @@ describe('Settings of a segmentation', () => {
     expect(toConfig(values)).toMatchObject({ batch_size: 64 });
     expect(toConfig(values)).not.toHaveProperty('loss');
     const config = toConfig(values, { segmentation: true, builtin: true });
-    expect(config).toMatchObject({ batch_size: 16, loss: 'cross_entropy_dice', test_split: 0 });
+    expect(config).toMatchObject({ batch_size: 8, loss: 'cross_entropy_dice', test_split: 0 });
   });
 
   it('refuse batches that do not fit into memory', () => {
@@ -561,7 +561,7 @@ describe('Settings of a segmentation', () => {
   it('show the batch size for segmentation, what fits and the loss', async () => {
     render(<Form segmentation={scope} />);
     const batch = screen.getByLabelText('Batch size') as HTMLInputElement;
-    expect(batch.value).toBe('16');
+    expect(batch.value).toBe('8');
     expect(
       screen.getByText('Images per optimizer step; up to 50 fit into memory')
     ).toBeInTheDocument();

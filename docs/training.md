@@ -350,8 +350,9 @@ file, both with the reason; classical models do not segment.
 ### Settings, memory and time
 
 - **Batch size.** Every layer keeps its output for all pixels of a batch, so batches are
-  much smaller than for classification: 8 to 16 is usual, and the form has a batch size of
-  its own for segmentation (16). A batch that would need more than
+  much smaller than for classification: 4 to 16 is usual, and the form has a batch size of
+  its own for segmentation (8). Small datasets learn faster with small batches: 44 images
+  in batches of 16 are only three optimizer steps per epoch. A batch that would need more than
   `BRICKDNN_SEGMENTATION_MEMORY_MB` (default 900 MB) is refused before the start with the
   batch size that fits, e.g. 52 for the U-Net example at 64×64 and 13 at 128×128.
 - **Loss.** *Cross-entropy* of every pixel, or *Cross-entropy + Dice* (`loss`:

@@ -45,7 +45,7 @@
   - *Training:* the cross-entropy of every pixel, optionally with a Dice term (setting
     `loss`); `val_iou`, `val_dice` and `val_pixel_accuracy` per epoch, the same on the test
     set, and the IoU of every class. The kept epoch stays the one with the lowest validation
-    loss. The training panel has a batch size of its own for segmentation (16).
+    loss. The training panel has a batch size of its own for segmentation (8).
   - *Predictions:* a finished run shows eight validation images with their mask, the
     predicted mask and the prediction over the image
     (`GET /api/training/runs/<id>/previews/`). `predict` (REST and MCP) takes image files as

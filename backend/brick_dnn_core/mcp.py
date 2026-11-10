@@ -108,7 +108,7 @@ Input, e.g. the example unet, with one output channel per class (or one channel 
 classes). It trains on the built-in dataset shapes (generated, nothing to upload) or on a ZIP
 file with the folders images/ and masks/ (same file names; masks are PNG files with the
 class index of every pixel, or black and white), uploaded with create_upload_link. The
-metrics are mean IoU, Dice and pixel accuracy; use a batch size of 8 to 16; predict takes an
+metrics are mean IoU, Dice and pixel accuracy; use a batch size of 4 to 16 (8 for the example); predict takes an
 image file as base64 (image) and returns the class map as a small PNG.
 
 Real tables usually need preparing first (missing values, categories, dates, outliers):

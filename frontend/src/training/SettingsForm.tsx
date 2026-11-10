@@ -253,7 +253,7 @@ export function SettingsForm({
             description={
               maxBatch !== null && maxBatch >= 1
                 ? `Images per optimizer step; up to ${maxBatch.toLocaleString('en-US')} fit into memory`
-                : 'Images per optimizer step (8 to 16 is usual for segmentation)'
+                : 'Images per optimizer step (4 to 16 is usual for segmentation)'
             }
             value={tuned.batch_size ? '' : values.segmentation_batch_size}
             placeholder={tuned.batch_size ? SEARCHED : undefined}

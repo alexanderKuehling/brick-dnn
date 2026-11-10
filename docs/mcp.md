@@ -167,8 +167,8 @@ name in `segmentation`; `predict {run_id, image}` returns the class map. The exa
 `list_examples {id: "unet"}`: it fits `shapes` as it is.
 
 ```text
-check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "shapes"}, config: {batch_size: 16}} → ok
-start_training {…, config: {epochs: 10, batch_size: 16}} · get_training_run {id} → val_iou 0.80, test_iou 0.78
+check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "shapes"}, config: {batch_size: 8}} → ok
+start_training {…, config: {epochs: 10, batch_size: 8}} · get_training_run {id} → val_iou 0.77, test_iou 0.81
 predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_png
 ```
 
