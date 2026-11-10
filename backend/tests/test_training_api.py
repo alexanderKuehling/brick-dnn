@@ -234,14 +234,17 @@ def start(client, graph=DEMO_GRAPH, dataset=RANDOM, config=QUICK, name="Small ne
 
 def wait_for(client, run_id, statuses=TERMINAL_STATUSES, timeout=15.0, interval=0.05):
     """Poll the run until its status is one of ``statuses``."""
-    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    deadline = started + timeout
     while True:
         data = client.get(f"/api/training/runs/{run_id}/").data
         if data["status"] in statuses:
             return data
         if time.monotonic() > deadline:
             raise AssertionError(f"The run is still {data['status']}: {data['message']}")
-        time.sleep(interval)
+        # A long wait (a real training on a busy machine) polls less often, to stay below the
+        # rate limit of 600 requests per minute.
+        time.sleep(interval if time.monotonic() - started < 5 else max(interval, 0.25))
 
 
 def wait_for_state(training_dir, run_id, timeout=10.0):

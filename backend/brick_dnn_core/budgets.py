@@ -389,6 +389,21 @@ def overage_billable(user) -> bool:
     return billing.overage_allowed(user)
 
 
+def overage_used_seconds(user) -> float:
+    """Overage the account's cap may not go below: what it used beyond the allowance this
+    month and, with paid plans, in months that are not billed yet. A cap set lower would not
+    undo that usage, only hide it from the limit (and from the bill)."""
+    from . import billing  # billing.py builds on this module
+
+    this_month = float(
+        UsageRecord.objects.filter(user=user, period=period_of()).aggregate(n=Sum("overage"))["n"]
+        or 0.0
+    )
+    if billing.config().enabled:
+        return max(this_month, billing.unbilled_overage_seconds(user))
+    return this_month
+
+
 def pricing_url() -> str | None:
     """Where a higher plan can be bought, on a server that sells plans (billing.py)."""
     from . import billing

@@ -962,6 +962,22 @@ def overage_seconds(user, period: date) -> float:
     return max(0.0, recorded)
 
 
+def unbilled_overage_seconds(user) -> float:
+    """The most overage the ledger recorded in a month that is not billed yet (the running
+    month included): the account's cap must not go below it, or the bill would shrink."""
+    most = 0.0
+    for period in _open_periods(user):
+        recorded = float(
+            UsageRecord.objects.filter(user=user, period=period).aggregate(total=Sum("overage"))[
+                "total"
+            ]
+            or 0.0
+        )
+        if recorded - _handled_seconds(user, period) > 0:
+            most = max(most, recorded)
+    return most
+
+
 def _open_periods(user) -> list[date]:
     """Months in which the account used overage, oldest first."""
     return list(

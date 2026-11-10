@@ -636,6 +636,20 @@ class AccountBudgetSerializer(serializers.Serializer):
         min_value=0, max_value=1_000_000, allow_null=True, required=False
     )
 
+    def validate_overage_cap_cpu_hours(self, value: float | None) -> float | None:
+        user = self.context["user"]
+        profile = UserProfile.objects.filter(user=user).first()
+        current = profile.overage_cap_cpu_hours if profile is not None else None
+        if value is None or (current is not None and value >= current):
+            return value  # no cap, the same or a higher one
+        used = budgets.overage_used_seconds(user) / 3600
+        if value < used:
+            raise serializers.ValidationError(
+                f"You have already used {used:.2f} CPU hours beyond your allowance that are "
+                "not billed yet. The cap cannot be lower than that."
+            )
+        return value
+
     def validate_overage_enabled(self, value: bool) -> bool:
         user = self.context["user"]
         plan = budgets.plan_of(user)

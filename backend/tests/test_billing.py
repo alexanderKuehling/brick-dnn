@@ -1015,6 +1015,24 @@ def test_overage_is_billed_up_to_the_accounts_cap(paddle, ada, web):
     assert paddle.charges[0][1]["amount_minor"] == 200
 
 
+def test_the_cap_cannot_go_below_overage_that_is_not_billed_yet(paddle, ada, web):
+    subscribe(paddle, web, ada, "plus")
+    UserProfile.objects.filter(user=ada).update(overage_enabled=True, overage_cap_cpu_hours=5)
+    use_overage(ada, 3)  # last month, the daily job has not billed it yet
+
+    def set_cap(hours):
+        return web.patch("/api/account/usage/", {"overage_cap_cpu_hours": hours}, format="json")
+
+    response = set_cap(1)
+    assert response.status_code == 400
+    assert "3.00 CPU hours" in response.data["overage_cap_cpu_hours"][0]
+    assert set_cap(3).status_code == 200  # down to what is used
+    billing.sync_all()
+    assert OverageCharge.objects.get().amount == Decimal("1.20")  # 3 h at 0.40
+    # Billed: that month no longer holds the cap up.
+    assert set_cap(1).status_code == 200
+
+
 def test_the_running_month_is_billed_only_when_the_subscription_ends(paddle, ada, web):
     subscribe(paddle, web, ada, "plus")
     use_overage(ada, 3, period=budgets.period_of())

@@ -295,6 +295,8 @@
   without one keep working.
 
 ### Fixed
+- The cap for compute beyond the allowance cannot be set below what an account has already
+  used and not been billed for: lowering it afterwards would have shrunk the bill.
 - The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have
   no effect with the other settings, such as `padding_size` when `padding` is `same` or
   `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
