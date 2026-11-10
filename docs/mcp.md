@@ -96,7 +96,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `get_project`           | read   |             | One saved network with its graph                                |
 | `save_project`          | full   | yes         | Create a network or update one (owner, editors)                 |
 | `delete_project`        | full   | yes         | Delete a network (owner only)                                   |
-| `get_training_options`  | read   |             | Whether training is available, datasets (summaries), default settings, search, upload limit |
+| `get_training_options`  | read   |             | Whether training is available, the training queue (worker online, slots, running, waiting), datasets (summaries), default settings, search, upload limit |
 | `get_dataset`           | read   |             | One dataset: rows, task, classes and its columns, a page at a time |
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `create_upload_link`    | full   |             | One-time link to upload a local file with curl (data source or training dataset) |
@@ -115,12 +115,12 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `apply_readiness_fix`   | full   |             | Add the step that fixes a readiness issue (`fix_id`, or `all`)  |
 | `export_training_dataset` | full |             | Turn a ready preparation into a training dataset (owner, editors) |
 | `delete_data_prep`      | full   | yes         | Delete a preparation (owner only)                               |
-| `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer, the estimated CPU time and whether the budgets allow it |
+| `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer, the estimated CPU time, whether the budgets allow it and how long the run would wait in the queue |
 | `get_usage`             | read   |             | This month's usage, the plan and its limits, what is left (also of your token's or app's budget), when it resets |
-| `start_training`        | full   |             | Train in the background                                         |
-| `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R² (`limit`, `status`, `project_id`) |
+| `start_training`        | full   |             | Train in the background (on a server with a training queue the run is `queued` first) |
+| `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R², queued ones with their position (`limit`, `status`, `project_id`) |
 | `get_training_run`      | read   |             | One run as a summary (`include`: history, graph, plan, log, trials, preprocessing) |
-| `stop_training`         | full   |             | Stop a run after the current batch (starter, project editors)   |
+| `stop_training`         | full   |             | Stop a run after the current batch, or cancel a queued one (starter, project editors) |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
 | `predict`               | read   |             | Run a trained network on up to 64 samples                       |
@@ -167,6 +167,28 @@ validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login
 Destructive tools are marked as such for the client (`destructiveHint`), so it can ask you
 before it uses them.
 
+### The training queue
+
+On a server with a training worker ([training.md](training.md#the-training-queue)) a training
+does not start at once: `start_training` returns the run as `queued`, and it trains when a
+worker has a free slot, runs of plans with a higher priority first. The tools say where it
+stands, in small answers:
+
+- `get_training_options`: `queue` with `online` (false, with a `message`, when no worker is
+  running: trainings then wait until one is back), `slots`, `running`, `waiting` and a
+  `priority_hint` for the user's plan; `null` on a server that trains one run at a time and
+  refuses a start while it is busy.
+- `check_training`: `queue` with the `position` a run started now would get and
+  `estimated_wait_seconds`, a rough estimate (null if it cannot be told).
+- `start_training`, `list_training_runs` and `get_training_run`: a queued run has `queue`
+  with `position`, `waiting` (how many wait in all) and `estimated_wait_minutes`;
+  `get_training_run` adds `estimated_start_at` and a `note` (the wait is an estimate; the run
+  waits for the account's running training; no worker is running).
+- `stop_training` cancels a queued run (it ends as `stopped` and uses no compute);
+  `delete_training_run` removes it. A run whose budget is gone when its turn comes ends as
+  `failed` with "Not started: …". Starting more runs than the plan lets wait is a tool error
+  that says so.
+
 ### Budgets
 
 Trainings and predictions use compute (CPU time), which the account's plan and the budgets of
@@ -189,7 +211,7 @@ never count.
   editing it live are disconnected, as when it is deleted in the web app. Training runs
   started in it are kept for who started them.
 - `delete_training_run`: who started the run and the owner of its project. An active run is
-  killed first.
+  killed first (`killed_running_training`; false for a run that only waited in the queue).
 - `delete_dataset`: your own datasets only (not the ones others shared with you), and not
   while a training uses them.
 

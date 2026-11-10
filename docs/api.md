@@ -308,15 +308,15 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits, `classical` |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits, `classical`, `queue` |
 | GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
 | POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
-| POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it? |
+| POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it, how long would it wait? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
 | POST   | `/api/training/runs/`                  | Start a run `{name, graph, dataset, config, tuning?}` |
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
-| POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept) |
+| POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
@@ -396,7 +396,7 @@ with a price), `budget.allowed` false with `reason` and `code` (`budget_exceeded
 `storage_quota_exceeded`, `estimate_too_high`) if a start would be refused, `warning` if the
 run will probably be stopped by its limit, `run_limit_cpu_minutes` the most it may use. A start
 refused by a budget answers `403 {detail, code, …}`; the plan's limit of trainings at a time
-answers `409`. Runs have `usage: {cpu_minutes, limit_cpu_minutes, estimated_cpu_minutes,
+answers `409` (with a training queue: its limit of waiting trainings). Runs have `usage: {cpu_minutes, limit_cpu_minutes, estimated_cpu_minutes,
 stop_reason}` (`stop_reason`: `user`, `budget` or `run_limit`) and `started_via` (`{source:
 "token" | "app", name}`, null in the web app); the answer to a start adds `budget_warning`.
 See [training.md](training.md#usage-and-budgets).
@@ -452,9 +452,45 @@ against the row limit of a classical model. For classical models, only the Input
 
 `POST /api/training/runs/` answers incompatible combinations with explanations, e.g.
 `400 {"detail": "...", "errors": ["The network outputs 5 values, but MNIST has 10 classes. ..."],
-"warnings": []}`. Starting a run while another one is active gives `409`, and `503` when
-training is disabled or the library the network needs is missing (PyTorch for neural
-networks, scikit-learn for classical models).
+"warnings": []}`. Starting a run while another one is active gives `409` on a server without
+a training queue (see below), and `503` when training is disabled or the library the network
+needs is missing (PyTorch for neural networks, scikit-learn for classical models).
+
+**The training queue.** On a server with a training worker (`BRICKDNN_TRAINING_WORKER`, the
+default with Docker Compose; see [training.md](training.md#the-training-queue)) a start does
+not answer `409` because the server is busy: the run is created with the status `queued` and
+trains when a worker has a free slot, runs of plans with a higher priority first. `409` then
+only means that the account has as many runs waiting as it may. `GET /api/training/` has
+
+```json
+"queue": {"online": true, "workers": 1, "slots": 1, "running": 1, "waiting": 2,
+          "message": null, "priority_hint": "Paid plans start first."}
+```
+
+(`null` without a worker mode: the web server trains itself). `online` false, with a
+`message`, means that no worker is running: queued runs wait until one is back. `slots` are
+the trainings the workers run at the same time (also `max_concurrent_runs`),
+`priority_hint` (logged in) one line on what the caller's plan means for its place, null if
+the plans do not differ. A queued run, in the list and alone, has
+
+```json
+"status": "queued",
+"queue": {"position": 3, "waiting": 5, "estimated_wait_seconds": 240,
+          "estimated_start_at": "2026-11-10T10:04:00Z", "worker_online": true,
+          "blocked_by": null, "priority": 0, "hint": "Paid plans start first."}
+```
+
+`position` counts from 1 among all waiting runs. `estimated_wait_seconds` and
+`estimated_start_at` are a **rough estimate** from the CPU-time estimates of the trainings
+ahead and the worker's slots (null if it cannot be told, e.g. without a worker).
+`blocked_by: "account"` means that the run waits for a running training of the same account
+(the plan's trainings at a time). `queue` is null for every other status, and `state` is null
+until the run has started. `POST …/stop/` cancels a queued run: it ends as `stopped` with the
+message "Cancelled before it started." and `usage.cpu_minutes` 0. A queued run whose budget
+is gone when its turn comes ends as `failed` with "Not started: …" and
+`usage.stop_reason: "budget"`. A run that is started again after its worker was restarted
+is `queued` again in between (its `message` says why). The training check answers with the
+same `queue` object for a run that would be started now (plus `running` and `message`).
 
 **Classical models** (Gaussian processes, SVMs, see [training.md](training.md#classical-models))
 train with scikit-learn and do not need PyTorch. `GET /api/training/` describes them separately,
