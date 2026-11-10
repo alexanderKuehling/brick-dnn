@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from . import rows as rowstats
 from .io import _LEADING_ZERO, LEADING_ZERO_SHARE, parse_numbers
 from .profile import _CAMEL_ID, _ID_NAME, HIGH_CARDINALITY, SKEWNESS, _eta
 from .steps.columns import (
@@ -38,7 +39,7 @@ from .steps.columns import (
 )
 from .steps.columns import _date_format as date_format
 from .steps.text import fmt_number, fmt_share, plural
-from .table import NUMERIC_KINDS, TEST, TRAIN, VAL, Table
+from .table import NUMERIC_KINDS, TEST, TRAIN, VAL, DataError, Table
 
 # Training rows the value checks look at at most (a seeded random sample)...
 CHECK_ROWS = 100_000
@@ -92,11 +93,21 @@ ROWS_PER_FEATURE = 5
 DUPLICATE_WARNING = 0.05  # share of duplicate rows that is more than a note
 OVERLAP_WARNING = 0.01  # share of validation/test rows that are copies of training rows
 CONFLICT_SHARE = 0.01
+# Row structure (atypical rows, near twins): rows checked at most, rows needed, and the share
+# of rows with a twin / of validation and test rows with a twin in training that is worth a
+# warning.
+STRUCTURE_ROWS = 4_000
+STRUCTURE_MIN_ROWS = 50
+STRUCTURE_TWIN_SHARE = 0.05
+STRUCTURE_HELD_SHARE = 0.05
 
 # Order of the warnings and notes in the list (errors keep the order they are found in).
 PRIORITY = (
     "leakage",
     "split_overlap",
+    "near_twins",
+    "atypical_rows",
+    "group_column_feature",
     "rare_classes",
     "classes_not_in_split",
     "inconsistent_categories",
@@ -1348,3 +1359,147 @@ def row_issues(
         if message:
             issues.append(issue("few_rows", "warning", message))
     return issues
+
+
+# --------------------------------------------------------------------------- #
+# Row structure: unusually typical rows, near twins (see brickdnn.data.rows)
+# --------------------------------------------------------------------------- #
+
+
+def group_column_name(table: Table) -> str:
+    """``group``, or ``group_2`` … if that column exists already."""
+    name, number = "group", 1
+    while name in table.kinds:
+        number += 1
+        name = f"group_{number}"
+    return name
+
+
+def row_structure_issues(
+    table: Table, target: str | None, settings: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Rows whose every value sits close to its column median (fix: remove atypical rows),
+    and rows with a near twin, with the share of validation/test rows that have a twin in
+    the training rows (fix: find near-duplicate groups and split by them).
+
+    Both need a clear split in the distributions (:func:`rows.suggest_threshold`), at
+    least ``rows.MIN_FEATURES`` feature columns and ``STRUCTURE_MIN_ROWS`` rows, so ordinary
+    tables stay quiet. Large tables are checked on a seeded sample of
+    ``STRUCTURE_ROWS`` rows (or fewer for wide tables)."""
+    if table.n_rows < STRUCTURE_MIN_ROWS:
+        return []
+    group_by = (settings.get("split") or {}).get("group_by")
+    try:
+        stats = rowstats.cached_compute(
+            table,
+            target=target,
+            exclude=[group_by] if group_by else [],
+            max_rows=STRUCTURE_ROWS,
+            with_projection=False,
+        )
+    except DataError:
+        return []
+    suggested = stats.suggestions()
+    sampled = f"In a sample of {stats.rows:,} rows, " if stats.sampled else ""
+    issues: list[dict[str, Any]] = []
+
+    def sentence(text: str) -> str:
+        return sampled + text[0].lower() + text[1:] if sampled else text
+
+    if (threshold := suggested["atypical"]) is not None:
+        count = int(np.sum(stats.spread < threshold))
+        typical = float(np.nanmedian(stats.spread))
+        issues.append(
+            issue(
+                "atypical_rows",
+                "warning",
+                sentence(
+                    f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) "
+                    f"{'is' if count == 1 else 'are'} unusually typical: every value is close "
+                    f"to its column median (spread below {fmt_number(threshold)}; ordinary rows "
+                    f"{fmt_number(typical)}). Such rows are often filler or synthetic rows "
+                    "with made-up labels; look at them in Analysis → Rows."
+                ),
+                [],
+                step_fix(
+                    "remove_atypical",
+                    {"features": "auto", "columns": [], "side": "low", "threshold": None},
+                    "Remove the atypical rows",
+                ),
+            )
+        )
+    if (threshold := suggested["twins"]) is not None:
+        ratio = stats.nn_ratio()
+        twins = ratio < threshold
+        count = int(twins.sum())
+        if count >= STRUCTURE_TWIN_SHARE * stats.rows:
+            closer = 1 / float(np.median(ratio[twins]))
+            held_text, held_share = "", 0.0
+            if table.split is not None:
+                parts = table.split[stats.positions]
+                held_out = parts != TRAIN
+                ratios = stats.ratios()
+                linked = (stats.neighbors >= 0) & (ratios < threshold)
+                in_train = np.zeros_like(linked)
+                valid = stats.neighbors >= 0
+                in_train[valid] = parts[stats.neighbors[valid]] == TRAIN
+                held = int(held_out.sum())
+                with_twin = int((linked & in_train).any(axis=1)[held_out].sum())
+                held_share = with_twin / held if held else 0.0
+                held_text = (
+                    f" {fmt_share(with_twin, held)} of the validation/test rows have a near "
+                    "twin in the training rows"
+                )
+            base = sentence(
+                f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) "
+                f"{'has' if count == 1 else 'have'} a near twin: the nearest row is about "
+                f"{closer:.0f}× closer than a typical pair of rows (repeated measurements of the "
+                "same person or object?)."
+            )
+            if group_by:
+                if held_share >= STRUCTURE_HELD_SHARE:
+                    issues.append(
+                        issue(
+                            "near_twins",
+                            "warning",
+                            f"{base} Although the split keeps the groups of '{group_by}' "
+                            f"together,{held_text}: the groups do not hold the twins. Check "
+                            "the groups in Analysis → Rows.",
+                        )
+                    )
+            elif held_share >= STRUCTURE_HELD_SHARE or table.split is None:
+                name = group_column_name(table)
+                fix = step_fix(
+                    "find_groups",
+                    {"features": "auto", "columns": [], "threshold": None, "name": name},
+                    "Find near-duplicate groups and split by them",
+                )
+                fix["settings"] = {"split": {"group_by": name}}
+                issues.append(
+                    issue(
+                        "near_twins",
+                        "warning",
+                        f"{base}{held_text}, so the validation and test scores are too "
+                        "optimistic. Keep near twins in one part: find the groups and split by "
+                        "them.",
+                        [],
+                        fix,
+                    )
+                )
+    return issues
+
+
+def group_column_issues(table: Table, target: str | None, group_by: str | None) -> list:
+    """The column the split keeps groups of is still a feature (fix: drop it)."""
+    if not group_by or group_by == target or group_by not in table.kinds:
+        return []
+    return [
+        issue(
+            "group_column_feature",
+            "warning",
+            f"'{group_by}' decides the split (keep groups together) and is still a feature: "
+            "group numbers or ids mean nothing for new rows. Drop it after the split.",
+            [group_by],
+            step_fix("drop_columns", {"columns": [group_by]}, f"Drop {group_by}"),
+        )
+    ]

@@ -4,20 +4,24 @@ whether the result can be used for training.
 Order of work in :func:`run_pipeline`:
 
 1. **Combine** steps (join, append) run first, on whole tables without a split.
-2. The **split** is assigned to every row (seeded; stratified by the target for
-   classification if asked for and possible). From here on every row keeps its split label,
-   whatever later steps do, so steps that learn values learn them from training rows only.
-3. All other steps run in order. Disabled steps are passed through. If a step fails, its
+2. **Row steps before the split** (``Step.pre_split``: remove atypical rows, find
+   near-duplicate groups) run next, on all rows; they use no labels.
+3. The **split** is assigned to every row (seeded; stratified by the target for
+   classification if asked for and possible; with ``group_by`` whole groups of rows go to one
+   part, see :func:`assign_split`). From here on every row keeps its split label, whatever
+   later steps do, so steps that learn values learn them from training rows only.
+4. All other steps run in order. Disabled steps are passed through. If a step fails, its
    report has ``status="error"`` and the message, all later steps are ``"skipped"``, and the
    result is the table before the failing step, so the preview stays usable.
-4. With ``upto`` (a step id), steps after that one are ``"not_run"``: the UI uses it to show
+5. With ``upto`` (a step id), steps after that one are ``"not_run"``: the UI uses it to show
    the data at any point of the pipeline.
 
 Settings (``PrepSettings`` in ``frontend/src/api/types.ts``)::
 
     {"target": "price" | None,
      "task": "auto" | "classification" | "regression",
-     "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True}}
+     "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True,
+               "group_by": None | "patient_id"}}
 
 A step is ``{"id": "s1", "type": "impute", "enabled": True, "params": {...}}``.
 
@@ -42,10 +46,12 @@ import pandas as pd
 from .checks import (
     class_issues,
     feature_issues,
+    group_column_issues,
     issue,
     numbers_in_text,
     regression_target_issues,
     row_issues,
+    row_structure_issues,
     sort_issues,
     step_fix,
     string_feature_issues,
@@ -57,7 +63,7 @@ from .table import MAX_NEW_COLUMNS, NUMERIC_KINDS, TEST, TRAIN, VAL, DataError, 
 logger = logging.getLogger(__name__)
 
 MAX_STEPS = 100
-DEFAULT_SPLIT = {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True}
+DEFAULT_SPLIT = {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True, "group_by": None}
 DEFAULT_SETTINGS: dict[str, Any] = {"target": None, "task": "auto", "split": dict(DEFAULT_SPLIT)}
 TASKS = ("auto", "classification", "regression")
 # "auto": a numeric target with at most this many distinct whole numbers is a class label.
@@ -69,6 +75,9 @@ MIN_ROWS = 4
 MAX_SHARE = 0.9
 MAX_SEED = 2**31 - 1
 MAX_STEP_ID = 64
+# Group split: warn when a part is this far (share of all rows) from its asked share.
+GROUP_SHARE_TOLERANCE = 0.03
+MAX_COLUMN_NAME = 200
 # Readiness warnings.
 IMBALANCE_RATIO = 3.0
 MANY_FEATURES = 1000
@@ -224,10 +233,21 @@ def clean_settings(data: Any) -> dict[str, Any]:
     stratify = split.get("stratify", DEFAULT_SPLIT["stratify"])
     if not isinstance(stratify, bool):
         raise DataError("Stratify: expected true or false.")
+    group_by = split.get("group_by")
+    if group_by is not None:
+        if not isinstance(group_by, str) or len(group_by) > MAX_COLUMN_NAME:
+            raise DataError("Keep groups together: choose a column.")
+        group_by = group_by.strip() or None
     return {
         "target": target,
         "task": task,
-        "split": {"val": val, "test": test, "seed": seed, "stratify": stratify},
+        "split": {
+            "val": val,
+            "test": test,
+            "seed": seed,
+            "stratify": stratify,
+            "group_by": group_by,
+        },
     }
 
 
@@ -237,7 +257,8 @@ def clean_steps(data: Any) -> list[dict[str, Any]]:
 
     Checks: a list of at most ``MAX_STEPS`` objects with a unique non-empty string ``id``
     (at most 64 characters), a known ``type``, a boolean ``enabled`` (default True) and a
-    ``params`` object (default {}); combine steps only at the start of the list.
+    ``params`` object (default {}); combine steps only at the start of the list, the steps
+    that run before the split (``pre_split``) right after them.
     """
     if data is None:
         return []
@@ -248,6 +269,7 @@ def clean_steps(data: Any) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
     after_combine = False
+    after_pre_split = False
     for number, step in enumerate(data, start=1):
         where = f"Step {number}"
         if not isinstance(step, dict):
@@ -279,7 +301,13 @@ def clean_steps(data: Any) -> list[dict[str, Any]]:
                 f"{where} ({cls.label}) combines tables, so it must come before all other "
                 "steps. Move it to the top."
             )
+        if cls.pre_split and after_pre_split:
+            raise DataError(
+                f"{where} ({cls.label}) runs before the split, so it must come right after the "
+                "steps that combine tables and before all other steps. Move it up."
+            )
         after_combine = after_combine or not cls.combine
+        after_pre_split = after_pre_split or not (cls.combine or cls.pre_split)
         result.append({"id": step_id, "type": cls.type, "enabled": enabled, "params": params})
     return result
 
@@ -356,13 +384,24 @@ def assign_split(table: Table, settings: dict[str, Any], task: str | None) -> np
     Sizes follow ``round(n * share)`` with at least one row for every non-empty part (like
     ``brickdnn.training.data.split_sizes``). Stratified per class when ``stratify`` is set
     and the task is classification; rows with a missing target are split at random.
+
+    With ``group_by`` (a column of ``table``) all rows with the same value go to the same
+    part, see :func:`group_split`. Raises :class:`DataError` if that column is missing.
     """
     split_settings = {**DEFAULT_SPLIT, **(settings.get("split") or {})}
     n = table.n_rows
     _, n_val, n_test = split_sizes(n, split_settings["val"], split_settings["test"])
     rng = np.random.default_rng(int(split_settings["seed"]))
-    split = np.full(n, TRAIN, dtype=np.int8)
     codes = _target_codes(table, settings, task) if split_settings["stratify"] else None
+    group_by = split_settings.get("group_by")
+    if group_by:
+        if group_by not in table.kinds:
+            raise DataError(
+                f"Keep groups together: there is no column '{group_by}' when the split is "
+                "assigned (after the combine steps and the steps that run before the split)."
+            )
+        return group_split(group_codes(table.df[group_by]), n_val, n_test, codes, rng)
+    split = np.full(n, TRAIN, dtype=np.int8)
     if codes is None or n == 0:
         order = rng.permutation(n)
         split[order[:n_test]] = TEST
@@ -389,8 +428,153 @@ def assign_split(table: Table, settings: dict[str, Any], task: str | None) -> np
     return split
 
 
+def group_codes(series: pd.Series) -> np.ndarray:
+    """A group number per row (0, 1, …): equal values share a number; every row with a
+    missing value is a group of its own."""
+    codes, uniques = pd.factorize(series, use_na_sentinel=True)
+    codes = np.asarray(codes, dtype=np.int64)
+    missing = codes < 0
+    if missing.any():
+        codes[missing] = len(uniques) + np.arange(int(missing.sum()))
+    return codes
+
+
+def _majority(groups: np.ndarray, classes: np.ndarray) -> np.ndarray:
+    """The most common class of every group (ties: the smaller class code; -1 = no target)."""
+    frame = pd.DataFrame({"g": groups, "c": classes})
+    counts = frame.value_counts().reset_index(name="n")
+    counts = counts.sort_values(["g", "n", "c"], ascending=[True, False, True], kind="stable")
+    first = counts.drop_duplicates("g")
+    result = np.full(int(groups.max()) + 1 if len(groups) else 0, -1, dtype=np.int64)
+    result[first["g"].to_numpy()] = first["c"].to_numpy()
+    return result
+
+
+def group_split(
+    groups: np.ndarray,
+    n_val: int,
+    n_test: int,
+    classes: np.ndarray | None,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """A split that keeps every group (``groups``: a number per row) in one part, with row
+    counts as close to ``n_val`` / ``n_test`` as the group sizes allow.
+
+    Groups with several rows are placed first, largest first (equal sizes in random order),
+    each into the part where it reduces the distance to the wanted row counts the most;
+    single rows then fill the remaining room at random. With ``classes`` (stratified
+    classification) this happens per stratum, the most common class of each group, so every
+    part gets about the same class shares. Every part that should have rows gets at least
+    one group if possible.
+    """
+    n = len(groups)
+    split = np.full(n, TRAIN, dtype=np.int8)
+    if n == 0:
+        return split
+    sizes = np.bincount(groups)
+    count = len(sizes)
+    strata = _majority(groups, classes) if classes is not None else np.zeros(count, np.int64)
+    _, strata = np.unique(strata, return_inverse=True)
+    n_strata = int(strata.max()) + 1
+    wanted = np.array([n - n_val - n_test, n_val, n_test], dtype=np.float64)
+    stratum_rows = np.bincount(strata, weights=sizes, minlength=n_strata)
+    target = stratum_rows[:, None] * (wanted / n)[None, :]
+    assigned = np.zeros((n_strata, 3))
+    part = np.zeros(count, dtype=np.int8)
+
+    order = rng.permutation(count)
+    order = order[np.argsort(-sizes[order], kind="stable")]
+    multi = order[sizes[order] > 1]
+    single = order[sizes[order] == 1]
+    totals = np.zeros(3)
+    for g in multi.tolist():
+        st, size = int(strata[g]), float(sizes[g])
+        need = target[st] - assigned[st]
+        change = np.abs(need - size) - np.abs(need)
+        best = np.flatnonzero(change <= change.min() + 1e-9)
+        if len(best) > 1:  # ties: the part that misses the most rows overall
+            best = best[np.argsort(-(wanted - totals)[best], kind="stable")]
+        p = int(best[0])
+        part[g] = p
+        assigned[st, p] += size
+        totals[p] += size
+    for st in range(n_strata):
+        members = single[strata[single] == st]
+        if len(members) == 0:
+            continue
+        need = np.maximum(target[st] - assigned[st], 0)
+        if need.sum() <= 0:
+            need = target[st].copy()
+        alloc = _allocate(need, len(members), np.full(3, len(members)))
+        bounds = np.cumsum(alloc)
+        for p in range(3):
+            part[members[bounds[p] - alloc[p] : bounds[p]]] = p
+    # Every part that should have rows gets at least one group (the smallest of the part
+    # with the most groups), as long as that part keeps one.
+    for p in (VAL, TEST, TRAIN):
+        if wanted[p] > 0 and not (part == p).any():
+            counts = np.bincount(part, minlength=3)
+            donor = int(np.argmax(counts))
+            if counts[donor] > 1:
+                candidates = np.flatnonzero(part == donor)
+                part[candidates[np.argmin(sizes[candidates])]] = p
+    return part[groups].astype(np.int8)
+
+
+def split_info(table: Table, settings: dict[str, Any], error: str | None = None) -> dict[str, Any]:
+    """``SplitInfo`` (frontend/src/api/types.ts): the columns where the split is assigned and,
+    with ``group_by``, how the groups were split (``mixed``: groups in more than one part,
+    0 unless rows were added to a group later)."""
+    group_by = (settings.get("split") or {}).get("group_by")
+    info: dict[str, Any] = {
+        "group_by": group_by,
+        "columns": table.column_info(),
+        "error": error,
+        "groups": None,
+    }
+    if not group_by or error or group_by not in table.kinds or table.split is None:
+        return info
+    codes = group_codes(table.df[group_by])
+    sizes = np.bincount(codes)
+    parts = np.zeros((len(sizes), 3), dtype=np.int64)
+    np.add.at(parts, (codes, table.split.astype(np.int64)), 1)
+    info["groups"] = {
+        "count": len(sizes),
+        "multi": int((sizes > 1).sum()),
+        "largest": int(sizes.max()) if len(sizes) else 0,
+        "missing": int(table.df[group_by].isna().sum()),
+        "per_part": [int((parts[:, p] > 0).sum()) for p in range(3)],
+        "mixed": int(((parts > 0).sum(axis=1) > 1).sum()),
+    }
+    return info
+
+
+def _group_split_warnings(table: Table, settings: dict[str, Any], task: str | None) -> list[str]:
+    split_settings = settings["split"]
+    assert table.split is not None
+    counts = np.bincount(table.split.astype(np.int64), minlength=3)[:3] / table.n_rows
+    val, test = split_settings["val"], split_settings["test"]
+    asked = np.array([1 - val - test, val, test])
+    warnings = []
+    if np.abs(counts - asked).max() > GROUP_SHARE_TOLERANCE:
+        shown = " / ".join(f"{v:.0%}" for v in counts)
+        wanted = " / ".join(f"{v:.0%}" for v in asked)
+        warnings.append(
+            f"Split by '{split_settings['group_by']}': the groups are large, so training / "
+            f"validation / test have {shown} of the rows instead of {wanted}."
+        )
+    if split_settings["stratify"] and task == "classification":
+        warnings.append(
+            "Stratified by the most common class of every group: the class shares of the "
+            "parts are close to each other, not exactly equal."
+        )
+    return warnings
+
+
 def _split_warnings(table: Table, settings: dict[str, Any], task: str | None) -> list[str]:
     split_settings = settings["split"]
+    if split_settings.get("group_by") and table.split is not None and table.n_rows:
+        return _group_split_warnings(table, settings, task)
     if not split_settings["stratify"] or task != "classification":
         return []
     codes = _target_codes(table, settings, task)
@@ -432,6 +616,8 @@ class PipelineResult:
     params: dict[str, dict[str, Any]] = field(default_factory=dict)
     # The settings after clean_settings.
     settings: dict[str, Any] = field(default_factory=dict)
+    # Where and how the split was assigned (SplitInfo, see split_info).
+    split: dict[str, Any] = field(default_factory=dict)
 
 
 def make_context(
@@ -517,6 +703,11 @@ def _run_step(
             raise DataError(
                 f"'{cls.label}' combines tables, so it must come before all other steps."
             )
+        if cls.pre_split and table.split is not None:
+            raise DataError(
+                f"'{cls.label}' runs before the split, so it must come before all steps "
+                "except the ones that combine tables."
+            )
         instance = cls(step.get("params") or {})
         params = instance.clean(table, ctx)
         result = instance.run(table, params, ctx)
@@ -582,18 +773,34 @@ def run_pipeline(
     if upto is not None and not any(s.get("id") == upto for s in steps):
         upto = None
 
+    split_error: str | None = None
+
     def start_split() -> None:
-        nonlocal table, before, task, ctx
+        nonlocal table, before, task, ctx, split_error
         task = resolve_task(table, settings)
-        table = table.with_split(assign_split(table, settings, task))
+        try:
+            split = assign_split(table, settings, task)
+            used = settings
+        except DataError as exc:
+            # The group column is missing: a random split keeps the preview usable.
+            used = {**settings, "split": {**settings["split"], "group_by": None}}
+            split = assign_split(table, used, task)
+            if state == "run":
+                split_error = str(exc)
+            else:
+                warnings.append(
+                    "This preview stops before the group column exists, so it shows a random "
+                    "split; the split by groups is assigned once the steps before it have run."
+                )
+        table = table.with_split(split)
         before = table
         ctx = make_context(table, settings, task, source_id=source_id, **sources)
-        warnings.extend(_split_warnings(table, settings, task))
+        warnings.extend(_split_warnings(table, used, task))
 
     for step in steps:
         cls = REGISTRY.get(step.get("type"))
-        is_combine = cls is not None and cls.combine
-        if before is None and not is_combine:
+        early = cls is not None and (cls.combine or cls.pre_split)
+        if before is None and not early:
             start_split()
         fitted[step["id"]] = None
         if state == "error":
@@ -628,6 +835,7 @@ def run_pipeline(
         warnings=warnings,
         params=params,
         settings=settings,
+        split=split_info(before, settings, split_error),
     )
 
 
@@ -653,7 +861,12 @@ def _mostly_numbers(series: pd.Series) -> dict[str, Any] | None:
 
 
 def readiness(
-    table: Table, settings: dict[str, Any], task: str | None, *, checks: bool = True
+    table: Table,
+    settings: dict[str, Any],
+    task: str | None,
+    *,
+    checks: bool = True,
+    split: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Can ``table`` be exported as a training dataset? See ``Readiness`` in
     ``frontend/src/api/types.ts``.
@@ -671,6 +884,8 @@ def readiness(
     ``{"code", "severity", "column", "columns", "message", "fix"}`` with ``fix`` ``{"type":
     step type, "params": {...}, "label": "Impute 3 columns (median)"}`` or None. ``checks``
     False leaves out the sanity checks (only the errors decide whether data can be exported).
+    ``split``: the ``PipelineResult.split`` of the run (``SplitInfo``); its ``error`` (the
+    group column is missing where the split is assigned) is an error here.
     """
     target = settings.get("target") or None
     errors: list[dict[str, Any]] = []
@@ -981,8 +1196,22 @@ def readiness(
                 )
             )
             warnings.extend(row_issues(table, target if has_target else None, task, len(features)))
+            warnings.extend(row_structure_issues(table, target if has_target else None, settings))
 
     # ---- rows and split
+    group_by = (settings.get("split") or {}).get("group_by")
+    if split and split.get("error"):
+        errors.append(
+            issue(
+                "split_group_missing",
+                "error",
+                f"{split['error']} Choose another column in Target & split, or add the step "
+                "that creates it (e.g. Find near-duplicate groups).",
+                [group_by] if group_by else [],
+            )
+        )
+    elif checks:
+        warnings.extend(group_column_issues(table, target, group_by))
     if table.n_rows < MIN_ROWS:
         errors.append(
             issue(

@@ -175,6 +175,10 @@ class Step:
     # Only removes or adds training rows (e.g. class balancing): skipped in the pandas
     # script that prepares new data.
     training_only: ClassVar[bool] = False
+    # Works on the rows as a whole before the split is assigned (remove atypical rows, find
+    # near-duplicate groups): comes after the combine steps and before all other steps, so a
+    # column it adds can decide the split. Learns nothing from labels; sees all rows.
+    pre_split: ClassVar[bool] = False
 
     def __init__(self, params: dict[str, Any]):
         self.raw_params = params
@@ -191,6 +195,7 @@ class Step:
             "fitted": cls.fitted,
             "combine": cls.combine,
             "training_only": cls.training_only,
+            "pre_split": cls.pre_split,
             "params": [p.to_dict() for p in cls.params],
         }
 

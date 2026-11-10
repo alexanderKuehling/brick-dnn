@@ -69,7 +69,7 @@ def test_clean_settings_fills_in_defaults():
     assert clean_settings(None) == {
         "target": None,
         "task": "auto",
-        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True},
+        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True, "group_by": None},
     }
     cleaned = clean_settings(
         {"target": " price ", "task": "regression", "split": {"val": 0.2, "test": 0, "seed": 7.0}}
@@ -77,7 +77,7 @@ def test_clean_settings_fills_in_defaults():
     assert cleaned == {
         "target": "price",
         "task": "regression",
-        "split": {"val": 0.2, "test": 0.0, "seed": 7, "stratify": True},
+        "split": {"val": 0.2, "test": 0.0, "seed": 7, "stratify": True, "group_by": None},
     }
     assert clean_settings({"target": "", "unknown": 1})["target"] is None
 

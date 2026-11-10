@@ -12,6 +12,7 @@ from . import (  # noqa: F401  (imported to register the steps)
     encode,
     missing,
     outliers,
+    row_structure,
     rows,
     selection,
     target,
