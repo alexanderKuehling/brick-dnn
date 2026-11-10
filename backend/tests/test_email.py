@@ -139,8 +139,13 @@ def test_settings_from_the_environment(monkeypatch):
         assert loaded.DEFAULT_FROM_EMAIL == loaded.SERVER_EMAIL
         assert loaded.ADMINS == [("Operator", "owner@example.com")]
         monkeypatch.setenv("BRICKDNN_EMAIL_PORT", "587")
+        # Docker Compose passes unset variables as empty strings: STARTTLS stays on.
+        monkeypatch.setenv("BRICKDNN_EMAIL_USE_TLS", "")
+        monkeypatch.setenv("BRICKDNN_EMAIL_USE_SSL", "")
         loaded = importlib.reload(site_settings)
         assert loaded.EMAIL_USE_TLS is True and loaded.EMAIL_USE_SSL is False
+        monkeypatch.setenv("BRICKDNN_EMAIL_USE_TLS", "false")
+        assert importlib.reload(site_settings).EMAIL_USE_TLS is False
         monkeypatch.delenv("BRICKDNN_EMAIL_HOST")
         assert importlib.reload(site_settings).EMAIL_ENABLED is False
         monkeypatch.setenv("BRICKDNN_EMAIL_BACKEND", "file")
