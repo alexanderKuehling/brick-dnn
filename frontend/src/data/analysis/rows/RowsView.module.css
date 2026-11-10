@@ -1,0 +1,172 @@
+.card {
+  min-width: 0;
+}
+
+.chart {
+  width: 100%;
+  min-width: 0;
+}
+
+.histogram {
+  display: block;
+  touch-action: none;
+  cursor: ew-resize;
+  user-select: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.bar {
+  fill: var(--chart-series-1);
+  opacity: 0.85;
+}
+
+.barBelow {
+  fill: var(--chart-series-2);
+}
+
+.baseline {
+  fill: none;
+  stroke: var(--chart-other);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.axis {
+  stroke: var(--mantine-color-dimmed);
+  stroke-width: 1;
+}
+
+.tick {
+  font-size: 10px;
+  fill: var(--mantine-color-dimmed);
+}
+
+.threshold {
+  stroke: var(--mantine-color-text);
+  stroke-width: 2;
+}
+
+.handle {
+  fill: var(--mantine-color-body);
+  stroke: var(--mantine-color-text);
+  stroke-width: 2;
+}
+
+.suggested {
+  stroke: var(--chart-series-3);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+
+.keyBelow,
+.keyBaseline,
+.keySuggested {
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  margin-right: 2px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.keyBelow {
+  background: var(--chart-series-2);
+}
+
+.keyBaseline {
+  height: 0;
+  border-top: 2px dashed var(--chart-other);
+}
+
+.keySuggested {
+  height: 0;
+  border-top: 2px dashed var(--chart-series-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: var(--mantine-spacing-sm);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--mantine-spacing-xs);
+}
+
+.tableScroll {
+  position: relative;
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.table {
+  width: 100%;
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  border-collapse: collapse;
+
+  & th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 4px 8px;
+    text-align: left;
+    white-space: nowrap;
+    background: var(--mantine-color-body);
+    border-bottom: 1px solid var(--mantine-color-default-border);
+  }
+
+  & td {
+    height: 30px;
+    padding: 0 8px;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--mantine-color-default-border);
+  }
+
+  & tr[data-active] td {
+    background: var(--mantine-primary-color-light);
+  }
+
+  & tbody tr:not([data-spacer]) {
+    cursor: pointer;
+  }
+
+  & tbody tr:not([data-spacer]):hover td {
+    background: var(--mantine-color-default-hover);
+  }
+}
+
+.numeric {
+  text-align: right !important;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.compare {
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}

@@ -63,6 +63,10 @@ export interface ScatterPlotProps {
   jitter?: boolean;
   /** Name of point i in the tooltip, e.g. "Row 1,204". */
   pointLabel?: (index: number) => string;
+  /** Click (or Enter) on a point: its index. */
+  onPointClick?: (index: number) => void;
+  /** A point to mark with a ring (e.g. the selected row). */
+  highlight?: number | null;
   height?: number;
   width?: number;
 }
@@ -121,6 +125,8 @@ export function ScatterPlot({
   trend = false,
   jitter = false,
   pointLabel,
+  onPointClick,
+  highlight = null,
   height = 320,
   width: fixedWidth,
 }: ScatterPlotProps) {
@@ -136,7 +142,9 @@ export function ScatterPlot({
     const indices = Array.from({ length: n }, (_, i) => i);
     return indices.sort((a, b) => x[a] - x[b] || y[a] - y[b]);
   }, [x, y, n]);
-  const cursor = useChartCursor(n);
+  const cursor = useChartCursor(n, {
+    onActivate: onPointClick ? (rank) => onPointClick(order[rank]) : undefined,
+  });
   const activePoint = cursor.active !== null ? order[cursor.active] : null;
 
   const fit = useMemo(() => (trend ? ols(x, y) : null), [trend, x, y]);
@@ -360,6 +368,17 @@ export function ScatterPlot({
   const marks = (
     <>
       {trendLine && <line className={classes.trend} clipPath={`url(#${clipId})`} {...trendLine} />}
+      {highlight !== null && highlight >= 0 && highlight < n && (
+        <circle
+          cx={px[highlight]}
+          cy={py[highlight]}
+          r={style.r + 5}
+          fill="none"
+          stroke="var(--mantine-color-text)"
+          strokeWidth={2}
+          data-testid="scatter-highlight"
+        />
+      )}
       {activePoint !== null && (
         <circle
           cx={px[activePoint]}
@@ -507,6 +526,18 @@ export function ScatterPlot({
               cursor.setActive(hit === null ? null : rankOf[hit]);
             }}
             onPointerLeave={() => cursor.setActive(null)}
+            onClick={
+              onPointClick
+                ? (event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const hit = nearest(event.clientX - rect.left, event.clientY - rect.top);
+                    if (hit !== null) {
+                      onPointClick(hit);
+                    }
+                  }
+                : undefined
+            }
+            style={onPointClick ? { cursor: 'pointer' } : undefined}
             onKeyDown={cursor.onKeyDown}
             onFocus={cursor.onFocus}
             onBlur={cursor.onBlur}

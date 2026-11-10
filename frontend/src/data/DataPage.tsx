@@ -53,6 +53,7 @@ import { DEMO } from '@/demo';
 import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
+import type { RowsSource } from './analysis/rows/RowsView';
 import { describeReport, ImportDialog, tableSize } from './ImportDialog';
 import { PipelineEditor } from './pipeline/PipelineEditor';
 import { accessOf, PrepAccessContext, prepRole } from './prepAccess';
@@ -1045,6 +1046,25 @@ function PrepContent(props: PrepContentProps) {
         : null;
   // The last result stays visible while a new one is computed, slightly faded.
   const stale = (prep.previewing && result !== null) || undefined;
+  // The Rows view analyses what the preview shows: the same steps, settings and step.
+  const pipelineNow = useRef({ steps: prep.steps, settings, upto: prep.upto });
+  pipelineNow.current = { steps: prep.steps, settings, upto: prep.upto };
+  const prepId = prep.prep?.id ?? null;
+  const changeSplit = prep.changeSplit;
+  const rowsSource = useMemo<RowsSource | undefined>(
+    () =>
+      prepId === null
+        ? undefined
+        : {
+            revision: result,
+            load: (body, signal) =>
+              api.data.preps.rows(prepId, { ...pipelineNow.current, ...body }, signal),
+            similar: (body, signal) =>
+              api.data.preps.similar(prepId, { ...pipelineNow.current, ...body }, signal),
+            onChangeSplit: changeSplit,
+          },
+    [prepId, result, changeSplit]
+  );
 
   const editor = catalog ? (
     <PipelineEditor
@@ -1062,6 +1082,7 @@ function PrepContent(props: PrepContentProps) {
       previewing={prep.previewing}
       task={result?.task ?? null}
       splitCounts={result?.profile.split_counts ?? result?.readiness.split_counts ?? null}
+      splitInfo={result?.split ?? null}
     />
   ) : catalogError ? (
     <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot load the step types">
@@ -1190,6 +1211,7 @@ function PrepContent(props: PrepContentProps) {
             onAddStep={props.onAddStep}
             column={props.column}
             onColumnChange={props.onColumnChange}
+            rows={rowsSource}
           />
         ))}
       </Tabs.Panel>
@@ -1203,6 +1225,7 @@ function PrepContent(props: PrepContentProps) {
           <ReadinessPanel
             readiness={preview.readiness}
             onAddStep={props.onAddStep}
+            onChangeSplit={prep.changeSplit}
             onExport={props.onExport}
             exporting={props.exporting}
             fixesDisabled={prep.previewing}
