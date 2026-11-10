@@ -558,8 +558,8 @@ def _shrink_hint(analysis: Analysis) -> str:
         )
     if pools:
         hints.append(
-            "every pooling layer needs an upsampling layer (ConvTranspose2d or Upsample) that "
-            f"undoes it, and the Input height and width must be divisible by {2**pools} "
+            "every pooling layer needs an upsampling layer (ConvTranspose2d) that undoes it, "
+            f"and the Input height and width must be divisible by {2**pools} "
             f"({pools} pooling layer{'s' if pools != 1 else ''})"
         )
     if not hints:

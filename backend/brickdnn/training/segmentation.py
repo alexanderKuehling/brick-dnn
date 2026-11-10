@@ -62,43 +62,38 @@ LAYOUT_HINT = (
     "Put the images into a folder images/ and their masks into a folder masks/, with the "
     "same file names (images/001.jpg and masks/001.png)."
 )
-# Colours of the classes in previews and predicted masks: the background dark, then colours
-# that are easy to tell apart.
-CLASS_COLORS = (
-    "#20242c",
-    "#e5534b",
-    "#4c9be8",
-    "#f2b93b",
-    "#3fb27f",
-    "#a66bd6",
-    "#f08a3c",
-    "#35b8c4",
-    "#e56fa8",
-    "#8fbf3f",
-    "#6f7bf7",
-    "#c9824b",
-    "#f4d35e",
-    "#2f8f9d",
-    "#b84a62",
-    "#7fd1ae",
-    "#9a8cff",
-    "#d9a441",
-    "#5fa8d3",
-    "#e07a5f",
-    "#81b29a",
-    "#b56576",
-    "#6d9f71",
-    "#c77dff",
-    "#ffb4a2",
-    "#43aa8b",
-    "#577590",
-    "#f9844a",
-    "#90be6d",
-    "#4d908e",
-    "#f94144",
-    "#277da1",
+# Colours of the classes in previews and predicted masks. The background (class 0) is dark;
+# classes 1 to 8 get eight hues in a fixed order that stay apart for people with a colour
+# vision deficiency (checked on a dark surface: neighbours in this order differ by at least
+# 8 in OKLab under simulated protanopia and deuteranopia). Further classes reuse the hues in
+# lighter and darker steps: with that many, the legend and the table name the classes.
+BACKGROUND_COLOR = "#1a1a19"
+_BASE_COLORS = (
+    "#3987e5",  # blue
+    "#d95926",  # orange
+    "#199e70",  # aqua
+    "#c98500",  # yellow
+    "#d55181",  # magenta
+    "#008300",  # green
+    "#9085e9",  # violet
+    "#e66767",  # red
 )
 IGNORE_COLOR = "#8a8f98"
+
+
+def _mixed(color: str, other: int, share: float) -> str:
+    """``color`` mixed with white (``other`` 255) or black (0)."""
+    parts = [int(color[i : i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(c + (other - c) * share):02x}" for c in parts)
+
+
+CLASS_COLORS = (
+    BACKGROUND_COLOR,
+    *_BASE_COLORS,
+    *(_mixed(color, 255, 0.45) for color in _BASE_COLORS),
+    *(_mixed(color, 0, 0.4) for color in _BASE_COLORS),
+    *(_mixed(color, 255, 0.72) for color in _BASE_COLORS[:7]),
+)
 
 
 def class_colors(count: int) -> list[str]:

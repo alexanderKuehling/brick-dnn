@@ -49,9 +49,9 @@ class DatasetError(ValueError):
 # --------------------------------------------------------------------------- #
 
 # Shapes (shapes.py): statistics of its 400 training images, checked by the tests.
-SHAPES_MEAN = (0.5543, 0.5558, 0.5453)
-SHAPES_STD = (0.1913, 0.1936, 0.1981)
-SHAPES_PIXEL_SHARE = (0.8585, 0.0572, 0.0477, 0.0365)
+SHAPES_MEAN = (0.5556, 0.5575, 0.5419)
+SHAPES_STD = (0.1903, 0.192, 0.2007)
+SHAPES_PIXEL_SHARE = (0.8577, 0.0446, 0.0609, 0.0367)
 
 
 @dataclass(frozen=True)
@@ -172,10 +172,10 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
         BuiltinDataset(
             id="shapes",
             name="Shapes",
-            description="Segmentation: circles, squares and triangles on noisy backgrounds, "
+            description="Segmentation: squares, circles and triangles on noisy backgrounds, "
             "with a class for every pixel. Generated, RGB 64×64.",
             shape=(3, 64, 64),
-            class_names=("background", "circle", "square", "triangle"),
+            class_names=("background", "square", "circle", "triangle"),
             train_size=400,
             test_size=100,
             download_mb=0,

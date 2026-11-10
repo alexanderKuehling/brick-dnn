@@ -70,7 +70,7 @@ def test_unet_example_trains_on_shapes_as_it_is():
     )
     assert plan.targets == [{"kind": "mask", "num_classes": 4, "binary": False}]
     assert plan.image == {"channels": 3, "height": 64, "width": 64, "layout": "chw"}
-    assert plan.class_names == ["background", "circle", "square", "triangle"]
+    assert plan.class_names == ["background", "square", "circle", "triangle"]
     assert plan.num_classes == 4
     assert plan.segmentation["binary"] is False and plan.segmentation["ignore_index"] is None
     assert any("generated on the server" in note for note in plan.notes)

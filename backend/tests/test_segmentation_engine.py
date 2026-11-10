@@ -325,7 +325,7 @@ def test_shapes_data_split_and_batches():
     pre = data.preprocessing
     assert pre["kind"] == "image" and pre["task"] == "segmentation" and pre["dataset"] == "shapes"
     assert pre["mask"] == {"resize": "nearest", "binary": False, "ignore_index": None}
-    assert pre["class_names"] == ["background", "circle", "square", "triangle"]
+    assert pre["class_names"] == ["background", "square", "circle", "triangle"]
     # The test images are the last hundred, whatever the seed; the rest is split by it.
     other = prepare(job, seed=1)
     assert torch.equal(data.test.indices, torch.arange(400, 500))
@@ -418,7 +418,7 @@ def test_training_on_shapes_beats_chance_clearly(tmp_path):
     result = train(shapes_job(), reporter, weights, previews)
     assert result.status == "completed", result.message
     assert reporter.info["task"] == "segmentation"
-    assert reporter.info["class_names"] == ["background", "circle", "square", "triangle"]
+    assert reporter.info["class_names"] == ["background", "square", "circle", "triangle"]
     assert (reporter.info["train_size"], reporter.info["val_size"]) == (160, 40)
     assert reporter.info["test_size"] == 40
 
@@ -449,7 +449,7 @@ def test_training_on_shapes_beats_chance_clearly(tmp_path):
 
     details = reporter.segmentation
     assert details["loss"] == "cross_entropy" and details["binary"] is False
-    assert details["class_names"] == ["background", "circle", "square", "triangle"]
+    assert details["class_names"] == ["background", "square", "circle", "triangle"]
     assert details["colors"] == class_colors(4)
     assert details["validation"]["epoch"] == result.weights_epoch
     assert details["validation"]["iou"] == kept["val_iou"]
@@ -479,7 +479,7 @@ def test_previews_are_written_bounded_and_true(tmp_path):
     index = json.loads((previews / "index.json").read_text())
     assert index["epoch"] == result.weights_epoch and index["split"] == "validation"
     assert (index["width"], index["height"], index["input_size"]) == (32, 32, [32, 32])
-    assert index["class_names"] == ["background", "circle", "square", "triangle"]
+    assert index["class_names"] == ["background", "square", "circle", "triangle"]
     assert index["colors"] == class_colors(4)
     assert len(index["samples"]) == PREVIEW_SAMPLES == 8
     names = sorted(p.name for p in previews.iterdir())
@@ -863,8 +863,8 @@ def test_inputs_and_how_to_use_describe_a_segmentation(trained_run, tmp_path):
     assert inference.is_segmentation(plan) and inference.kind_of(plan, preprocessing) == "image"
     assert inference.class_names(plan, preprocessing) == [
         "background",
-        "circle",
         "square",
+        "circle",
         "triangle",
     ]
     text = inference.describe_inputs(plan, preprocessing)
@@ -912,7 +912,7 @@ def test_read_masks_checks_what_the_process_reports(trained_run):
             "height": 1,
             "classes": [
                 {"class": "background", "index": 0, "share": 0.5},
-                {"class": "square", "index": 2, "share": 0.5},
+                {"class": "circle", "index": 2, "share": 0.5},
             ],
             "mask_png": "data:image/png;base64,AAAA",
         }
@@ -970,7 +970,7 @@ def test_cli_trains_on_shapes_and_prints_the_metrics(tmp_path, capsys):
     assert "IoU per class (of the kept weights):" in out
     table = out[out.index("IoU per class") :].splitlines()
     assert table[1].split() == ["class", "val", "test"]
-    assert [row.split()[0] for row in table[2:6]] == ["background", "circle", "square", "triangle"]
+    assert [row.split()[0] for row in table[2:6]] == ["background", "square", "circle", "triangle"]
     assert f"Saved 8 preview images (image, mask, prediction, overlay) to {tmp_path / 'out'}" in out
     assert (tmp_path / "net.pt").is_file() and (tmp_path / "out" / "index.json").is_file()
 
@@ -1045,3 +1045,29 @@ def test_cli_search_shows_the_iou_of_every_trial(tmp_path, capsys):
     header = next(line for line in out.splitlines() if line.strip().startswith("trial"))
     assert header.split()[-2:] == ["val", "IoU"]
     assert out.count("val IoU") >= 4  # two epochs, two trial summaries, the table
+
+
+# --------------------------------------------------------------------------- #
+# The exported script
+# --------------------------------------------------------------------------- #
+
+
+def test_exported_script_of_the_unet_example_runs(tmp_path):
+    """The export is the model and a check with a random batch; its training loop is only
+    offered for tabular models, and the docstring does not promise one."""
+    import subprocess
+    import sys
+
+    from brickdnn import EXAMPLES, generate_code
+
+    code = generate_code(EXAMPLES["unet"]["graph"], {"include_training": True})
+    assert "Input: (batch, 3, 64, 64)" in code and "Output: (batch, 4, 64, 64)" in code
+    assert "--data" not in code and "def train" not in code
+    assert "python this_file.py" in code
+    script = tmp_path / "unet.py"
+    script.write_text(code)
+    done = subprocess.run(
+        [sys.executable, str(script)], capture_output=True, text=True, timeout=300
+    )
+    assert done.returncode == 0, done.stderr
+    assert "Output shape: (2, 4, 64, 64)" in done.stdout

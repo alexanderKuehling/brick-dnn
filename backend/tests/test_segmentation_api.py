@@ -77,10 +77,12 @@ def mcp(user):
 
 
 @pytest.fixture
-def real_runner(training_dir, settings):
-    """The real training process (PyTorch on the CPU) instead of the fake runner."""
+def real_runner(training_dir, settings, monkeypatch):
+    """The real training process (PyTorch on the CPU) instead of the fake runner. One thread
+    per process: on a busy machine, several OpenMP threads per training slow it down a lot."""
     settings.TRAINING_RUNNER_COMMAND = None
     settings.TRAINING_MAX_RUNS = 2
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
     return training_dir
 
 
@@ -113,7 +115,7 @@ def start(client, graph=NET, dataset=SHAPES, config=QUICK, name="Shapes net", **
 def train(client, training_dir, **kwargs) -> dict:
     response = start(client, **kwargs)
     assert response.status_code == 201, response.data
-    data = wait_for(client, response.data["id"], timeout=120, interval=0.3)
+    data = wait_for(client, response.data["id"], timeout=600, interval=0.5)
     log = (training_dir / "runs" / data["id"] / "output.log").read_text(errors="replace")
     assert data["status"] == "completed", f"{data['message']}\n{log[-3000:]}"
     return data
@@ -136,7 +138,7 @@ def test_capabilities_list_shapes_and_the_limits(web, training_dir, monkeypatch)
     assert shapes["id"] == "shapes" and shapes["task"] == "segmentation"
     assert shapes["available"] is True  # generated: no torchvision needed
     assert (shapes["train_size"], shapes["test_size"], shapes["download_mb"]) == (400, 100, 0)
-    assert shapes["class_names"] == ["background", "circle", "square", "triangle"]
+    assert shapes["class_names"] == ["background", "square", "circle", "triangle"]
     assert data["builtin_datasets"][0]["available"] is False
     assert data["builtin_datasets"][0]["task"] == "classification"
     assert data["segmentation"] == {
@@ -417,7 +419,7 @@ def test_train_on_shapes_end_to_end(web, user, real_runner):
     assert response.status_code == 200
     index = response.data
     assert index["epoch"] == state["weights_epoch"] and index["split"] == "validation"
-    assert index["class_names"] == ["background", "circle", "square", "triangle"]
+    assert index["class_names"] == ["background", "square", "circle", "triangle"]
     assert len(index["colors"]) == 4 and len(index["samples"]) == 8
     assert len(json.dumps(index)) < 300_000
     sample = index["samples"][0]
@@ -498,7 +500,7 @@ def test_predict_a_segmentation(web, mcp, real_runner):
     assert response.status_code == 200, response.data
     data = response.data
     assert data["task"] == "segmentation"
-    assert data["class_names"] == ["background", "circle", "square", "triangle"]
+    assert data["class_names"] == ["background", "square", "circle", "triangle"]
     assert len(data["colors"]) == 4 and "mask_png" in data["mask_note"]
     (prediction,) = data["predictions"]
     assert (prediction["width"], prediction["height"]) == (32, 32)
@@ -552,7 +554,7 @@ def test_predict_a_segmentation(web, mcp, real_runner):
     info, _ = answer(mcp, "get_weights_download", id=run["id"])
     assert info["task"] == "segmentation"
     assert "classes = output.argmax(dim=1)[0].to(torch.uint8)" in info["how_to_use"]
-    assert info["class_names"] == ["background", "circle", "square", "triangle"]
+    assert info["class_names"] == ["background", "square", "circle", "triangle"]
     assert "one of 4 classes for each of the 32×32 pixels" in info["inputs"]
 
 
@@ -603,7 +605,7 @@ def test_upload_train_and_search_over_mcp(mcp, web, real_runner):
         tuning={"method": "grid", "space": {"learning_rate": [0.03, 0.0001]}},
     )
     assert started["task"] == "segmentation" and started["tuning"]["trials"] == 2
-    wait_for(web, started["id"], timeout=120, interval=0.3)
+    wait_for(web, started["id"], timeout=600, interval=0.5)
     detail, size = answer(mcp, "get_training_run", id=started["id"])
     assert detail["status"] == "completed", detail
     assert size < 3500  # a search with a test set: the largest summary
@@ -695,7 +697,7 @@ def test_a_worker_trains_a_segmentation_from_the_queue(web, user, real_runner, l
 
     worker = Worker(name="worker-1", slots=1)
     worker.start()
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 600
     while True:
         worker.step()
         if (

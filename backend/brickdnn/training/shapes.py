@@ -2,11 +2,11 @@
 
 Every image shows one to three shapes (circles, squares, triangles) of random size and
 rotation on a noisy greyish background with a gradient; the mask says for every pixel
-whether it is background (0), circle (1), square (2) or triangle (3). Later shapes cover
+whether it is background (0), square (1), circle (2) or triangle (3). Later shapes cover
 earlier ones.
 
-The colour of a shape hints at its class: circles are reddish, triangles greenish, squares
-bluish. The hues of the classes overlap (an orange shape can be a circle or a triangle), so
+The colour of a shape hints at its class: squares are bluish, circles reddish, triangles
+greenish (like the colours of their classes in the predicted masks). The hues of the classes overlap (an orange shape can be a circle or a triangle), so
 a network gets most pixels right after a few epochs by colour alone and needs the outlines
 for the rest. That makes it a quick first dataset on a CPU.
 
@@ -20,7 +20,7 @@ import colorsys
 import math
 from typing import Any
 
-SHAPE_CLASSES = ("background", "circle", "square", "triangle")
+SHAPE_CLASSES = ("background", "square", "circle", "triangle")
 SHAPES_SIZE = 64  # pixels (square images)
 SHAPES_SEED = 20_240_611
 # Shapes may overlap, but a shape whose centre is closer than this to an earlier one (in
@@ -28,7 +28,7 @@ SHAPES_SEED = 20_240_611
 _MIN_DISTANCE = 0.9
 # Hue (0-1) of each class and how far a shape may be off it. Neighbouring classes are 0.27
 # to 0.43 apart, so with this spread some hues fit two classes.
-_HUES = {1: 0.03, 2: 0.6, 3: 0.3}
+_HUES = {1: 0.6, 2: 0.03, 3: 0.3}
 _HUE_SPREAD = 0.18
 # A shape differs at least this much from the background (largest difference of a channel).
 _MIN_CONTRAST = 0.22
@@ -105,9 +105,9 @@ def shapes_sample(index: int, size: int = SHAPES_SIZE) -> tuple[Any, Any]:
         kind = int(rng.integers(1, 4))
         angle = float(rng.uniform(0, 2 * math.pi))
         if kind == 1:
-            distance = np.hypot(xx - cx, yy - cy) - radius * 0.9
-        elif kind == 2:
             distance = _polygon_distance(xx, yy, _regular_polygon(cx, cy, radius, 4, angle))
+        elif kind == 2:
+            distance = np.hypot(xx - cx, yy - cy) - radius * 0.9
         else:
             distance = _polygon_distance(xx, yy, _regular_polygon(cx, cy, radius * 1.15, 3, angle))
         for _attempt in range(20):
