@@ -9,6 +9,10 @@ import type {
   Analysis,
   ApiToken,
   ApiTokenInput,
+  ApprovalList,
+  ApprovalRequest,
+  ApprovalRule,
+  ApprovalRules,
   BillingCheckout,
   BillingInfo,
   BillingState,
@@ -332,6 +336,29 @@ const serverApi = {
     /** The tokens and apps that acted, the tools used and the latest entry. */
     summary: (signal?: AbortSignal) =>
       request<AgentActivitySummary>('/api/agent-activity/summary/', { auth: true, signal }),
+  },
+
+  /** Actions of agents that wait for the user's OK, and the rules (website login only). */
+  approvals: {
+    list: (query: { status?: 'pending' | 'decided'; limit?: number } = {}, signal?: AbortSignal) =>
+      request<ApprovalList>(`/api/approvals/${queryString(query)}`, { auth: true, signal }),
+    /** Done right away as the agent; the answer says whether it worked. */
+    approve: (id: number) =>
+      request<ApprovalRequest>(`/api/approvals/${id}/approve/`, { method: 'POST', auth: true }),
+    deny: (id: number, message: string) =>
+      request<ApprovalRequest>(`/api/approvals/${id}/deny/`, {
+        method: 'POST',
+        body: { message },
+        auth: true,
+      }),
+    rules: (signal?: AbortSignal) =>
+      request<ApprovalRules>('/api/approvals/rules/', { auth: true, signal }),
+    /** The rule of a token, an app, or (null) the default for new ones. */
+    setRule: (agent: { kind: 'token' | 'app'; id: number } | null, rule: ApprovalRule) =>
+      request<ApprovalRule>(
+        agent ? `/api/approvals/rules/${agent.kind}/${agent.id}/` : '/api/approvals/rules/default/',
+        { method: 'PUT', body: rule, auth: true }
+      ),
   },
 
   projects: {

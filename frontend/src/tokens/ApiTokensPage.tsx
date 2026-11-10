@@ -18,7 +18,15 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type ActivityAgent, type AgentKey, type ApiToken } from '@/api';
+import {
+  api,
+  type ActivityAgent,
+  type AgentKey,
+  type ApiToken,
+  type ApprovalRule,
+  type ApprovalRules,
+} from '@/api';
+import { ApprovalRuleEditor } from '@/approvals/ApprovalRuleEditor';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
 import { ActivityLink } from './ActivityLink';
@@ -34,13 +42,18 @@ function isExpired(token: ApiToken, now = Date.now()): boolean {
 function TokenItem({
   token,
   activity,
+  rule,
   onRevoke,
   onBudget,
+  onRule,
 }: {
   token: ApiToken;
   activity: ActivityAgent | undefined;
+  /** What it may do without asking; undefined while loading (or on older servers). */
+  rule: ApprovalRule | undefined;
   onRevoke: () => void;
   onBudget: (budget: number | null) => Promise<void>;
+  onRule: (rule: ApprovalRule) => Promise<void>;
 }) {
   const expired = isExpired(token);
   return (
@@ -105,6 +118,14 @@ function TokenItem({
             </dd>
           </div>
         )}
+        {rule && (
+          <div>
+            <dt>Approval</dt>
+            <dd>
+              <ApprovalRuleEditor rule={rule} label={`“${token.name}”`} onSave={onRule} />
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Agent activity</dt>
           <dd>
@@ -113,6 +134,39 @@ function TokenItem({
         </div>
       </dl>
     </li>
+  );
+}
+
+/** What new tokens and apps may do without asking (the account's default rule). */
+function DefaultApprovals({
+  rules,
+  onRule,
+}: {
+  rules: ApprovalRules;
+  onRule: (rule: ApprovalRule) => Promise<void>;
+}) {
+  return (
+    <section className={classes.section} aria-labelledby="approvals-title">
+      <Title order={3} id="approvals-title" mb="xs">
+        Approvals
+      </Title>
+      <Text size="sm" c="dimmed" mb="sm" maw={720}>
+        Agents can ask you before expensive trainings, before publishing something (a download link
+        that works without logging in, sharing data in a project) and before deleting. Their request
+        then waits on{' '}
+        <Anchor component={Link} to="/activity">
+          the activity page
+        </Anchor>{' '}
+        until you approve or deny it (at most {rules.expiry_hours} hours). Set it for each token and
+        app below.
+      </Text>
+      <Group gap="xs" wrap="wrap">
+        <Text size="sm" fw={600}>
+          New tokens and apps:
+        </Text>
+        <ApprovalRuleEditor rule={rules.default} label="new tokens and apps" onSave={onRule} />
+      </Group>
+    </section>
   );
 }
 
@@ -131,6 +185,31 @@ export function ApiTokensPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  // What each token and app may do without asking (approvals).
+  const [rules, setRules] = useState<ApprovalRules | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    api.approvals
+      .rules(controller.signal)
+      .then(setRules)
+      .catch(() => undefined); // The page works without them (e.g. an older server).
+    return () => controller.abort();
+  }, []);
+  const saveRule = async (
+    agent: { kind: 'token' | 'app'; id: number } | null,
+    rule: ApprovalRule
+  ) => {
+    const saved = await api.approvals.setRule(agent, rule);
+    setRules((current) => {
+      if (!current) {
+        return current;
+      }
+      return agent
+        ? { ...current, agents: { ...current.agents, [`${agent.kind}:${agent.id}`]: saved } }
+        : { ...current, default: saved };
+    });
+  };
 
   // What each token and app did lately (the log is on the page "Agent activity").
   const [activity, setActivity] = useState<Map<AgentKey, ActivityAgent>>(new Map());
@@ -200,7 +279,13 @@ export function ApiTokensPage() {
         <McpSetup />
       </section>
 
-      <ConnectedApps activity={activity} />
+      {rules && <DefaultApprovals rules={rules} onRule={(rule) => saveRule(null, rule)} />}
+
+      <ConnectedApps
+        activity={activity}
+        rules={rules?.agents}
+        onRule={(id, rule) => saveRule({ kind: 'app', id }, rule)}
+      />
 
       <section className={classes.section} aria-labelledby="tokens-title">
         <Group justify="space-between" mb="md">
@@ -242,6 +327,8 @@ export function ApiTokensPage() {
                 key={token.id}
                 token={token}
                 activity={activity.get(`token:${token.id}`)}
+                rule={rules?.agents[`token:${token.id}`]}
+                onRule={(rule) => saveRule({ kind: 'token', id: token.id }, rule)}
                 onRevoke={() => revoke(token)}
                 onBudget={async (budget) => {
                   const updated = await api.apiTokens.setBudget(token.id, budget);
@@ -257,7 +344,18 @@ export function ApiTokensPage() {
         key={dialogKey}
         opened={creating}
         onClose={() => setCreating(false)}
-        onCreated={(token) => setTokens((list) => [token, ...(list ?? [])])}
+        onCreated={(token) => {
+          setTokens((list) => [token, ...(list ?? [])]);
+          // A new token gets the default rule.
+          setRules((current) =>
+            current
+              ? {
+                  ...current,
+                  agents: { ...current.agents, [`token:${token.id}`]: current.default },
+                }
+              : current
+          );
+        }}
       />
     </Container>
   );

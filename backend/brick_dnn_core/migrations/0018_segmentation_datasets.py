@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("brick_dnn_core", "0016_accounts_email_2fa"),
+        ("brick_dnn_core", "0017_agent_approvals"),
     ]
 
     operations = [

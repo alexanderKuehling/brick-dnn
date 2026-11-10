@@ -3,7 +3,14 @@ import { IconPlugConnectedX } from '@tabler/icons-react';
 import { Alert, Badge, Button, Center, Group, Loader, Text, Title } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { api, type ActivityAgent, type AgentKey, type OAuthConnection } from '@/api';
+import {
+  api,
+  type ActivityAgent,
+  type AgentKey,
+  type ApprovalRule,
+  type OAuthConnection,
+} from '@/api';
+import { ApprovalRuleEditor } from '@/approvals/ApprovalRuleEditor';
 import { urlHost } from '@/oauth/url';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
@@ -13,13 +20,17 @@ import classes from './Tokens.module.css';
 function ConnectionItem({
   connection,
   activity,
+  rule,
   onDisconnect,
   onBudget,
+  onRule,
 }: {
   connection: OAuthConnection;
   activity: ActivityAgent | undefined;
+  rule: ApprovalRule | undefined;
   onDisconnect: () => void;
   onBudget: (budget: number | null) => Promise<void>;
+  onRule: (rule: ApprovalRule) => Promise<void>;
 }) {
   const host = urlHost(connection.client_uri);
   return (
@@ -78,6 +89,18 @@ function ConnectionItem({
             </dd>
           </div>
         )}
+        {rule && (
+          <div>
+            <dt>Approval</dt>
+            <dd>
+              <ApprovalRuleEditor
+                rule={rule}
+                label={`“${connection.client_name}”`}
+                onSave={onRule}
+              />
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Agent activity</dt>
           <dd>
@@ -92,9 +115,14 @@ function ConnectionItem({
 /** Apps the user allowed to use their account by signing in (OAuth), e.g. the Claude apps. */
 export function ConnectedApps({
   activity = new Map(),
+  rules,
+  onRule,
 }: {
   /** What each app did lately, by "app:<id>". */
   activity?: Map<AgentKey, ActivityAgent>;
+  /** What each app may do without asking, by "app:<id>". */
+  rules?: Partial<Record<AgentKey, ApprovalRule>>;
+  onRule?: (id: number, rule: ApprovalRule) => Promise<void>;
 }) {
   const [connections, setConnections] = useState<OAuthConnection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -155,6 +183,8 @@ export function ConnectedApps({
               key={connection.id}
               connection={connection}
               activity={activity.get(`app:${connection.id}`)}
+              rule={onRule ? rules?.[`app:${connection.id}`] : undefined}
+              onRule={(rule) => onRule?.(connection.id, rule) ?? Promise.resolve()}
               onDisconnect={() => disconnect(connection)}
               onBudget={async (budget) => {
                 const updated = await api.connections.setBudget(connection.id, budget);

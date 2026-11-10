@@ -21,6 +21,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Training runs:** network, settings and metrics; job, state, log and trained weights; for a segmentation, eight small preview images (validation images of the dataset with their masks and the predicted masks) | database; `BRICKDNN_DATA_DIR/training/runs/<id>/` | as imports (finished runs only) |
 | **API tokens and connected apps:** name, start of the token, SHA-256 hash, dates, the app's name, their monthly budget | database | revoked by the user, or with the account |
 | **Agent activity log:** every MCP tool call and API request made with a token or app: token or app name, start of the token, user agent, tool or route, outcome and error message, duration, ids and names of what it touched, summarised arguments (sizes and counts, never file contents, prediction inputs or secrets) | database | `BRICKDNN_AGENT_LOG_DAYS` (90) days, at most 20,000 entries per account; with the account. Kept when the token is revoked |
+| **Approval requests and rules:** what each token and app may do without asking; actions of agents that waited for the user's approval, with the arguments of the call (e.g. a training's network and settings; never file contents), the decision, the user's message to the agent and the result | database | 90 days (`purge_old_data`; not while they wait); with the account |
 | **Usage records:** the CPU time of each training run and prediction per calendar month, the part beyond the plan's allowance, which token or app caused it (with its name), the run's name; the account's plan, budgets and limits | database | with the account (they stay when a run, token or app is deleted: the month's total and later billing need them) |
 | **Training queue** (only with a [training worker](training.md#the-training-queue)): for every start of a training by a worker when the run was queued, started and ended, how it ended, the plan and priority of its account and the worker; no user name. Workers: name, host name, start, last heartbeat | database | 90 days after the training ended (the link to the run goes when the run is deleted) |
 | **Paid plans** (only with [billing](billing.md)): the account's customer and subscription ids at Paddle, plan, status and dates; for every notification from Paddle its type, time and subscription id (not its content); overage charges (month, CPU hours, amount) | database | the account is deleted. Paddle keeps payment data and invoices itself |
@@ -97,7 +98,7 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
   when the address was confirmed and whether two-factor authentication is on, never its
   secret), own
   networks with their history, memberships, own comments, API tokens (no secrets), connected
-  apps, the agent activity log, data sources, preparations, datasets, training runs
+  apps, the agent activity log, approval rules and requests, data sources, preparations, datasets, training runs
   (settings, metrics; not the weights), the usage records with the plan and budgets
   (`usage.json`) and, for accounts that bought a plan, `billing.json` (below), plus the
   uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
@@ -154,7 +155,8 @@ Expired logins (refresh tokens, unused OAuth codes) and expired admin sessions a
 on every run, whatever the settings. So are entries of the **agent activity log** older than
 `BRICKDNN_AGENT_LOG_DAYS` (default 90; it is on by default, as users see it on the page *Agent
 activity*; `0` turns the log off and the next run deletes it) and the oldest entries of an
-account beyond 20,000. `--agent-log-days N` overrides the setting once.
+account beyond 20,000. `--agent-log-days N` overrides the setting once. Approval requests of
+agents are deleted after 90 days (not while they wait).
 
 ## Logs and security headers
 

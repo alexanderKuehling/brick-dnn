@@ -60,6 +60,7 @@ from . import billing, budgets, data_service, live
 from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
+from .approvals import export_approvals
 from .models import (
     AgentAction,
     ApiToken,
@@ -188,6 +189,8 @@ api_tokens.json          your API tokens: name, the start of the token, dates (n
 connected_apps.json      apps you connected with OAuth, e.g. AI assistants
 agent_activity.json      what AI assistants and scripts did with your API tokens and
                          connected apps (summarised, as on the page "Agent activity")
+approvals.json           what your tokens and apps may do without asking you, and the
+                         actions of theirs that waited for your approval
 data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
@@ -495,6 +498,7 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "api_tokens.json", _api_tokens(user))
         _json(archive, "connected_apps.json", _connections(user))
         _json(archive, "agent_activity.json", export_entries(user))
+        _json(archive, "approvals.json", export_approvals(user))
         _json(archive, "data_sources.json", _data_sources(user))
         _json(archive, "data_preparations.json", _data_preps(user))
         _json(archive, "datasets.json", _datasets(user))

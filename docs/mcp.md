@@ -101,6 +101,8 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `create_upload_link`    | full   |             | One-time link to upload a local file with curl (data source or training dataset) |
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
+| `get_approval`          | read   |             | The state of a request that waits for the user's approval, and its result ([Approvals](#approvals)) |
+| `list_approvals`        | read   |             | The approval requests of this token or app                      |
 | `list_data_sources`     | read   |             | Your imported data files, and what `import_data` accepts        |
 | `get_data_source`       | read   |             | One imported file: columns with types, import report, first rows |
 | `import_data`           | full   |             | Import a file (CSV/JSON text, base64 for Excel/Parquet …, or a public link) |
@@ -404,6 +406,83 @@ it happens: the page asks for new entries every few seconds while it is open.
   export and deleted with the account ([privacy.md](privacy.md)).
 - Entries are written after the answer has been sent: logging never delays or breaks a tool
   call. The API is [`GET /api/agent-activity/`](api.md#agent-activity).
+
+## Approvals
+
+You can let an agent do some things only after you said yes. Per API token and per connected
+app (API tokens page, next to its budget):
+
+- **Trainings:** it starts trainings freely up to N estimated CPU minutes; above that it asks.
+  `0` asks before every training, empty never asks. The estimate is the one `check_training`
+  returns (`estimate.cpu_minutes`, the middle of the range `low_cpu_minutes` to
+  `high_cpu_minutes`): the number the web app shows as the estimated CPU time, so the limit
+  means what you see there. A training whose CPU time cannot be estimated asks. What a
+  training really uses is still limited by the budgets.
+- **Publishing:** it asks before something becomes visible to other people or downloadable
+  without logging in. Over MCP these are the tools that can do that today:
+  - `get_weights_download`: a link to the trained weights that works without logging in;
+  - `upload_dataset` and `create_data_prep` with `project_id`: sharing the dataset or the
+    preparation (with its data file) in a project. The upload or the new preparation is done
+    right away for you alone; only the sharing waits;
+  - `create_upload_link` for a training dataset with `project_id`: the link is made once
+    approved (and is valid for 15 minutes from then).
+
+  MCP has no tools for share links of networks or for inviting people; with an API token the
+  REST API has (see below).
+- **Deleting** (optional): `delete_project`, `delete_training_run`, `delete_dataset`,
+  `delete_data_source` and `delete_data_prep` ask first.
+
+New tokens and apps get a copy of your account's default (on the API tokens page: *Approvals
+for new tokens and apps*). Without one of your own it is: trainings above 15 estimated CPU
+minutes and publishing ask, deleting does not. Tokens and apps that existed before approvals
+were added ask for nothing until you set their rule.
+
+**What the agent sees.** A call that needs approval does nothing yet. It is not an error: the
+answer is
+
+```json
+{
+  "approval_required": true,
+  "approval": {"id": 12, "status": "pending", "tool": "start_training", "category": "training",
+               "summary": "Start training “GP 1” on dataset “houses.csv” (#3)",
+               "reason": "The estimated CPU time (42 CPU min, roughly 14 to 126 CPU min) is above the 15 CPU min that trainings may use without approval.",
+               "estimate": {"cpu_minutes": 42.1, "low_cpu_minutes": 14.0, "high_cpu_minutes": 126.3, "cost": null, "currency": null},
+               "expires_at": "2026-11-11T14:03:00+00:00", "next": "…"},
+  "message": "Waiting for the user's approval (request #12, expires 2026-11-11 14:03 UTC). Nothing has been done yet. … Call get_approval with id 12 …"
+}
+```
+
+(For an upload or a preparation shared in a project, the tool's normal answer with `approval`
+and `approval_note` added.) The same call again returns the same request; at most 20 requests
+of a token or app wait at a time. The agent follows the request with **`get_approval {id}`**:
+`status` is `pending`, `approved` (being done), `executed` (`result` is what the tool
+returned, e.g. the run with its id), `failed` (`error`: e.g. the budget was used up in the
+meantime), `denied` (`message`: your reason) or `expired` (requests expire after 24 hours).
+**`list_approvals {status?, limit?}`** lists its requests. An agent sees only its own
+requests and cannot decide them: there is no tool for it, and the approval endpoints need a
+website login.
+
+**Deciding.** Waiting requests appear at the top of the page **Agent activity** (and as a
+count in the header's account menu) with the agent, the network and dataset with links, the
+estimate in CPU minutes (and money, if the server has prices), and what publishing would make
+visible. *Approve* does it right away on the server as that agent: with its token or app (its
+budgets, its rate limits, its name on the run), with the same checks as the tool and the
+budgets checked at that moment. If the token was revoked, the app disconnected or a budget is
+used up, the request ends as `failed` and nothing is done. *Deny* takes an optional message
+for the agent. Approving twice does nothing twice; a denied or expired request cannot be
+approved. The activity log shows each step: the call as *pending*, then *approved* (with what
+was done), *failed* or *denied*.
+
+**REST API.** It cannot ask: a request with a personal API token whose rule covers it is
+refused with `403` and a message that points to MCP or the web app. Covered are the trainings
+above the limit (`POST /api/training/runs/`), publishing (`POST /api/projects/<id>/link/`,
+`…/members/`, `…/data/`) and deleting (`DELETE` of networks, runs, datasets, data files and
+preparations).
+
+Requests keep the validated arguments of the call (e.g. the graph and settings of a
+training), never the content of files. Decided and expired requests are deleted 90 days
+after they were made (`purge_old_data`); they are part of the data export. The endpoints are under
+[`/api/approvals/`](api.md#approvals).
 
 ## Details
 
