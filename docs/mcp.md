@@ -123,7 +123,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `stop_training`         | full   |             | Stop a run after the current batch, or cancel a queued one (starter, project editors) |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
-| `predict`               | read   |             | Run a trained network on up to 64 samples                       |
+| `predict`               | read   |             | Run a trained network on up to 64 samples, or on image files (base64) |
 
 Read-only tokens and apps allowed read-only access only see the read tools. Networks use the [graph format](graph-format.md).
 
@@ -151,6 +151,26 @@ default, and every capped list says how long it is and how to see more:
 A dataset with 800 columns took 17 KB in `get_training_options` before and 3.4 KB now (most of
 it the training settings); a run with 200 epochs took 71 KB in `get_training_run` and now
 takes 1 KB. The REST API and the web app keep their full answers.
+
+**Segmentation.** Networks that give every pixel a class
+([training.md](training.md#image-segmentation)) use the same tools. The instructions explain
+what such a network and dataset look like; `get_training_options` lists the generated dataset
+`shapes` (`task` `segmentation`, nothing to upload) and the limits under `segmentation`;
+`create_upload_link {purpose: "training_dataset", filename: "scans.zip", kind:
+"segmentation"}` takes a ZIP file with the folders `images` and `masks`; `get_dataset` shows
+how the masks are read and the share of the pixels of every class; `check_training` explains
+what does not fit (an output smaller than the Input, too few output channels, a batch that
+needs too much memory, with the batch size that fits) and suggests `fixes` for the Input and
+the output channels of the last convolution; `get_training_run` reports `val_iou`,
+`val_dice`, `val_pixel_accuracy` (and the test values) in `metrics` and the IoU per class by
+name in `segmentation`; `predict {run_id, image}` returns the class map. The example graph is
+`list_examples {id: "unet"}`: it fits `shapes` as it is.
+
+```text
+check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "shapes"}, config: {batch_size: 16}} → ok
+start_training {…, config: {epochs: 10, batch_size: 16}} · get_training_run {id} → val_iou 0.80, test_iou 0.78
+predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_png
+```
 
 **Classical models.** The same tools work for Gaussian processes and support vector machines
 ([graph-format.md](graph-format.md#classical-models)): the instructions and
@@ -249,7 +269,9 @@ curl --fail-with-body -F "file=@sales.csv" "https://example.com/api/uploads/?sig
 `purpose` `data_source` imports the file into the Data tab like `import_data` (every format it
 reads, with its options: `delimiter`, `decimal`, `header`, `encoding`, `missing_values`,
 `sheet`); `training_dataset` stores a CSV or ZIP file like `upload_dataset` (optionally shared
-in `project_id`). The answer of curl is the JSON the inline tool returns: the new source with
+in `project_id`): a ZIP file with one folder of images per class, or for segmentation with the
+folders `images` and `masks` (`kind: "segmentation"` says so explicitly; without `kind` the
+folders decide). The answer of curl is the JSON the inline tool returns: the new source with
 its columns, or the dataset with its `reference`. The upload goes through the same functions,
 limits (`BRICKDNN_DATA_MAX_UPLOAD_MB` and `BRICKDNN_MAX_UPLOAD_MB`, not the MCP text limit),
 checks and rate limit (`BRICKDNN_UPLOAD_RATE`) as in the web app. The file is read under the
@@ -343,6 +365,15 @@ process, like a training (CPU, lower priority, 30 seconds at most, one predictio
 the server by default: `BRICKDNN_MAX_PREDICTIONS`). Everyone who can see the run may predict,
 also with read-only access. The same is available as
 [`POST /api/training/runs/<id>/predict/`](api.md#training-login-required).
+
+Image networks also take **image files**: `predict {run_id, image}` with the base64 text of a
+PNG or JPEG file (or a list of at most 8, together at most 900 kB of text) instead of
+`inputs`. The server converts and resizes them like the training images. A **segmentation**
+answers per image with `classes` (the classes that occur and the share of their pixels) and
+`mask_png`, the predicted class of every pixel as a small palette PNG (a data URL; about 1 KB
+for 64×64) whose pixel values are the class indices. `mask: "rle"` returns run-lengths
+(`mask_rle`: class, pixels, class, pixels … row by row) instead, `mask: "none"` only the
+shares, which keeps the answer below 1 KB.
 
 ## Activity log
 

@@ -27,12 +27,38 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Training for image segmentation.** Networks whose output is as high and wide as their
+  Input can be trained on data with a class for every pixel
+  ([docs/training.md](docs/training.md#image-segmentation)):
+  - *Datasets:* a ZIP file with the folders `images` and `masks` (same file names; `train`,
+    `val` and `test` folders are the split) becomes a dataset of the new kind `segmentation`,
+    in the web app and through upload links. Masks are PNG files with the class index of
+    every pixel (255 is ignored), black and white, a few grey levels or one colour per class;
+    JPEG masks, smoothed edges and more than 32 classes are refused with the reason.
+    `classes.txt` or `classes.json` name the classes. The built-in dataset **Shapes**
+    (squares, circles and triangles, 400 training and 100 test images of 64×64 pixels) is
+    generated on the server: nothing to upload or download.
+  - *Checks:* the output must have one channel per class (or one channel for two classes) at
+    the size of the Input; the errors say what shrinks it, the fixes set the Input shape and
+    the output channels of the last convolution, and a batch that would not fit into memory
+    (`BRICKDNN_SEGMENTATION_MEMORY_MB`, 900 MB) is refused with the batch size that fits.
+  - *Training:* the cross-entropy of every pixel, optionally with a Dice term (setting
+    `loss`); `val_iou`, `val_dice` and `val_pixel_accuracy` per epoch, the same on the test
+    set, and the IoU of every class. The kept epoch stays the one with the lowest validation
+    loss. The training panel has a batch size of its own for segmentation (16).
+  - *Predictions:* a finished run shows eight validation images with their mask, the
+    predicted mask and the prediction over the image
+    (`GET /api/training/runs/<id>/previews/`). `predict` (REST and MCP) takes image files as
+    base64 (`image`, also for classifiers) and answers a segmentation with the class map as a
+    small PNG or run-lengths and the share of every class.
+  - `brickdnn train` reads the new datasets and has `--loss` and `--previews`; the MCP tools
+    and the activity log know the new datasets and metrics.
 - **U-Net example and `ConvTranspose2d`.** A new brick for transposed 2-D convolutions
   (learned upsampling: kernel 2 with stride 2 doubles the size; padding and output padding
   as in PyTorch), and the example *U-Net (image segmentation)*: three levels down with
-  `MaxPool2d`, three up with `ConvTranspose2d`, skip connections with `Concat`, one value per
-  pixel as output. It is an example for building and exporting code: the datasets the app
-  trains on have one label per image, not one per pixel.
+  `MaxPool2d`, three up with `ConvTranspose2d`, skip connections with `Concat`, one score per
+  class for every pixel as output (3 × 64 × 64 in, 4 × 64 × 64 out). It trains on the
+  built-in dataset Shapes as it is.
 - **A training queue with a separate worker.** With `BRICKDNN_TRAINING_WORKER` the web server
   only stores a new run as `queued`; `manage.py training_worker` (its own process or
   container, `--slots N`, `--once` for one run) takes the runs from the database and trains
