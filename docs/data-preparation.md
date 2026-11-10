@@ -88,9 +88,10 @@ the table as CSV or Parquet and import that.
 
 ## Train, validation and test rows
 
-Right after combining tables, every row is assigned to the **training**, **validation** or
-**test** part (*Target & split*: shares, seed, and for classification optionally
-*stratified*, which keeps the class proportions in every part). From then on:
+Right after combining tables and the row steps that run before the split (*Remove atypical
+rows*, *Find near-duplicate groups*), every row is assigned to the **training**,
+**validation** or **test** part (*Target & split*: shares, seed, and for classification
+optionally *stratified*, which keeps the class proportions in every part). From then on:
 
 - Steps that **learn values** – means and medians for missing values, clipping bounds,
   outlier limits, scaling statistics, categories, power-transform parameters – learn them from
@@ -103,13 +104,39 @@ Right after combining tables, every row is assigned to the **training**, **valid
   split (the validation and test shares in the training settings are then fixed), so the test
   rows are never seen before the final test.
 
+### Keep rows of a group together (split by group)
+
+When several rows belong to the same person, patient, customer or object (repeated
+measurements, several scans of one person), a random split puts some of them into training
+and others into validation or test. The network then partly *recognises* the person instead
+of predicting, and the validation and test scores are better than they will be for new
+people. *Target & split → Keep rows of a group together* takes a column whose equal values
+form a group (a person id, or the `group` column of *Find near-duplicate groups*): every group
+goes as a whole into one part.
+
+- Groups with several rows are placed first, largest first, each into the part where it
+  brings the row counts closest to the shares; single rows fill the remaining room at
+  random (seeded). The parts can only be as exact as the group sizes allow; a warning says
+  when they differ by more than 3 percentage points from the shares.
+- With *Stratify* (classification), groups are split per stratum, the most common class of
+  each group, so the class shares of the parts stay close to each other. Regression targets
+  are not stratified (as without groups).
+- Rows without a group value are each a group of their own.
+- The column must exist **where the split is assigned**: in the imported data, from a join,
+  or from a step that runs before the split. *Target & split* lists those columns, and says
+  how many groups there are and that no group is in two parts.
+- The group column itself means nothing for new rows: drop it after the split (the readiness
+  check suggests *Drop columns*).
+
+The exported dataset carries this split in `split.bin`, so training uses it unchanged.
+
 ## Steps
 
 | Group | Steps |
 | ----- | ----- |
 | **Combine data** | *Join another table* (match key columns; left, inner, outer or right join) · *Append rows* (stack another table with the same columns) |
 | **Columns** | Drop · Keep only · Rename · Change type · *Formula* (new column from an expression, e.g. `log1p(income) / household_size`) · Replace values |
-| **Rows** | Remove duplicates · Filter rows (=, <, between, is one of, contains, is missing …) · Drop rows with missing values · Sort |
+| **Rows** | Remove duplicates · Filter rows (=, <, between, is one of, contains, is missing …) · Drop rows with missing values · Sort · *Drop rows* (picked by hand: by the values of an ID column, or by row number) · *Remove atypical rows* and *Find near-duplicate groups* (before the split, see *Rows* below) |
 | **Missing values** | *Mark as missing* (sentinel values like `-999` or `unknown`) · Drop sparse columns · *Fill missing values*: mean, median, most frequent, fixed value, nearest neighbours (KNN), forward/backward fill, interpolation, optionally with an indicator column |
 | **Outliers & clipping** | *Outliers*: IQR rule, z-score, robust z-score (MAD) or quantiles; clip, remove, set missing or flag · *Clip values*: fixed bounds, quantiles (e.g. 1st–99th percentile) or mean ± k standard deviations |
 | **Transform numbers** | Scale (standard, min-max, robust, max-abs) · log, log1p, square root, Box-Cox, Yeo-Johnson … · Quantile transform (uniform or normal) · Bin into intervals |
@@ -118,8 +145,10 @@ Right after combining tables, every row is assigned to the **training**, **valid
 | **Target & balance** | Balance classes (oversample or undersample the training rows) |
 | **Feature selection** | Drop near-constant, highly correlated, mostly missing or uninformative columns |
 
-Steps that combine tables always come first. A step that fails shows its error and stops the
-pipeline there; the preview shows the data before it.
+Steps that combine tables always come first, then the steps that run before the split
+(*Remove atypical rows*, *Find near-duplicate groups*, marked *Runs before the split*). A step
+that fails shows its error and stops the pipeline there; the preview shows the data before
+it.
 
 The training engine standardises all features again (mean 0, standard deviation 1, from the
 training rows), so a *Scale* step is optional for training in Brick DNN; it is useful for the
@@ -144,8 +173,101 @@ charts that show single rows from a random sample, which is always labelled):
   association with the target (|r| for numbers, correlation ratio η, Cramér's V for
   categories).
 - **Compare**: a column before and after the preparation.
+- **Rows**: the structure of the rows, see below.
+
+### Rows: atypical rows and near twins
+
+The other views look at columns. **Rows** compares every row with all others, so that two
+problems become visible that no column statistic shows:
+
+- **Unusually typical rows**: rows whose every value sits close to its column median. Real
+  rows are never typical in *all* columns; filler or synthetic rows often are, and their
+  labels are usually made up. Outlier steps do not find them – they are the opposite of
+  outliers.
+- **Near twins**: rows whose nearest row is far closer than a typical pair of rows, e.g.
+  several scans of the same person. With a random split, a row in validation often has its
+  twin in training, and validation looks better than it is.
+
+How it is computed (on the data the preview shows, with the scaling learned from the training
+rows):
+
+- Every number column is put on one scale with the **robust z-score**
+  `(x − median) / (1.4826 · MAD)`, clipped to ±10.
+- The **spread** of a row is the median of its `|z|`: about 0.67 for ordinary rows, near 0
+  for a row whose every value is at the median.
+- The **distance** of two rows is the root mean square of their z differences over the
+  columns both have (missing values are left out; pairs that share fewer than half of the
+  columns have no distance). The **NN ratio** of a row is the distance to its nearest row
+  divided by the **typical pair distance** (the median distance of random pairs): 1 means "as
+  far as any two rows", 0.2 "five times closer".
+- **Groups**: rows linked to one of their 10 nearest rows with an NN ratio below the
+  threshold, as connected groups.
+- **Which columns**: *Automatic* uses all number columns in tables with up to 20 of them, and
+  in wider tables only the columns with a **strong partner** (largest |Spearman r| with
+  another column at least 0.3, or more for few rows). In wide tables, columns without any
+  correlated partner are mostly noise, and noise columns drown the differences between rows:
+  with 600 noise columns out of 830, near twins are invisible on all columns but obvious on
+  the partnered ones. *Partnered*, *All number columns* and *I choose* set it by hand. The
+  target, ID columns and the group column of the split are never used.
+- **Size**: brute force in float32, computed when the view opens and cached per data and
+  columns (the preview does not wait for it). Up to 20,000 rows with up to 50 compared
+  columns, about 9,000 rows with 230 columns and 4,500 with 1,000 (rows² × columns ≤ 2·10¹⁰,
+  a few seconds of CPU); above that a seeded random sample, which the view says (a row's twin
+  may then be outside the sample). *Find near-duplicate groups* has the same limit and asks
+  for an existing group column (e.g. a person id) on larger tables.
+
+What the view shows:
+
+- **Two histograms with thresholds**: the spreads (a separate low cluster = unusually typical
+  rows) and the NN ratios, with the ratios of random pairs as a dashed outline (a big mass far
+  left of the outline = near twins). Drag a threshold (or use the arrow keys, or type it); the
+  view counts the rows below it. A dashed green line marks a **clear gap** the analysis found;
+  ordinary data has none, and then nothing is suggested.
+- **Close pairs vs random pairs**: how much the target differs between a row and its near
+  twin, compared with random pairs (e.g. 2 years of age against 10). This uses the labels:
+  it tells what the twins are, not which rows to drop.
+- **Projection**: the rows on the first two principal components of the compared columns,
+  coloured by structure, split part, target, spread or NN ratio. Twins sit on top of each
+  other; click a point to see its similar rows.
+- **Row table**: every analysed row with its id, split part, target, spread, missing values,
+  NN ratio, nearest row and group; sort by any column, filter (unusually typical, with a near
+  twin, the group of the chosen row, selected), find a row or id, select rows, *Select all
+  shown*.
+- **Similar rows**: click a row to see its 10 nearest rows with distances, targets and split
+  parts, and for a pair the columns in which they agree and differ most.
+
+Acting on it:
+
+- *Remove N rows (step)* adds **Remove atypical rows** with the threshold. It runs before the
+  split on all rows and removes them from every part: they are errors, not rare cases, and
+  left in validation or test their arbitrary labels only add noise to the scores. Without a
+  threshold the step uses the gap it finds itself (and removes nothing if there is none). The
+  pandas script removes such rows from new data as well; delete those lines to keep every row.
+- *Find groups & split by them (step)* adds **Find near-duplicate groups** (a column `group`
+  with the group number; single rows get their own number) and switches the split to *Keep
+  rows of a group together* on it. The step finds the groups again on all rows before the
+  split, so its counts can differ a little from the view.
+- *Drop N selected rows (step)* adds **Drop rows** with the ids of the selected rows (or
+  their row numbers if there is no ID column; row numbers count the rows right before the
+  step).
+
+An advanced idea, deliberately not offered as a step: a near twin's known target is a strong
+predictor (a person's age from their earlier scan). Adding it as a feature leaks the target
+unless it is computed out of fold – every training row may only see twins from other folds,
+and validation and test rows only twins from training – otherwise the network learns to copy
+its own label.
 
 ## Readiness and sanity checks
+
+The row checks run with every preview on a seeded sample small enough to stay fast (rows² ×
+compared columns ≤ 5·10⁸: all 1,212 rows of a table with 230 compared columns, about 1,500
+of a larger one; at most 4,000) and only speak up when the Rows analysis finds a clear gap:
+**unusually typical rows** (fix: *Remove atypical rows*), and **near twins** when at least 5 %
+of the rows have one and at least 5 % of the validation/test rows have a twin in the
+training rows (fix: *Find near-duplicate groups* and split by its column). With a split by
+groups, the twin check stays quiet unless the groups do not hold the twins. A group column
+that is still a feature gets a *Drop* fix; a group column that does not exist where the split
+is assigned is an error.
 
 The **Readiness** view sorts what it finds into three lists. Each entry names the affected
 columns and, where a step solves it, has a button that adds that step (*Fix all* adds the

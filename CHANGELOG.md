@@ -27,6 +27,23 @@
   trainings: they go back into the queue and start again.
 
 ### Added
+- **Rows analysis in the Data tab.** *Analysis → Rows* compares every row with all others:
+  how typical its values are (median |robust z|), how close its nearest row is (NN ratio:
+  nearest distance / typical pair distance) and groups of near twins, on the columns with a
+  strong partner in wide tables. Histograms with draggable thresholds (random pairs as a
+  baseline), close vs random pairs with their target differences, a PCA projection, a
+  sortable, filterable row table with selection and a *Similar rows* panel. Brute force for
+  up to 20,000 rows (fewer for many columns, e.g. 9,000 with 230), a seeded sample above.
+- **Row steps**: *Remove atypical rows* and *Find near-duplicate groups* (both run before the
+  split, on all rows) and *Drop rows* (hand-picked rows by ID or row number); the recipe and
+  the pandas script include them.
+- **Split by group**: *Target & split → Keep rows of a group together* puts all rows with the
+  same value of a column into one part (shares as close as the group sizes allow, stratified
+  by each group's main class). The exported `split.bin` carries it into training. MCP: the
+  split settings take `group_by`.
+- **Readiness**: unusually typical rows, near twins with the share of validation/test rows
+  that have a twin in training (fix: find the groups and split by them), a group column left
+  as a feature. `preview_data_prep` includes a compact row analysis.
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public
