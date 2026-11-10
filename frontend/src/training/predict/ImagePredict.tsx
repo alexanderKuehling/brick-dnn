@@ -42,7 +42,8 @@ function DrawPad({
   onChange,
 }: {
   strokes: Stroke[];
-  onChange: (strokes: Stroke[]) => void;
+  /** Takes an update (pointer events can come faster than renders). */
+  onChange: (update: (strokes: Stroke[]) => Stroke[]) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -109,14 +110,19 @@ function DrawPad({
       onPointerDown={(event) => {
         drawing.current = true;
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        onChange([...strokes, [point(event)]]);
+        const first = point(event);
+        onChange((current) => [...current, [first]]);
       }}
       onPointerMove={(event) => {
-        if (!drawing.current || strokes.length === 0) {
+        if (!drawing.current) {
           return;
         }
-        const last = strokes[strokes.length - 1];
-        onChange([...strokes.slice(0, -1), [...last, point(event)]]);
+        const next = point(event);
+        onChange((current) =>
+          current.length === 0
+            ? current
+            : [...current.slice(0, -1), [...current[current.length - 1], next]]
+        );
       }}
       onPointerUp={() => {
         drawing.current = false;

@@ -1,5 +1,5 @@
 /** The prediction panel of the run view: forms from the columns, samples, CSV rows, images. */
-import { fireEvent, render, screen, userEvent, waitFor, within } from '@test-utils';
+import { act, fireEvent, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { api, ApiError, type PredictionForm, type PredictionResult } from '@/api';
 import { downloadText } from '@/builder/download';
@@ -307,10 +307,13 @@ describe('PredictionPanel', () => {
     const pad = screen.getByLabelText('Drawing pad');
     pad.getBoundingClientRect = () =>
       ({ left: 0, top: 0, width: 280, height: 280, right: 280, bottom: 280 }) as DOMRect;
-    fireEvent.pointerDown(pad, { clientX: 140, clientY: 40, pointerId: 1 });
-    fireEvent.pointerMove(pad, { clientX: 140, clientY: 160, pointerId: 1 });
-    fireEvent.pointerMove(pad, { clientX: 140, clientY: 240, pointerId: 1 });
-    fireEvent.pointerUp(pad, { pointerId: 1 });
+    // Pointer events can come faster than React renders: all of them must count.
+    act(() => {
+      fireEvent.pointerDown(pad, { clientX: 140, clientY: 40, pointerId: 1 });
+      fireEvent.pointerMove(pad, { clientX: 140, clientY: 160, pointerId: 1 });
+      fireEvent.pointerMove(pad, { clientX: 140, clientY: 240, pointerId: 1 });
+      fireEvent.pointerUp(pad, { pointerId: 1 });
+    });
     predict.mockResolvedValue(
       answer([{ class: '1', probability: 0.99, top: [] }], { task: 'classification' })
     );

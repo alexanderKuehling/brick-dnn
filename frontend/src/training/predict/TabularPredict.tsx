@@ -3,7 +3,6 @@ import { IconArrowsShuffle, IconFileUpload, IconWand } from '@tabler/icons-react
 import {
   Autocomplete,
   Button,
-  Collapse,
   FileButton,
   Group,
   Progress,
@@ -332,7 +331,7 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
         </Text>
       )}
 
-      <Collapse expanded={csvOpen}>
+      {csvOpen && (
         <Stack gap="xs">
           <Textarea
             label="CSV rows"
@@ -383,7 +382,7 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
             />
           )}
         </Stack>
-      </Collapse>
+      )}
 
       {problem && (
         <Messages
