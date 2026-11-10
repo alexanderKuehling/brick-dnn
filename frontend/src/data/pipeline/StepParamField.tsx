@@ -14,11 +14,13 @@ import {
   Switch,
   TagsInput,
   Text,
+  Textarea,
   TextInput,
   type ComboboxItem,
   type ComboboxLikeRenderOptionInput,
 } from '@mantine/core';
 import type { ColumnInfo, ColumnKind, DataSource, StepParamSpec } from '@/api/types';
+import { parseColumnList } from '../analysis/relations';
 import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
 import { KindIcon } from '../table/kinds';
@@ -261,22 +263,167 @@ function ColumnField({ param, value, onChange, columns, error }: StepParamFieldP
   }
 
   const selected = Array.isArray(value) ? value.map(String) : [];
-  const problem = selected.length > 0 ? columnsProblem(param, selected, columns) : null;
   return (
-    <MultiSelect
-      label={param.label}
-      description={description}
-      placeholder={selected.length === 0 ? (param.empty_means ?? 'Choose columns') : undefined}
-      data={data}
-      value={selected}
-      searchable
-      clearable
-      nothingFoundMessage={nothingFound}
-      renderOption={renderOption}
-      comboboxProps={comboboxProps}
-      error={error || problem}
+    <ColumnsField
+      param={param}
+      selected={selected}
       onChange={onChange}
+      data={data}
+      columns={columns}
+      allowed={allowed.map((column) => column.name)}
+      renderOption={renderOption}
+      nothingFound={nothingFound}
+      error={error}
     />
+  );
+}
+
+/** Above this many chosen columns the chips scroll inside the field. */
+const MANY_COLUMNS = 24;
+
+/**
+ * Several columns: a searchable multi-select plus actions for wide tables: select all columns
+ * matching the search, paste a list of names (comma, space or new line separated), clear.
+ */
+function ColumnsField({
+  param,
+  selected,
+  onChange,
+  data,
+  columns,
+  allowed,
+  renderOption,
+  nothingFound,
+  error,
+}: {
+  param: StepParamSpec;
+  selected: string[];
+  onChange: (value: unknown) => void;
+  data: { value: string; label: string }[];
+  columns: ColumnInfo[];
+  allowed: string[];
+  renderOption: ReturnType<typeof columnOption>;
+  nothingFound: string;
+  error?: string | null;
+}) {
+  const [search, setSearch] = useState('');
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
+  const problem = selected.length > 0 ? columnsProblem(param, selected, columns) : null;
+  const query = search.trim().toLowerCase();
+  const matching = query ? allowed.filter((name) => name.toLowerCase().includes(query)) : [];
+  const newMatches = matching.filter((name) => !selected.includes(name));
+  const addColumns = (names: string[]) =>
+    onChange([...selected, ...names.filter((name) => !selected.includes(name))]);
+  const many = selected.length > MANY_COLUMNS;
+
+  return (
+    <Stack gap={4}>
+      <MultiSelect
+        label={param.label}
+        description={
+          many
+            ? `${param.help ? `${param.help} ` : ''}${formatCount(selected.length)} columns chosen.`
+            : param.help || undefined
+        }
+        placeholder={selected.length === 0 ? (param.empty_means ?? 'Choose columns') : undefined}
+        data={data}
+        value={selected}
+        searchable
+        searchValue={search}
+        onSearchChange={setSearch}
+        clearable
+        nothingFoundMessage={nothingFound}
+        renderOption={renderOption}
+        comboboxProps={comboboxProps}
+        error={error || problem}
+        onChange={onChange}
+        styles={many ? { pillsList: { maxHeight: 120, overflowY: 'auto' } } : undefined}
+      />
+      <Group gap={4} wrap="wrap">
+        {newMatches.length > 0 && (
+          <Button
+            size="compact-xs"
+            variant="light"
+            // keep the search (the field would clear it when it loses the focus)
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              addColumns(newMatches);
+              setSearch('');
+            }}
+          >
+            Select all {formatCount(newMatches.length)} matching “{search.trim()}”
+          </Button>
+        )}
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          aria-expanded={pasting}
+          onClick={() => {
+            setPasting((open) => !open);
+            setPasteNote(null);
+          }}
+        >
+          Paste a list
+        </Button>
+        {selected.length > 0 && (
+          <Button size="compact-xs" variant="subtle" color="gray" onClick={() => onChange([])}>
+            Clear ({formatCount(selected.length)})
+          </Button>
+        )}
+      </Group>
+      {pasting && (
+        <Stack gap={4}>
+          <Textarea
+            size="xs"
+            aria-label={`Paste column names for ${param.label}`}
+            placeholder="Column names, separated by commas, spaces or new lines"
+            autosize
+            minRows={2}
+            maxRows={6}
+            value={pasted}
+            onChange={(event) => setPasted(event.currentTarget.value)}
+          />
+          <Group gap={4}>
+            <Button
+              size="compact-xs"
+              disabled={!pasted.trim()}
+              onClick={() => {
+                const { found, unknown } = parseColumnList(pasted, allowed);
+                addColumns(found);
+                const added = found.filter((n) => !selected.includes(n)).length;
+                const more =
+                  unknown.length > 5 ? ` and ${formatCount(unknown.length - 5)} more` : '';
+                const missing = unknown.length
+                  ? `; not found: ${unknown.slice(0, 5).join(', ')}${more}.`
+                  : '.';
+                setPasteNote(`Added ${formatCount(added)} columns${missing}`);
+                setPasted('');
+              }}
+            >
+              Add these columns
+            </Button>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                setPasting(false);
+                setPasted('');
+              }}
+            >
+              Cancel
+            </Button>
+          </Group>
+        </Stack>
+      )}
+      {pasteNote && (
+        <Text size="xs" c="dimmed" role="status">
+          {pasteNote}
+        </Text>
+      )}
+    </Stack>
   );
 }
 
