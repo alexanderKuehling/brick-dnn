@@ -360,7 +360,14 @@ def run_detail(
         else None,
     }
     if isinstance(state.get("classical"), dict):
-        detail["classical"] = {k: _short(v) for k, v in state["classical"].items()}
+        classical = {k: _short(v) for k, v in state["classical"].items()}
+        # Kernel hyperparameters at a bound: their messages (they name brick and fix).
+        bounds = classical.pop("at_bounds", None)
+        if bounds:
+            classical["at_bounds"] = capped_names(
+                [str(entry.get("message")) for entry in bounds if isinstance(entry, dict)], 5
+            )
+        detail["classical"] = classical
     if isinstance(state.get("segmentation"), dict):
         detail["segmentation"] = segmentation_results(state["segmentation"])
     if run.tuning or state.get("trials"):

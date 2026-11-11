@@ -12,6 +12,8 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | ---- | ----- | ---------- |
 | **Accounts:** username, e-mail address, password hash, sign-up, last login and last activity, accepted terms of use (time and version) | database | the account is deleted: by its owner, an admin, or the purge of inactive accounts |
 | **Logins:** refresh tokens (with their id, user and expiry) | database | 7 days after their last use; `purge_old_data` removes expired ones daily. Access tokens (30 minutes) are not stored |
+| **E-mail** (only with [e-mail set up](email.md)): when and which address was confirmed, whether the address dates from before addresses were confirmed, when the account was last warned of its deletion. The e-mails themselves are not stored | database | with the account; a changed address is unconfirmed again |
+| **Two-factor authentication** (optional): the TOTP secret (encrypted with a key derived from `DJANGO_SECRET_KEY`), when it was set up, the time step of the last code used, the recovery codes as SHA-256 hashes | database | turned off by the user, or with the account |
 | **Networks:** graph, description, version history, comments, members, share link | database | deleted by their owner (or with the account) |
 | **Data tab imports:** the uploaded or downloaded file (CSV, Excel, JSON, Parquet ...), the link it came from (without its query) and the table read from it | `BRICKDNN_DATA_DIR/prepare/sources/<id>/` | deleted by the user, with the account, or when unused (below) |
 | **Data preparations:** steps and settings | database | deleted by the user, with the account or with their source |
@@ -19,6 +21,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Training runs:** network, settings and metrics; job, state, log and trained weights; for a segmentation, eight small preview images (validation images of the dataset with their masks and the predicted masks) | database; `BRICKDNN_DATA_DIR/training/runs/<id>/` | as imports (finished runs only) |
 | **API tokens and connected apps:** name, start of the token, SHA-256 hash, dates, the app's name, their monthly budget | database | revoked by the user, or with the account |
 | **Agent activity log:** every MCP tool call and API request made with a token or app: token or app name, start of the token, user agent, tool or route, outcome and error message, duration, ids and names of what it touched, summarised arguments (sizes and counts, never file contents, prediction inputs or secrets) | database | `BRICKDNN_AGENT_LOG_DAYS` (90) days, at most 20,000 entries per account; with the account. Kept when the token is revoked |
+| **Approval requests and rules:** what each token and app may do without asking; actions of agents that waited for the user's approval, with the arguments of the call (e.g. a training's network and settings; never file contents), the decision, the user's message to the agent and the result | database | 90 days (`purge_old_data`; not while they wait); with the account |
 | **Usage records:** the CPU time of each training run and prediction per calendar month, the part beyond the plan's allowance, which token or app caused it (with its name), the run's name; the account's plan, budgets and limits | database | with the account (they stay when a run, token or app is deleted: the month's total and later billing need them) |
 | **Training queue** (only with a [training worker](training.md#the-training-queue)): for every start of a training by a worker when the run was queued, started and ended, how it ended, the plan and priority of its account and the worker; no user name. Workers: name, host name, start, last heartbeat | database | 90 days after the training ended (the link to the run goes when the run is deleted) |
 | **Paid plans** (only with [billing](billing.md)): the account's customer and subscription ids at Paddle, plan, status and dates; for every notification from Paddle its type, time and subscription id (not its content); overage charges (month, CPU hours, amount) | database | the account is deleted. Paddle keeps payment data and invoices itself |
@@ -29,7 +32,12 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 The browser keeps the login (`brickdnn:tokens`), the builder's draft (`brickdnn:draft`), the
 last training settings and data preparation and the colour scheme in `localStorage`. The app
 sets no cookies (the Django admin at `/admin/` does, for the operator), loads nothing from
-other servers, has no analytics and sends no e-mails. AI assistants a user connects (MCP,
+other servers and has no analytics. It sends e-mails only if the operator sets up an
+e-mail provider ([email.md](email.md)), and only about the account: links to confirm the
+address or reset the password, short security notices, the warning before an inactive
+account is deleted; with `BRICKDNN_ADMIN_EMAIL`, reports of server errors (with the
+request's path and username) go to the operator. The provider receives the address, the
+username and the text: name it in the privacy policy and sign a data processing agreement. AI assistants a user connects (MCP,
 OAuth or an API token) fetch data on the user's behalf; their provider is responsible for it.
 The one exception to "nothing from other servers" is Paddle's checkout on a server that sells
 plans, see [Paid plans](#paid-plans-paddle).
@@ -79,12 +87,18 @@ The account page (`/account`, in the account menu) offers, after a website login
 cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
 
 - **Change the e-mail address**, e.g. for accounts from before e-mail addresses were
-  required. It must be unused, like at sign-up.
+  required. It must be unused, like at sign-up. With e-mail set up, the new address gets a
+  link to confirm it and the old one a notice; the account page shows whether the address is
+  confirmed and sends the link again.
+- **Turn two-factor authentication on or off** (authenticator app, recovery codes; see
+  [email.md](email.md#two-factor-authentication)).
 - **Change the password** (with the current one). All other logins end (their refresh tokens
   are blacklisted; their access tokens expire within 30 minutes); this one goes on.
-- **Download my data:** a ZIP file with `README.txt` and JSON files for the account, own
+- **Download my data:** a ZIP file with `README.txt` and JSON files for the account (with
+  when the address was confirmed and whether two-factor authentication is on, never its
+  secret), own
   networks with their history, memberships, own comments, API tokens (no secrets), connected
-  apps, the agent activity log, data sources, preparations, datasets, training runs
+  apps, the agent activity log, approval rules and requests, data sources, preparations, datasets, training runs
   (settings, metrics; not the weights), the usage records with the plan and budgets
   (`usage.json`) and, for accounts that bought a plan, `billing.json` (below), plus the
   uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
@@ -94,7 +108,7 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
   are stopped, then everything the account owns is deleted, files included: its networks
   (members lose access, people editing them live see that the network is gone), data
   sources, preparations, datasets, training runs, API tokens, connected apps, the agent
-  activity log, usage records, memberships and its comments. Comments are deleted, not anonymised: a comment's text can itself be
+  activity log, usage records, two-factor authentication, memberships and its comments. Comments are deleted, not anonymised: a comment's text can itself be
   personal data. Replies of others to a thread the user started go with the thread, as when
   the user deletes the thread. Networks of others the user worked on stay; their history
   keeps the versions without saying who saved them. All refresh tokens are blacklisted.
@@ -117,9 +131,16 @@ someone logs in, a login is refreshed (the app does so at least every half hour 
 used), or one
 of its API tokens or connected apps is used. Staff accounts are never deleted automatically,
 and nothing an active training uses is. Times are tracked from the update that added them:
-existing data and accounts count as used at the time of the migration. No one is warned by
-e-mail (the app sends none): name the periods in your privacy policy and terms of use; the
-upload dialogs and the account page mention them, too.
+existing data and accounts count as used at the time of the migration. Name the periods in
+your privacy policy and terms of use; the upload dialogs and the account page mention them,
+too.
+
+**Warnings before an account is deleted.** With [e-mail set up](email.md), owners of inactive
+accounts are warned `BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS` (14 and 3) days before, with
+a link to log in, and an account with an address is only deleted once a warning went out
+at least 3 days before: nobody is deleted without notice (accounts that are overdue when
+e-mail is switched on are warned first). Without e-mail, or without an address, nobody is
+warned.
 
 Docker Compose runs a small `cleanup` service (the backend image, sleeping in between) that
 calls `python manage.py purge_old_data` ten minutes after it starts and then once a day. It
@@ -134,7 +155,8 @@ Expired logins (refresh tokens, unused OAuth codes) and expired admin sessions a
 on every run, whatever the settings. So are entries of the **agent activity log** older than
 `BRICKDNN_AGENT_LOG_DAYS` (default 90; it is on by default, as users see it on the page *Agent
 activity*; `0` turns the log off and the next run deletes it) and the oldest entries of an
-account beyond 20,000. `--agent-log-days N` overrides the setting once.
+account beyond 20,000. `--agent-log-days N` overrides the setting once. Approval requests of
+agents are deleted after 90 days (not while they wait).
 
 ## Logs and security headers
 
@@ -194,8 +216,11 @@ part on paid plans; see the checklist in [billing.md](billing.md#privacy-and-leg
 - Sign the data processing agreements (AV-Vertrag, Art. 28 GDPR) with Hetzner (in the Hetzner
   console) and, if you use it, Supabase (their DPA); check where Supabase keeps the data and
   on what basis it may leave the EU.
+- With e-mail: sign the data processing agreement of the e-mail provider and name it in the
+  privacy policy (the templates have a placeholder), see [email.md](email.md).
 - Decide on the deletion periods (or none) and state them in the texts. Mention backups
-  (Hetzner backups keep seven, Supabase its own) and how long they keep deleted data.
+  (Hetzner backups keep seven, Supabase its own, `manage.py backup` up to 7 daily and 4 weekly
+  ones: deleted data stays in them for up to five weeks) and how long they keep deleted data.
 - Keep a short record of processing activities (Art. 30) and of the technical and
   organisational measures; this page is a starting point.
 - Have a plan for data breaches: report to the supervisory authority within 72 hours

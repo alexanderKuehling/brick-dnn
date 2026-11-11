@@ -97,6 +97,16 @@
   }
 
   /* New entries slide in and glow briefly. */
+  &[data-pending]::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    content: '';
+    background: var(--mantine-color-yellow-filled);
+  }
+
   &[data-fresh] {
     animation:
       slide-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1),

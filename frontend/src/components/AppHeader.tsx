@@ -25,11 +25,13 @@ import {
   Box,
   Button,
   Group,
+  Indicator,
   Menu,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
 import { api, type LegalPageName } from '@/api';
+import { usePendingApprovals } from '@/approvals/pending';
 import { useAuth } from '@/auth/AuthContext';
 import { useBillingInfo } from '@/billing/useBillingInfo';
 import { relativeTime } from '@/collab/time';
@@ -56,6 +58,8 @@ export function AppHeader() {
   const pricing = Boolean(useBillingInfo());
   const navVariant = (path: string) =>
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
+  // Requests of agents that wait for the user's approval (a badge on the account menu).
+  const pending = usePendingApprovals(Boolean(user) && !DEMO);
   // When an agent last did something: asked for when the account menu opens.
   const [latestActivity, setLatestActivity] = useState<string | null>(null);
   const checkActivity = () => {
@@ -192,12 +196,25 @@ export function AppHeader() {
               <Button
                 variant="default"
                 leftSection={
-                  <Avatar size={22} color="brick" radius="xl">
-                    {user.username.slice(0, 1).toUpperCase()}
-                  </Avatar>
+                  <Indicator
+                    label={pending}
+                    size={16}
+                    color="yellow"
+                    disabled={pending === 0}
+                    offset={2}
+                    data-testid="approvals-indicator"
+                  >
+                    <Avatar size={22} color="brick" radius="xl">
+                      {user.username.slice(0, 1).toUpperCase()}
+                    </Avatar>
+                  </Indicator>
                 }
                 rightSection={<IconChevronDown size={14} />}
-                aria-label={user.username}
+                aria-label={
+                  pending > 0
+                    ? `${user.username}, ${pending} waiting for your approval`
+                    : user.username
+                }
               >
                 {/* Phones show only the avatar. */}
                 <Box component="span" visibleFrom="xs">
@@ -220,7 +237,15 @@ export function AppHeader() {
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconActivity size={16} />}
-                rightSection={<RecentActivity at={latestActivity} />}
+                rightSection={
+                  pending > 0 ? (
+                    <Badge size="sm" color="yellow" variant="filled">
+                      {pending} waiting
+                    </Badge>
+                  ) : (
+                    <RecentActivity at={latestActivity} />
+                  )
+                }
                 onClick={() => navigate('/activity')}
               >
                 Agent activity

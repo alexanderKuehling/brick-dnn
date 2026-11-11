@@ -158,12 +158,63 @@ export interface Tokens {
   refresh: string;
 }
 
+/** The answer of the password login when the account has two-factor authentication on. */
+export interface TwoFactorChallenge {
+  two_factor_required: true;
+  /** Signed, valid for `expires_in` seconds: send it with the code. */
+  challenge: string;
+  expires_in: number;
+}
+
+export type LoginResult = Tokens | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(result: LoginResult): result is TwoFactorChallenge {
+  return (result as TwoFactorChallenge).two_factor_required === true;
+}
+
+export interface TwoFactorState {
+  enabled: boolean;
+  enabled_at: string | null;
+  recovery_codes_left: number;
+}
+
+/** The start of the setup: shown once, never again. */
+export interface TwoFactorSetup {
+  secret: string;
+  /** For the QR code. */
+  otpauth_uri: string;
+}
+
+/** Two-factor authentication is on: the recovery codes (shown once) and new tokens. */
+export interface TwoFactorEnabled extends Tokens {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface RecoveryCodes {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface PasswordResetLink {
+  valid: boolean;
+  username: string | null;
+}
+
 // --------------------------------------------------------------------------
 // The own account and the legal pages
 // --------------------------------------------------------------------------
 
 /** The logged-in user's account (page /account) and how much the server stores for it. */
 export interface Account extends User {
+  /** The address was confirmed with a link sent to it (and has not changed since). */
+  email_verified: boolean;
+  email_verified_at: string | null;
+  /** Whether the server sends e-mail at all. */
+  email_sending: boolean;
+  /** Whether a forgotten password could be reset by e-mail (needs a confirmed address). */
+  password_reset_available: boolean;
+  two_factor: TwoFactorState;
   last_login: string | null;
   last_active_at: string | null;
   /** When the terms of use were accepted at sign-up; null if the server had none then. */
@@ -466,7 +517,8 @@ export interface AgentAction {
   method: string;
   /** Changes something rather than only reading. */
   writes: boolean;
-  outcome: 'ok' | 'error';
+  /** pending: waited for the user's approval; approved: approved and done; denied. */
+  outcome: AgentOutcome;
   /** What the agent was told went wrong ("" when it worked). */
   error: string;
   /** REST requests: the HTTP status. */
@@ -478,12 +530,16 @@ export interface AgentAction {
   targets: AgentTarget[];
   /** The network it was about, if any. */
   project: number | null;
+  /** The approval request it belongs to, if any. Missing on older servers. */
+  approval?: number | null;
 }
+
+export type AgentOutcome = 'ok' | 'error' | 'pending' | 'approved' | 'denied';
 
 export interface AgentActivityQuery {
   agent?: AgentKey;
   tool?: string;
-  outcome?: 'ok' | 'error';
+  outcome?: AgentOutcome;
   project?: number;
   /** Older entries than this id (the next page). */
   before?: number;
@@ -501,6 +557,88 @@ export interface AgentActivityPage {
   latest_id: number;
   /** How long entries are kept; 0: this server keeps no log. */
   retention_days: number;
+  /** Requests waiting for the user's approval, with every poll. Missing on older servers. */
+  approvals?: PendingApprovals;
+}
+
+// --------------------------------------------------------------------------
+// Approvals: actions of agents that wait for the user's OK
+// --------------------------------------------------------------------------
+
+/** What a token or app may do without asking. */
+export interface ApprovalRule {
+  /** Trainings estimated above this many CPU minutes ask (0: every one; null: none). */
+  training_cpu_minutes: number | null;
+  /** Sharing in projects and links that work without logging in ask. */
+  publishing: boolean;
+  /** Deleting networks, runs, datasets and data asks. */
+  deleting: boolean;
+}
+
+export interface ApprovalRules {
+  /** What new tokens and apps get. */
+  default: ApprovalRule;
+  builtin_default: ApprovalRule;
+  /** By "token:<id>" and "app:<id>". */
+  agents: Partial<Record<AgentKey, ApprovalRule>>;
+  gated_tools: Record<ApprovalCategory, string[]>;
+  expiry_hours: number;
+}
+
+export type ApprovalCategory = 'training' | 'publishing' | 'deleting';
+export type ApprovalStatus = 'pending' | 'approved' | 'executed' | 'failed' | 'denied' | 'expired';
+
+export interface ApprovalEstimate {
+  cpu_minutes: number | null;
+  low_cpu_minutes: number | null;
+  high_cpu_minutes: number | null;
+  cost: number | null;
+  currency: string | null;
+}
+
+export interface ApprovalRequest {
+  id: number;
+  status: ApprovalStatus;
+  category: ApprovalCategory;
+  /** The tool the agent called, and what the server does once approved. */
+  tool: string;
+  action: string;
+  agent: AgentRef & { active: boolean };
+  /** 'Start training “GP 1” on dataset “houses.csv” (#3)'. */
+  summary: string;
+  /** Why it needs approval. */
+  reason: string;
+  estimate: ApprovalEstimate | null;
+  limit_cpu_minutes: number | null;
+  /** Trainings: the network ("5 layers (…), 4 connections") and the data. */
+  network: string | null;
+  dataset: string | null;
+  /** Publishing: what would become visible, and to whom. */
+  exposes: string | null;
+  warning: string | null;
+  targets: AgentTarget[];
+  arguments: Record<string, AgentArgument>;
+  created_at: string;
+  expires_at: string;
+  decided_at: string | null;
+  finished_at: string | null;
+  /** The user's message with a denial. */
+  message: string;
+  /** Why it failed once approved. */
+  error: string;
+  /** What was done once approved. */
+  done: string | null;
+}
+
+export interface PendingApprovals {
+  pending_count: number;
+  /** Newest first. */
+  pending: ApprovalRequest[];
+}
+
+export interface ApprovalList {
+  results: ApprovalRequest[];
+  pending_count: number;
 }
 
 /** A token or app that acted, for filters and the API tokens page. */
@@ -1374,6 +1512,29 @@ export interface ClassicalRunState {
   support_vectors: number | null;
   /** The metrics on the training rows. */
   train: ClassicalMetrics | null;
+  /** Gaussian processes: kernel hyperparameters the fit left at a bound (older servers: none). */
+  at_bounds?: KernelBound[] | null;
+}
+
+/** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */
+export interface KernelBound {
+  /** The kernel brick (null: the default kernel of a Gaussian process without kernel bricks). */
+  node: string | null;
+  /** Its name in the network, e.g. "white_1". */
+  name: string;
+  type: string;
+  /** E.g. "noise_level", with its label "Noise level". */
+  parameter: string;
+  label: string;
+  value: number;
+  bound: number;
+  side: 'lower' | 'upper';
+  /** Classifiers with one kernel per class: the classes whose kernel hit the bound. */
+  classes: string[] | null;
+  /** New parameters for the brick: custom bounds that move this bound. */
+  suggestion: Params | null;
+  /** "Noise level of white_1 ended at its lower bound 1e-05: the model may be overfitting; …" */
+  message: string;
 }
 
 export interface RunDetail extends RunSummary {
@@ -1887,7 +2048,63 @@ export interface DataProfile {
   correlations: CorrelationMatrix[];
   target: TargetProfile | null;
   warnings: DataWarning[];
+  /** How the number columns relate (null where not computed, e.g. the "before" profile). */
+  relations?: ColumnRelations | null;
 }
+
+// --- Column relations (backend/brickdnn/data/relations.py) -------------------------------
+
+/**
+ * Every number/yes-no feature's strongest partner: the other feature it correlates with most
+ * (Spearman ρ), on the training rows (a seeded sample on large tables). Indices refer to
+ * `columns`.
+ */
+export interface ColumnRelations {
+  method: 'spearman' | 'pearson';
+  /** The analysed features (number and yes/no columns but the target, not constant). */
+  columns: string[];
+  /** Number features that could not be analysed (constant on these rows). */
+  skipped: string[];
+  /** Number features in the table (with `sampled_columns`, more than were analysed). */
+  total: number;
+  /** Rows used, and the rows they were drawn from. */
+  rows: number;
+  pool_rows: number;
+  /** The rows are training rows (false before the split is assigned). */
+  training_rows: boolean;
+  sampled_columns: boolean;
+  /** Index of each column's strongest partner (null: none). */
+  best: (number | null)[];
+  /** Signed Spearman ρ with it, and Pearson r with the same partner. */
+  best_rho: (number | null)[];
+  best_r: (number | null)[];
+  /** Partners with |ρ| ≥ partner_level. */
+  partners: number[];
+  partner_level: number;
+  /** Up to 5 partners per column (indices), strongest first, and their ρ. */
+  top: number[][];
+  top_rho: number[][];
+  /** Histogram of the strongest-partner |ρ| (bins of 0.02 from 0 to 1). */
+  histogram: { edges: number[]; counts: number[] };
+  /** Default threshold of "no strong partner". */
+  weak_level: number;
+  /** Threshold suggested for these rows: weak_level, more where chance correlations are large. */
+  suggested_level: number;
+  /** Strongest |ρ| an unrelated column reaches by chance: median, and 99.9 % stay below. */
+  chance: number | null;
+  chance_high: number | null;
+  /** Clustered order of the columns (related ones together); null for very wide tables. */
+  order: number[] | null;
+  /** Group of related columns per column (0 = largest), -1 for none. */
+  groups: number[] | null;
+  /**
+   * The whole matrix in the clustered order, in blocks: `starts` index into `order`;
+   * `values[a][b]` is the mean |ρ| of the columns of block a with those of block b.
+   */
+  overview: { starts: number[]; values: (number | null)[][] } | null;
+}
+
+// --- end of column relations ---------------------------------------------------------------
 
 export interface DataSample {
   /** Rows of the whole table. */

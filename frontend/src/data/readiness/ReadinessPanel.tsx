@@ -87,6 +87,7 @@ const CHECK_LABELS: Record<string, string> = {
   constant: 'Constant',
   near_constant: 'Near-constant',
   redundant: 'Redundant',
+  no_partner: 'No strong partner',
   skewed: 'Skewed',
   skewed_target: 'Skewed target',
   scales: 'Scales',

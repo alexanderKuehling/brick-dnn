@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Analysis, LayerSpec } from '@/api/types';
+import type { Analysis, LayerSpec, Params } from '@/api/types';
 import type { PresenceStore } from '@/live/presence';
 import type { LayerNodeData } from './graph';
 
@@ -23,6 +23,11 @@ export interface BuilderContextValue {
   /** View only: settings are shown but cannot be changed. */
   readOnly: boolean;
   updateNode: (id: string, patch: Partial<LayerNodeData>) => void;
+  /**
+   * Changes some parameters of a brick on the canvas (e.g. from a training run's hint) and
+   * returns its parameters before, for undoing it; null if there is no such brick.
+   */
+  patchParams?: (id: string, type: string, patch: Params) => Params | null;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
   focusNode: (id: string) => void;
@@ -30,6 +35,8 @@ export interface BuilderContextValue {
   presence?: PresenceStore | null;
   /** The selected Input layer and the training data, if a dataset is chosen. */
   inputFit?: InputFit | null;
+  /** The connections (for the receptive fields in the inspector). */
+  links?: { source: string; target: string }[];
 }
 
 export const BuilderContext = createContext<BuilderContextValue | null>(null);

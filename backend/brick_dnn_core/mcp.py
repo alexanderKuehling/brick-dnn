@@ -37,7 +37,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
-from . import budgets, downloads, history, raw_predictions
+from . import approvals, budgets, downloads, history, raw_predictions
 from . import data_service as data
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
@@ -132,7 +132,13 @@ the budget runs out. Only the user can raise budgets, in the web app.
 
 A server may queue trainings: start_training then returns the run as queued, with its
 position and a rough estimate of the wait (queue), and it trains when a worker is free.
-get_training_run shows where it stands; stop_training cancels it while it waits."""
+get_training_run shows where it stands; stop_training cancels it while it waits.
+
+The user may want to approve some actions first: trainings above a number of CPU minutes,
+sharing in projects and links that work without logging in (get_weights_download), or
+deleting. Such a call does nothing yet and answers with approval_required and the id of
+an approval request; the user decides in the web app, and once approved the server does it
+and get_approval returns the result. Do not repeat the call: check it with get_approval."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -1113,6 +1119,28 @@ def delete_dataset(request: Request, args: dict[str, Any]) -> Any:
     return deleted
 
 
+def get_approval(request: Request, args: dict[str, Any]) -> Any:
+    answer = approvals.get_for_agent(request, args.get("id"))
+    if answer is None:
+        raise ToolError(
+            "No such approval request of this token or app. list_approvals shows its requests."
+        )
+    return answer
+
+
+APPROVAL_STATUSES = ("pending", "approved", "executed", "failed", "denied", "expired")
+
+
+def list_approvals(request: Request, args: dict[str, Any]) -> Any:
+    wanted = args.get("status")
+    if wanted is not None and wanted not in APPROVAL_STATUSES:
+        raise ToolError(f"'status' must be one of {', '.join(APPROVAL_STATUSES)}.")
+    limit = args.get("limit", 20)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ToolError("'limit' must be a whole number from 1 to 100.")
+    return approvals.list_for_agent(request, wanted, limit)
+
+
 TOOLS: dict[str, Tool] = {
     tool.name: tool
     for tool in [
@@ -1906,9 +1934,34 @@ TOOLS: dict[str, Tool] = {
             writes=True,
             destructive=True,
         ),
+        Tool(
+            "get_approval",
+            "Check an approval request",
+            "The state of a request that waits for the user's approval (a tool answered with "
+            "approval_required and its id): pending, approved (being done), executed (done: "
+            "result is what the tool returned, e.g. the training run), failed (error), denied "
+            "(message: the user's reason) or expired. The user decides in the web app; ask "
+            "again later instead of repeating the original call.",
+            get_approval,
+            {"id": {"type": "integer", "description": "The id of the approval request"}},
+            ("id",),
+        ),
+        Tool(
+            "list_approvals",
+            "List approval requests",
+            "The approval requests of this token or app, newest first (status filters them). "
+            "Which actions need the user's approval is set per token and app by the user.",
+            list_approvals,
+            {
+                "status": {"type": "string", "enum": list(APPROVAL_STATUSES)},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            },
+        ),
     ]
 }
 
+# explain_prediction and get_layer_activations (they add themselves to TOOLS).
+from . import mcp_explain  # noqa: E402, F401
 
 # --------------------------------------------------------------------------- #
 # JSON-RPC
@@ -1967,10 +2020,33 @@ def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
         record_tool_call(request, name, args, started=started, error=message)
         raise McpError(-32602, message)
 
-    result, error = _run_tool(tool, request, args)
+    # Calls that need the user's approval wait instead (approvals.py).
+    try:
+        held = approvals.hold(request, tool, args, lambda given: _run_tool(tool, request, given))
+    except Exception:
+        logger.exception("Could not check whether MCP tool %s needs approval", tool.name)
+        held = approvals.Held(None, "Internal error in the Brick DNN server.")
+    if held is None:
+        result, error = _run_tool(tool, request, args)
+        logged: dict[str, Any] = {}
+    else:
+        result, error = held.result, held.error
+        logged = {
+            "outcome": held.outcome,
+            "approval": held.approval,
+            "summary": held.summary,
+            "targets": held.targets,
+        }
     # The activity log (agent_activity.py); written after the response.
     record_tool_call(
-        request, tool.name, args, started=started, result=result, error=error, writes=tool.writes
+        request,
+        tool.name,
+        held.arguments if held is not None and held.arguments is not None else args,
+        started=started,
+        result=result,
+        error=error,
+        writes=tool.writes,
+        **logged,
     )
     if error is not None:
         return {"content": [{"type": "text", "text": error}], "isError": True}

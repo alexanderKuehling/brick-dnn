@@ -165,6 +165,7 @@ export function MissingView({
 
       <WarningList
         warnings={profile.warnings.filter((w) => w.code === 'high_missing')}
+        profile={profile}
         resetKey={profile}
         onAddStep={onAddStep}
         onShowColumn={onShowColumn}

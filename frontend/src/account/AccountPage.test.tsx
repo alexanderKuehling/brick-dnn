@@ -19,6 +19,7 @@ vi.mock('@/api', async (importOriginal) => {
       account: {
         get: vi.fn(),
         changeEmail: vi.fn(),
+        resendVerification: vi.fn(),
         changePassword: vi.fn(),
         exportData: vi.fn(),
         remove: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/api', async (importOriginal) => {
         setBudget: vi.fn(),
         setOverage: vi.fn(),
       },
+      twoFactor: { setup: vi.fn(), enable: vi.fn(), disable: vi.fn(), recoveryCodes: vi.fn() },
     },
   };
 });
@@ -36,6 +38,11 @@ const ACCOUNT: Account = {
   id: 1,
   username: 'ada',
   email: 'ada@example.com',
+  email_verified: true,
+  email_verified_at: '2026-01-02T10:05:00Z',
+  email_sending: true,
+  password_reset_available: true,
+  two_factor: { enabled: false, enabled_at: null, recovery_codes_left: 0 },
   date_joined: '2026-01-02T10:00:00Z',
   last_login: '2026-11-08T10:00:00Z',
   last_active_at: '2026-11-08T10:00:00Z',
@@ -212,6 +219,60 @@ test('asks accounts without an e-mail address for one', async () => {
   vi.mocked(api.account.get).mockResolvedValue({ ...ACCOUNT, email: '' });
   renderPage();
   expect(await screen.findByText(/Your account has no e-mail address yet/)).toBeInTheDocument();
+  expect(screen.getByText(/and you can reset a forgotten password/)).toBeInTheDocument();
+});
+
+test('shows a confirmed address', async () => {
+  renderPage();
+  const profile = await screen.findByRole('region', { name: 'Profile' });
+  expect(within(profile).getByText('Confirmed')).toBeInTheDocument();
+  expect(within(profile).queryByText('Not confirmed yet')).not.toBeInTheDocument();
+});
+
+test('an unconfirmed address can get a new link', async () => {
+  vi.mocked(api.account.get).mockResolvedValue({
+    ...ACCOUNT,
+    email_verified: false,
+    email_verified_at: null,
+    password_reset_available: false,
+  });
+  vi.mocked(api.account.resendVerification).mockResolvedValue({
+    detail: 'We sent a link to ada@example.com.',
+  });
+  renderPage();
+  expect(await screen.findByText('Not confirmed yet')).toBeInTheDocument();
+  expect(screen.getByText(/a forgotten password cannot be reset by e-mail/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Send me a new link' }));
+  await waitFor(() =>
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'We sent a link to ada@example.com.' })
+    )
+  );
+  expect(screen.getByRole('button', { name: 'Send the link again' })).toBeInTheDocument();
+});
+
+test('says nothing about confirming on a server without e-mail', async () => {
+  vi.mocked(api.account.get).mockResolvedValue({
+    ...ACCOUNT,
+    email_verified: false,
+    email_sending: false,
+    password_reset_available: false,
+  });
+  renderPage();
+  await screen.findByRole('region', { name: 'Profile' });
+  expect(screen.queryByText('Not confirmed yet')).not.toBeInTheDocument();
+  expect(screen.queryByText('Confirmed')).not.toBeInTheDocument();
+});
+
+test('has a section for two-factor authentication', async () => {
+  vi.mocked(api.account.get).mockResolvedValue({
+    ...ACCOUNT,
+    two_factor: { enabled: true, enabled_at: '2026-11-01T10:00:00Z', recovery_codes_left: 8 },
+  });
+  renderPage();
+  const section = await screen.findByRole('region', { name: 'Two-factor authentication' });
+  expect(within(section).getByText('On')).toBeInTheDocument();
+  expect(within(section).getByText(/8 recovery codes left/)).toBeInTheDocument();
 });
 
 test('changes the password and keeps the new login', async () => {

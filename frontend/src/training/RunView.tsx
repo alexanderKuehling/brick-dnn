@@ -53,6 +53,7 @@ import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { ExplainButton } from '@/explain/ExplainButton';
 import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
@@ -87,6 +88,7 @@ import {
   weightsSnippet,
 } from './format';
 import { PredictionPanel } from './predict/PredictionPanel';
+import { KernelBoundsHint } from './KernelBounds';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
 import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
@@ -570,6 +572,8 @@ export function RunView({
             Preprocessing (.json)
           </Button>
         )}
+        {/* Explanations of the trained model (src/explain). */}
+        {run.has_weights && !active && <ExplainButton run={run} />}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}
@@ -1034,6 +1038,9 @@ function ClassicalResults({
         </Text>
       )}
 
+      {gaussianProcess && fit?.at_bounds?.length ? (
+        <KernelBoundsHint bounds={fit.at_bounds} />
+      ) : null}
       {gaussianProcess && fit?.kernel && <KernelBlock label="Fitted kernel" code={fit.kernel} />}
       {gaussianProcess && fit?.initial_kernel && (
         <KernelBlock label="Starting kernel" code={fit.initial_kernel} dimmed />

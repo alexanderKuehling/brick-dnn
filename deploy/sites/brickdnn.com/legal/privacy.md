@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-Stand: 9. November 2026
+Stand: 10. November 2026
 
 ## 1. Verantwortlicher
 
@@ -45,6 +45,8 @@ Wenn Sie ein Konto anlegen, speichere ich:
 - ob und wann Sie die Nutzungsbedingungen akzeptiert haben (mit deren Version).
 
 Die E-Mail-Adresse dient dazu, dass andere Sie zu ihren Netzen einladen können; sie wird anderen Nutzern nicht angezeigt. Ihr Benutzername ist für Personen sichtbar, mit denen Sie zusammenarbeiten.
+
+**Zwei-Faktor-Anmeldung.** Wenn Sie sie unter „Account“ einschalten, speichere ich den geheimen Schlüssel für Ihre Authenticator-App (verschlüsselt), wann Sie sie eingerichtet haben, welcher Code zuletzt verwendet wurde (damit jeder Code nur einmal gilt) und Ihre Wiederherstellungscodes (nur als Hash). Die Codes erzeugt die App auf Ihrem Gerät selbst; dabei werden keine Daten an mich übertragen. Die Angaben werden gelöscht, wenn Sie die Zwei-Faktor-Anmeldung ausschalten oder das Konto löschen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
 
 Zweck: Bereitstellung des Kontos und der Funktionen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
 
@@ -103,14 +105,14 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 
 ## 11. Speicherdauer und Löschung
 
-- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen, Nutzungsdaten und die Angaben zu einem Abo (Abschnitt 10) gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
+- **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen, Nutzungsdaten, die Angaben zur Zwei-Faktor-Anmeldung und zu einem Abo (Abschnitt 10) gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
 - **Ungenutzte Uploads und Trainings** (hochgeladene Dateien, aufbereitete Datensätze und abgeschlossene Trainings) werden nach 180 Tagen ohne Nutzung automatisch gelöscht.
 - **Inaktive Konten** werden nach zwei Jahren (730 Tagen) ohne Login und ohne Nutzung mit allen Inhalten automatisch gelöscht. Die App versendet keine E-Mails, eine Erinnerung vorher gibt es daher nicht.
 - **Nutzungsdaten** bleiben gespeichert, solange Ihr Konto besteht, auch wenn ein Training, Token oder eine App gelöscht wird (sie gehören zum Verbrauch des Monats).
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
 - **Protokoll der Agentenaktionen** (Abschnitt 9): nach 90 Tagen.
 - **Server-Logs:** siehe Abschnitt 4.
-- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank bzw. des Servers enthalten sein, bis diese turnusmäßig überschrieben werden (in der Regel nach wenigen Tagen).
+- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank und der Dateien enthalten sein, bis diese turnusmäßig gelöscht werden: die täglichen Sicherungen auf dem Server nach 7 Tagen, die wöchentlichen nach spätestens 5 Wochen; Sicherungen des Hosters bzw. der Datenbank nach dessen Fristen (in der Regel 7 Tage).
 
 ## 12. Ihre Rechte
 

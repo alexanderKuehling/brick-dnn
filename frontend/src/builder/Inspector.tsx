@@ -28,6 +28,7 @@ import {
 } from '@mantine/core';
 import type { Analysis, LayerSpec, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
+import { LayerLearning } from '@/explain/LayerLearning';
 import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
 import { formatOutput, formatShape } from './format';
@@ -114,6 +115,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
     deleteNode,
     duplicateNode,
     inputFit,
+    links,
   } = useBuilder();
   const spec = specs[node.data.type];
   const info = analysis?.nodes[node.id];
@@ -196,6 +198,8 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         />
         <Stat label={params.label} value={params.value} />
       </SimpleGrid>
+      {/* For learners: parameter formula and receptive field (src/explain). */}
+      <LayerLearning nodeId={node.id} analysis={analysis} links={links} />
       {kernelCode && (kernel || gaussianProcess) && (
         <Stack gap={4}>
           <Text size="xs" c="dimmed">

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@test-utils';
 import type { ColumnProfile, DataProfile, DataSample } from '@/api/types';
-import { PROFILE, SAMPLE } from '@/data/fixtures';
+import { PROFILE, RELATIONS, SAMPLE } from '@/data/fixtures';
 import { AnalysisPanel, type AnalysisPanelProps } from './AnalysisPanel';
 
 beforeAll(() => {
@@ -177,14 +177,28 @@ describe('AnalysisPanel', () => {
 
   it('shows correlations; a pair opens the scatter plot', () => {
     setup({ view: undefined });
-    openView('Correlations');
+    openView('Relationships');
+    expect(screen.getByText('Spearman correlation')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Pearson' }));
     expect(screen.getByText('Pearson correlation')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: 'Spearman' }));
-    expect(screen.getByText('Spearman correlation')).toBeInTheDocument();
-    const pair = screen.getByRole('button', { name: /age and income: Spearman ρ 0\.51/ });
+    const pair = screen.getByRole('button', {
+      name: /(age and income|income and age): Spearman ρ 0\.51/,
+    });
     fireEvent.click(pair);
-    expect(screen.getByText('income vs age')).toBeInTheDocument();
+    expect(screen.getByText(/^(income vs age|age vs income)$/)).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Scatter' })).toBeChecked();
+  });
+
+  it('explores the relationships of the columns and acts on them', () => {
+    const { onAddStep } = setup({ profile: { ...PROFILE, relations: RELATIONS } });
+    openView('Relationships');
+    expect(screen.getByText('Strongest partner of each column')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Drop the 2 without a partner' }));
+    expect(onAddStep).toHaveBeenCalledWith({
+      type: 'feature_selection',
+      params: { method: 'no_partner', min_partner: 0.15, partner_method: 'spearman' },
+    });
   });
 
   it('plots two columns of the sample against each other', () => {
@@ -202,6 +216,29 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('2.7 : 1')).toBeInTheDocument();
     expect(screen.getByText('Class mix per split')).toBeInTheDocument();
     expect(screen.getByText('Features by association with the target')).toBeInTheDocument();
+  });
+
+  it('drops the features weakly associated with the target', () => {
+    const { onAddStep } = setup({ view: 'target' });
+    expect(
+      screen.getByText(/1 of \d+ features are below 0\.05: customer_id\./)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a step: drop below this' }));
+    expect(onAddStep).toHaveBeenLastCalledWith({
+      type: 'feature_selection',
+      params: { method: 'target_correlation', min_association: 0.05 },
+    });
+    expect(screen.getByRole('button', { name: 'Step added' })).toBeDisabled();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Drop below association' }), {
+      target: { value: '0.1' },
+    });
+    expect(screen.getByText(/2 of \d+ features are below 0\.10/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Drop these 2 columns' }));
+    expect(onAddStep).toHaveBeenLastCalledWith({
+      type: 'drop_columns',
+      params: { columns: ['city', 'customer_id'] },
+    });
   });
 
   it('splits by a yes/no target into its two classes', () => {
