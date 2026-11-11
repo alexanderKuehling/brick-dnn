@@ -616,3 +616,20 @@ def test_no_outlier_warning_once_a_column_is_clipped():
     assert stats["iqr_outliers"] > 0.01 * len(clipped)  # still "outliers" by the IQR rule
     assert stats["at_min"] == stats["at_max"] == 50
     assert not [w for w in after["warnings"] if w["code"] == "outliers"]
+
+
+def test_skew_fix_only_when_the_transform_helps():
+    """A count that is mostly 0 (here 90 %) stays skewed after log(1 + x): it is not offered
+    (it was added again and again); a lognormal column gets it."""
+    rng = np.random.default_rng(1)
+    n = 5000
+    retries = np.where(rng.random(n) < 0.9, 0, rng.poisson(1.5, n) + 1).astype(float)
+    amount = rng.lognormal(mean=3.0, sigma=1.2, size=n)
+    profile = profile_table(Table.from_frame(pd.DataFrame({"retries": retries, "amount": amount})))
+    assert warning(profile, "skewed", "amount")["fix"]["params"]["function"] == "log1p"
+    skewed = warning(profile, "skewed", "retries")
+    assert skewed["fix"] is None and skewed["severity"] == "info"
+    assert "would hardly change that" in skewed["message"]
+
+    logged = profile_table(Table.from_frame(pd.DataFrame({"amount": np.log1p(amount)})))
+    assert not [w for w in logged["warnings"] if w["code"] == "skewed"]

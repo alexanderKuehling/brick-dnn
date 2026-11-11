@@ -273,6 +273,35 @@ def _short(text: str) -> str:
     return text if len(text) <= MAX_VALUE_LENGTH else text[: MAX_VALUE_LENGTH - 1] + "…"
 
 
+# Values the skewness after the suggested transform is estimated on (seeded sample).
+TRANSFORM_SAMPLE = 20_000
+# The transform is suggested only if it brings the skewness below SKEWNESS or by a quarter.
+TRANSFORM_GAIN = 0.75
+
+
+def _skew_after_transform(x: np.ndarray, log: bool) -> float | None:
+    """The skewness after the transform the warning would suggest (log1p for values ≥ 0,
+    else Yeo-Johnson with its fitted λ). Columns with many equal values (counts that are
+    mostly 0, say) stay skewed whatever the transform; then it is not suggested again and
+    again."""
+    from brickdnn.data.steps.transform import fit_lambda, yeo_johnson
+
+    values = x
+    if len(values) > TRANSFORM_SAMPLE:
+        rng = np.random.default_rng(0)
+        values = values[rng.choice(len(values), TRANSFORM_SAMPLE, replace=False)]
+    series = pd.Series(values.astype(float))
+    try:
+        if log:
+            done = np.log1p(series)
+        else:
+            done = yeo_johnson(series, fit_lambda(series.to_numpy(), "yeo_johnson"))
+        skew = float(done.skew())
+    except (ValueError, FloatingPointError, OverflowError):
+        return None
+    return skew if math.isfinite(skew) else None
+
+
 def _numeric_stats(x: np.ndarray, *, dates: bool = False) -> dict[str, Any]:
     """``NumericStats`` of the non-missing values ``x`` (at least one)."""
     count = len(x)
@@ -295,6 +324,8 @@ def _numeric_stats(x: np.ndarray, *, dates: bool = False) -> dict[str, Any]:
         series = pd.Series(x)
         stats["skew"] = float(series.skew())
         stats["kurtosis"] = float(series.kurt()) if count >= 4 else None
+        if not dates and abs(stats["skew"]) > SKEWNESS:
+            stats["skew_transformed"] = _skew_after_transform(x, stats["min"] >= 0)
     q25, q75 = stats["q25"], stats["q75"]
     iqr = q75 - q25
     stats["iqr_outliers"] = int(((x < q25 - 1.5 * iqr) | (x > q75 + 1.5 * iqr)).sum())
@@ -714,17 +745,33 @@ def _column_warnings(
         skew = stats["skew"]
         if skew is not None and abs(skew) > SKEWNESS:
             log = stats["min"] >= 0
-            warnings.append(
-                _warning(
-                    "skewed",
-                    "warning",
-                    name,
-                    f"{name} is strongly skewed (skewness {skew:.1f}).",
-                    "transform",
-                    {"columns": [name], "function": "log1p" if log else "yeo_johnson"},
-                    f"Log-transform {name} (log1p)" if log else f"Yeo-Johnson transform {name}",
+            after = stats.get("skew_transformed")
+            helps = after is None or abs(after) <= max(SKEWNESS, TRANSFORM_GAIN * abs(skew))
+            if helps:
+                warnings.append(
+                    _warning(
+                        "skewed",
+                        "warning",
+                        name,
+                        f"{name} is strongly skewed (skewness {skew:.1f}).",
+                        "transform",
+                        {"columns": [name], "function": "log1p" if log else "yeo_johnson"},
+                        f"Log-transform {name} (log1p)" if log else f"Yeo-Johnson transform {name}",
+                    )
                 )
-            )
+            else:
+                transform = "log(1 + x)" if log else "a Yeo-Johnson transform"
+                warnings.append(
+                    _warning(
+                        "skewed",
+                        "info",
+                        name,
+                        f"{name} is strongly skewed (skewness {skew:.1f}); {transform} would "
+                        f"hardly change that ({after:.1f}), as many of its values are equal. "
+                        "Trees and networks cope; a yes/no column (value > 0) or bins can "
+                        "describe such a column better.",
+                    )
+                )
         iqr = stats["q75"] - stats["q25"]
         outliers = stats["iqr_outliers"]
         # A column clipped to its 1st–99th percentile can still have values outside 1.5 × IQR
