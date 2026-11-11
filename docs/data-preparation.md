@@ -116,7 +116,7 @@ Right after combining tables, every row is assigned to the **training**, **valid
 | **Encode categories** | One-hot, ordinal, frequency or target encoding · Group rare categories |
 | **Dates & times** | Date parts (year, quarter, month, weekday, hour …), optionally cyclical (sin/cos) |
 | **Target & balance** | Balance classes (oversample or undersample the training rows) |
-| **Feature selection** | Drop near-constant, highly correlated, mostly missing or uninformative columns |
+| **Feature selection** | Drop near-constant, highly correlated, mostly missing or uninformative columns, or number columns with *no strong partner* (they correlate with no other feature: often noise) |
 
 Steps that combine tables always come first. A step that fails shows its error and stops the
 pipeline there; the preview shows the data before it.
@@ -132,18 +132,62 @@ charts that show single rows from a random sample, which is always labelled):
 
 - **Overview**: rows, columns, missing cells, duplicate rows, the split, column types, and
   warnings with suggested fixes (ID-like columns, constant columns, strong skew, outliers,
-  high cardinality, imbalanced classes, columns that are almost numeric …).
+  high cardinality, imbalanced classes, columns that are almost numeric …). Warnings of one
+  kind about three or more columns are one entry (“Missing values in 828 columns (6–9 % of
+  the rows)”) that lists its columns when opened, with one fix for all of them.
 - **Columns**: one row per column with type, missing share, distinct values, statistics, a
   small histogram and the association with the target. Click a column for details.
 - **Distribution**: histogram, box plot, quantiles and statistics; split by target; top values
   of categories.
 - **Missing values**: missing share per column and a matrix of where values are missing.
-- **Correlations**: Pearson and Spearman heatmaps and the strongest pairs.
+- **Relationships**: how the number columns relate to each other – see below.
 - **Scatter**: any two columns, coloured by the target or another column, with a trend line.
 - **Target**: class balance or the target distribution, and the columns ranked by their
   association with the target (|r| for numbers, correlation ratio η, Cramér's V for
-  categories).
+  categories). Below the ranking, *Drop below association* picks a threshold and lists the
+  features under it: **Add a step** adds “Select features: little association with the
+  target”, which measures again on the training rows every time; **Drop these columns**
+  drops exactly the listed ones.
 - **Compare**: a column before and after the preparation.
+
+### Relationships between columns
+
+For every number and yes/no feature, the **strongest partner** is the other feature it
+correlates with most (Spearman ρ, the correlation of ranks; computed for all columns on the
+training rows, a random sample of them on large tables). Measurements of one object – pixels,
+sensor channels, scan features, questions about one topic – usually have partners. A column
+related to no other column is often **noise**: added on purpose, broken, or unrelated to the
+rest; a network learns such columns by heart.
+
+- **Strongest partner of each column**: a histogram of every column's largest |ρ|. Drag the
+  line (or type a threshold) and the count of columns without a partner above it updates. The
+  dashed line is the **chance level**: unrelated columns reach about this |ρ| by chance, for
+  the number of rows and columns (with 850 rows and 830 columns about 0.12). Read the
+  histogram like this: a hump near the chance level and another one clearly to the right
+  means two kinds of columns; put the threshold in the gap. One hump means the columns are
+  alike. The suggested threshold is 0.15, or the level that 99.9 % of unrelated columns stay
+  below if that is higher (few rows, many columns).
+- **All columns, related ones together**: the whole correlation matrix (|ρ|) ordered by
+  hierarchical clustering, so that groups of related columns form dark blocks on the
+  diagonal; on wide tables the cells are blocks of columns. A click shows those columns in
+  the heatmap.
+- **Columns and their partners**: one row per column with its strongest partner, ρ, Pearson
+  r with the same partner, the number of partners with |ρ| ≥ 0.3, its group of related
+  columns, the association with the target and the missing share. Sort by ρ to see the
+  columns without a partner first; filter by name, by the threshold, by the number of partners
+  or by group. Tick columns (or *Select all matching* the filter) and add a step: *Drop
+  selected*, or *Keep only selected* (drops the other number columns). A click on a name
+  shows its five strongest partners and a scatter plot with the strongest one.
+- **Heatmap of chosen columns**: Pearson or Spearman for the strongest pairs, the selected
+  or filtered columns of the table, a group or blocks of the overview (up to 60 columns),
+  optionally ordered so that related columns are next to each other. It says how many of the
+  columns it shows and what the values are based on.
+
+*Drop the … without a partner* adds the step *Select features* with the method **No strong
+partner** at the threshold: it learns the columns from the training rows (the same numbers as
+the view), so the choice is reproducible and part of the exported pandas script. In the step
+editor, column lists can also be filled by *Select all matching* a search or by *Paste a
+list* (names separated by commas, spaces or new lines).
 
 ## Readiness and sanity checks
 
@@ -185,6 +229,7 @@ them; duplicates compare all rows (up to a million).
 | Imbalanced classes | More than 3 : 1 | *Balance classes* |
 | Duplicate rows | ≥ 5 % of the rows (fewer: a suggestion) | *Remove duplicates* |
 | Constant features | One value in all rows | *Drop columns* |
+| Features without a strong partner | At least 20 number features, of which ≥ 10 (and ≥ 10 %) correlate with no other feature at the suggested threshold (0.15, or the 99.9 % chance level if higher), ≥ 10 (and ≥ 10 %) have a partner at twice that, and at most 10 % lie in between (a clear gap). Tables with a few independent features stay quiet. The message says whether these columns are related to a numeric target | *Select features*: no strong partner |
 | More than 1,000 features | | – |
 
 **Suggestions** – worth considering:

@@ -1930,7 +1930,63 @@ export interface DataProfile {
   correlations: CorrelationMatrix[];
   target: TargetProfile | null;
   warnings: DataWarning[];
+  /** How the number columns relate (null where not computed, e.g. the "before" profile). */
+  relations?: ColumnRelations | null;
 }
+
+// --- Column relations (backend/brickdnn/data/relations.py) -------------------------------
+
+/**
+ * Every number/yes-no feature's strongest partner: the other feature it correlates with most
+ * (Spearman ρ), on the training rows (a seeded sample on large tables). Indices refer to
+ * `columns`.
+ */
+export interface ColumnRelations {
+  method: 'spearman' | 'pearson';
+  /** The analysed features (number and yes/no columns but the target, not constant). */
+  columns: string[];
+  /** Number features that could not be analysed (constant on these rows). */
+  skipped: string[];
+  /** Number features in the table (with `sampled_columns`, more than were analysed). */
+  total: number;
+  /** Rows used, and the rows they were drawn from. */
+  rows: number;
+  pool_rows: number;
+  /** The rows are training rows (false before the split is assigned). */
+  training_rows: boolean;
+  sampled_columns: boolean;
+  /** Index of each column's strongest partner (null: none). */
+  best: (number | null)[];
+  /** Signed Spearman ρ with it, and Pearson r with the same partner. */
+  best_rho: (number | null)[];
+  best_r: (number | null)[];
+  /** Partners with |ρ| ≥ partner_level. */
+  partners: number[];
+  partner_level: number;
+  /** Up to 5 partners per column (indices), strongest first, and their ρ. */
+  top: number[][];
+  top_rho: number[][];
+  /** Histogram of the strongest-partner |ρ| (bins of 0.02 from 0 to 1). */
+  histogram: { edges: number[]; counts: number[] };
+  /** Default threshold of "no strong partner". */
+  weak_level: number;
+  /** Threshold suggested for these rows: weak_level, more where chance correlations are large. */
+  suggested_level: number;
+  /** Strongest |ρ| an unrelated column reaches by chance: median, and 99.9 % stay below. */
+  chance: number | null;
+  chance_high: number | null;
+  /** Clustered order of the columns (related ones together); null for very wide tables. */
+  order: number[] | null;
+  /** Group of related columns per column (0 = largest), -1 for none. */
+  groups: number[] | null;
+  /**
+   * The whole matrix in the clustered order, in blocks: `starts` index into `order`;
+   * `values[a][b]` is the mean |ρ| of the columns of block a with those of block b.
+   */
+  overview: { starts: number[]; values: (number | null)[][] } | null;
+}
+
+// --- end of column relations ---------------------------------------------------------------
 
 export interface DataSample {
   /** Rows of the whole table. */

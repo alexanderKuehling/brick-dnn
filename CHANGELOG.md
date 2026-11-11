@@ -2,7 +2,28 @@
 
 ## Unreleased
 
+### Added
+- **Data tab: Relationships view for wide tables.** For every number column its strongest
+  partner (Spearman ρ and Pearson r), its number of partners and its group of related columns,
+  computed for all columns on the training rows. A histogram of the strongest |ρ| with a
+  draggable threshold and the chance level, an overview of all columns ordered by
+  hierarchical clustering, a sortable and filterable table with selection (*Drop selected*,
+  *Keep only selected*), the partners of a column with a scatter plot, and a heatmap of chosen
+  columns (strongest pairs, selection, filter, group) with a note how many it shows. Replaces
+  the Correlations view, which showed the 40 most complete columns only.
+- *Select features* method **no strong partner**: drops number features whose strongest
+  correlation with any other feature stays below a threshold (Spearman or Pearson), learned
+  on the training rows; also in the pandas script.
+- Readiness check **features without a strong partner**: many number features unrelated to
+  all others in a table whose other features are clearly related – the signature of noise
+  columns – with the selection step as fix. Ordinary tables stay quiet.
+- Step editor: column lists have *Select all matching* the search, *Paste a list* and *Clear*.
+- MCP: `preview_data_prep` and `get_data_source` add a short `column_relations` summary
+  (counts, a coarse histogram, the weakest columns, how to drop them).
+
 ### Changed
+- Analysis overview: warnings of one kind about many columns are grouped into one entry with
+  one fix for all of them (1,062 warnings of a table with 833 columns become 4 entries).
 - **Logging in with two-factor authentication** answers `{two_factor_required, challenge}`
   instead of tokens for accounts that turned it on; clients of `POST /api/auth/token/` that
   log in such an account need the second step. Accounts without it log in as before.

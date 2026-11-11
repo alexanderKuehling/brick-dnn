@@ -507,6 +507,7 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
     """``PreviewResult`` for a ``PreviewRequest`` (see frontend/src/api/types.ts)."""
     from brickdnn.data.pipeline import readiness
     from brickdnn.data.profile import profile_table, sample_table
+    from brickdnn.data.relations import column_relations
 
     started = time.perf_counter()
     if body is None:
@@ -522,11 +523,19 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
     run = _run(prep, body.get("steps"), body.get("settings"), upto)
     result, prep_settings = run.result, run.settings
     with _user_errors():
+        # How the number columns relate (training rows): for the profile and the readiness.
+        relations = column_relations(result.table, prep_settings.get("target"))
         profile = profile_table(
-            result.table, **_target_args(result.table, prep_settings, result.task)
+            result.table,
+            **_target_args(result.table, prep_settings, result.task),
+            relations=relations,
         )
         before = (
-            profile_table(result.before, **_target_args(result.before, prep_settings, result.task))
+            profile_table(
+                result.before,
+                **_target_args(result.before, prep_settings, result.task),
+                relations=False,
+            )
             if compare
             else None
         )
@@ -535,7 +544,7 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         columns = max(1, len(result.table.columns))
         rows = max(MIN_SAMPLE_ROWS, min(sample_rows, MAX_SAMPLE_CELLS // columns))
         sample = sample_table(result.table, rows, seed=int(prep_settings["split"]["seed"]))
-        ready = readiness(result.table, prep_settings, result.task)
+        ready = readiness(result.table, prep_settings, result.task, relations=relations)
     failed = _failed_step(run)
     if failed:
         # The data shown is the data before that step; it cannot be exported like this.

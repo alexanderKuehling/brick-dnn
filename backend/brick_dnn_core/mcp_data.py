@@ -259,6 +259,14 @@ def source_detail(
                 f"{len(names)} of {len(table.columns):,} columns (the first of this page)."
             )
     detail["preparations"] = [{"id": p["id"], "name": p["name"]} for p in preps]
+    numbers = sum(c.get("kind") in ("numeric", "boolean") for c in columns)
+    if numbers >= 3:
+        from brickdnn.data.relations import column_relations, to_json
+
+        table = data.source_table(source)
+        relations = relations_view(to_json(column_relations(table, cluster=False)))
+        if relations:
+            detail["column_relations"] = relations
     return detail
 
 
@@ -794,6 +802,54 @@ def _column_profile(column: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in view.items() if v is not None}
 
 
+MAX_WEAK_COLUMNS = 15  # columns without a strong partner listed by name
+RELATION_BINS = 10  # bins of the strongest-partner histogram
+
+
+def relations_view(relations: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A short summary of how the number columns relate (``ColumnRelations`` of a profile):
+    counts, a coarse histogram of every column's strongest |ρ| and the weakest columns."""
+    if not relations or len(relations.get("columns") or []) < 3:
+        return None
+    names = relations["columns"]
+    strength = [abs(v) if v is not None else 0.0 for v in relations["best_rho"]]
+    level = relations.get("suggested_level") or relations.get("weak_level") or 0.15
+    strong = relations.get("partner_level") or 0.3
+    bins = [0] * RELATION_BINS
+    for value in strength:
+        bins[min(int(value * RELATION_BINS), RELATION_BINS - 1)] += 1
+    width = 1 / RELATION_BINS
+    weakest = sorted(zip(strength, names, strict=True))[:MAX_WEAK_COLUMNS]
+    weak = sum(value < level for value in strength)
+    view: dict[str, Any] = {
+        "about": (
+            "Strongest partner of every number feature: its largest |Spearman ρ| with any "
+            f"other feature, on {relations['rows']:,} "
+            + ("training rows" if relations.get("training_rows") else "rows")
+            + f". Unrelated columns reach about {relations.get('chance')} by chance; columns "
+            "without a strong partner in a table of related columns are often noise."
+        ),
+        "columns": len(names),
+        "without_partner": {"threshold": level, "columns": weak},
+        "with_partner": {"threshold": strong, "columns": sum(v >= strong for v in strength)},
+        "histogram": {
+            f"{i * width:.1f}–{(i + 1) * width:.1f}": count for i, count in enumerate(bins) if count
+        },
+        "weakest": {name: _number(round(value, 3)) for value, name in weakest},
+    }
+    if relations.get("groups"):
+        view["groups"] = len({g for g in relations["groups"] if g >= 0})
+    if relations.get("sampled_columns"):
+        view["note"] = f"A sample of the {relations['total']:,} number columns."
+    if weak:
+        view["drop_them"] = (
+            'add_steps [{"type": "feature_selection", "params": {"method": "no_partner", '
+            f'"min_partner": {level}}}}}] drops the {weak:,} columns without a strong partner '
+            "(fitted on the training rows)."
+        )
+    return view
+
+
 def _target_view(target: dict[str, Any] | None) -> dict[str, Any] | None:
     if not target:
         return None
@@ -875,6 +931,9 @@ def preview_view(
     target = _target_view(profile.get("target"))
     if target:
         view["target"] = target
+    relations = relations_view(profile.get("relations"))
+    if relations:
+        view["column_relations"] = relations
     if sample_rows > 0:
         view["sample"] = _sample_view(result.get("sample") or {}, sample_rows, chosen, len(names))
     return view

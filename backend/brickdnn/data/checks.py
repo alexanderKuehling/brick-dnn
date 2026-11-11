@@ -29,6 +29,7 @@ import pandas as pd
 
 from .io import _LEADING_ZERO, LEADING_ZERO_SHARE, parse_numbers
 from .profile import _CAMEL_ID, _ID_NAME, HIGH_CARDINALITY, SKEWNESS, _eta
+from .relations import Relations, chance_level, column_relations, noise_columns
 from .steps.columns import (
     NUMBER_PATTERN,
     UNIT_NUMBER,
@@ -101,6 +102,7 @@ PRIORITY = (
     "classes_not_in_split",
     "inconsistent_categories",
     "id_like",
+    "no_partner",
     "few_rows",
     "imbalanced",
     "duplicate_rows",
@@ -911,6 +913,7 @@ def feature_issues(
 ) -> list[dict[str, Any]]:
     """Warnings and notes about the feature columns (all but the target): target leakage,
     ID-like numbers, near-constant, redundant and skewed features, very different scales.
+    (Columns without any strong partner: :func:`relation_issues`.)
 
     ``class_codes`` are the class codes of all rows (classification). Columns in
     ``constant`` are reported elsewhere and skipped.
@@ -1348,3 +1351,93 @@ def row_issues(
         if message:
             issues.append(issue("few_rows", "warning", message))
     return issues
+
+
+# --------------------------------------------------------------------------- #
+# Columns without a strong partner (noise)
+# --------------------------------------------------------------------------- #
+
+
+def relation_issues(
+    table: Table,
+    target: str | None,
+    task: str | None,
+    relations: Relations | None = None,
+) -> list[dict[str, Any]]:
+    """Many number features that correlate with no other feature, in a table whose other
+    features are clearly related (see :func:`brickdnn.data.relations.noise_columns`): they
+    behave like noise. Fix: the *Select features* method "no strong partner" at the same
+    threshold, which drops exactly these columns."""
+    if relations is None:
+        relations = column_relations(table, target, cluster=False)
+    found = noise_columns(relations)
+    if found is None:
+        return []
+    columns = found.columns
+    weak = len(columns)
+    chance = relations.chance(0.5)
+    rows = (
+        f"{plural(relations.rows, 'training row')}"
+        if relations.training_rows
+        else plural(relations.rows, "row")
+    )
+    message = (
+        f"{weak:,} of {found.analysed:,} number features have no strong partner: none of "
+        f"them correlates with any other feature at {found.level:.2f} or more (Spearman ρ, "
+        f"either sign; with "
+        f"{rows}, unrelated columns reach about {chance:.2f} by chance), while "
+        f"{found.strong:,} others have partners at {2 * found.level:.2f} or more. Columns "
+        "unrelated to all others are often noise (added on purpose, or broken sensors); "
+        "a network learns them by heart."
+    )
+    message += _target_note(relations, columns, target, task)
+    message += " Analysis → Relationships shows them."
+    return [
+        issue(
+            "no_partner",
+            "warning",
+            message,
+            columns,
+            step_fix(
+                "feature_selection",
+                {
+                    "method": "no_partner",
+                    "min_partner": found.level,
+                    "partner_method": "spearman",
+                },
+                f"Drop {_columns_text(columns)} without a strong partner"
+                + (
+                    f" (and {plural(len(relations.skipped), 'constant one')})"
+                    if relations.skipped
+                    else ""
+                ),
+            ),
+        )
+    ]
+
+
+def _target_note(
+    relations: Relations, columns: list[str], target: str | None, task: str | None
+) -> str:
+    """Whether the columns without a partner tell something about a number target."""
+    if relations.target_value is None or not target or task != "regression":
+        return ""
+    chosen = set(columns)
+    values = [
+        (abs(v), c)
+        for c, v in zip(relations.columns, relations.target_value, strict=True)
+        if c in chosen and math.isfinite(v)
+    ]
+    if not values:
+        return ""
+    strongest, column = max(values)
+    chance = chance_level(relations.pair_rows, len(values), 0.99) or 0.0
+    if strongest < chance:
+        return (
+            f" Their correlation with the target {target} is at chance level too (at most "
+            f"|ρ| = {strongest:.2f})."
+        )
+    return (
+        f" Check before dropping: {column} correlates with the target {target} "
+        f"(|ρ| = {strongest:.2f}, more than chance)."
+    )
