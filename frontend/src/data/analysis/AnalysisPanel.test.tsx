@@ -31,7 +31,9 @@ const openView = (label: string) => fireEvent.click(screen.getByRole('radio', { 
 describe('AnalysisPanel', () => {
   it('starts with the overview: figures, column types and warnings', () => {
     setup();
-    expect(screen.getByText('Rows').nextSibling).toHaveTextContent('1,200');
+    // ("Rows" is also the name of a view.)
+    const rowsTile = screen.getAllByText('Rows').find((el) => !el.closest('label'));
+    expect(rowsTile?.nextSibling).toHaveTextContent('1,200');
     expect(screen.getByText('840 / 180 / 180')).toBeInTheDocument();
     expect(
       screen.getByRole('img', { name: /Columns per type: Number 3 \(33%\)/ })

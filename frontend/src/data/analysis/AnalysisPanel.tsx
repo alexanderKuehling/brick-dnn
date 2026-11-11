@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, SegmentedControl, Select, Stack } from '@mantine/core';
+import { Box, SegmentedControl, Select, Stack, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import type { DataProfile, DataSample, NewStep } from '@/api/types';
 import { ColumnsView } from './ColumnsView';
@@ -9,6 +9,7 @@ import { DistributionView, type DistributionOptions } from './DistributionView';
 import { MissingView } from './MissingView';
 import { OverviewView } from './OverviewView';
 import { RelationshipsView } from './RelationshipsView';
+import { RowsView, type RowsSource } from './rows/RowsView';
 import { sampleColumn } from './sampleData';
 import { defaultScatterAxes, ScatterView, type ScatterOptions } from './ScatterView';
 import { TargetView } from './TargetView';
@@ -23,7 +24,9 @@ export type AnalysisView =
   | 'relationships'
   | 'scatter'
   | 'target'
-  | 'compare';
+  | 'compare'
+  // Row structure (atypical rows, near twins, groups)
+  | 'rows';
 
 export const ANALYSIS_VIEWS: { value: AnalysisView; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -34,6 +37,8 @@ export const ANALYSIS_VIEWS: { value: AnalysisView; label: string }[] = [
   { value: 'scatter', label: 'Scatter' },
   { value: 'target', label: 'Target' },
   { value: 'compare', label: 'Compare' },
+  // Row structure (atypical rows, near twins, groups)
+  { value: 'rows', label: 'Rows' },
 ];
 
 /** Below this width the view switcher is a select instead of a segmented control. */
@@ -54,6 +59,10 @@ export interface AnalysisPanelProps {
   /** Shown view (controlled, optional). */
   view?: AnalysisView;
   onViewChange?: (view: AnalysisView) => void;
+  /** Loads the row analysis (Rows view); without it the view explains it is unavailable. */
+  rows?: RowsSource;
+  /** Hide actions that change the preparation. */
+  readOnly?: boolean;
 }
 
 /**
@@ -72,6 +81,8 @@ export function AnalysisPanel({
   onColumnChange,
   view: viewProp,
   onViewChange,
+  rows,
+  readOnly = false,
 }: AnalysisPanelProps) {
   const { ref, width } = useElementSize();
   const [ownView, setOwnView] = useState<AnalysisView>('overview');
@@ -231,6 +242,22 @@ export function AnalysisPanel({
             onAddStep={onAddStep}
           />
         )}
+        {view === 'rows' &&
+          (rows ? (
+            <RowsView
+              source={rows}
+              numberColumns={profile.columns
+                .filter((c) => (c.kind === 'numeric' || c.kind === 'boolean') && c.name !== target)
+                .map((c) => c.name)}
+              columns={profile.columns.map((c) => c.name)}
+              onAddStep={onAddStep}
+              readOnly={readOnly}
+            />
+          ) : (
+            <Text size="sm" c="dimmed">
+              The row analysis is not available here.
+            </Text>
+          ))}
         {view === 'compare' && (
           <CompareView
             profile={profile}

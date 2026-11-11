@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, userEvent, within } from '@test-utils';
-import type { ColumnInfo, PipelineStep, PrepSettings, StepReport } from '@/api/types';
+import type { ColumnInfo, PipelineStep, PrepSettings, SplitInfo, StepReport } from '@/api/types';
 import { CATALOG, OTHER_SOURCE, PREP, SOURCE, STEP_REPORTS } from '../fixtures';
 import { reportsById } from '../steps';
 import { PipelineEditor, type PipelineEditorProps } from './PipelineEditor';
@@ -74,6 +74,45 @@ describe('PipelineEditor', () => {
     expect(screen.getByText(/Train 70 % · 840 rows/)).toBeInTheDocument();
     expect(screen.getByText(/Validation 15 % · 180 rows/)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: /Stratify/ })).toBeChecked();
+  });
+
+  it('keeps the rows of a group together and shows how the groups were split', async () => {
+    const info: SplitInfo = {
+      group_by: 'city',
+      columns: SOURCE.columns.map(({ name, kind }) => ({ name, kind })),
+      error: null,
+      groups: { count: 120, multi: 40, largest: 7, missing: 0, per_part: [84, 18, 18], mixed: 0 },
+    };
+    render(
+      <Harness
+        initialSettings={{ ...PREP.settings, split: { ...PREP.settings.split, group_by: 'city' } }}
+        splitInfo={info}
+      />
+    );
+    const field = screen.getByRole('combobox', { name: 'Keep rows of a group together' });
+    expect(field).toHaveValue('city');
+    expect(screen.getByTestId('group-split-summary')).toHaveTextContent(
+      '120 groups (40 with several rows, the largest 7 rows); no group is in two parts. ' +
+        'Training / validation / test hold 84 / 18 / 18 groups.'
+    );
+    await userEvent.click(field);
+    await userEvent.click(screen.getByRole('option', { name: /income/ }));
+    expect(settings.split.group_by).toBe('income');
+  });
+
+  it('says when the group column does not exist at the split', () => {
+    render(
+      <Harness
+        initialSettings={{ ...PREP.settings, split: { ...PREP.settings.split, group_by: 'gone' } }}
+        splitInfo={{
+          group_by: 'gone',
+          columns: [],
+          error: 'There is no column gone.',
+          groups: null,
+        }}
+      />
+    );
+    expect(screen.getByText('There is no column gone.')).toBeInTheDocument();
   });
 
   it('shows every step with its report', () => {

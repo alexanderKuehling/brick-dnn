@@ -191,6 +191,12 @@ SPLIT_SCHEMA: dict[str, Any] = {
         "test": {"type": "number", "minimum": 0, "maximum": 0.9},
         "seed": {"type": "integer", "minimum": 0},
         "stratify": {"type": "boolean"},
+        "group_by": {
+            "type": ["string", "null"],
+            "description": "Keep the rows of a group together: a column (e.g. a person id, or "
+            "the 'group' column of a find_groups step) whose equal values all go to the same "
+            "part. It must exist before the split (source, combine or pre-split steps).",
+        },
     },
 }
 
@@ -717,7 +723,7 @@ def preview_data_prep(request: Request, args: dict[str, Any]) -> Any:
         rows = data_answers.sample_rows_arg(args.get("sample_rows"))
         columns = data_answers.check_columns(args.get("columns"))
         offset = data_answers.offset_arg(args.get("columns_offset"))
-        body: dict[str, Any] = {"sample_rows": max(rows, data.MIN_SAMPLE_ROWS)}
+        body: dict[str, Any] = {"sample_rows": max(rows, data.MIN_SAMPLE_ROWS), "rows": True}
         if args.get("steps") is not None:
             body["steps"] = data_answers.complete_steps(args["steps"])
         if (unsaved := data_answers.settings_from(args, prep.settings)) is not None:
@@ -860,8 +866,12 @@ def apply_readiness_fix(request: Request, args: dict[str, Any]) -> Any:
         )
     steps = list(prep.steps) if isinstance(prep.steps, list) else []
     applied = []
+    new_settings = None
     with _data_errors():
         for key, (fix, _) in chosen:
+            if isinstance(fix.get("settings"), dict):  # e.g. split by the new group column
+                base = new_settings or dict(prep.settings or {})
+                new_settings = data_answers.settings_from(fix["settings"], base)
             new = {"type": fix["type"], "params": copy.deepcopy(fix.get("params") or {})}
             steps, created = data_answers.insert_step(steps, new, reports=result["steps"])
             applied.append(
@@ -872,7 +882,10 @@ def apply_readiness_fix(request: Request, args: dict[str, Any]) -> Any:
                     "type": fix["type"],
                 }
             )
-    prep = _save_prep(request, prep, {"steps": steps})
+    changes: dict[str, Any] = {"steps": steps}
+    if new_settings is not None:
+        changes["settings"] = new_settings
+    prep = _save_prep(request, prep, changes)
     return {
         "applied": applied,
         "steps": [{"id": s["id"], "type": s["type"]} for s in prep.steps],

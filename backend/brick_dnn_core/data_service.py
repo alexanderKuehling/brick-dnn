@@ -547,7 +547,9 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         columns = max(1, len(result.table.columns))
         rows = max(MIN_SAMPLE_ROWS, min(sample_rows, MAX_SAMPLE_CELLS // columns))
         sample = sample_table(result.table, rows, seed=int(prep_settings["split"]["seed"]))
-        ready = readiness(result.table, prep_settings, result.task, relations=relations)
+        ready = readiness(
+            result.table, prep_settings, result.task, split=result.split, relations=relations
+        )
     failed = _failed_step(run)
     if failed:
         # The data shown is the data before that step; it cannot be exported like this.
@@ -574,9 +576,35 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         "before": before,
         "sample": sample,
         "readiness": ready,
+        "split": result.split,
+        "rows": _row_summary(result, prep_settings) if body.get("rows") is True else None,
         "warnings": list(result.warnings),
         "duration_ms": round((time.perf_counter() - started) * 1000, 1),
     }
+
+
+def _row_summary(result: PipelineResult, prep_settings: dict[str, Any]) -> dict[str, Any] | None:
+    """A compact summary of the row analysis (MCP previews), on the same rows as the
+    readiness check (so it comes from the cache), or None if no number column fits."""
+    from brickdnn.data import rows
+    from brickdnn.data.checks import STRUCTURE_ROWS, STRUCTURE_WORK
+    from brickdnn.data.table import DataError
+
+    table = result.table
+    target = prep_settings.get("target")
+    group_by = prep_settings["split"].get("group_by")
+    try:
+        stats = rows.cached_compute(
+            table,
+            target=target if target in table.kinds else None,
+            exclude=[group_by] if group_by else [],
+            max_rows=STRUCTURE_ROWS,
+            max_work=STRUCTURE_WORK,
+            with_projection=False,
+        )
+    except DataError:
+        return None
+    return rows.summary(stats, table)
 
 
 def _without_duplicate_fixes(issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -614,6 +642,121 @@ def _failed_step(run: _Run) -> str | None:
 
 
 # --------------------------------------------------------------------------- #
+# Row analysis (Analysis → Rows)
+# --------------------------------------------------------------------------- #
+
+
+def _row_options(body: dict[str, Any]) -> dict[str, Any]:
+    """The feature choice of a row analysis request: ``{"features": {"mode", "columns"}}``."""
+    features = body.get("features")
+    if features is None:
+        features = {}
+    if not isinstance(features, dict):
+        raise DataInputError('features must be an object: {"mode", "columns"}.')
+    mode = features.get("mode", "auto")
+    columns = features.get("columns")
+    if mode not in ("auto", "all", "partnered", "columns"):
+        raise DataInputError("features.mode must be auto, all, partnered or columns.")
+    if columns is not None and (
+        not isinstance(columns, list) or not all(isinstance(c, str) for c in columns)
+    ):
+        raise DataInputError("features.columns must be a list of column names.")
+    if mode == "columns" and len(columns or []) > 5_000:
+        raise DataInputError("Choose at most 5,000 columns.")
+    return {"mode": mode, "columns": list(columns or []) if mode == "columns" else None}
+
+
+def _threshold(body: dict[str, Any], key: str) -> float | None:
+    value = body.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 100:
+        raise DataInputError(f"{key} must be a number from 0 to 100.")
+    return float(value)
+
+
+def _row_stats(prep: DataPrep, body: Any):
+    """Run the pipeline of a row analysis request and compute (or reuse) its row
+    statistics. Returns ``(run, stats, settings)``."""
+    from brickdnn.data import rows
+
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        raise DataInputError("Send the row analysis settings as a JSON object.")
+    upto = body.get("upto")
+    if upto is not None and (not isinstance(upto, str) or not upto):
+        raise DataInputError("upto must be the id of a step.")
+    options = _row_options(body)
+    run = _run(prep, body.get("steps"), body.get("settings"), upto)
+    result = run.result
+    target = run.settings.get("target")
+    target = target if target in result.table.kinds else None
+    group_by = run.settings["split"].get("group_by")
+    with _user_errors():
+        stats = rows.cached_compute(
+            result.table,
+            target=target,
+            exclude=[group_by] if group_by else [],
+            seed=int(run.settings["split"]["seed"]),
+            **options,
+        )
+    return run, stats, target
+
+
+def row_analysis(prep: DataPrep, body: Any) -> dict[str, Any]:
+    """``RowAnalysis`` for a ``RowAnalysisRequest`` (see frontend/src/api/types.ts)."""
+    from brickdnn.data import rows
+
+    started = time.perf_counter()
+    run, stats, target = _row_stats(prep, body)
+    body = body or {}
+    with _user_errors():
+        view = rows.analysis_view(
+            stats,
+            run.result.table,
+            target=target,
+            task=run.result.task if target else None,
+            twin_threshold=_threshold(body, "twin_threshold"),
+            atypical_threshold=_threshold(body, "atypical_threshold"),
+        )
+    view["split_group_by"] = run.settings["split"].get("group_by")
+    view["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    view["stats_ms"] = stats.duration_ms
+    return view
+
+
+def similar_rows(prep: DataPrep, body: Any) -> dict[str, Any]:
+    """``SimilarRows``: the nearest rows of one analysed row (``row``: its index in the
+    analysis) and a column comparison with ``other`` (default: its nearest row)."""
+    from brickdnn.data import rows
+
+    run, stats, target = _row_stats(prep, body)
+    body = body or {}
+
+    def index(key: str) -> int | None:
+        value = body.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise DataInputError(f"{key} must be the index of a row of the analysis.")
+        return value
+
+    row = index("row")
+    if row is None:
+        raise DataInputError("row: choose a row of the analysis.")
+    with _user_errors():
+        return rows.similar_view(
+            stats,
+            run.result.table,
+            row,
+            other=index("other"),
+            target=target,
+            task=run.result.task if target else None,
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Export into a training dataset
 # --------------------------------------------------------------------------- #
 
@@ -636,7 +779,7 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         raise DataInputError(f"{failed} Fix it before creating a training dataset.")
     result = run.result
     with _user_errors():
-        ready = readiness(result.table, run.settings, result.task, checks=False)
+        ready = readiness(result.table, run.settings, result.task, checks=False, split=result.split)
     if not ready.get("ready"):
         issues = ready.get("issues") or []
         errors = [i for i in issues if i.get("severity") == "error"]

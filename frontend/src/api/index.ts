@@ -56,12 +56,16 @@ import type {
   ProjectVersion,
   ProjectVersionDetail,
   RecoveryCodes,
+  RowAnalysis,
+  RowAnalysisRequest,
   RunDetail,
   RunInput,
   RunPreviews,
   RunSummary,
   SharedNetwork,
   ShareLink,
+  SimilarRows,
+  SimilarRowsRequest,
   StepCatalog,
   Tokens,
   TrainingConfig,
@@ -662,6 +666,22 @@ const serverApi = {
       /** Run the (possibly unsaved) pipeline and return reports, profile and a sample. */
       preview: (id: number, body: PreviewRequest = {}, signal?: AbortSignal) =>
         request<PreviewResult>(`/api/data/preps/${id}/preview/`, {
+          method: 'POST',
+          body,
+          auth: true,
+          signal,
+        }),
+      /** Row statistics of the (unsaved) pipeline's result (Analysis → Rows). */
+      rows: (id: number, body: RowAnalysisRequest = {}, signal?: AbortSignal) =>
+        request<RowAnalysis>(`/api/data/preps/${id}/rows/`, {
+          method: 'POST',
+          body,
+          auth: true,
+          signal,
+        }),
+      /** The nearest rows of one analysed row, and a column comparison with another. */
+      similar: (id: number, body: SimilarRowsRequest, signal?: AbortSignal) =>
+        request<SimilarRows>(`/api/data/preps/${id}/similar/`, {
           method: 'POST',
           body,
           auth: true,

@@ -26,6 +26,8 @@ pytestmark = pytest.mark.django_db
 
 PREVIEW_KEYS = {
     "steps",
+    "split",
+    "rows",
     "task",
     "profile",
     "before",
@@ -696,7 +698,7 @@ def test_create_prep_with_defaults(auth_client, source):
     assert data["settings"] == {
         "target": None,
         "task": "auto",
-        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True},
+        "split": {"val": 0.15, "test": 0.15, "seed": 42, "stratify": True, "group_by": None},
     }
 
 
@@ -787,7 +789,11 @@ def test_preview_shape(auth_client, prep):
     assert set(data) == PREVIEW_KEYS
     assert data["steps"] == []
     assert data["task"] == "classification"
-    assert data["before"] is None
+    assert data["before"] is None and data["rows"] is None
+    assert data["split"]["group_by"] is None and data["split"]["error"] is None
+    assert [c["name"] for c in data["split"]["columns"]] == [
+        c["name"] for c in data["profile"]["columns"]
+    ]
     assert isinstance(data["duration_ms"], (int, float)) and isinstance(data["warnings"], list)
     profile = data["profile"]
     assert (profile["n_rows"], profile["n_columns"]) == (40, 4)
@@ -1121,3 +1127,69 @@ def test_preview_lists_the_sanity_checks(auth_client):
     assert issues["split_overlap"]["message"].endswith(
         "Remove duplicates before balancing the classes."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Row analysis (Analysis → Rows) and the split by groups
+# --------------------------------------------------------------------------- #
+
+
+def scans_csv() -> bytes:
+    from .test_data_rows import people_frame
+
+    frame, _, _ = people_frame(60)
+    return frame.to_csv(index=False).encode()
+
+
+def test_row_analysis_and_similar_rows(auth_client):
+    source = import_csv(auth_client, "scans.csv", scans_csv()).data
+    prep = create_prep(auth_client, source["id"], settings={"target": "age"}).data
+    url = f"/api/data/preps/{prep['id']}"
+    response = auth_client.post(f"{url}/rows/", {}, format="json")
+    assert response.status_code == 200, response.data
+    data = response.data
+    assert data["analysed"] == data["n_total"] == source["n_rows"] and not data["sampled"]
+    assert data["features"]["used"] == "partnered" and data["id_column"] == "id"
+    assert data["target"] == "age" and data["task"] == "regression"
+    assert data["suggested"]["atypical"] is not None and data["suggested"]["twins"] is not None
+    assert data["groups"]["count"] > 10 and len(data["rows"]["spread"]) == source["n_rows"]
+    # Another threshold and the columns of my choice.
+    body = {"twin_threshold": 0.0001, "features": {"mode": "columns", "columns": ["x0", "x1"]}}
+    other = auth_client.post(f"{url}/rows/", body, format="json").data
+    assert other["features"]["count"] == 2 and other["groups"]["count"] == 0
+    # Unsaved steps are analysed.
+    steps = [step("s1", "remove_atypical")]
+    fewer = auth_client.post(f"{url}/rows/", {"steps": steps}, format="json").data
+    assert fewer["n_total"] == source["n_rows"] - 10
+    similar = auth_client.post(f"{url}/similar/", {"row": 0}, format="json")
+    assert similar.status_code == 200, similar.data
+    assert len(similar.data["neighbors"]) == 10 and similar.data["pair"]["shared"] == 40
+    bad = auth_client.post(f"{url}/similar/", {"row": "x"}, format="json")
+    assert bad.status_code == 400
+    bad = auth_client.post(f"{url}/rows/", {"features": {"mode": "nope"}}, format="json")
+    assert bad.status_code == 400 and "features.mode" in bad.data["detail"]
+
+
+def test_export_with_a_group_split(auth_client, settings):
+    source = import_csv(auth_client, "scans.csv", scans_csv()).data
+    steps = [
+        step("s1", "remove_atypical"),
+        step("s2", "find_groups"),
+        step("s3", "drop_columns", columns=["group", "id"]),
+    ]
+    prep = create_prep(
+        auth_client,
+        source["id"],
+        steps=steps,
+        settings={"target": "age", "split": {"group_by": "group"}},
+    ).data
+    result = preview(auth_client, prep["id"]).data
+    groups = result["split"]["groups"]
+    assert result["split"]["group_by"] == "group" and groups["mixed"] == 0
+    assert groups["multi"] > 10
+    codes = {i["code"] for i in result["readiness"]["issues"]}
+    assert "near_twins" not in codes and "atypical_rows" not in codes
+    response = export(auth_client, prep["id"])
+    assert response.status_code == 201, response.data
+    info = response.data["info"]
+    assert sum(info["predefined_split"]) == source["n_rows"] - 10

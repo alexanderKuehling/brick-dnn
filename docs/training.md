@@ -158,6 +158,11 @@ The data is split randomly (with the seed) into up to three parts:
 | ---- | ---------- | ---- |
 | CSV file, image folder, demo data | `val_split` of the data | `test_split` of the data (none if 0); the rest, at least 20 %, is for training |
 | MNIST, Fashion-MNIST, CIFAR-10 | `val_split` of the training images | always the official test images (10,000); `test_split` is not used |
+| Datasets from the *Data* tab | the split made there (also a split by groups) | the split made there; `val_split` and `test_split` are not used |
+
+When rows belong together (several measurements of one person), split them by group in the
+*Data* tab (*Target & split → Keep rows of a group together*): the exported dataset brings
+that split along, so no person is in training and validation at once.
 | Shapes | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
 | Images with masks | `val_split` of the data, or the folder `val` | `test_split` of the data, or the folder `test` (none without it) |
 | Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |

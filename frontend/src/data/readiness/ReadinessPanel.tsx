@@ -23,7 +23,7 @@ import {
   Title,
   VisuallyHidden,
 } from '@mantine/core';
-import type { DataFix, NewStep, Readiness, ReadinessIssue } from '@/api/types';
+import type { DataFix, NewStep, Readiness, ReadinessIssue, SplitSettings } from '@/api/types';
 import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
 import classes from './ReadinessPanel.module.css';
@@ -31,6 +31,8 @@ import classes from './ReadinessPanel.module.css';
 export interface ReadinessPanelProps {
   readiness: Readiness;
   onAddStep: (step: NewStep) => void;
+  /** Settings a fix changes besides adding its step (e.g. split by a new group column). */
+  onChangeSplit?: (split: Partial<SplitSettings>) => void;
   onExport: () => void;
   exporting: boolean;
   /** A new preview is on its way: fixes wait for it (they could be outdated or added twice). */
@@ -107,6 +109,7 @@ function plural(count: number, word: string): string {
 export function ReadinessPanel({
   readiness,
   onAddStep,
+  onChangeSplit,
   onExport,
   exporting,
   fixesDisabled = false,
@@ -141,6 +144,9 @@ export function ReadinessPanel({
     const next = new Set(applied);
     for (const fix of fixes) {
       onAddStep({ type: fix.type, params: structuredClone(fix.params) });
+      if (fix.settings?.split) {
+        onChangeSplit?.(fix.settings.split);
+      }
       next.add(fixKey(fix));
     }
     setApplied(next);

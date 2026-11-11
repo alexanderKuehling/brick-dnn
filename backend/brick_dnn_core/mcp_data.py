@@ -540,13 +540,15 @@ def _index(steps: list[dict[str, Any]], step_id: Any) -> int:
     raise DataToolError(f"There is no step '{step_id}'. The steps: {listing}.")
 
 
-def _combine_end(steps: list[dict[str, Any]]) -> int:
+def _combine_end(steps: list[dict[str, Any]], pre_split: bool = False) -> int:
+    """Index after the last combine step (with ``pre_split``: after the last step that
+    runs before the split as well)."""
     from brickdnn.data.steps import REGISTRY
 
     end = 0
     for i, step in enumerate(steps):
         cls = REGISTRY.get(step.get("type"))
-        if cls is not None and cls.combine:
+        if cls is not None and (cls.combine or (pre_split and cls.pre_split)):
             end = i + 1
     return end
 
@@ -572,11 +574,15 @@ def insert_step(
     reports: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Add a step like the web app (insertStep): combine steps after the last combine step,
-    all others at the end or right after ``after`` (a step id), but in front of the first
-    step that failed in ``reports`` and never in front of a combine step."""
+    steps that run before the split after the last of those, all others at the end or right
+    after ``after`` (a step id), but in front of the first step that failed in ``reports``
+    and never in front of a combine or pre-split step."""
     created = new_step(step, steps)
-    end = _combine_end(steps)
-    if _step_class(created["type"]).combine:
+    cls = _step_class(created["type"])
+    end = _combine_end(steps, pre_split=True)
+    if cls.combine:
+        position = _combine_end(steps)
+    elif cls.pre_split:
         position = end
     else:
         position = len(steps) if after in (None, "") else _index(steps, after) + 1
@@ -710,6 +716,8 @@ def _issue_view(issue: dict[str, Any]) -> dict[str, Any]:
             shown["params"] = params
         else:
             shown["params"] = "(long; apply it with apply_readiness_fix)"
+        if fix.get("settings"):
+            shown["settings"] = fix["settings"]
         view["fix"] = shown
     return view
 
@@ -913,6 +921,11 @@ def preview_view(
         view["columns_note"] = note
     if result.get("warnings"):
         view["warnings"] = result["warnings"]
+    split = result.get("split") or {}
+    if split.get("group_by"):
+        view["split_groups"] = {"group_by": split["group_by"], **(split.get("groups") or {})}
+    if result.get("rows"):
+        view["row_analysis"] = result["rows"]
     if not detail:
         return view
     if columns is None:
