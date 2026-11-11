@@ -26,6 +26,7 @@ import {
   type AgentRef,
   type AgentTarget,
 } from '@/api';
+import { ApprovalsPanel } from '@/approvals/ApprovalsPanel';
 import { projectDraft } from '@/builder/draft';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
 import { groupByDay } from '@/collab/time';
@@ -197,6 +198,10 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
     );
 
   const { entries } = activity;
+  const waiting = useMemo(
+    () => new Set((activity.approvals ?? []).map((approval) => approval.id)),
+    [activity.approvals]
+  );
   const options = agentOptions(agents, entries);
   const days = useMemo(
     () =>
@@ -223,6 +228,13 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
         , as it happens.
         {retention ? ` Entries are kept for ${retention} days.` : ''}
       </Text>
+
+      <ApprovalsPanel
+        approvals={activity.approvals ?? []}
+        now={now}
+        onDecided={activity.decided}
+        onOpen={openTarget}
+      />
 
       {retention === 0 && (
         <Alert color="gray" mt="lg">
@@ -296,6 +308,9 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
                 fresh={activity.fresh.has(group.key)}
                 now={now}
                 onOpen={openTarget}
+                waiting={
+                  group.entries[0].approval != null && waiting.has(group.entries[0].approval)
+                }
               />
             ))}
           </ol>

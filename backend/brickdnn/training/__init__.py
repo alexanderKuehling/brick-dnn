@@ -25,6 +25,7 @@ from .datasets import (
     inspect_image_folder,
     random_info,
 )
+from .segmentation import inspect_segmentation_folder, is_segmentation_folder
 from .state import ACTIVE_STATUSES, QUEUED, RUNNING_STATUSES, STATUSES, TERMINAL_STATUSES
 
 
@@ -65,6 +66,8 @@ __all__ = [
     "extract_image_zip",
     "inspect_csv",
     "inspect_image_folder",
+    "inspect_segmentation_folder",
+    "is_segmentation_folder",
     "random_info",
     "sklearn_installed",
     "suggest_fixes",

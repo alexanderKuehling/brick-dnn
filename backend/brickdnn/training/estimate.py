@@ -39,7 +39,13 @@ STEP_CPU_SECONDS = 0.002
 # CPU time per layer and optimizer step (each layer is a few kernel launches).
 LAYER_STEP_CPU_SECONDS = 0.0003
 # Preparing one sample per epoch (decoding, normalising, copying into a batch).
-SAMPLE_CPU_SECONDS = {"builtin": 4e-6, "images": 2e-4, "csv": 1e-6, "random": 1e-6}
+SAMPLE_CPU_SECONDS = {
+    "builtin": 4e-6,
+    "images": 2e-4,
+    "segmentation": 4e-4,
+    "csv": 1e-6,
+    "random": 1e-6,
+}
 # Starting the process, importing PyTorch, loading the data and building the model.
 STARTUP_CPU_SECONDS = 3.0
 # Built-in datasets are read once (and downloaded the first time).

@@ -8,11 +8,32 @@ need an account; saved networks, training and data preparation do.
 | Method | Path              | Description                                                   |
 | ------ | ----------------- | ------------------------------------------------------------- |
 | GET    | `/api/`           | Index of endpoints and version                                |
-| GET    | `/api/health/`    | `{"status": "ok", "version": "1.1.0"}`                        |
+| GET    | `/api/health/`    | `{"status": "ok", "version": "1.1.0", "checks": {...}}`, see below |
 | GET    | `/api/layers/`    | `{"categories": [...], "layers": [LayerSpec, ...]}`           |
 | GET    | `/api/examples/`  | Example networks `[{id, name, description, graph}]`           |
 | POST   | `/api/analyze/`   | Validate a graph, infer shapes                                |
 | POST   | `/api/generate/`  | Generate PyTorch code (scikit-learn for classical models)     |
+
+### `GET /api/health/`
+
+Whether the server works, cheap enough for frequent checks (Docker's health check, the uptime
+workflow in [deploy/server](../deploy/server/README.md#monitoring)):
+
+```json
+{ "status": "degraded", "version": "1.1.0", "checks": { "database": "ok", "worker": "failed", "disk": "ok" } }
+```
+
+| Check      | Fails when                                                                 |
+| ---------- | -------------------------------------------------------------------------- |
+| `database` | `SELECT 1` fails. The answer is then `503` with `"status": "error"`.       |
+| `worker`   | With the training queue: no training worker sent a heartbeat within `BRICKDNN_WORKER_TIMEOUT` seconds. |
+| `disk`     | The data directory has less than `BRICKDNN_HEALTH_MIN_FREE_MB` free (default 1024; `0`: no check). |
+| `backup`   | With `BRICKDNN_BACKUP_DIR`, once `manage.py backup` ran: the last backup failed, or the newest is older than `BRICKDNN_BACKUP_MAX_AGE_HOURS` (default 50). |
+
+A failed check other than the database makes the status `degraded` (still `200`); checks a
+server does not use are left out. Everyone sees only these names and `ok`/`failed`. Staff
+accounts, and requests with the header `X-Health-Token: <BRICKDNN_HEALTH_TOKEN>`, also get a
+`detail` object (free space, seconds since the last heartbeat, error messages).
 
 ### `POST /api/analyze/`
 
@@ -84,7 +105,7 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
 | Method | Path                       | Body                               | Response                    |
 | ------ | -------------------------- | ---------------------------------- | --------------------------- |
 | POST   | `/api/auth/register/`      | `{username, email, password, accept_terms?}` | `201 {user, access, refresh}` |
-| POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`         |
+| POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`, or a two-factor challenge (below) |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
 | GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined}` |
@@ -93,7 +114,42 @@ Send the access token as `Authorization: Bearer <access>`. Access tokens live 30
 refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
 account only. Registration can be disabled with `BRICKDNN_ALLOW_REGISTRATION=false`. If the
 server has terms of use (`GET /api/legal/` says `accept_terms_required`), registration needs
-`accept_terms: true`; the acceptance is stored with the version of the terms.
+`accept_terms: true`; the acceptance is stored with the version of the terms. With e-mail set
+up, sign-up sends a link to confirm the address.
+
+### E-mail, password reset and two-factor authentication
+
+See [email.md](email.md) for what is sent and when an address may receive reset links.
+
+| Method | Path | Body | Response |
+| ------ | ---- | ---- | -------- |
+| POST | `/api/auth/token/two-factor/` | `{challenge, code}` | `{access, refresh}` (plus `recovery_codes_left` after a recovery code) |
+| GET  | `/api/auth/password-reset/` | – | `{available}`: whether this server sends reset links |
+| POST | `/api/auth/password-reset/` | `{login}` (username or e-mail) | `{detail}`, the same for every login; `503` without e-mail |
+| POST | `/api/auth/password-reset/check/` | `{uid, token}` (from the link) | `{valid, username}` |
+| POST | `/api/auth/password-reset/confirm/` | `{uid, token, new_password}` | `{detail, username}`; all logins of the account end; `400 {code: "invalid_link"}` |
+| POST | `/api/auth/account/email/verify/` | `{token}` (from the link) | `{email, email_verified, …}`; only the account the link was sent to (`400 {code: "other_account" \| "other_address" \| "invalid_link"}`) |
+| POST | `/api/auth/account/email/resend/` | – | `{detail}`; `503` without e-mail; `BRICKDNN_EMAIL_VERIFY_RATE` (5/hour) |
+| GET  | `/api/auth/two-factor/` | – | `TwoFactorState` |
+| POST | `/api/auth/two-factor/setup/` | `{password}` | `{secret, otpauth_uri}` (shown once; not on until confirmed) |
+| POST | `/api/auth/two-factor/enable/` | `{code}` | `{recovery_codes, state, access, refresh}`; all other logins end |
+| POST | `/api/auth/two-factor/disable/` | `{password, code}` | `TwoFactorState` |
+| POST | `/api/auth/two-factor/recovery-codes/` | `{password, code}` | `{recovery_codes, state}`; the old codes stop working |
+
+**Logging in with two-factor authentication.** When it is on, `POST /api/auth/token/` with the
+right password answers `{two_factor_required: true, challenge, expires_in}` (no tokens). The
+challenge is signed, valid for 5 minutes and ends with a password change. `POST
+/api/auth/token/two-factor/` with it and a 6-digit code from the app, or a recovery code
+(`xxxx-xxxx-xxxx-xxxx`), returns the tokens. Wrong codes: `400 {code: [...]}`; an expired
+challenge: `400 {code: "challenge_expired"}`; after 5 wrong codes in 15 minutes: `429`. The
+step is limited per IP address too (`BRICKDNN_TWO_FACTOR_RATE`, 30/hour). API tokens and
+OAuth apps are not affected. `TwoFactorState` is `{enabled, enabled_at, recovery_codes_left}`.
+The `/api/auth/two-factor/…` endpoints need a website login and share the account rate limit.
+
+**Password reset** is limited per IP address (`BRICKDNN_PASSWORD_RESET_RATE`, 10/hour) and
+to 3 e-mails an hour per account. The link is `/reset-password#uid=…&token=…` (the fragment
+stays in the browser), valid for an hour and void once the password changed, the account
+logged in or its address changed.
 
 ### The own account
 
@@ -108,8 +164,12 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 | GET    | `/api/auth/account/export/`   | –                                     | a ZIP file with everything stored about the account |
 | POST   | `/api/auth/account/delete/`   | `{password, username}`                | `204`: the account and everything it owns are deleted |
 
-`Account` is `{id, username, email, date_joined, last_login, last_active_at,
-terms_accepted_at, terms_version, privacy_version, stored}`; `stored` counts the projects,
+`Account` is `{id, username, email, email_verified, email_verified_at, email_sending,
+password_reset_available, two_factor, date_joined, last_login, last_active_at,
+terms_accepted_at, terms_version, privacy_version, stored}` (`email_sending`: the server sends
+e-mail; `password_reset_available`: a forgotten password could be reset by e-mail;
+`two_factor`: `TwoFactorState`). Changing the e-mail address makes it unconfirmed and sends a
+link to the new address and a notice to the old one;` `stored` counts the projects,
 memberships, comments, data sources and preparations, datasets, training runs, API tokens,
 connected apps and entries of the agent activity log (`agent_actions`), and the bytes of
 uploaded files. What the export holds and what deleting an
@@ -178,7 +238,10 @@ budget_cpu_minutes, used_cpu_minutes}`; `PATCH /api/auth/api-tokens/<id>/
 [Usage and budgets](#usage-and-budgets)).
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
 is only returned by `POST`; only its hash is stored. At most 20 tokens per user. These three
-endpoints need a website login (JWT): an API token cannot manage tokens.
+endpoints need a website login (JWT): an API token cannot manage tokens. A new token gets the
+account's default [approval rule](#approvals). A request with a token whose rule says that
+it needs approval (trainings above its limit, sharing, deleting) is refused with `403`: the
+REST API cannot ask.
 
 ## Agent activity
 
@@ -187,23 +250,51 @@ What AI agents and scripts did with the user's API tokens and connected apps (se
 
 | Method | Path                            | Response                                         |
 | ------ | ------------------------------- | ------------------------------------------------ |
-| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days}`, newest first |
+| GET    | `/api/agent-activity/`          | `{results: [AgentAction], has_more, latest_id, retention_days, approvals}`, newest first |
 | GET    | `/api/agent-activity/summary/`  | `{agents, tools, total, latest_id, latest_at, retention_days}` |
 
 Query parameters of the list: `limit` (default 50, at most 200), `before=<id>` (older
 entries: the next page), `after=<id>` (only newer entries: poll with the last `latest_id`),
 and the filters `agent=token:<id>` or `app:<connection id>`, `tool=<tool or route>`,
-`outcome=ok|error`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
+`outcome=ok|error|pending|approved|denied`, `source=mcp|api`, `writes=true`, `project=<id>` and `since=<ISO date or
 time>`. `latest_id` is the user's newest entry whatever the filters. With `after`, `has_more`
 means more new entries than `limit` arrived: load the first page again.
 
 `AgentAction` is `{id, created_at, source ("mcp" | "api"), agent: {kind ("token" | "app"), id,
-key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error"), error,
-status_code, duration_ms, summary, arguments, targets: [{kind, id, name?}], project}`.
+key, name, prefix}, user_agent, tool, method, writes, outcome ("ok" | "error" | "pending" |
+"approved" | "denied"), error, status_code, duration_ms, summary, arguments, targets: [{kind,
+id, name?}], project, approval}`; `approval` is the id of the [approval request](#approvals)
+an entry belongs to (outcomes `pending`, `approved`, `denied`, or `error` when an approved
+action failed).
 `arguments` are summarised and redacted; `targets` kinds are `project`, `run`, `dataset`,
 `data_source` and `data_prep`. The summary's `agents` are `{kind, id, key, name, prefix,
 active, actions, errors, last_at, last_id}`, the most recently active first; `active` is false
 for revoked tokens and disconnected apps.
+
+## Approvals
+
+Actions of agents that wait for the user's approval, and the rules per token and app (see
+[mcp.md](mcp.md#approvals)). Website login (JWT) only: API tokens and apps cannot decide.
+
+| Method | Path                                  | Body                    | Response |
+| ------ | ------------------------------------- | ----------------------- | -------- |
+| GET    | `/api/approvals/`                     | –                       | `{results: [ApprovalRequest], pending_count}`, newest first; `?status=pending\|decided`, `?limit=` (default 50, at most 200) |
+| GET    | `/api/approvals/<id>/`                | –                       | `ApprovalRequest` |
+| POST   | `/api/approvals/<id>/approve/`        | –                       | `ApprovalRequest`, done as the agent: `status` `executed` or `failed`; approving again changes nothing; `409 {detail, approval}` if denied or expired |
+| POST   | `/api/approvals/<id>/deny/`           | `{message?}`            | `ApprovalRequest` (`denied`); `409` if approved or expired |
+| GET    | `/api/approvals/rules/`               | –                       | `{default: Rule, builtin_default: Rule, agents: {"token:<id>" \| "app:<id>": Rule}, gated_tools, expiry_hours}` |
+| PUT    | `/api/approvals/rules/default/`       | `Rule`                  | `Rule`: the default new tokens and apps get |
+| PUT    | `/api/approvals/rules/token/<id>/`    | `Rule`                  | `Rule` of an API token |
+| PUT    | `/api/approvals/rules/app/<id>/`      | `Rule`                  | `Rule` of a connected app |
+
+`Rule` is `{training_cpu_minutes (null: never ask; 0: always), publishing, deleting}`.
+`ApprovalRequest` is `{id, status ("pending" | "approved" | "executed" | "failed" | "denied" |
+"expired"), category ("training" | "publishing" | "deleting"), tool, action, agent: {kind, id,
+key, name, active}, summary, reason, estimate: {cpu_minutes, low_cpu_minutes,
+high_cpu_minutes, cost, currency} | null, limit_cpu_minutes, network, dataset, exposes,
+warning, targets, arguments (summarised as in the activity log), created_at, expires_at,
+decided_at, finished_at, message, error, done}`. `GET /api/agent-activity/` also returns
+`approvals: {pending_count, pending: [ApprovalRequest]}` with every poll.
 
 ## OAuth (MCP sign-in)
 
@@ -308,9 +399,9 @@ Training runs on the server in a separate process per run, see [training.md](tra
 
 | Method | Path                                   | Description                                         |
 | ------ | -------------------------------------- | --------------------------------------------------- |
-| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images), limits, `classical`, `queue` |
-| GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets                 |
-| POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` (multipart) |
+| GET    | `/api/training/`                       | Availability, devices, built-in datasets (`train_size` training and `test_size` official test images; `task` is `classification` or `segmentation`), limits, `classical`, `segmentation`, `queue` |
+| GET    | `/api/training/datasets/`              | Your uploaded and prepared datasets (`kind`: `csv`, `images` or `segmentation`) |
+| POST   | `/api/training/datasets/`              | Upload `file` (`.csv` or `.zip`), optional `name` and `kind` (multipart) |
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
 | POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it, how long would it wait? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
@@ -319,18 +410,24 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
-| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` |
+| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` or image files `{image, mask?}` |
+| GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
+| GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
+| GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
+| POST   | `/api/training/runs/<id>/explain/`     | Explain the trained model `{method, sample? \| input?, input_scale?, target?, layer?, node?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
-(`mnist`, `fashion_mnist`, `cifar10`) or `{"kind": "upload", "id": 3}`. `config` may contain
+(`mnist`, `fashion_mnist`, `cifar10`, or `shapes` for segmentation) or
+`{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
 `val_split`, `test_split` (0 = no test set; validation and test together at most 0.8; built-in
 datasets take `val_split` of their training images and always test on their official test
 images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
 stop when the validation loss has not improved for this many epochs, 1–1000; `null`, the
-default, trains every epoch) and `restore_best` (default `true`: test and save the weights of
-the epoch with the lowest validation loss instead of the last one); missing values use the
+default, trains every epoch), `restore_best` (default `true`: test and save the weights of
+the epoch with the lowest validation loss instead of the last one) and, for a segmentation,
+`loss` (`cross_entropy`, the default, or `cross_entropy_dice`); missing values use the
 defaults.
 
 `tuning` (optional) turns the run into a hyperparameter search, see
@@ -376,9 +473,58 @@ applied together (empty when it fits or when other layers would have to change):
 ]
 ```
 
-Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed;
+Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are changed
+(for a segmentation dataset the last `Conv2d` or `ConvTranspose2d` layer: `out_channels`);
 a fix for surplus class outputs can also come with `"ok": true`. See
 [training.md](training.md#adapting-the-network-to-the-data).
+
+**Segmentation** ([training.md](training.md#image-segmentation)). A `.zip` upload with a folder
+of images and a folder of masks becomes a dataset of `kind` `segmentation`; the form field
+`kind` (`segmentation` or `images`) says which one is meant when the folders should not
+decide. Its `info` has `num_samples` (images with a mask), `sample_shape` (channels, height
+and width of the most common image size), `class_names`, `predefined_split` (with `train`,
+`val` and `test` folders) and `segmentation`: `mask_format` (`binary`, `indices`, `levels` or
+`colors`), `ignore_index` (255 or null), `class_pixel_share` (one share per class),
+`image_sizes`, `unmatched_images`, `unmatched_masks`, `unmatched_examples` and
+`mask_size_mismatches`. `GET /api/training/` lists the limits under `segmentation`
+(`max_classes`, `max_images`, `max_input_side`, `batch_memory_mb`, `losses`). The plan of a
+check has `task` `segmentation`, the target `{"kind": "mask", "num_classes", "binary"}` and
+`segmentation` (`binary`, `ignore_index`, and `fixed_bytes` and `sample_bytes`: a training
+step needs about `fixed_bytes + batch_size · sample_bytes` of memory; a `config` whose batch
+does not fit into `batch_memory_mb` is an error that names the batch size that does).
+
+Runs of a segmentation have `val_iou`, `val_dice` and `val_pixel_accuracy` in every entry of
+`state.history` and in `metrics` (there also `test_iou`, `test_dice`, `test_pixel_accuracy`);
+the accuracies are null. Once the weights are saved, `state.segmentation` has the results of
+the kept weights per class and the previews:
+
+```json
+"segmentation": {
+  "loss": "cross_entropy", "binary": false, "ignore_index": null,
+  "class_names": ["background", "square", "circle", "triangle"],
+  "colors": ["#1a1a19", "#3987e5", "#d95926", "#199e70"],
+  "validation": {"epoch": 7, "iou": 0.79, "dice": 0.88, "pixel_accuracy": 0.97,
+                 "class_iou": [0.98, 0.8, 0.82, 0.56], "class_dice": [0.99, 0.89, 0.9, 0.72]},
+  "test": {"iou": 0.78, "dice": 0.87, "pixel_accuracy": 0.97, "class_iou": […], "class_dice": […]},
+  "previews": {"count": 8, "epoch": 7, "split": "validation"}
+}
+```
+
+`GET /api/training/runs/<id>/previews/` returns those previews (everyone who can see the run):
+
+```json
+{"epoch": 7, "split": "validation", "width": 64, "height": 64, "input_size": [64, 64],
+ "class_names": ["background", "square", "circle", "triangle"], "colors": ["#1a1a19", …],
+ "ignore_color": "#8a8f98",
+ "samples": [{"index": 0, "iou": 0.92, "pixel_accuracy": 0.97, "classes": [0, 1, 3],
+              "image": {"file": "0_image.png", "url": "data:image/png;base64,…"},
+              "truth": {…}, "prediction": {…}, "overlay": {…}}]}
+```
+
+`image` is the picture as the network got it, `truth` its mask and `prediction` the predicted
+mask (palette PNGs whose pixel values are the class indices, shown in `colors`), `overlay` the
+prediction drawn over the image; `iou` is the mean IoU of that image over its `classes`.
+`?embed=0` leaves the data URLs out; `GET …/previews/0_overlay.png` returns one file.
 
 The check also has `estimate` and `budget` (pass `config` and `tuning` as for the start):
 
@@ -571,6 +717,37 @@ also height × width) or in the shape of the Input layer, and need `input_scale`
 arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
 `top_k` (1–10, default 3) is the number of classes in `top`.
 
+Image networks also take image files instead of arrays: `{"image": "<base64>"}` or a list of
+at most 8 (PNG, JPEG, BMP, GIF or WebP, as base64 text or a `data:` URL, together at most
+900 kB of text). They are converted to the channels of the network and resized to its Input
+like the training images, so `input_scale` is not needed.
+
+A **segmentation** answers with one class map per image instead of one class:
+
+```json
+{ "image": "iVBORw0KGgo…", "mask": "png" }
+```
+
+```json
+{
+  "run": { "id": "…", "name": "U-Net" },
+  "task": "segmentation",
+  "class_names": ["background", "square", "circle", "triangle"],
+  "colors": ["#1a1a19", "#3987e5", "#d95926", "#199e70"],
+  "predictions": [
+    { "width": 64, "height": 64,
+      "classes": [{ "class": "background", "index": 0, "share": 0.91 }, { "class": "circle", "index": 2, "share": 0.09 }],
+      "mask_png": "data:image/png;base64,iVBORw0KGgo…" }
+  ]
+}
+```
+
+`classes` are the classes that occur with the share of their pixels, largest first.
+`mask_png` is the class map at the size of the Input as a palette PNG: the pixel values are
+the class indices, the palette shows them in `colors`. `mask` chooses how it is returned:
+`png` (default), `rle` (`mask_rle`: run-lengths row by row, `[class, pixels, class, pixels,
+…]`) or `none` (only the shares).
+
 Classical models take the same rows. Classifiers give their own class probabilities (an SVC
 calibrated with Platt scaling, a Gaussian process its predictive probabilities); a Gaussian
 process regressor adds `"std"`, its predictive standard deviation in the units of the target,
@@ -584,6 +761,37 @@ weights or its preprocessing is unknown (e.g. it failed early), `503` when train
 disabled, PyTorch (scikit-learn for classical models) is missing or other predictions are
 running (`Retry-After: 5`), `500` when the
 prediction itself fails or takes too long, `429` above the rate limit.
+
+### Explanations
+
+**Explanations** of a trained model (see [explain.md](explain.md)): `GET
+/api/training/runs/<id>/explain/` answers `{"family", "kind": "image"|"tabular"|"demo"|null,
+"unavailable", "demo", "methods": [{"id", "label", "available", "reason"}]}`. `POST` computes
+one method:
+
+```json
+{ "method": "tabular", "sample": 3, "target": 1 }
+{ "method": "image", "input": [[0, 0, …], …], "input_scale": "raw", "layer": "conv2" }
+```
+
+| `method`      | Needs a sample | Answer                                                                 |
+| ------------- | -------------- | ---------------------------------------------------------------------- |
+| `samples`     | –              | `samples`: validation samples (`index`, a thumbnail `png` or the row's `values`, `label`, `predicted`, `probability`, `correct`) |
+| `image`       | yes            | `image` (PNG), `prediction`, `target`, and `saliency`, `gradcam` (with `layer` and the `layers` to choose from), `occlusion`: each a `png` overlay and a coarse `grid` (0–1), or `unavailable` |
+| `tabular`     | yes            | `prediction`, `base_value` (for the mean training row), `value`, `features`: `{name, value, shapley, integrated_gradients?}`, largest first |
+| `permutation` | –              | `metric` (`accuracy` or `r2`), `baseline`, `rows`, `repeats`, `features`: `{name, mean, std}` |
+| `boundary`    | –              | `features`, `x`/`y` ranges, `png` (the 64×64 grid), `classes` and `colors` or `value_range`, a 16×16 `grid`, `points` (training rows), `std` for Gaussian process regression |
+| `activations` | yes (demo runs: no) | `nodes`: per brick `{id, type, name, shape, stats, histogram, view}`; `view` is `maps` (a PNG of the first 16 feature maps), `matrix`, `vector` or `scalar` |
+| `weights`     | –              | `filters` of the first Conv2d (a PNG) and `layers` with a `histogram` and `norm` per parameter |
+
+The sample is `sample` (the `index` of a validation sample) or `input` (one sample like an
+entry of a prediction's `inputs`, with `input_scale`). `target` is the class to explain
+(default: the predicted one), `layer` the brick for Grad-CAM, `node` restricts `activations`
+to one brick. The answer also has `notes`, `seconds`, `cached` and `run`. Everyone who can see
+the run may ask. It runs like a prediction (same process, time limit, slots and rate limit;
+the CPU time counts as a prediction); answers are cached per run, and a cached answer
+(`"cached": true`) costs nothing and does not count against the rate limit. Errors as for
+predictions; `409` also when the method does not work for the run (the `reason` of `GET`).
 
 ## Data preparation (login required)
 
@@ -727,7 +935,10 @@ Anonymous clients: 300 requests/minute, logged-in users: 600/minute, login and r
 preparations: 60/hour, predictions: 120/hour, previews and downloads of preparations:
 1200/hour, MCP requests: 600/hour, OAuth registration, token and revocation requests:
 120/minute, changes to the own account (e-mail, password, export, deletion): 30/hour,
-checkout and changes of a paid plan: 60/hour (`BRICKDNN_BILLING_RATE`). Adjust
+checkout and changes of a paid plan: 60/hour (`BRICKDNN_BILLING_RATE`), asking for a password
+reset link: 10/hour per IP address (`BRICKDNN_PASSWORD_RESET_RATE`), sending the confirmation
+link again: 5/hour (`BRICKDNN_EMAIL_VERIFY_RATE`), the second step of a two-factor login:
+30/hour per IP address (`BRICKDNN_TWO_FACTOR_RATE`). Adjust
 with `BRICKDNN_ANON_RATE`, `BRICKDNN_USER_RATE`, `BRICKDNN_AUTH_RATE`,
 `BRICKDNN_TRAINING_RATE`, `BRICKDNN_UPLOAD_RATE`, `BRICKDNN_PREDICT_RATE`,
 `BRICKDNN_DATA_RATE`, `BRICKDNN_MCP_RATE`, `BRICKDNN_OAUTH_RATE`, `BRICKDNN_ACCOUNT_RATE` and

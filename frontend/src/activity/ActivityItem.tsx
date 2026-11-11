@@ -7,6 +7,8 @@ import {
   IconChartLine,
   IconChecklist,
   IconChevronDown,
+  IconCircleCheck,
+  IconClockHour4,
   IconCode,
   IconDeviceFloppy,
   IconDownload,
@@ -25,6 +27,7 @@ import {
   IconTrash,
   IconUpload,
   IconWand,
+  IconX,
 } from '@tabler/icons-react';
 import { ActionIcon, Anchor, Badge, Collapse, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import type { AgentAction, AgentTarget } from '@/api';
@@ -75,6 +78,15 @@ const METHOD_ICONS: Record<string, Icon> = {
 function iconOf(entry: AgentAction): Icon {
   if (entry.outcome === 'error') {
     return IconAlertTriangle;
+  }
+  if (entry.outcome === 'pending') {
+    return IconClockHour4;
+  }
+  if (entry.outcome === 'approved') {
+    return IconCircleCheck;
+  }
+  if (entry.outcome === 'denied') {
+    return IconX;
   }
   if (entry.source === 'mcp') {
     return TOOL_ICONS[entry.tool] ?? IconApi;
@@ -133,6 +145,40 @@ function Summary({ entry, onOpen }: { entry: AgentAction; onOpen: OpenTarget }) 
         </span>
       ))}
     </Text>
+  );
+}
+
+const OUTCOME_COLORS: Partial<Record<AgentAction['outcome'], string>> = {
+  error: 'red',
+  pending: 'yellow',
+  approved: 'green',
+  denied: 'gray',
+};
+
+/** "Waiting for approval", "Approved" or "Denied" for entries of an approval request. */
+function ApprovalBadge({ entry, waiting }: { entry: AgentAction; waiting: boolean }) {
+  if (entry.approval == null) {
+    return null;
+  }
+  const label =
+    entry.outcome === 'pending'
+      ? waiting
+        ? 'Waiting for approval'
+        : 'Asked for approval'
+      : entry.outcome === 'approved'
+        ? 'Approved'
+        : entry.outcome === 'denied'
+          ? 'Denied'
+          : 'Approved, failed';
+  return (
+    <Badge
+      size="sm"
+      radius="sm"
+      variant={waiting ? 'filled' : 'light'}
+      color={OUTCOME_COLORS[entry.outcome] ?? 'gray'}
+    >
+      {label} #{entry.approval}
+    </Badge>
   );
 }
 
@@ -218,15 +264,19 @@ export function ActivityItem({
   fresh,
   now,
   onOpen,
+  waiting = false,
 }: {
   group: EntryGroup;
   fresh: boolean;
   now: Date;
   onOpen: OpenTarget;
+  /** The entry's approval request still waits for the user. */
+  waiting?: boolean;
 }) {
   const [opened, setOpened] = useState(false);
   const [entry] = group.entries;
   const failed = entry.outcome === 'error';
+  const denied = entry.outcome === 'denied';
   const ItemIcon = iconOf(entry);
   const AgentIcon = entry.agent.kind === 'app' ? IconPlugConnected : IconKey;
   const toggle = () => setOpened((open) => !open);
@@ -236,6 +286,7 @@ export function ActivityItem({
     <li
       className={classes.item}
       data-error={failed || undefined}
+      data-pending={waiting || undefined}
       data-fresh={fresh || undefined}
       aria-label={entry.summary}
     >
@@ -245,7 +296,7 @@ export function ActivityItem({
         <ThemeIcon
           className={classes.icon}
           variant="light"
-          color={failed ? 'red' : entry.writes ? 'brick' : 'gray'}
+          color={OUTCOME_COLORS[entry.outcome] ?? (entry.writes ? 'brick' : 'gray')}
           radius="xl"
           size={32}
           aria-hidden
@@ -259,6 +310,11 @@ export function ActivityItem({
               {entry.error}
             </Text>
           )}
+          {denied && entry.error && (
+            <Text size="sm" c="dimmed" className={classes.error}>
+              Your message: {entry.error}
+            </Text>
+          )}
           <div className={classes.meta}>
             <Badge
               variant="light"
@@ -269,6 +325,7 @@ export function ActivityItem({
             >
               {entry.agent.name}
             </Badge>
+            <ApprovalBadge entry={entry} waiting={waiting} />
             <Text span ff="monospace" size="xs" c="dimmed" className={classes.tool}>
               {actionLabel(entry)}
             </Text>

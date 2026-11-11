@@ -37,7 +37,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
-from . import budgets, downloads, history
+from . import approvals, budgets, downloads, history
 from . import data_service as data
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
@@ -103,6 +103,14 @@ start_training, get_training_run). A finished run can predict new samples (predi
 its weights can be downloaded with a short-lived link (get_weights_download).
 Saved networks also appear in the user's Brick DNN web app.
 
+Segmentation (a class for every pixel): a network whose output is as high and wide as its
+Input, e.g. the example unet, with one output channel per class (or one channel for two
+classes). It trains on the built-in dataset shapes (generated, nothing to upload) or on a ZIP
+file with the folders images/ and masks/ (same file names; masks are PNG files with the
+class index of every pixel, or black and white), uploaded with create_upload_link. The
+metrics are mean IoU, Dice and pixel accuracy; use a batch size of 4 to 16 (8 for the example); predict takes an
+image file as base64 (image) and returns the class map as a small PNG.
+
 Real tables usually need preparing first (missing values, categories, dates, outliers):
 import_data (the text of a CSV or JSON file, base64 for Excel or Parquet, or a public link),
 create_data_prep with the target column (the column to predict), then repeat
@@ -123,7 +131,13 @@ the budget runs out. Only the user can raise budgets, in the web app.
 
 A server may queue trainings: start_training then returns the run as queued, with its
 position and a rough estimate of the wait (queue), and it trains when a worker is free.
-get_training_run shows where it stands; stop_training cancels it while it waits."""
+get_training_run shows where it stands; stop_training cancels it while it waits.
+
+The user may want to approve some actions first: trainings above a number of CPU minutes,
+sharing in projects and links that work without logging in (get_weights_download), or
+deleting. Such a call does nothing yet and answers with approval_required and the id of
+an approval request; the user decides in the web app, and once approved the server does it
+and get_approval returns the result. Do not repeat the call: check it with get_approval."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -143,9 +157,9 @@ GRAPH_SCHEMA: dict[str, Any] = {
 DATASET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
-        'Which data to train on: {"kind": "builtin", "id": "mnist"}, {"kind": "upload", '
-        '"id": 3} (one of the user\'s datasets) or {"kind": "random"}. See '
-        "get_training_options."
+        'Which data to train on: {"kind": "builtin", "id": "mnist"} (or "shapes" for '
+        'segmentation), {"kind": "upload", "id": 3} (one of the user\'s datasets) or '
+        '{"kind": "random"}. See get_training_options.'
     ),
     "properties": {
         "kind": {"type": "string", "enum": ["builtin", "upload", "random"]},
@@ -391,6 +405,9 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         "config_defaults": TrainingConfig().to_dict(),
         "tuning": capabilities["tuning"],
         "classical": capabilities["classical"],
+        # Segmentation (a class for every pixel): its limits. The ZIP layout of a dataset is
+        # in the description of create_upload_link.
+        "segmentation": capabilities["segmentation"],
         "max_concurrent_runs": capabilities["max_concurrent_runs"],
         "upload_dataset_max_mb": _megabytes(upload_limit()),
     }
@@ -1036,9 +1053,16 @@ class _PredictScope:
 
 def predict(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args, "run_id")
+    if args.get("inputs") is None and args.get("image") is None:
+        raise ToolError("Give the samples in 'inputs', or an image file as base64 in 'image'.")
     try:
         prediction = training.prepare_prediction(
-            run, args["inputs"], args.get("input_scale"), args.get("top_k")
+            run,
+            args.get("inputs"),
+            args.get("input_scale"),
+            args.get("top_k"),
+            args.get("image"),
+            args.get("mask"),
         )
     except training.TrainingInputError as exc:
         expected = training.describe_inputs(run)
@@ -1085,6 +1109,28 @@ def delete_dataset(request: Request, args: dict[str, Any]) -> Any:
             f"{exc} list_training_runs shows the running trainings; stop_training stops one."
         ) from None
     return deleted
+
+
+def get_approval(request: Request, args: dict[str, Any]) -> Any:
+    answer = approvals.get_for_agent(request, args.get("id"))
+    if answer is None:
+        raise ToolError(
+            "No such approval request of this token or app. list_approvals shows its requests."
+        )
+    return answer
+
+
+APPROVAL_STATUSES = ("pending", "approved", "executed", "failed", "denied", "expired")
+
+
+def list_approvals(request: Request, args: dict[str, Any]) -> Any:
+    wanted = args.get("status")
+    if wanted is not None and wanted not in APPROVAL_STATUSES:
+        raise ToolError(f"'status' must be one of {', '.join(APPROVAL_STATUSES)}.")
+    limit = args.get("limit", 20)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ToolError("'limit' must be a whole number from 1 to 100.")
+    return approvals.list_for_agent(request, wanted, limit)
 
 
 TOOLS: dict[str, Tool] = {
@@ -1252,7 +1298,10 @@ TOOLS: dict[str, Tool] = {
             "with a shell command such as curl, for files too large to pass as text. "
             "purpose data_source imports it into the Data tab like import_data (any format "
             "import_data reads, with its options); training_dataset stores a CSV or ZIP file "
-            "like upload_dataset. Returns the url and ready-to-run curl commands; the curl "
+            "like upload_dataset: a ZIP with one folder of images per class, or for "
+            "segmentation with the folders images/ and masks/ (same file names; masks as PNG "
+            "with the class index of every pixel, or black and white; optional classes.txt). "
+            "Returns the url and ready-to-run curl commands; the curl "
             "answer is the JSON that import_data or upload_dataset would return (with the "
             "new id or the dataset reference). The size limit is that of the web app. Which "
             "way to send a file: small file (up to the import_data limit) as text or base64; "
@@ -1270,6 +1319,12 @@ TOOLS: dict[str, Tool] = {
                 "project_id": {
                     "type": "integer",
                     "description": "training_dataset: also share it in this project",
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": list(training.UPLOAD_KINDS),
+                    "description": "training_dataset, ZIP files: 'images' (one folder per "
+                    "class) or 'segmentation' (images/ and masks/). Default: the folders decide",
                 },
                 "delimiter": {"type": "string", "description": "data_source: CSV delimiter"},
                 "decimal": {"type": "string", "description": "data_source: '.' or ','"},
@@ -1732,7 +1787,8 @@ TOOLS: dict[str, Tool] = {
             "One training run, as a summary by default: status and message (queued runs: "
             "queue with the position and the estimated wait), settings, epochs "
             "done, the best epoch, the final and test metrics (loss, accuracy; for regressions "
-            "the RMSE in the units of the target and R²), "
+            "the RMSE in the units of the target and R²; for segmentations mean IoU, Dice and "
+            "pixel accuracy, and segmentation with the IoU per class), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
             "kernel, log marginal likelihood or support vectors) and the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
@@ -1791,7 +1847,12 @@ TOOLS: dict[str, Tool] = {
             "training). Inputs of an image network: one image per sample as a nested array of "
             "channels×height×width (grayscale also height×width) or in the shape of its Input "
             "layer, with input_scale 'raw' (pixels 0–255), 'unit' (0–1) or 'normalized' "
-            "(already normalised like in training). Runs trained on demo data take arrays of "
+            "(already normalised like in training). Image networks also take image instead of "
+            "inputs: an image file (PNG, JPEG …) as base64 text, converted and resized like "
+            "the training images. Segmentation: per image the share of the pixels of every "
+            "class and the predicted class map as a small PNG (mask_png, a data URL; mask "
+            "'rle' gives run-lengths instead, 'none' only the shares). Runs trained on demo "
+            "data take arrays of "
             "the Input shape as they are. get_weights_download describes a run's inputs.",
             predict,
             {
@@ -1799,6 +1860,18 @@ TOOLS: dict[str, Tool] = {
                 "inputs": {
                     "type": "array",
                     "description": f"The samples, at most {inference.MAX_SAMPLES}",
+                },
+                "image": {
+                    "type": ["string", "array"],
+                    "items": {"type": "string"},
+                    "description": "Image networks, instead of inputs: an image file as "
+                    f"base64 text, or a list of at most {inference.MAX_IMAGE_FILES} (together "
+                    f"at most {inference.MAX_IMAGE_TEXT // 1000} kB of text)",
+                },
+                "mask": {
+                    "type": "string",
+                    "enum": list(inference.MASK_FORMATS),
+                    "description": "Segmentation: how the class map is returned (default png)",
                 },
                 "input_scale": {
                     "type": "string",
@@ -1814,7 +1887,7 @@ TOOLS: dict[str, Tool] = {
                     "description": f"Classes listed per sample (default {inference.DEFAULT_TOP_K})",
                 },
             },
-            ("run_id", "inputs"),
+            ("run_id",),
         ),
         Tool(
             "delete_training_run",
@@ -1840,9 +1913,34 @@ TOOLS: dict[str, Tool] = {
             writes=True,
             destructive=True,
         ),
+        Tool(
+            "get_approval",
+            "Check an approval request",
+            "The state of a request that waits for the user's approval (a tool answered with "
+            "approval_required and its id): pending, approved (being done), executed (done: "
+            "result is what the tool returned, e.g. the training run), failed (error), denied "
+            "(message: the user's reason) or expired. The user decides in the web app; ask "
+            "again later instead of repeating the original call.",
+            get_approval,
+            {"id": {"type": "integer", "description": "The id of the approval request"}},
+            ("id",),
+        ),
+        Tool(
+            "list_approvals",
+            "List approval requests",
+            "The approval requests of this token or app, newest first (status filters them). "
+            "Which actions need the user's approval is set per token and app by the user.",
+            list_approvals,
+            {
+                "status": {"type": "string", "enum": list(APPROVAL_STATUSES)},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            },
+        ),
     ]
 }
 
+# explain_prediction and get_layer_activations (they add themselves to TOOLS).
+from . import mcp_explain  # noqa: E402, F401
 
 # --------------------------------------------------------------------------- #
 # JSON-RPC
@@ -1901,10 +1999,33 @@ def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
         record_tool_call(request, name, args, started=started, error=message)
         raise McpError(-32602, message)
 
-    result, error = _run_tool(tool, request, args)
+    # Calls that need the user's approval wait instead (approvals.py).
+    try:
+        held = approvals.hold(request, tool, args, lambda given: _run_tool(tool, request, given))
+    except Exception:
+        logger.exception("Could not check whether MCP tool %s needs approval", tool.name)
+        held = approvals.Held(None, "Internal error in the Brick DNN server.")
+    if held is None:
+        result, error = _run_tool(tool, request, args)
+        logged: dict[str, Any] = {}
+    else:
+        result, error = held.result, held.error
+        logged = {
+            "outcome": held.outcome,
+            "approval": held.approval,
+            "summary": held.summary,
+            "targets": held.targets,
+        }
     # The activity log (agent_activity.py); written after the response.
     record_tool_call(
-        request, tool.name, args, started=started, result=result, error=error, writes=tool.writes
+        request,
+        tool.name,
+        held.arguments if held is not None and held.arguments is not None else args,
+        started=started,
+        result=result,
+        error=error,
+        writes=tool.writes,
+        **logged,
     )
     if error is not None:
         return {"content": [{"type": "text", "text": error}], "isError": True}

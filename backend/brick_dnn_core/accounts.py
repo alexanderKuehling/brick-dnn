@@ -47,6 +47,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
+    TokenObtainSerializer,
     TokenRefreshSerializer,
 )
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -59,6 +60,7 @@ from . import billing, budgets, data_service, live
 from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
+from .approvals import export_approvals
 from .models import (
     AgentAction,
     ApiToken,
@@ -85,10 +87,16 @@ User = get_user_model()
 
 
 class LoginSerializer(TokenObtainPairSerializer):
+    """The password login of the website. With two-factor authentication it answers a
+    challenge for the second step instead of tokens (see two_factor.py)."""
+
     def validate(self, attrs):
-        data = super().validate(attrs)
-        record_activity(self.user.pk)
-        return data
+        from . import two_factor
+
+        TokenObtainSerializer.validate(self, attrs)  # the password; raises if it is wrong
+        if two_factor.is_enabled(self.user):
+            return two_factor.challenge_response(self.user)
+        return two_factor.issue_login(self.user)
 
 
 class RefreshSerializer(TokenRefreshSerializer):
@@ -169,8 +177,9 @@ README = """Brick DNN: your data
 
 Everything this server stores about the account "{username}", exported {date}.
 
-account.json             your account: username, e-mail, when you signed up and last logged
-                         in, the terms of use you accepted
+account.json             your account: username, e-mail (and when it was confirmed), when
+                         you signed up and last logged in, the terms of use you accepted,
+                         whether two-factor authentication is on (not its secret)
 projects.json            networks you own: graphs, descriptions, sharing settings and their
                          version history
 memberships.json         networks of other people that were shared with you
@@ -180,6 +189,8 @@ api_tokens.json          your API tokens: name, the start of the token, dates (n
 connected_apps.json      apps you connected with OAuth, e.g. AI assistants
 agent_activity.json      what AI assistants and scripts did with your API tokens and
                          connected apps (summarised, as on the page "Agent activity")
+approvals.json           what your tokens and apps may do without asking you, and the
+                         actions of theirs that waited for your approval
 data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
@@ -207,17 +218,24 @@ def _json(archive: ZipFile, name: str, data: Any) -> None:
 
 
 def _account(user) -> dict[str, Any]:
+    from . import recovery, two_factor
+
     profile = UserProfile.objects.filter(user=user).first()
+    verified = recovery.is_verified(user, profile)
     return {
         "id": user.pk,
         "username": user.get_username(),
         "email": user.email,
+        "email_verified": verified,
+        "email_verified_at": profile.email_verified_at if verified and profile else None,
         "date_joined": user.date_joined,
         "last_login": user.last_login,
         "last_active_at": profile.last_active_at if profile else None,
         "terms_accepted_at": profile.terms_accepted_at if profile else None,
         "terms_version": (profile.terms_version or None) if profile else None,
         "privacy_version": (profile.privacy_version or None) if profile else None,
+        # Whether it is on, since when and how many recovery codes are left; never the secret.
+        "two_factor": two_factor.state(user),
     }
 
 
@@ -480,6 +498,7 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "api_tokens.json", _api_tokens(user))
         _json(archive, "connected_apps.json", _connections(user))
         _json(archive, "agent_activity.json", export_entries(user))
+        _json(archive, "approvals.json", export_approvals(user))
         _json(archive, "data_sources.json", _data_sources(user))
         _json(archive, "data_preparations.json", _data_preps(user))
         _json(archive, "datasets.json", _datasets(user))
@@ -514,11 +533,14 @@ class AccountApiView(APIView):
 
 def account_data(user) -> dict[str, Any]:
     """``Account`` (frontend/src/api/types.ts): the account and how much is stored for it."""
+    from . import recovery
+
     uploads = (DataSource.objects.filter(owner=user).aggregate(n=Sum("size_bytes"))["n"] or 0) + (
         Dataset.objects.filter(owner=user).aggregate(n=Sum("size_bytes"))["n"] or 0
     )
     return {
         **_account(user),
+        **recovery.email_state(user),
         "stored": {
             "projects": Project.objects.filter(owner=user).count(),
             "memberships": ProjectMember.objects.filter(user=user).count(),
@@ -551,12 +573,19 @@ class AccountView(AccountApiView):
         return Response(account_data(request.user))
 
     def patch(self, request: Request) -> Response:
-        serializer = EmailSerializer(data=request.data, context={"user": request.user})
+        from . import recovery
+
+        user = request.user
+        serializer = EmailSerializer(data=request.data, context={"user": user})
         serializer.is_valid(raise_exception=True)
-        request.user.email = serializer.validated_data["email"]
-        request.user.save(update_fields=["email"])
-        billing.email_changed(request.user)  # invoices of a paid plan go to this address
-        return Response(account_data(request.user))
+        old_address = user.email
+        old_trusted = recovery.trusted_email(user) is not None
+        user.email = serializer.validated_data["email"]
+        user.save(update_fields=["email"])
+        billing.email_changed(user)  # invoices of a paid plan go to this address
+        # A link to confirm the new address, a notice to the old one.
+        recovery.email_changed(user, old_address, old_trusted, request)
+        return Response(account_data(user))
 
 
 class PasswordSerializer(serializers.Serializer):
@@ -581,12 +610,15 @@ class PasswordView(AccountApiView):
     sessions and returns new tokens for this one: ``{"access", "refresh"}``."""
 
     def post(self, request: Request) -> Response:
+        from . import notices
+
         user = request.user
         serializer = PasswordSerializer(data=request.data, context={"user": user})
         serializer.is_valid(raise_exception=True)
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
         log_out_everywhere(user)
+        notices.password_changed(user, request)
         return Response(tokens_for(user))
 
 

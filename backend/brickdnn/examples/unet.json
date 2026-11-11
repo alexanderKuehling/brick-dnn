@@ -1,7 +1,7 @@
 {
   "id": "unet",
   "name": "U-Net (image segmentation)",
-  "description": "An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one value per pixel.",
+  "description": "An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one score per class for every pixel: it trains on the built-in Shapes dataset (background, square, circle, triangle) as it is, or on your own images with masks.",
   "order": 3,
   "graph": {
     "version": 1,
@@ -12,8 +12,8 @@
         "params": {
           "shape": [
             3,
-            128,
-            128
+            64,
+            64
           ]
         },
         "position": {
@@ -426,7 +426,7 @@
         "id": "mask",
         "type": "Conv2d",
         "params": {
-          "out_channels": 1,
+          "out_channels": 4,
           "kernel_size": [
             1,
             1

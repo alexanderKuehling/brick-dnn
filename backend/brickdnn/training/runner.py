@@ -1,7 +1,8 @@
 """Run one training job in its own process: ``python -m brickdnn.training.runner RUN_DIR``.
 
 Reads ``RUN_DIR/job.json``, keeps ``RUN_DIR/state.json`` up to date (see state.py) and
-saves ``RUN_DIR/weights.pt`` (classical models: ``RUN_DIR/model.joblib``). A ``STOP`` file,
+saves ``RUN_DIR/weights.pt`` (classical models: ``RUN_DIR/model.joblib``); a segmentation
+also writes ``RUN_DIR/previews/`` (see previews.py). A ``STOP`` file,
 SIGTERM or SIGINT stop the run after the current batch; a classical model that is being
 fitted cannot be interrupted, so the process then ends right away without saving it. The
 process always ends with a terminal status in ``state.json``. It runs with a lower
@@ -30,6 +31,7 @@ from .reporting import Reporter, TrainingError
 from .state import (
     HEARTBEAT_SECONDS,
     MAX_LOG_LINES,
+    PREVIEW_DIR,
     cpu_seconds,
     initial_state,
     read_job,
@@ -189,6 +191,9 @@ class StateReporter(Reporter):
                 current["epochs_done"] = entry["epoch"]
                 for key in ("train_loss", "val_loss", "val_accuracy", "val_rmse", "val_r2"):
                     current[key] = entry.get(key)
+                for key in ("val_iou", "val_dice", "val_pixel_accuracy"):  # segmentation
+                    if key in entry:
+                        current[key] = entry[key]
                 self.state["trials"] = [*trials[:-1], current]
             self._write()
 
@@ -249,6 +254,10 @@ class StateReporter(Reporter):
     def test_end(self, result: dict[str, Any]) -> None:
         print(f"Test: {result}", flush=True)
         self._update(test=result, progress=None)
+
+    def segmentation_end(self, result: dict[str, Any]) -> None:
+        print(f"Segmentation: {result}", flush=True)
+        self._update(segmentation=result)
 
     def finish(self, status: str, message: str, weights: bool) -> None:
         reason = None
@@ -321,7 +330,7 @@ def run(run_dir: str | Path) -> dict[str, Any]:
         if job_data is None:
             raise TrainingError("The training job is missing or invalid.")
         job = TrainingJob.from_dict(job_data)
-        engine.train(job, reporter, run_dir / weights_file(family))
+        engine.train(job, reporter, run_dir / weights_file(family), run_dir / PREVIEW_DIR)
     except TrainingError as exc:
         if not reporter.finished:
             reporter.finish("failed", str(exc), False)

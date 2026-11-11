@@ -29,13 +29,22 @@ import torch
 import torch.nn as nn
 
 from ..codegen import generate_code
-from .compat import TrainingPlan, check_compatibility
+from .compat import TrainingPlan, check_compatibility, segmentation_memory_error
 from .config import TrainingConfig
 from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT
 from .devices import available_devices, default_device, device_label, select_device
 from .job import TrainingJob, TrainingResult
-from .reporting import DivergedError, Reporter, StopTraining, TrainingError, short_error
+from .reporting import (
+    DivergedError,
+    MemoryLimitError,
+    Reporter,
+    StopTraining,
+    TrainingError,
+    short_error,
+)
+from .segmentation import class_colors
+from .segmetrics import SegmentationLoss, SegmentationMetrics, predicted_classes
 from .state import finite, preprocessing_path, write_json_atomic
 from .tuning import TuningConfig, describe_params, trial_config
 
@@ -43,6 +52,11 @@ from .tuning import TuningConfig, describe_params, trial_config
 PROGRESS_INTERVAL = 0.5
 # How often the stop flag is checked (seconds).
 STOP_CHECK_INTERVAL = 0.2
+# Segmentation: what an evaluation adds to loss, accuracy, rmse and r2 (the means over the
+# classes and the values per class), and the keys of a trial's validation results.
+SEGMENTATION_KEYS = ("iou", "dice", "pixel_accuracy")
+CLASS_KEYS = ("class_iou", "class_dice")
+TRIAL_SEGMENTATION_KEYS = ("val_iou", "val_dice", "val_pixel_accuracy")
 
 __all__ = [
     "DEFAULT_DATA_ROOT",
@@ -73,7 +87,10 @@ def build_model(graph: Any) -> nn.Module:
 
 
 def train(
-    job: TrainingJob, reporter: Reporter, weights_path: str | Path | None = None
+    job: TrainingJob,
+    reporter: Reporter,
+    weights_path: str | Path | None = None,
+    previews_dir: str | Path | None = None,
 ) -> TrainingResult:
     """Run one training job to the end. Never raises (except ``KeyboardInterrupt``).
 
@@ -83,6 +100,9 @@ def train(
     set, if any, is measured with the same weights. The outcome is reported with
     ``reporter.finish`` and returned.
 
+    A segmentation also writes preview images of a few validation samples into
+    ``previews_dir`` (see :mod:`.previews`) once the weights are saved.
+
     Classical models (scikit-learn) are handed to :mod:`.classical_engine`, which saves
     the fitted model with joblib instead.
     """
@@ -91,8 +111,8 @@ def train(
 
         return classical_engine.train(job, reporter, weights_path)
     if job.tuning is not None:
-        return _Search(job, reporter, weights_path).run()
-    return _Run(job, reporter, weights_path).run()
+        return _Search(job, reporter, weights_path, previews_dir).run()
+    return _Run(job, reporter, weights_path, previews_dir).run()
 
 
 def _is_out_of_memory(exc: BaseException) -> bool:
@@ -123,9 +143,21 @@ def _capitalized(text: str) -> str:
 
 
 def _metrics_text(
-    name: str, loss: float, accuracy: float | None, rmse: float | None, r2: float | None
+    name: str,
+    loss: float,
+    accuracy: float | None,
+    rmse: float | None,
+    r2: float | None,
+    iou: float | None = None,
+    pixel_accuracy: float | None = None,
 ) -> str:
-    """``"validation accuracy 97.1%"`` or ``"test loss 0.123, RMSE 4.5, R² 0.912"``."""
+    """``"validation accuracy 97.1%"``, ``"test loss 0.123, RMSE 4.5, R² 0.912"`` or, for a
+    segmentation, ``"validation mean IoU 81.2%, pixel accuracy 96.4%"``."""
+    if iou is not None:
+        text = f"{name} mean IoU {iou * 100:.1f}%"
+        if pixel_accuracy is not None:
+            text += f", pixel accuracy {pixel_accuracy * 100:.1f}%"
+        return text
     if accuracy is not None:
         return f"{name} accuracy {accuracy * 100:.1f}%"
     text = f"{name} loss {loss:.4g}"
@@ -185,11 +217,21 @@ class _R2:
 
 
 class _Run:
-    def __init__(self, job: TrainingJob, reporter: Reporter, weights_path: str | Path | None):
+    def __init__(
+        self,
+        job: TrainingJob,
+        reporter: Reporter,
+        weights_path: str | Path | None,
+        previews_dir: str | Path | None = None,
+    ):
         self.job = job
         self.config = job.config
         self.reporter = reporter
         self.weights_path = Path(weights_path) if weights_path is not None else None
+        self.previews_dir = Path(previews_dir) if previews_dir is not None else None
+        self.segmentation = False
+        # Segmentation: per-class results on the validation data, by epoch (of this trial)
+        self.class_results: dict[int, dict[str, Any]] = {}
         self.device = torch.device("cpu")
         self.device_label = device_label("cpu")
         self.model: nn.Module | None = None
@@ -216,8 +258,11 @@ class _Run:
                 self._on_stopped()
                 self._report_kept()
                 weights = self._save_weights()
+                self._report_segmentation(weights)
                 return self._end("stopped", self._stopped_message(), weights)
-            return self._end("completed", self._summary(), self._save_weights())
+            weights = self._save_weights()
+            self._report_segmentation(weights)
+            return self._end("completed", self._summary(), weights)
         except TrainingError as exc:
             return self._end("failed", str(exc), False)
         except Exception as exc:
@@ -291,11 +336,19 @@ class _Run:
             kept["val_accuracy"],
             kept.get("val_rmse"),
             kept.get("val_r2"),
+            kept.get("val_iou"),
+            kept.get("val_pixel_accuracy"),
         )
         if self.test_result is not None:
             test = self.test_result
             text += "; " + _metrics_text(
-                "test", test["loss"], test["accuracy"], test["rmse"], test["r2"]
+                "test",
+                test["loss"],
+                test["accuracy"],
+                test["rmse"],
+                test["r2"],
+                test.get("iou"),
+                test.get("pixel_accuracy"),
             )
         return text
 
@@ -352,6 +405,7 @@ class _Run:
 
     def _prepare(self) -> None:
         self._prepare_data()
+        self._check_memory(self.config)
         self._build(self.config)
         self.reporter.setup(self._setup_info())
         self._to_device(check=True)
@@ -386,11 +440,29 @@ class _Run:
         self._check_stop()
 
         targets = self.plan.targets
-        self.losses = [
-            nn.CrossEntropyLoss() if t["kind"] == "class" else nn.MSELoss() for t in targets
-        ]
+        self.losses = [self._loss_function(t) for t in targets]
         self.accuracy = len(targets) == 1 and targets[0]["kind"] == "class"
         self.regression = self.plan.task == "regression"
+        self.segmentation = self.plan.task == "segmentation"
+
+    def _loss_function(self, target: dict[str, Any]) -> nn.Module:
+        if target["kind"] == "mask":
+            return SegmentationLoss(
+                int(target["num_classes"]),
+                bool(target.get("binary")),
+                dice=self.job.config.loss == "cross_entropy_dice",
+            )
+        return nn.CrossEntropyLoss() if target["kind"] == "class" else nn.MSELoss()
+
+    def _check_memory(self, config: TrainingConfig) -> None:
+        """Segmentation: refuse a batch that would not fit into memory (the process would be
+        killed instead of failing with a message)."""
+        if self.segmentation and self.plan.image is not None:
+            error = segmentation_memory_error(
+                self.plan.segmentation or {}, self.plan.image, config.batch_size
+            )
+            if error is not None:
+                raise MemoryLimitError(error)
 
     def _build(self, config: TrainingConfig) -> None:
         """A fresh model and shuffling order for ``config``.
@@ -405,6 +477,7 @@ class _Run:
         self.weights_epoch = None
         self.stopped_early = False
         self.steps = 0
+        self.class_results = {}
         self.shuffle = torch.Generator().manual_seed(self.seed + 1)
         torch.manual_seed(self.seed)
         self.model = build_model(self.job.graph)
@@ -560,9 +633,18 @@ class _Run:
             if self.regression:
                 entry["val_rmse"] = validated["rmse"]
                 entry["val_r2"] = validated["r2"]
+            if self.segmentation:
+                entry["val_iou"] = validated["iou"]
+                entry["val_dice"] = validated["dice"]
+                entry["val_pixel_accuracy"] = validated["pixel_accuracy"]
+                self.class_results[epoch] = {
+                    key: validated[key] for key in (*SEGMENTATION_KEYS, *CLASS_KEYS)
+                }
             self.history.append(entry)
             if self.best is None or val_loss < self.best["val_loss"]:
                 self.best = {"epoch": epoch, "val_loss": val_loss, "val_accuracy": val_acc}
+                if self.segmentation:
+                    self.best["val_iou"] = validated["iou"]
                 if self.config.restore_best:
                     self.best_weights = self._weights_copy()
             self.reporter.epoch_end(dict(entry), dict(self.best))
@@ -639,11 +721,16 @@ class _Run:
     def _evaluate(self, source: Source) -> dict[str, Any]:
         """``{"loss", "accuracy", "rmse", "r2"}`` on ``source``: the accuracy for a single
         classification output, RMSE (in the units of the data) and R² for a regression,
-        otherwise None."""
+        otherwise None. A segmentation adds ``"iou"`` and ``"dice"`` (means over the classes
+        that occur), ``"pixel_accuracy"`` and per class ``"class_iou"`` and ``"class_dice"``."""
         assert self.model is not None
         self.model.eval()
         loss_sum, seen, correct = 0.0, 0, 0
         r2 = _R2() if self.regression else None
+        masks = None
+        if self.segmentation:
+            target = self.plan.targets[0]
+            masks = SegmentationMetrics(int(target["num_classes"]), bool(target.get("binary")))
         values = [i for i, t in enumerate(self.plan.targets) if t["kind"] == "value"]
         with torch.no_grad():
             for inputs, targets in iterate_batches(source, self.config.batch_size):
@@ -656,17 +743,22 @@ class _Run:
                     correct += self._correct(outputs, targets)
                 if r2 is not None:
                     r2.add([outputs[i] for i in values], [targets[i] for i in values])
+                if masks is not None:
+                    masks.add(outputs[0], targets[0])
         seen = max(seen, 1)
         loss = loss_sum / seen
         rmse = None
         if self.regression and self.data.target_std is not None and math.isfinite(loss):
             rmse = math.sqrt(loss) * self.data.target_std
-        return {
+        result = {
             "loss": loss,
             "accuracy": correct / seen if self.accuracy else None,
             "rmse": rmse,
             "r2": r2.value() if r2 is not None else None,
         }
+        if masks is not None:
+            result.update(masks.result())
+        return result
 
     def _test(self) -> None:
         """Measure the kept weights once on the test set (if there is one)."""
@@ -675,6 +767,69 @@ class _Run:
         self.reporter.status("running", "Testing the final model …")
         self.test_result = self._evaluate(self.data.test)
         self.reporter.test_end(dict(self.test_result))
+
+    # -- segmentation ------------------------------------------------------ #
+
+    def _kept_model(self) -> nn.Module | None:
+        """The model with the weights that were saved."""
+        return self.model
+
+    def _report_segmentation(self, weights: bool) -> None:
+        """Segmentation, once the weights are saved: write the preview images and report the
+        per-class results of the kept weights. Never fails the run."""
+        if not self.segmentation or not (weights or self.history):
+            return  # nothing was trained
+        try:
+            plan, target = self.plan, self.plan.targets[0]
+            names = list(plan.class_names or [])[: int(target["num_classes"])]
+            kept = self.class_results.get(self.weights_epoch or 0)
+            test = self.test_result
+            result: dict[str, Any] = {
+                "loss": self.job.config.loss,
+                "binary": bool(target.get("binary")),
+                "ignore_index": (plan.segmentation or {}).get("ignore_index"),
+                "class_names": names,
+                "colors": class_colors(len(names)),
+                "validation": {"epoch": self.weights_epoch, **kept} if kept else None,
+                "test": (
+                    {key: test.get(key) for key in (*SEGMENTATION_KEYS, *CLASS_KEYS)}
+                    if test is not None
+                    else None
+                ),
+                "previews": self._write_previews(names),
+            }
+            self.reporter.segmentation_end(result)
+        except Exception as exc:
+            traceback.print_exc()
+            self.reporter.log(f"The preview images could not be written: {short_error(exc)}")
+
+    def _write_previews(self, names: list[str]) -> dict[str, Any] | None:
+        """Predict the first validation samples with the kept weights and save them as
+        images (see previews.py). Returns ``{"count", "epoch", "split"}``, or None."""
+        model = self._kept_model()
+        if self.previews_dir is None or model is None or len(self.data.val) == 0:
+            return None
+        from .previews import PREVIEW_SAMPLES, save_previews
+
+        count = min(PREVIEW_SAMPLES, len(self.data.val))
+        inputs, targets = self.data.val.batch(torch.arange(count))
+        model.eval()
+        with torch.no_grad():
+            out = model(*[x.to(self.device) for x in inputs])
+        output = out[0] if isinstance(out, tuple) else out
+        binary = bool(self.plan.targets[0].get("binary"))
+        predicted = predicted_classes(output, binary).cpu()
+        preprocessing = self.data.preprocessing
+        mean = torch.tensor(preprocessing["mean"], dtype=torch.float32).view(1, -1, 1, 1)
+        std = torch.tensor(preprocessing["std"], dtype=torch.float32).view(1, -1, 1, 1)
+        pixels = ((inputs[0].cpu() * std + mean) * 255.0).round().clamp(0, 255).to(torch.uint8)
+        index = save_previews(
+            self.previews_dir, pixels, targets[0], predicted, names, self.weights_epoch
+        )
+        if index is None:
+            self.reporter.log("Preview images need Pillow: pip install pillow")
+            return None
+        return {"count": len(index["samples"]), "epoch": index["epoch"], "split": index["split"]}
 
 
 class _Search(_Run):
@@ -687,8 +842,14 @@ class _Search(_Run):
     kept in memory, tested and saved at the end.
     """
 
-    def __init__(self, job: TrainingJob, reporter: Reporter, weights_path: str | Path | None):
-        super().__init__(job, reporter, weights_path)
+    def __init__(
+        self,
+        job: TrainingJob,
+        reporter: Reporter,
+        weights_path: str | Path | None,
+        previews_dir: str | Path | None = None,
+    ):
+        super().__init__(job, reporter, weights_path, previews_dir)
         assert job.tuning is not None
         self.tuning: TuningConfig = job.tuning
         self.base_config = job.config
@@ -697,6 +858,7 @@ class _Search(_Run):
         self.best_state: dict[str, torch.Tensor] | None = None
         self.best_history: list[dict[str, Any]] = []
         self.best_epoch: dict[str, Any] | None = None
+        self.best_class_results: dict[int, dict[str, Any]] = {}
         self.device_checked = False  # the Apple GPU check (_try_mps) is done once
 
     def _execute(self) -> None:
@@ -748,10 +910,13 @@ class _Search(_Run):
             "stopped_early": False,
             "seconds": None,
         }
+        if self.segmentation:
+            entry.update(dict.fromkeys(TRIAL_SEGMENTATION_KEYS))
         self.trials.append(entry)
         started = time.perf_counter()
         failure: str | None = None
         try:
+            self._check_memory(self.config)
             self._to_device(check=not self.device_checked)
             self.device_checked = True
             self.optimizer = self._optimizer()
@@ -762,7 +927,7 @@ class _Search(_Run):
             raise
         except Exception as exc:
             if not (
-                isinstance(exc, DivergedError)
+                isinstance(exc, (DivergedError, MemoryLimitError))
                 or _is_out_of_memory(exc)
                 or _is_batch_norm_error(exc)
             ):
@@ -781,6 +946,7 @@ class _Search(_Run):
             self.best_state = self._weights_copy()
             self.best_history = list(self.history)
             self.best_epoch = dict(self.best) if self.best else None
+            self.best_class_results = dict(self.class_results)
             self._trial_done(entry, "completed", "", started, new_best=True)
         else:
             self._trial_done(entry, "completed", "", started)
@@ -807,6 +973,8 @@ class _Search(_Run):
             stopped_early=self.stopped_early,
             seconds=round(time.perf_counter() - started, 3),
         )
+        if self.segmentation:
+            entry.update({key: kept.get(key) for key in TRIAL_SEGMENTATION_KEYS})
         if new_best:
             self.best_trial = entry
         best = self.best_trial["trial"] if self.best_trial else None
@@ -822,6 +990,7 @@ class _Search(_Run):
         self.model.to(self.device)
         self.history = list(self.best_history)
         self.best = self.best_epoch
+        self.class_results = dict(self.best_class_results)
         self.weights_epoch = best["weights_epoch"]
         self.stopped_early = best["stopped_early"]
         self.trial = 0
@@ -842,6 +1011,7 @@ class _Search(_Run):
             best = self.best_trial
             self.history = list(self.best_history)
             self.best = self.best_epoch
+            self.class_results = dict(self.best_class_results)
             self.weights_epoch = best["weights_epoch"]
             self.stopped_early = best["stopped_early"]
             self.reporter.search_end(
@@ -890,6 +1060,15 @@ class _Search(_Run):
         if self.best_state is not None:
             return self._write_weights(self.best_state)
         return super()._save_weights()
+
+    def _kept_model(self) -> nn.Module | None:
+        """A model with the weights of the best trial (the current model may be that of a
+        later trial when the search was stopped)."""
+        if self.best_state is None:
+            return super()._kept_model()
+        model = build_model(self.job.graph)
+        model.load_state_dict(self.best_state)
+        return model.to(self.device)
 
 
 def entry_score(history: list[dict[str, Any]], weights_epoch: int | None = None) -> float:

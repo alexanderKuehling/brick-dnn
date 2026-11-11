@@ -64,9 +64,9 @@ def max_bytes(purpose: str) -> int:
 def create_link(request: Request, user, purpose: Any, args: dict[str, Any]) -> dict[str, Any]:
     """A signed one-time upload link for ``user`` and what to do with it.
 
-    ``args``: ``filename`` (decides the format), ``name``, ``project_id`` (training
-    datasets) and the import options of the Data tab (data sources). Raises
-    :class:`UploadLinkError`.
+    ``args``: ``filename`` (decides the format), ``name``, ``project_id`` and ``kind``
+    (training datasets: what a ZIP file holds, "images" or "segmentation") and the import
+    options of the Data tab (data sources). Raises :class:`UploadLinkError`.
     """
     if purpose not in PURPOSES:
         raise UploadLinkError("'purpose' must be data_source or training_dataset.")
@@ -99,6 +99,11 @@ def create_link(request: Request, user, purpose: Any, args: dict[str, Any]) -> d
             raise UploadLinkError(training.DISABLED_REASON)
         if Path(filename).suffix.lower() not in (".csv", ".zip"):
             raise UploadLinkError(training.WRONG_FILE_MESSAGE)
+        kind = args.get("kind")
+        if kind is not None:
+            if kind not in training.UPLOAD_KINDS or Path(filename).suffix.lower() != ".zip":
+                raise UploadLinkError(training.WRONG_KIND_MESSAGE)
+            payload["k"] = kind
         payload["pr"] = _project_id(user, args.get("project_id"))
         becomes = "a training dataset (its reference goes to check_training / start_training)"
     signature = _signer().sign_object(payload, compress=True)
@@ -312,7 +317,7 @@ class UploadLinkView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
         try:
-            dataset = training.save_upload(user, upload, payload.get("n"))
+            dataset = training.save_upload(user, upload, payload.get("n"), payload.get("k"))
         except DatasetError as exc:
             return Response(
                 {"detail": f"The file cannot be used: {exc}"}, status=status.HTTP_400_BAD_REQUEST

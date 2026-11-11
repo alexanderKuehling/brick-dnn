@@ -46,7 +46,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Real graphs, not just stacks**: skip connections (`Add`), multiple inputs and outputs and
   branch merging (`Concat`).
 - **Local training from the editor**: press *Train*, pick demo data, MNIST, Fashion-MNIST,
-  CIFAR-10, a CSV file or a folder of images, and watch loss and accuracy live. Training runs
+  CIFAR-10, a CSV file, a folder of images or images with masks, and watch loss and accuracy
+  live. Training runs
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
   checks beforehand whether network and data fit and says what to change. Hold out a test set,
   stop early when the validation loss no longer improves (the weights of the best epoch are
@@ -55,6 +56,12 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   wait in a **queue** and a separate worker container trains them, so the site stays
   responsive and nothing is refused because the server is busy. See
   [docs/training.md](docs/training.md).
+- **Image segmentation**: train a U-Net (or any network that keeps the image size) on images
+  with one mask each, a ZIP file with the folders `images` and `masks`, or on the built-in
+  generated dataset *Shapes* without uploading anything. The run reports mean IoU, Dice and
+  pixel accuracy per epoch and the IoU of every class, and shows what the network predicts
+  for a few validation images next to their true masks. See
+  [docs/training.md](docs/training.md#image-segmentation).
 - **Data preparation and analysis** in the *Data* tab: import messy CSV files, Excel and
   OpenDocument workbooks (choose the sheet), JSON / JSON Lines, Parquet and Feather files, also
   zipped or gzipped, or straight from a link (Google Sheets, GitHub, Hugging Face …), join and
@@ -78,17 +85,30 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   or the support vectors, predict with uncertainty (Gaussian processes) or class
   probabilities, and export as a scikit-learn script. See
   [docs/training.md](docs/training.md#classical-models).
+- **Explainable AI and learning aids**: explain a trained model's predictions with saliency
+  maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
+  importance (tables), compare decision boundaries of an MLP, an SVM and a Gaussian process,
+  and look inside a network: the output of every layer for one sample, learned filters and
+  weight histograms. In the builder, **How data flows** steps a sample through the network,
+  and the inspector shows how a layer's parameters add up and its receptive field (also in
+  the online demo). See [docs/explain.md](docs/explain.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
-- **Examples** to start from: MLP, CNN, residual block, LSTM and Transformer text classifiers,
+- **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
+  classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
   tabular regression, multi-input model, Gaussian process regression, SVM classifier and a
   periodic Gaussian process.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and
-  delete unused data automatically ([docs/privacy.md](docs/privacy.md)).
+  delete unused data automatically ([docs/privacy.md](docs/privacy.md)). Optional two-factor
+  login with an authenticator app, and with an e-mail provider password reset, confirmed
+  addresses and security notices ([docs/email.md](docs/email.md)).
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
+- **A short guide** on the first visit (palette, connections, the analysis, code and export,
+  training; skippable, and again with the *?* button), and an empty canvas offers examples to
+  start from.
 - Dark mode, keyboard shortcuts, works on tablets and phones.
 
 <table>
@@ -362,7 +382,15 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
 | `BRICKDNN_GPC_MAX_ROWS`        | `2000`                     | Training rows a Gaussian process classifier is fitted on at most |
 | `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
-| `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer) |
+| `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900`                   | Memory a batch of a segmentation training may need; larger batches are refused ([docs/training.md](docs/training.md#settings-memory-and-time)) |
+| `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
+| `BRICKDNN_EMAIL_HOST` / `_PORT` | – (no e-mail) / `587`     | SMTP server of an e-mail provider: password reset, confirming addresses, notices ([docs/email.md](docs/email.md)) |
+| `BRICKDNN_EMAIL_USER` / `_PASSWORD` | –                     | SMTP login and password (secret; only in `.env`)     |
+| `BRICKDNN_EMAIL_FROM` / `_REPLY_TO` | `Brick DNN <no-reply@localhost>` / – | Sender of the e-mails, e.g. `Brick DNN <no-reply@brickdnn.com>` |
+| `BRICKDNN_EMAIL_USE_TLS` / `_USE_SSL` | STARTTLS (TLS on port 465) | How to connect to the SMTP server              |
+| `BRICKDNN_ADMIN_EMAIL`         | unset                      | Where server errors (HTTP 500) are mailed, at most one per kind an hour |
+| `BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS` | `14,3`           | With e-mail: days before an inactive account is deleted that its owner is warned |
+| `BRICKDNN_REQUIRE_2FA_FOR_STAFF` | `false`                  | Staff accounts need two-factor authentication for the Django admin |
 | `BRICKDNN_LEGAL_DIR`           | `legal/` in the data dir   | Folder with `imprint.md`, `privacy.md`, `terms.md` (shown at `/imprint` …); several separated by `:`, the first with a page wins |
 | `BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS` | `0` (off)           | Delete data sources, datasets and finished runs unused for this many days |
 | `BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS` | `0` (off)        | Delete accounts unused for this many days, with everything they own |
@@ -382,6 +410,13 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
 | `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
+| `BRICKDNN_BACKUP_DIR`          | – (off)                    | Folder for `manage.py backup` (database and files; the cleanup service runs it daily), see [deploy/server](deploy/server/README.md#backups) |
+| `BRICKDNN_BACKUP_KEEP_DAILY` / `_WEEKLY` | `7` / `4`        | Backups kept: the newest of each of the last days / weeks |
+| `BRICKDNN_BACKUP_FILES`        | `archive`                  | The data directory's files as tarball (`archive`), `list` or `none` |
+| `BRICKDNN_BACKUP_MAX_FILES_MB` | `2048`                     | Larger file sets are only listed                     |
+| `BRICKDNN_BACKUP_MAX_AGE_HOURS` | `50`                      | `/api/health/` reports a newest backup older than this |
+| `BRICKDNN_HEALTH_MIN_FREE_MB`  | `1024`                     | `/api/health/` reports `degraded` below this much free space in the data dir (`0`: no check) |
+| `BRICKDNN_HEALTH_TOKEN`        | – (staff only)             | Secret for the `X-Health-Token` header that shows the details of `/api/health/` (only in `.env`) |
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
@@ -390,7 +425,9 @@ PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server 
 people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
 legal pages (imprint, privacy policy, terms of use; templates in
 [deploy/legal/](deploy/legal/README.md)), the account page where users export their data or
-delete their account, and the optional automatic deletion of old data. Selling plans as
+delete their account, and the optional automatic deletion of old data. E-mail (password
+reset, confirming addresses, notices) and two-factor login: [docs/email.md](docs/email.md).
+Selling plans as
 subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
 training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); what
 comes after one server: [docs/scaling.md](docs/scaling.md).
@@ -406,7 +443,8 @@ cd frontend && npm test       # typecheck, prettier, eslint, stylelint, vitest
 The backend suite builds every example and every layer type, runs the generated code in
 PyTorch and checks that output shapes and parameter counts match the analysis exactly. It also
 trains the generated CSV scripts end to end and runs the training engine on every example
-(demo data, CSV files, image folders, built-in datasets with faked downloads). CI runs everything on Python 3.12 and 3.13 and builds
+(demo data, CSV files, image folders, images with masks, built-in datasets with faked
+downloads). CI runs everything on Python 3.12 and 3.13 and builds
 the Docker images.
 
 ## Roadmap

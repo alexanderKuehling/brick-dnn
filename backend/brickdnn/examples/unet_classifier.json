@@ -1,0 +1,678 @@
+{
+  "id": "unet_classifier",
+  "name": "U-Net classifier (Fashion-MNIST)",
+  "description": "Classification with a U-Net: the encoder, decoder and skip connections of the U-Net example, then AdaptiveAvgPool2d, Flatten and Linear give 10 class scores. Fashion-MNIST's 28\u00d728 images are resized to 32\u00d732 so that three halvings fit (32 \u2192 16 \u2192 8 \u2192 4), and the filters are halved (16/32/64, bottleneck 128) so that it trains on a CPU server. For this task a plain CNN such as the Small CNN example is smaller and faster; this one shows how a segmentation network becomes a classifier.",
+  "order": 4,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "input",
+        "type": "Input",
+        "params": {
+          "shape": [
+            1,
+            32,
+            32
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enc1_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 16
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      },
+      {
+        "id": "enc1_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "enc1_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 16
+        },
+        "position": {
+          "x": 840,
+          "y": 0
+        }
+      },
+      {
+        "id": "enc1_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 1120,
+          "y": 0
+        }
+      },
+      {
+        "id": "pool1",
+        "type": "MaxPool2d",
+        "params": {},
+        "position": {
+          "x": 1400,
+          "y": 0
+        }
+      },
+      {
+        "id": "enc2_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 32
+        },
+        "position": {
+          "x": 420,
+          "y": 170
+        }
+      },
+      {
+        "id": "enc2_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 700,
+          "y": 170
+        }
+      },
+      {
+        "id": "enc2_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 32
+        },
+        "position": {
+          "x": 980,
+          "y": 170
+        }
+      },
+      {
+        "id": "enc2_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 1260,
+          "y": 170
+        }
+      },
+      {
+        "id": "pool2",
+        "type": "MaxPool2d",
+        "params": {},
+        "position": {
+          "x": 1540,
+          "y": 170
+        }
+      },
+      {
+        "id": "enc3_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64
+        },
+        "position": {
+          "x": 560,
+          "y": 340
+        }
+      },
+      {
+        "id": "enc3_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 840,
+          "y": 340
+        }
+      },
+      {
+        "id": "enc3_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64
+        },
+        "position": {
+          "x": 1120,
+          "y": 340
+        }
+      },
+      {
+        "id": "enc3_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 1400,
+          "y": 340
+        }
+      },
+      {
+        "id": "pool3",
+        "type": "MaxPool2d",
+        "params": {},
+        "position": {
+          "x": 1680,
+          "y": 340
+        }
+      },
+      {
+        "id": "bottleneck_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 128
+        },
+        "position": {
+          "x": 700,
+          "y": 510
+        }
+      },
+      {
+        "id": "bottleneck_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 980,
+          "y": 510
+        }
+      },
+      {
+        "id": "bottleneck_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 128
+        },
+        "position": {
+          "x": 1260,
+          "y": 510
+        }
+      },
+      {
+        "id": "bottleneck_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 1540,
+          "y": 510
+        }
+      },
+      {
+        "id": "up3",
+        "type": "ConvTranspose2d",
+        "params": {
+          "out_channels": 64
+        },
+        "position": {
+          "x": 1960,
+          "y": 340
+        }
+      },
+      {
+        "id": "skip3",
+        "type": "Concat",
+        "params": {
+          "dim": 0
+        },
+        "position": {
+          "x": 2240,
+          "y": 340
+        }
+      },
+      {
+        "id": "dec3_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64
+        },
+        "position": {
+          "x": 2520,
+          "y": 340
+        }
+      },
+      {
+        "id": "dec3_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 2800,
+          "y": 340
+        }
+      },
+      {
+        "id": "dec3_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 64
+        },
+        "position": {
+          "x": 3080,
+          "y": 340
+        }
+      },
+      {
+        "id": "dec3_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 3360,
+          "y": 340
+        }
+      },
+      {
+        "id": "up2",
+        "type": "ConvTranspose2d",
+        "params": {
+          "out_channels": 32
+        },
+        "position": {
+          "x": 2100,
+          "y": 170
+        }
+      },
+      {
+        "id": "skip2",
+        "type": "Concat",
+        "params": {
+          "dim": 0
+        },
+        "position": {
+          "x": 2380,
+          "y": 170
+        }
+      },
+      {
+        "id": "dec2_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 32
+        },
+        "position": {
+          "x": 2660,
+          "y": 170
+        }
+      },
+      {
+        "id": "dec2_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 2940,
+          "y": 170
+        }
+      },
+      {
+        "id": "dec2_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 32
+        },
+        "position": {
+          "x": 3220,
+          "y": 170
+        }
+      },
+      {
+        "id": "dec2_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 3500,
+          "y": 170
+        }
+      },
+      {
+        "id": "up1",
+        "type": "ConvTranspose2d",
+        "params": {
+          "out_channels": 16
+        },
+        "position": {
+          "x": 2240,
+          "y": 0
+        }
+      },
+      {
+        "id": "skip1",
+        "type": "Concat",
+        "params": {
+          "dim": 0
+        },
+        "position": {
+          "x": 2520,
+          "y": 0
+        }
+      },
+      {
+        "id": "dec1_conv1",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 16
+        },
+        "position": {
+          "x": 2800,
+          "y": 0
+        }
+      },
+      {
+        "id": "dec1_relu1",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 3080,
+          "y": 0
+        }
+      },
+      {
+        "id": "dec1_conv2",
+        "type": "Conv2d",
+        "params": {
+          "out_channels": 16
+        },
+        "position": {
+          "x": 3360,
+          "y": 0
+        }
+      },
+      {
+        "id": "dec1_relu2",
+        "type": "Activation",
+        "params": {
+          "function": "relu"
+        },
+        "position": {
+          "x": 3640,
+          "y": 0
+        }
+      },
+      {
+        "id": "pool",
+        "type": "AdaptiveAvgPool2d",
+        "params": {
+          "output_size": [
+            1,
+            1
+          ]
+        },
+        "position": {
+          "x": 3920,
+          "y": 0
+        }
+      },
+      {
+        "id": "flatten",
+        "type": "Flatten",
+        "params": {},
+        "position": {
+          "x": 4060,
+          "y": 0
+        }
+      },
+      {
+        "id": "classifier",
+        "type": "Linear",
+        "params": {
+          "out_features": 10
+        },
+        "position": {
+          "x": 4200,
+          "y": 0
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-input-enc1_conv1",
+        "source": "input",
+        "target": "enc1_conv1"
+      },
+      {
+        "id": "e-enc1_conv1-enc1_relu1",
+        "source": "enc1_conv1",
+        "target": "enc1_relu1"
+      },
+      {
+        "id": "e-enc1_relu1-enc1_conv2",
+        "source": "enc1_relu1",
+        "target": "enc1_conv2"
+      },
+      {
+        "id": "e-enc1_conv2-enc1_relu2",
+        "source": "enc1_conv2",
+        "target": "enc1_relu2"
+      },
+      {
+        "id": "e-enc1_relu2-pool1",
+        "source": "enc1_relu2",
+        "target": "pool1"
+      },
+      {
+        "id": "e-pool1-enc2_conv1",
+        "source": "pool1",
+        "target": "enc2_conv1"
+      },
+      {
+        "id": "e-enc2_conv1-enc2_relu1",
+        "source": "enc2_conv1",
+        "target": "enc2_relu1"
+      },
+      {
+        "id": "e-enc2_relu1-enc2_conv2",
+        "source": "enc2_relu1",
+        "target": "enc2_conv2"
+      },
+      {
+        "id": "e-enc2_conv2-enc2_relu2",
+        "source": "enc2_conv2",
+        "target": "enc2_relu2"
+      },
+      {
+        "id": "e-enc2_relu2-pool2",
+        "source": "enc2_relu2",
+        "target": "pool2"
+      },
+      {
+        "id": "e-pool2-enc3_conv1",
+        "source": "pool2",
+        "target": "enc3_conv1"
+      },
+      {
+        "id": "e-enc3_conv1-enc3_relu1",
+        "source": "enc3_conv1",
+        "target": "enc3_relu1"
+      },
+      {
+        "id": "e-enc3_relu1-enc3_conv2",
+        "source": "enc3_relu1",
+        "target": "enc3_conv2"
+      },
+      {
+        "id": "e-enc3_conv2-enc3_relu2",
+        "source": "enc3_conv2",
+        "target": "enc3_relu2"
+      },
+      {
+        "id": "e-enc3_relu2-pool3",
+        "source": "enc3_relu2",
+        "target": "pool3"
+      },
+      {
+        "id": "e-pool3-bottleneck_conv1",
+        "source": "pool3",
+        "target": "bottleneck_conv1"
+      },
+      {
+        "id": "e-bottleneck_conv1-bottleneck_relu1",
+        "source": "bottleneck_conv1",
+        "target": "bottleneck_relu1"
+      },
+      {
+        "id": "e-bottleneck_relu1-bottleneck_conv2",
+        "source": "bottleneck_relu1",
+        "target": "bottleneck_conv2"
+      },
+      {
+        "id": "e-bottleneck_conv2-bottleneck_relu2",
+        "source": "bottleneck_conv2",
+        "target": "bottleneck_relu2"
+      },
+      {
+        "id": "e-bottleneck_relu2-up3",
+        "source": "bottleneck_relu2",
+        "target": "up3"
+      },
+      {
+        "id": "e-enc3_relu2-skip3",
+        "source": "enc3_relu2",
+        "target": "skip3"
+      },
+      {
+        "id": "e-up3-skip3",
+        "source": "up3",
+        "target": "skip3"
+      },
+      {
+        "id": "e-skip3-dec3_conv1",
+        "source": "skip3",
+        "target": "dec3_conv1"
+      },
+      {
+        "id": "e-dec3_conv1-dec3_relu1",
+        "source": "dec3_conv1",
+        "target": "dec3_relu1"
+      },
+      {
+        "id": "e-dec3_relu1-dec3_conv2",
+        "source": "dec3_relu1",
+        "target": "dec3_conv2"
+      },
+      {
+        "id": "e-dec3_conv2-dec3_relu2",
+        "source": "dec3_conv2",
+        "target": "dec3_relu2"
+      },
+      {
+        "id": "e-dec3_relu2-up2",
+        "source": "dec3_relu2",
+        "target": "up2"
+      },
+      {
+        "id": "e-enc2_relu2-skip2",
+        "source": "enc2_relu2",
+        "target": "skip2"
+      },
+      {
+        "id": "e-up2-skip2",
+        "source": "up2",
+        "target": "skip2"
+      },
+      {
+        "id": "e-skip2-dec2_conv1",
+        "source": "skip2",
+        "target": "dec2_conv1"
+      },
+      {
+        "id": "e-dec2_conv1-dec2_relu1",
+        "source": "dec2_conv1",
+        "target": "dec2_relu1"
+      },
+      {
+        "id": "e-dec2_relu1-dec2_conv2",
+        "source": "dec2_relu1",
+        "target": "dec2_conv2"
+      },
+      {
+        "id": "e-dec2_conv2-dec2_relu2",
+        "source": "dec2_conv2",
+        "target": "dec2_relu2"
+      },
+      {
+        "id": "e-dec2_relu2-up1",
+        "source": "dec2_relu2",
+        "target": "up1"
+      },
+      {
+        "id": "e-enc1_relu2-skip1",
+        "source": "enc1_relu2",
+        "target": "skip1"
+      },
+      {
+        "id": "e-up1-skip1",
+        "source": "up1",
+        "target": "skip1"
+      },
+      {
+        "id": "e-skip1-dec1_conv1",
+        "source": "skip1",
+        "target": "dec1_conv1"
+      },
+      {
+        "id": "e-dec1_conv1-dec1_relu1",
+        "source": "dec1_conv1",
+        "target": "dec1_relu1"
+      },
+      {
+        "id": "e-dec1_relu1-dec1_conv2",
+        "source": "dec1_relu1",
+        "target": "dec1_conv2"
+      },
+      {
+        "id": "e-dec1_conv2-dec1_relu2",
+        "source": "dec1_conv2",
+        "target": "dec1_relu2"
+      },
+      {
+        "id": "e-dec1_relu2-pool",
+        "source": "dec1_relu2",
+        "target": "pool"
+      },
+      {
+        "id": "e-pool-flatten",
+        "source": "pool",
+        "target": "flatten"
+      },
+      {
+        "id": "e-flatten-classifier",
+        "source": "flatten",
+        "target": "classifier"
+      }
+    ]
+  }
+}
