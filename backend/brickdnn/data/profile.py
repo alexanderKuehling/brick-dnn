@@ -51,6 +51,8 @@ SOME_MISSING = 0.05  # impute it
 HIGH_CARDINALITY = 50
 SKEWNESS = 2.0
 OUTLIER_SHARE = 0.01
+# At least this share of the values on both the minimum and the maximum: already clipped.
+CLIPPED_SHARE = 0.005
 ZERO_SHARE = 0.5
 IMBALANCE = 3.0
 NUMBER_SHARE = 0.9
@@ -296,6 +298,10 @@ def _numeric_stats(x: np.ndarray, *, dates: bool = False) -> dict[str, Any]:
     q25, q75 = stats["q25"], stats["q75"]
     iqr = q75 - q25
     stats["iqr_outliers"] = int(((x < q25 - 1.5 * iqr) | (x > q75 + 1.5 * iqr)).sum())
+    # How many values sit exactly on the minimum and the maximum: clipping (winsorising)
+    # piles values up at both ends.
+    stats["at_min"] = int((x == stats["min"]).sum())
+    stats["at_max"] = int((x == stats["max"]).sum())
     if std and math.isfinite(std):
         stats["z_outliers"] = int((np.abs(x - mean) > 3 * std).sum())
     else:
@@ -721,7 +727,11 @@ def _column_warnings(
             )
         iqr = stats["q75"] - stats["q25"]
         outliers = stats["iqr_outliers"]
-        if iqr > 0 and outliers > OUTLIER_SHARE * count:
+        # A column clipped to its 1st–99th percentile can still have values outside 1.5 × IQR
+        # (skewed columns): clipping again would change nothing, so no warning then.
+        pile = max(2, CLIPPED_SHARE * count)
+        clipped = stats.get("at_min", 0) >= pile and stats.get("at_max", 0) >= pile
+        if iqr > 0 and outliers > OUTLIER_SHARE * count and not clipped:
             warnings.append(
                 _warning(
                     "outliers",

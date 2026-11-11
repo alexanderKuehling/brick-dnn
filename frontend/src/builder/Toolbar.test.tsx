@@ -40,6 +40,24 @@ describe('Toolbar', () => {
     expect(props.onExportPython).toHaveBeenCalledTimes(2);
   });
 
+  it('scrolls the file menu when the examples are longer than the screen', async () => {
+    const examples = Array.from({ length: 20 }, (_, i) => ({
+      id: `example_${i}`,
+      name: `Example ${i}`,
+      description: 'A network to start from.',
+      order: i,
+      graph: { version: 1 as const, nodes: [], edges: [] },
+    }));
+    const props = renderToolbar({ examples });
+    await userEvent.click(screen.getByRole('button', { name: 'File' }));
+    const menu = await screen.findByRole('menu');
+    // jsdom cannot compute dvh units, so read the style as written.
+    expect(menu.getAttribute('style')).toContain('overflow-y: auto');
+    expect(menu.getAttribute('style')).toContain('max-height: calc(100dvh - 5rem)');
+    await userEvent.click(screen.getByRole('menuitem', { name: /Example 19/ }));
+    expect(props.onLoadExample).toHaveBeenCalledWith(examples[19]);
+  });
+
   it('names the live state also where only its dot is shown', () => {
     renderToolbar({ live: 'offline' });
     expect(screen.getByRole('status', { name: 'Offline – changes will sync' })).toBeInTheDocument();
