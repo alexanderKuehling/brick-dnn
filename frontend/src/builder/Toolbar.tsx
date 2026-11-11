@@ -236,7 +236,8 @@ export function Toolbar(props: ToolbarProps) {
               File
             </Button>
           </Menu.Target>
-          <Menu.Dropdown maw={360}>
+          {/* At most the height of the screen: the list of examples is longer than a phone. */}
+          <Menu.Dropdown maw={360} mah="calc(100dvh - 5rem)" style={{ overflowY: 'auto' }}>
             <Menu.Item leftSection={<IconFilePlus size={16} />} onClick={props.onNew}>
               New network
             </Menu.Item>
