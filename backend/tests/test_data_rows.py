@@ -471,6 +471,17 @@ def test_readiness_finds_fake_rows_and_near_twins():
     assert twins["fix"]["settings"] == {"split": {"group_by": "group"}}
 
 
+def test_readiness_handles_rows_that_are_exact_copies():
+    """Exact copies are at distance 0 from their twin: the check must not divide by it."""
+    base = plain_frame(200, 12, 0)
+    frame = pd.concat([base, base.iloc[:120]], ignore_index=True)
+    t = Table.from_frame(frame)
+    result = run_pipeline(t, [], {"target": "y"})
+    issues = {i["code"]: i for i in row_structure_issues(result.table, "y", result.settings)}
+    twins = issues["near_twins"]
+    assert "the nearest row has the same values in every feature" in twins["message"]
+
+
 @pytest.mark.parametrize("seed", range(3))
 def test_readiness_stays_quiet_on_ordinary_tables(seed):
     t = Table.from_frame(plain_frame(500, 25, seed))

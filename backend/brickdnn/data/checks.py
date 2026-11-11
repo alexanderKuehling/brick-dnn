@@ -1439,7 +1439,13 @@ def row_structure_issues(
         twins = ratio < threshold
         count = int(twins.sum())
         if count >= STRUCTURE_TWIN_SHARE * stats.rows:
-            closer = 1 / float(np.median(ratio[twins]))
+            middle = float(np.median(ratio[twins]))
+            # 0: most twins are identical in every feature (distance 0).
+            how_close = (
+                "the nearest row has the same values in every feature"
+                if middle <= 0
+                else f"the nearest row is about {1 / middle:.0f}× closer than a typical pair of rows"
+            )
             held_text, held_share = "", 0.0
             if table.split is not None:
                 parts = table.split[stats.positions]
@@ -1458,9 +1464,8 @@ def row_structure_issues(
                 )
             base = sentence(
                 f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) "
-                f"{'has' if count == 1 else 'have'} a near twin: the nearest row is about "
-                f"{closer:.0f}× closer than a typical pair of rows (repeated measurements of the "
-                "same person or object?)."
+                f"{'has' if count == 1 else 'have'} a near twin: {how_close} (repeated "
+                "measurements of the same person or object?)."
             )
             if group_by:
                 if held_share >= STRUCTURE_HELD_SHARE:
