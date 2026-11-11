@@ -87,8 +87,8 @@ import {
   weightsNote,
   weightsSnippet,
 } from './format';
-import { PredictionPanel } from './predict/PredictionPanel';
 import { KernelBoundsHint } from './KernelBounds';
+import { PredictionPanel } from './predict/PredictionPanel';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
 import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
