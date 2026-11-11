@@ -494,6 +494,35 @@ check has `task` `segmentation`, the target `{"kind": "mask", "num_classes", "bi
 step needs about `fixed_bytes + batch_size · sample_bytes` of memory; a `config` whose batch
 does not fit into `batch_memory_mb` is an error that names the batch size that does).
 
+A completed run with a single class or value output (classification, regression; neural or
+classical) has `state.evaluation`: the kept weights measured once more on the validation and
+the test rows ([training.md](training.md#metrics-of-the-finished-model) explains the metrics;
+`backend/brickdnn/training/state.py` has every key). It is `null` or missing for other runs
+and for runs of older versions:
+
+```json
+"evaluation": {
+  "task": "classification", "epoch": 7, "trial": null,
+  "train": {"loss": 0.21, "accuracy": 0.93},
+  "class_names": ["cat", "dog", "bird"], "matrix_classes_max": 50,
+  "val": {"size": 1200, "loss": 0.25, "accuracy": 0.93, "balanced_accuracy": 0.91,
+          "macro_f1": 0.9, "weighted_f1": 0.93, "log_loss": 0.25, "top_k_accuracy": null,
+          "per_class": {"precision": [0.95, 0.9, null], "recall": […], "f1": […],
+                        "support": [400, 420, 380]},
+          "confusion_matrix": [[380, 15, 5], […], […]],
+          "most_confused": [{"true": 1, "predicted": 0, "count": 15}]},
+  "test": {…}
+}
+```
+
+`confusion_matrix` counts rows (true class) against columns (predicted class); it is `null`
+above `matrix_classes_max` classes, `top_k_accuracy` (`{"3": …, "5": …}`) only has k smaller
+than the number of classes, and a per-class value is `null` where it is undefined. A
+regression split has `size`, `loss`, `mae`, `mse`, `rmse`, `r2`, `mape` (a share; `null` when a
+target is near 0), `median_absolute_error`, `max_error`, `residuals` (`q05`, `q25`, `median`,
+`q75`, `q95` of predicted − actual) and `sample` (`actual` and `predicted`, at most 500 rows),
+in the units of the target.
+
 Runs of a segmentation have `val_iou`, `val_dice` and `val_pixel_accuracy` in every entry of
 `state.history` and in `metrics` (there also `test_iou`, `test_dice`, `test_pixel_accuracy`);
 the accuracies are null. Once the weights are saved, `state.segmentation` has the results of

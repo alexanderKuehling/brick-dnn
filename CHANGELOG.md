@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- **Metrics of the finished model.** A completed classification or regression run (neural
+  networks and classical models; in a search the best trial) measures its kept weights once
+  more on the validation and test rows. The run view shows a *Metrics* section: tiles with
+  validation and test side by side; for classification a confusion matrix (counts or % of the
+  true class, scrolls for many classes; above 50 classes the most confused pairs), a sortable
+  table of precision, recall, F1 and support per class, balanced accuracy, macro and weighted
+  F1, log loss and top-3/5 accuracy; for regression MAE, RMSE, R², MAPE (only without targets
+  near 0), median and max error, residual quantiles and a predicted-vs-actual scatter plot; and
+  the train, validation and test loss of the kept epoch. Stored as `evaluation` in the run
+  state, summarised by the MCP tool `get_training_run` and printed at the end of
+  `brickdnn train`. Runs of older versions show nothing new.
 - **Data tab: Relationships view for wide tables.** For every number column its strongest
   partner (Spearman ρ and Pearson r), its number of partners and its group of related columns,
   computed for all columns on the training rows. A histogram of the strongest |ρ| with a

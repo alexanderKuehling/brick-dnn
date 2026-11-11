@@ -140,8 +140,12 @@ default, and every capped list says how long it is and how to see more:
   class names (at most 50).
 - `get_training_run` is a summary: status, settings, epochs done, the best epoch, final and
   test metrics, rows per split, tuning (trials, best trial), the classical fit (with
-  `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), and the end of
-  the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
+  `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), `evaluation`
+  (completed classification and regression runs: the overall metrics of the kept weights on
+  the validation and test rows with 4 significant digits; up to 10 classes also the confusion
+  matrix and precision/recall/F1/support per class, with more classes the 5 most confused
+  pairs and the 5 classes with the lowest F1; regressions without the sample of points), and
+  the end of the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
   "preprocessing"]` adds those parts; `history` has at most 50 evenly spaced epochs plus the
   best and the last, `log` the last `log_lines` lines (default 20, at most 200).
   `list_training_runs {limit?, status?, project_id?}` shows the newest 20 runs, one line each,
