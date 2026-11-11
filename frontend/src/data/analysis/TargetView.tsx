@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Button, SimpleGrid, Stack, Text } from '@mantine/core';
-import type { DataProfile, DataSample } from '@/api/types';
+import { IconTrash } from '@tabler/icons-react';
+import { Button, Group, NumberInput, SimpleGrid, Stack, Text } from '@mantine/core';
+import type { DataProfile, DataSample, NewStep } from '@/api/types';
 import { BarChart, type BarRow } from '@/components/charts/BarChart';
 import { BoxPlot } from '@/components/charts/BoxPlot';
 import { OTHER_COLOR, seriesColor } from '@/components/charts/colors';
@@ -13,6 +14,7 @@ import {
 import { Histogram } from '@/components/charts/Histogram';
 import { boxFromStats } from '@/components/charts/stats';
 import { StatTile } from '@/components/charts/StatTile';
+import { usePrepAccess } from '../prepAccess';
 import { ASSOCIATION_LABELS, SHORT_METHOD } from './ColumnsView';
 import { KeyValueTable } from './DistributionView';
 import { SPLIT_NAMES } from './OverviewView';
@@ -24,13 +26,20 @@ export interface TargetViewProps {
   sample: DataSample;
   target: string | null;
   onShowColumn: (column: string) => void;
+  onAddStep?: (step: NewStep) => void;
 }
 
 const RANKING = 25;
+/** The default of "Select features: little association with the target". */
+const DEFAULT_MIN_ASSOCIATION = 0.05;
+const LISTED = 8;
 
 /** Class balance or the target's distribution, and the features ranked by association. */
-export function TargetView({ profile, sample, target, onShowColumn }: TargetViewProps) {
+export function TargetView({ profile, sample, target, onShowColumn, onAddStep }: TargetViewProps) {
   const [allFeatures, setAllFeatures] = useState(false);
+  const [minAssociation, setMinAssociation] = useState(DEFAULT_MIN_ASSOCIATION);
+  const [added, setAdded] = useState<string[]>([]);
+  const { readOnly } = usePrepAccess();
   const info = profile.target;
   const ranking = useMemo(
     () =>
@@ -210,6 +219,17 @@ export function TargetView({ profile, sample, target, onShowColumn }: TargetView
                 : `Show all ${formatCount(ranking.length)} features`}
             </Button>
           )}
+          <WeakFeatures
+            ranking={ranking.map((c) => ({ name: c.name, value: c.target_association!.value }))}
+            threshold={minAssociation}
+            onThresholdChange={setMinAssociation}
+            canAdd={!readOnly && !!onAddStep}
+            added={added}
+            onAdd={(key, step) => {
+              onAddStep?.(step);
+              setAdded((keys) => [...keys, key]);
+            }}
+          />
           <Note>
             Measures:{' '}
             {methods.map((m) => `${SHORT_METHOD[m]} = ${ASSOCIATION_LABELS[m]}`).join(', ')}.
@@ -220,6 +240,92 @@ export function TargetView({ profile, sample, target, onShowColumn }: TargetView
       ) : (
         <Note>No feature associations yet (they need number or category features).</Note>
       )}
+    </Stack>
+  );
+}
+
+interface WeakFeaturesProps {
+  ranking: { name: string; value: number }[];
+  threshold: number;
+  onThresholdChange: (value: number) => void;
+  canAdd: boolean;
+  added: string[];
+  onAdd: (key: string, step: NewStep) => void;
+}
+
+/** Pick a minimum association and drop the features below it, as a step learned on the
+ * training rows or as a fixed list of columns. */
+function WeakFeatures({
+  ranking,
+  threshold,
+  onThresholdChange,
+  canAdd,
+  added,
+  onAdd,
+}: WeakFeaturesProps) {
+  const weak = ranking.filter((c) => c.value < threshold).map((c) => c.name);
+  const listed = weak.slice(0, LISTED).join(', ');
+  const more = weak.length > LISTED ? ` and ${formatCount(weak.length - LISTED)} more` : '';
+  const stepKey = `select:${threshold}`;
+  const listKey = `drop:${threshold}:${weak.length}`;
+  return (
+    <Stack gap={6} aria-label="Drop weakly associated features">
+      <Group gap="xs" wrap="wrap" align="flex-end">
+        <NumberInput
+          size="xs"
+          label="Drop below association"
+          value={threshold}
+          min={0}
+          max={1}
+          step={0.01}
+          decimalScale={2}
+          w={170}
+          onChange={(value) => {
+            if (typeof value === 'number' && Number.isFinite(value)) {
+              onThresholdChange(Math.min(1, Math.max(0, value)));
+            }
+          }}
+        />
+        {canAdd && (
+          <>
+            <Button
+              size="compact-sm"
+              variant="filled"
+              leftSection={<IconTrash size={14} />}
+              disabled={weak.length === 0 || added.includes(stepKey)}
+              onClick={() =>
+                onAdd(stepKey, {
+                  type: 'feature_selection',
+                  params: { method: 'target_correlation', min_association: threshold },
+                })
+              }
+            >
+              {added.includes(stepKey) ? 'Step added' : 'Add a step: drop below this'}
+            </Button>
+            <Button
+              size="compact-sm"
+              variant="light"
+              disabled={weak.length === 0 || added.includes(listKey)}
+              onClick={() => onAdd(listKey, { type: 'drop_columns', params: { columns: weak } })}
+            >
+              {added.includes(listKey)
+                ? 'Columns dropped'
+                : `Drop these ${formatCount(weak.length)} columns`}
+            </Button>
+          </>
+        )}
+      </Group>
+      <Text size="sm">
+        {weak.length === 0
+          ? `No feature is below ${formatCoefficient(threshold)}.`
+          : `${formatCount(weak.length)} of ${formatCount(ranking.length)} features are below ${formatCoefficient(threshold)}: ${listed}${more}.`}
+      </Text>
+      <Note>
+        “Add a step” adds “Select features: little association with the target”: it measures the
+        association again on the training rows each time the preparation runs, so it adapts when
+        earlier steps or the data change. “Drop these columns” drops exactly the columns listed
+        here, measured on the sample shown. Text and date columns have no association and are kept.
+      </Note>
     </Stack>
   );
 }

@@ -218,6 +218,29 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('Features by association with the target')).toBeInTheDocument();
   });
 
+  it('drops the features weakly associated with the target', () => {
+    const { onAddStep } = setup({ view: 'target' });
+    expect(
+      screen.getByText(/1 of \d+ features are below 0\.05: customer_id\./)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a step: drop below this' }));
+    expect(onAddStep).toHaveBeenLastCalledWith({
+      type: 'feature_selection',
+      params: { method: 'target_correlation', min_association: 0.05 },
+    });
+    expect(screen.getByRole('button', { name: 'Step added' })).toBeDisabled();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Drop below association' }), {
+      target: { value: '0.1' },
+    });
+    expect(screen.getByText(/2 of \d+ features are below 0\.10/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Drop these 2 columns' }));
+    expect(onAddStep).toHaveBeenLastCalledWith({
+      type: 'drop_columns',
+      params: { columns: ['city', 'customer_id'] },
+    });
+  });
+
   it('splits by a yes/no target into its two classes', () => {
     const { sample, profile } = booleanTarget();
     const props = { ...baseProps(), sample, profile };

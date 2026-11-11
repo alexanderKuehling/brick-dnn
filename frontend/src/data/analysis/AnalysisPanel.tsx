@@ -223,7 +223,13 @@ export function AnalysisPanel({
           />
         )}
         {view === 'target' && (
-          <TargetView profile={profile} sample={sample} target={target} onShowColumn={showColumn} />
+          <TargetView
+            profile={profile}
+            sample={sample}
+            target={target}
+            onShowColumn={showColumn}
+            onAddStep={onAddStep}
+          />
         )}
         {view === 'compare' && (
           <CompareView

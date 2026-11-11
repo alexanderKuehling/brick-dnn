@@ -144,7 +144,10 @@ charts that show single rows from a random sample, which is always labelled):
 - **Scatter**: any two columns, coloured by the target or another column, with a trend line.
 - **Target**: class balance or the target distribution, and the columns ranked by their
   association with the target (|r| for numbers, correlation ratio η, Cramér's V for
-  categories).
+  categories). Below the ranking, *Drop below association* picks a threshold and lists the
+  features under it: **Add a step** adds “Select features: little association with the
+  target”, which measures again on the training rows every time; **Drop these columns**
+  drops exactly the listed ones.
 - **Compare**: a column before and after the preparation.
 
 ### Relationships between columns
