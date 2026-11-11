@@ -1,13 +1,15 @@
 # Datenschutzerklärung
 
-Stand: 10. November 2026
+Stand: 11. November 2026
 
 ## 1. Verantwortlicher
 
 Alexander Kühling
 E-Mail: alexander.kuehling@gmx.net
 
-Ein Datenschutzbeauftragter ist nicht benannt (als Privatperson nicht vorgeschrieben).
+Anschrift: siehe [Impressum](/imprint).
+
+Ein Datenschutzbeauftragter ist nicht benannt (gesetzlich nicht vorgeschrieben).
 
 ## 2. Überblick
 
