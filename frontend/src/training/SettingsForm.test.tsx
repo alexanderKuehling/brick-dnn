@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, userEvent } from '@test-utils';
+import { render, screen, userEvent, waitFor } from '@test-utils';
 import {
   DEFAULT_SETTINGS,
   toConfig,
@@ -97,7 +97,10 @@ describe('SettingsForm', () => {
   it('offers early stopping and the choice of the kept weights', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
-    const patience = await screen.findByLabelText('Early stopping');
+    // Wait until the section has opened: before that its fields are hidden (display: none)
+    // and typing into them can get lost while it opens.
+    await waitFor(() => expect(screen.getByLabelText('Early stopping')).toBeVisible());
+    const patience = screen.getByLabelText('Early stopping');
     expect(patience).toHaveAttribute('placeholder', 'Off');
     expect(toConfig(latest)).toMatchObject({ patience: null, restore_best: true });
     await userEvent.type(patience, '5');
