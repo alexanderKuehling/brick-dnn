@@ -199,9 +199,13 @@ def _floats(table: Table, columns: list[str], positions: np.ndarray | None = Non
     if not columns:
         rows = table.n_rows if positions is None else len(positions)
         return np.empty((rows, 0), dtype=np.float64)
-    values = table.df[columns].to_numpy(dtype=np.float64, na_value=np.nan)
-    if positions is not None:
-        values = values[positions]
+    # Column by column, only the rows needed: converting the whole table first would copy
+    # all of it (hundreds of MB for a million rows).
+    rows = table.n_rows if positions is None else len(positions)
+    values = np.empty((rows, len(columns)), dtype=np.float64)
+    for number, name in enumerate(columns):
+        column = table.df[name].to_numpy(dtype=np.float64, na_value=np.nan)
+        values[:, number] = column if positions is None else column[positions]
     values[~np.isfinite(values)] = np.nan
     return values
 

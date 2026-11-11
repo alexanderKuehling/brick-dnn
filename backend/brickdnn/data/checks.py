@@ -1250,8 +1250,21 @@ def _associations(x: np.ndarray, y: np.ndarray, task: str | None) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 
 
-def _row_hashes(df: pd.DataFrame) -> np.ndarray:
-    return pd.util.hash_pandas_object(df, index=False).to_numpy()
+def _row_hashes(
+    df: pd.DataFrame, columns: list[str], positions: np.ndarray | None = None
+) -> np.ndarray:
+    """One hash per row of ``columns`` (of the rows at ``positions``), built column by
+    column: selecting the rows or columns of a wide table first would copy all of it
+    (hundreds of MB for a million rows)."""
+    rows = len(df) if positions is None else len(positions)
+    hashes = np.zeros(rows, dtype=np.uint64)
+    with np.errstate(over="ignore"):
+        for number, name in enumerate(columns):
+            column = df[name] if positions is None else df[name].iloc[positions]
+            values = pd.util.hash_pandas_object(column, index=False).to_numpy()
+            # Mix in the column's position, so equal values in other columns differ.
+            hashes = hashes * np.uint64(0x100000001B3) ^ (values + np.uint64(number))
+    return hashes
 
 
 def row_issues(
@@ -1269,24 +1282,26 @@ def row_issues(
     if n > DUPLICATE_ROWS:
         rng = np.random.default_rng(CHECK_SEED)
         positions = np.sort(rng.choice(n, DUPLICATE_ROWS, replace=False))
-    df = table.df if positions is None else table.df.iloc[positions]
+    df = table.df
     split = table.split
     if split is not None and positions is not None:
         split = split[positions]
     features = [c for c in table.columns if c != target]
-    rows = len(df)
+    rows = n if positions is None else len(positions)
     sampled = f"In a sample of {rows:,} rows, " if positions is not None else ""
 
     # One hash of the features and one of the target per row, combined for the whole row.
     zeros = np.zeros(rows, dtype=np.uint64)
-    feature_hashes = _row_hashes(df[features]) if features else zeros
-    target_hashes = _row_hashes(df[[target]]) if has_target else zeros
+    feature_hashes = _row_hashes(df, features, positions) if features else zeros
+    target_hashes = _row_hashes(df, [target], positions) if has_target else zeros
     with np.errstate(over="ignore"):
         hashes = feature_hashes ^ (target_hashes * np.uint64(0x9E3779B97F4A7C15))
     candidates = pd.Series(hashes).duplicated(keep=False).to_numpy()
     duplicates = 0
     if candidates.any():
-        duplicates = int(df[candidates].duplicated(keep="first").sum())
+        # Only the rows that share a hash are compared value by value.
+        chosen = np.flatnonzero(candidates) if positions is None else positions[candidates]
+        duplicates = int(df.iloc[chosen].duplicated(keep="first").sum())
     fix = step_fix("drop_duplicates", {"columns": [], "keep": "first"}, "Remove duplicates")
     overlap = held = 0
     if duplicates and split is not None:

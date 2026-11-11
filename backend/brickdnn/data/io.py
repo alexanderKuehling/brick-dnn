@@ -771,7 +771,7 @@ def _typed_table(
             data[name], kinds[name] = cells.typed(name, warnings)
         else:
             data[name], kinds[name] = _type_column(name, cells, decimal, warnings)
-    df = pd.DataFrame(data, index=pd.RangeIndex(n_rows))
+    df = pd.DataFrame(data, index=pd.RangeIndex(n_rows), copy=False)  # new arrays: no copy
     return Table(df, kinds)
 
 

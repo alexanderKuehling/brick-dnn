@@ -117,7 +117,8 @@ def write_training_dataset(
         columns[target] = pd.Series(codes, name=target)
     else:
         columns[target] = _compact(table.df[target])
-    frame = pd.DataFrame(columns, columns=[*features, target])
+    # Only written to the file: no copy of the (possibly large) table.
+    frame = pd.DataFrame(columns, columns=[*features, target], copy=False)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     frame.to_csv(directory / DATA_FILE, index=False, lineterminator="\n", encoding="utf-8")
@@ -149,7 +150,7 @@ def to_csv_frame(df):
             ):
                 series = series.astype("Int64")
         columns[name] = series
-    return pd.DataFrame(columns, index=df.index)
+    return pd.DataFrame(columns, index=df.index, copy=False)  # read only: no copy
 
 
 def write_processed_csv(table: Table, path: str | Path, *, include_split: bool = True) -> None:

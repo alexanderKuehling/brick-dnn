@@ -158,7 +158,9 @@ def _load(directory: Path, index: Any) -> Table:
         split = _read_array(directory, index["split"], rows)
         if split.dtype != np.int8 or (len(split) and (split.min() < 0 or split.max() > 2)):
             raise DataError(DAMAGED)
-    df = pd.DataFrame(columns, index=pd.RangeIndex(rows))
+    # copy=False: the arrays were just read; copying (and consolidating) them would need
+    # three times the memory of the table for a moment.
+    df = pd.DataFrame(columns, index=pd.RangeIndex(rows), copy=False)
     return Table(df, kinds, split)
 
 

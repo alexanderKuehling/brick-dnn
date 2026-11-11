@@ -1121,9 +1121,19 @@ def readiness(
         )
     constant: list[str] = []
     if numeric:
-        values = df[numeric].to_numpy(dtype=float, na_value=np.nan)
-        nan_counts = np.isnan(values).sum(axis=0)
-        with_missing = [c for c, k in zip(numeric, nan_counts, strict=True) if k]
+        # Column by column: one matrix of all number columns would copy the whole table
+        # (hundreds of MB for a million rows), twice.
+        with_missing, with_inf, constant = [], [], []
+        for name in numeric:
+            column = df[name].to_numpy(dtype=float, na_value=np.nan)
+            finite = np.isfinite(column)
+            if np.isnan(column).any():
+                with_missing.append(name)
+            if np.isinf(column).any():
+                with_inf.append(name)
+            present = column[finite]
+            if not len(present) or present.min() == present.max():
+                constant.append(name)
         if with_missing:
             errors.append(
                 issue(
@@ -1139,8 +1149,6 @@ def readiness(
                     ),
                 )
             )
-        inf_counts = np.isinf(values).sum(axis=0)
-        with_inf = [c for c, k in zip(numeric, inf_counts, strict=True) if k]
         if with_inf:
             errors.append(
                 issue(
@@ -1151,14 +1159,6 @@ def readiness(
                     with_inf,
                 )
             )
-        finite = np.where(np.isfinite(values), values, np.nan)
-        with np.errstate(all="ignore"):
-            constant = [
-                c
-                for i, c in enumerate(numeric)
-                if not np.any(np.isfinite(finite[:, i]))
-                or np.nanmin(finite[:, i]) == np.nanmax(finite[:, i])
-            ]
         if constant:
             warnings.append(
                 issue(
