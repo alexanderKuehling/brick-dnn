@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 from datetime import timedelta
 
 import pytest
@@ -198,7 +199,8 @@ def test_purge_unused_uploads(uploads, dirs, settings, django_capture_on_commit_
     assert f"with its preparation #{prep_id}" in output
     assert f"Would delete dataset #{dataset_id}" in output
     assert f"Would delete training run {run_id}" in output
-    assert "ada" not in output  # users are named by id only
+    # Users are named by id only (as a word: run ids are random hex and may contain "ada").
+    assert not re.search(r"\bada\b", output)
     assert "Would delete 0 accounts, 1 data sources, 1 preparations, 1 datasets, 1" in output
     assert DataSource.objects.count() == DataPrep.objects.count() == 1
     assert all(folder.is_dir() for folder in folders)
