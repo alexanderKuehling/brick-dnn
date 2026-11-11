@@ -1,11 +1,13 @@
 import type { GraphDocument, LayerSpec } from '@/api/types';
 import {
   autoLayout,
+  copySelection,
   defaultParams,
   freePosition,
   fromDocument,
   isParamVisible,
   parseGraphFile,
+  pasteClipboard,
   semanticKey,
   slugify,
   toDocument,
@@ -212,5 +214,55 @@ describe('fromDocument cleanup', () => {
       edges: [{ source: 'a', target: 'missing' }],
     });
     expect(edges).toEqual([]);
+  });
+});
+
+describe('copy and paste', () => {
+  const doc: GraphDocument = {
+    version: 1,
+    nodes: [
+      { id: 'in', type: 'Input', params: { shape: [4] } },
+      { id: 'fc', type: 'Linear', params: { out_features: 8 }, name: 'hidden' },
+      { id: 'out', type: 'Linear', params: { out_features: 2 } },
+    ],
+    edges: [
+      { source: 'in', target: 'fc' },
+      { source: 'fc', target: 'out' },
+    ],
+  };
+
+  it('copies the selected bricks with the edges between them', () => {
+    const { nodes, edges } = fromDocument(doc);
+    const chosen = nodes.map((n) => ({ ...n, selected: n.id !== 'in' }));
+    const clip = copySelection(chosen, edges)!;
+    expect(clip.nodes.map((n) => n.id)).toEqual(['fc', 'out']);
+    // in → fc leaves the selection and is not copied.
+    expect(clip.edges.map((e) => [e.source, e.target])).toEqual([['fc', 'out']]);
+    expect(copySelection(nodes, edges)).toBeNull(); // nothing selected
+  });
+
+  it('pastes new bricks with new ids, the connection and an offset', () => {
+    const { nodes, edges } = fromDocument(doc);
+    const clip = copySelection(
+      nodes.map((n) => ({ ...n, selected: true })),
+      edges
+    )!;
+    const pasted = pasteClipboard(clip, { x: 40, y: 40 });
+    const ids = pasted.nodes.map((n) => n.id);
+    expect(ids.some((id) => ['in', 'fc', 'out'].includes(id))).toBe(false);
+    expect(new Set(ids).size).toBe(3);
+    expect(pasted.nodes.every((n) => n.selected)).toBe(true);
+    expect(pasted.nodes[1].data.name).toBeUndefined(); // names must stay unique
+    expect(pasted.nodes[1].position).toEqual({
+      x: nodes[1].position.x + 40,
+      y: nodes[1].position.y + 40,
+    });
+    expect(pasted.edges.map((e) => [e.source, e.target])).toEqual([
+      [ids[0], ids[1]],
+      [ids[1], ids[2]],
+    ]);
+    // The copy does not share its params with the original.
+    pasted.nodes[1].data.params.out_features = 99;
+    expect(nodes[1].data.params.out_features).toBe(8);
   });
 });

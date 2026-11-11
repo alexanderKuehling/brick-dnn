@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **Copy and paste bricks.** Ctrl+C / Ctrl+X / Ctrl+V (Cmd on a Mac) copy, cut and paste the
+  selected bricks in the builder with the connections between them; each paste lands a bit
+  further down and is selected. Text fields and selected text keep their usual behaviour.
 - **Metrics of the finished model.** A completed classification or regression run (neural
   networks and classical models; in a search the best trial) measures its kept weights once
   more on the validation and test rows. The run view shows a *Metrics* section: tiles with
