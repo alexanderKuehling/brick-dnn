@@ -263,7 +263,8 @@ class _ClassicalRun:
 
         reporter.status("running", "Measuring the fitted model …")
         trained = self._metrics(data.train)
-        validated = self._metrics(data.val)
+        val_predictions = self._predictions(data.val)
+        validated = self._metrics(data.val, val_predictions)
         entry: dict[str, Any] = {
             "epoch": 1,
             "train_loss": trained["loss"],
@@ -287,11 +288,59 @@ class _ClassicalRun:
         reporter.setup({"classical": dict(self.details), "preprocessing": self._preprocessing()})
         reporter.epoch_end(dict(entry), dict(self.best))
         reporter.weights_kept({"weights_epoch": 1, "stopped_early": False})
+        test_predictions = None
         if data.test is not None:
             reporter.status("running", "Testing the fitted model …")
-            self.test_result = self._metrics(data.test)
+            test_predictions = self._predictions(data.test)
+            self.test_result = self._metrics(data.test, test_predictions)
             reporter.test_end(dict(self.test_result))
+        self._report_evaluation(trained, validated, val_predictions, test_predictions)
         self.saved = self._save()
+
+    def _report_evaluation(
+        self,
+        trained: dict[str, Any],
+        validated: dict[str, Any],
+        val_predictions: np.ndarray,
+        test_predictions: np.ndarray | None,
+    ) -> None:
+        """The final evaluation of the fitted model (state.json key ``evaluation``, see
+        evaluation.py) from the predictions that were already made. Never fails the run."""
+        try:
+            from .evaluation import (
+                ClassificationCounter,
+                RegressionCollector,
+                class_names_for,
+                evaluation,
+            )
+
+            def split(rows: np.ndarray, predictions: np.ndarray, loss: Any) -> dict[str, Any]:
+                sink: Any = (
+                    ClassificationCounter(self.num_classes)
+                    if self.classification
+                    else RegressionCollector()
+                )
+                sink.add(predictions, self.data.y[rows])
+                return sink.result(loss)
+
+            data = self.data
+            test = None
+            if data.test is not None and test_predictions is not None and self.test_result:
+                test = split(data.test, test_predictions, self.test_result["loss"])
+            result = evaluation(
+                "classification" if self.classification else "regression",
+                split(data.val, val_predictions, validated["loss"]),
+                test,
+                {"loss": trained["loss"], "accuracy": trained["accuracy"]},
+                class_names=class_names_for(self.plan.class_names, self.num_classes)
+                if self.classification
+                else None,
+                epoch=1,
+            )
+            self.reporter.evaluation_end(result)
+        except Exception as exc:
+            traceback.print_exc()
+            self.reporter.log(f"The final evaluation failed: {short_error(exc)}")
 
     def _summary(self) -> str:
         text = f"Finished: {self._metrics_text('validation', self.history[0], 'val_')}"
@@ -554,18 +603,25 @@ class _ClassicalRun:
         full[:, np.asarray(self.pipeline.classes_, dtype=np.int64)] = proba
         return full
 
-    def _metrics(self, rows: np.ndarray) -> dict[str, Any]:
+    def _predictions(self, rows: np.ndarray) -> np.ndarray:
+        """The class probabilities (classification) or the predicted values of ``rows``."""
+        x = self.data.x[rows]
+        return self.probabilities(x) if self.classification else self._chunks(x, "predict")
+
+    def _metrics(self, rows: np.ndarray, predictions: np.ndarray | None = None) -> dict[str, Any]:
         """``{"loss", "accuracy", "rmse", "r2"}`` on ``rows``. The loss is the cross-entropy
         (classification) or the mean squared error of the standardised target, like the
-        loss of a neural network."""
-        x, y = self.data.x[rows], self.data.y[rows]
+        loss of a neural network. ``predictions``: those of :meth:`_predictions`, if known."""
+        y = self.data.y[rows]
+        if predictions is None:
+            predictions = self._predictions(rows)
         if self.classification:
-            proba = self.probabilities(x)
+            proba = predictions
             true = proba[np.arange(len(y)), y]
             loss = float(-np.mean(np.log(np.clip(true, 1e-15, 1.0))))
             accuracy = float(np.mean(np.argmax(proba, axis=1) == y))
             return {"loss": loss, "accuracy": accuracy, "rmse": None, "r2": None}
-        errors = self._chunks(x, "predict") - y
+        errors = predictions - y
         squares = float(np.sum(errors**2))
         mse = squares / max(len(y), 1)
         spread = float(np.sum((y - y.mean()) ** 2))

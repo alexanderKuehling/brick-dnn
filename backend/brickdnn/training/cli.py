@@ -56,6 +56,27 @@ SKLEARN_HINT = (
     'Classical models need scikit-learn. Install it with: pip install "brickdnn[classic]"'
 )
 NO_TUNING = "Hyperparameter search is not available for classical models yet."
+# The final evaluation printed at the end: (row name, key of the split, format).
+CLI_CLASSIFICATION = (
+    ("loss", "loss", ".4g"),
+    ("accuracy", "accuracy", ".1%"),
+    ("balanced accuracy", "balanced_accuracy", ".1%"),
+    ("macro F1", "macro_f1", ".3f"),
+    ("weighted F1", "weighted_f1", ".3f"),
+    ("top-3 accuracy", "top3", ".1%"),
+    ("top-5 accuracy", "top5", ".1%"),
+)
+CLI_REGRESSION = (
+    ("loss", "loss", ".4g"),
+    ("MAE", "mae", ".4g"),
+    ("RMSE", "rmse", ".4g"),
+    ("R²", "r2", ".3f"),
+    ("MAPE", "mape", ".1%"),
+    ("median abs. error", "median_absolute_error", ".4g"),
+    ("max error", "max_error", ".4g"),
+)
+# Up to this many classes the values per class are printed.
+CLI_CLASSES = 20
 
 
 class ConsoleReporter(Reporter):
@@ -259,6 +280,46 @@ class ConsoleReporter(Reporter):
         if result.get("pixel_accuracy") is not None:
             line += f", pixel accuracy {result['pixel_accuracy']:.1%}"
         self._print(line)
+
+    def evaluation_end(self, result: dict[str, Any]) -> None:
+        """A short table of the final evaluation: validation and test side by side, and for
+        up to CLI_CLASSES classes precision, recall and F1 per class (validation)."""
+        parts = [(label, result.get(key)) for label, key in (("val", "val"), ("test", "test"))]
+        parts = [(label, part) for label, part in parts if isinstance(part, dict)]
+        if not parts:
+            return
+        classification = result.get("task") == "classification"
+        rows = CLI_CLASSIFICATION if classification else CLI_REGRESSION
+        width = max(len(name) for name, _, _ in rows)
+        what = "the fitted model" if self.classical else "the kept weights"
+        self._print(f"\nFinal evaluation (of {what}):")
+        self._print("  ".join([" " * width, *[label.rjust(10) for label, _ in parts]]))
+        train_loss = (result.get("train") or {}).get("loss")
+        self._print("  ".join(["train loss".ljust(width), _number(train_loss, ".4g").rjust(10)]))
+        for name, key, spec in rows:
+            values = [part.get(key) for _, part in parts]
+            if key.startswith("top"):
+                values = [(part.get("top_k_accuracy") or {}).get(key[3:]) for _, part in parts]
+            if all(value is None for value in values):
+                continue
+            cells = [_number(value, spec).rjust(10) for value in values]
+            self._print("  ".join([name.ljust(width), *cells]))
+        names = [str(name) for name in result.get("class_names") or []]
+        val = parts[0][1] if parts[0][0] == "val" else None
+        if classification and val and names and len(names) <= CLI_CLASSES:
+            per_class = val.get("per_class") or {}
+            name_width = max(len("class"), *(len(name) for name in names))
+            self._print("\nPer class (validation):")
+            head = ["precision", "recall", "f1", "support"]
+            self._print("  ".join(["class".ljust(name_width), *[h.rjust(9) for h in head]]))
+            for index, name in enumerate(names):
+                cells = [
+                    _number((per_class.get(key) or [None] * len(names))[index], spec).rjust(9)
+                    for key, spec in (("precision", ".1%"), ("recall", ".1%"), ("f1", ".3f"))
+                ]
+                support = (per_class.get("support") or [None] * len(names))[index]
+                cells.append(_number(support, "d").rjust(9))
+                self._print("  ".join([name.ljust(name_width), *cells]))
 
     def segmentation_end(self, result: dict[str, Any]) -> None:
         names = [str(name) for name in result.get("class_names") or []]

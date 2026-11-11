@@ -255,6 +255,10 @@ class StateReporter(Reporter):
         print(f"Test: {result}", flush=True)
         self._update(test=result, progress=None)
 
+    def evaluation_end(self, result: dict[str, Any]) -> None:
+        print("Final evaluation done.", flush=True)
+        self._update(evaluation=result)
+
     def segmentation_end(self, result: dict[str, Any]) -> None:
         print(f"Segmentation: {result}", flush=True)
         self._update(segmentation=result)

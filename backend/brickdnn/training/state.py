@@ -78,6 +78,9 @@ Every run lives in its own directory::
       "classical": {...},
       # Segmentation only (null otherwise), set once the weights are saved, see below
       "segmentation": {...},
+      # Completed runs with a single class or value output (null otherwise and in runs of
+      # older versions): the kept weights measured once more at the end, see below
+      "evaluation": {...},
 
       # Hyperparameter search only (null / empty for normal runs):
 
@@ -143,6 +146,51 @@ results of the kept weights per class and the preview images are in ``segmentati
         "test": {...},                 # the same on the test set (without "epoch"), or null
         "previews": {"count": 8, "epoch": 7, "split": "validation"}   # previews/, or null
       }
+
+When a run with a single class output (classification) or a single value output
+(regression) completes, the kept weights (in a search: those of the best trial; classical
+models: the fitted model) are evaluated once more on the validation rows and, if there is a
+test set, on the test rows (see evaluation.py for the definitions). Stopped and failed runs
+and segmentations get none::
+
+      "evaluation": {
+        "task": "classification",      # or "regression"
+        "epoch": 7,                    # weights_epoch (classical models: 1)
+        "trial": null,                 # search: the best trial, whose weights these are
+        "train": {"loss": 0.21, "accuracy": 0.93},   # the kept epoch in history (neural:
+                                       # the mean over its batches, in training mode;
+                                       # classical: the fitted model on its training rows);
+                                       # accuracy null for regression
+        "val": {...},                  # the validation rows, see below
+        "test": {...},                 # the same on the test rows, null without a test set
+        # classification only:
+        "class_names": ["cat", "dog", "bird"],      # the order of all lists and indices
+        "matrix_classes_max": 50       # above this many classes no confusion matrix is kept
+      }
+
+A classification split::
+
+      {"size": 1200, "loss": 0.25,     # loss: the run's loss (as in history)
+       "accuracy": 0.93, "balanced_accuracy": 0.91,  # balanced: mean recall per class
+       "macro_f1": 0.9, "weighted_f1": 0.93,         # mean F1 (weighted by support)
+       "log_loss": 0.25,               # cross-entropy of the predicted probabilities
+       "top_k_accuracy": {"3": 0.99, "5": 1.0},      # only k < number of classes; or null
+       "per_class": {"precision": [0.95, 0.9, null], "recall": [...], "f1": [...],
+                     "support": [400, 420, 380]},    # null: undefined (no predictions of
+                                       # the class / no rows of it / neither)
+       "confusion_matrix": [[380, 15, 5], ...],      # counts; rows: true class, columns:
+                                       # predicted class; null above matrix_classes_max
+       "most_confused": [{"true": 1, "predicted": 0, "count": 15}, ...]}  # up to 10 pairs
+
+A regression split (in the units of the target column)::
+
+      {"size": 300, "loss": 0.08,      # loss: MSE of the standardised target (as in history)
+       "mae": 1.2, "mse": 2.3, "rmse": 1.52, "r2": 0.91,
+       "mape": 0.04,                   # share (0.04 = 4 %); null if a target is near 0
+       "median_absolute_error": 0.9, "max_error": 6.1,
+       "residuals": {"q05": -2.4, "q25": -0.8, "median": 0.1, "q75": 0.9, "q95": 2.6},
+                                       # quantiles of predicted − actual
+       "sample": {"actual": [...], "predicted": [...]}}   # at most 500 evenly spaced rows
 """
 
 from __future__ import annotations
@@ -255,6 +303,7 @@ def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
         "best_trial": None,
         "classical": None,
         "segmentation": None,
+        "evaluation": None,
         "usage": {"cpu_seconds": 0.0, "wall_seconds": 0.0, "limit_cpu_seconds": None},
         "stop_reason": None,
     }

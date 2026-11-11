@@ -370,6 +370,8 @@ def run_detail(
         detail["classical"] = classical
     if isinstance(state.get("segmentation"), dict):
         detail["segmentation"] = segmentation_results(state["segmentation"])
+    if isinstance(state.get("evaluation"), dict):
+        detail["evaluation"] = evaluation_summary(state["evaluation"])
     if run.tuning or state.get("trials"):
         detail["tuning"] = _no_none(
             {
@@ -448,6 +450,105 @@ def segmentation_results(found: dict[str, Any]) -> dict[str, Any]:
             "the web app (REST: GET /api/training/runs/<id>/previews/)."
         )
     return _no_none(results)
+
+
+CLASSIFICATION_KEYS = (
+    "size",
+    "loss",
+    "accuracy",
+    "balanced_accuracy",
+    "macro_f1",
+    "weighted_f1",
+    "top_k_accuracy",
+)
+REGRESSION_KEYS = (
+    "size",
+    "loss",
+    "mae",
+    "rmse",
+    "r2",
+    "mape",
+    "median_absolute_error",
+    "max_error",
+    "residuals",
+)
+# Classes up to which the confusion matrix and the values per class are shown; above, the
+# most confused pairs and the classes with the lowest F1 score.
+MAX_MATRIX_CLASSES = 10
+MAX_PAIRS = 5
+
+
+def _rounded(value: Any) -> Any:
+    """Floats with 4 significant digits, also inside dicts and lists."""
+    if isinstance(value, float):
+        return float(f"{value:.4g}")
+    if isinstance(value, dict):
+        return {key: _rounded(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rounded(item) for item in value]
+    return value
+
+
+def _class_split(part: dict[str, Any], names: list[str]) -> dict[str, Any]:
+    entry = {key: _rounded(part.get(key)) for key in CLASSIFICATION_KEYS}
+    per_class = part.get("per_class") if isinstance(part.get("per_class"), dict) else {}
+    columns = ("precision", "recall", "f1", "support")
+    values = {key: per_class.get(key) or [] for key in columns}
+
+    def value(key: str, index: int) -> Any:
+        found = values[key]
+        return _rounded(found[index]) if index < len(found) else None
+
+    matrix = part.get("confusion_matrix")
+    if len(names) <= MAX_MATRIX_CLASSES:
+        entry["per_class"] = {
+            name: {key: value(key, i) for key in columns} for i, name in enumerate(names)
+        }
+        if isinstance(matrix, list):
+            entry["confusion_matrix"] = matrix
+        return _no_none(entry)
+    entry["most_confused"] = [
+        {
+            "true": names[pair["true"]] if pair["true"] < len(names) else pair["true"],
+            "predicted": (
+                names[pair["predicted"]] if pair["predicted"] < len(names) else pair["predicted"]
+            ),
+            "count": pair["count"],
+        }
+        for pair in (part.get("most_confused") or [])[:MAX_PAIRS]
+        if isinstance(pair, dict)
+    ]
+    scored = [(value("f1", i), name) for i, name in enumerate(names)]
+    lowest = sorted((f1, name) for f1, name in scored if isinstance(f1, (int, float)))
+    entry["lowest_f1"] = {name: f1 for f1, name in lowest[:MAX_PAIRS]}
+    return _no_none(entry)
+
+
+def evaluation_summary(found: dict[str, Any]) -> dict[str, Any]:
+    """The final evaluation of a run, compact: the overall numbers of the validation and the
+    test rows; for classification up to MAX_MATRIX_CLASSES classes also the confusion
+    matrix and the values per class, with more classes the most confused pairs and the
+    classes with the lowest F1 score; for regression without the sample of points."""
+    classification = found.get("task") == "classification"
+    names = [str(name) for name in found.get("class_names") or []]
+    result: dict[str, Any] = {
+        "task": found.get("task"),
+        "epoch": found.get("epoch"),
+        "trial": found.get("trial"),
+        "train": _no_none(_rounded(found.get("train") or {})) or None,
+    }
+    for key, label in (("val", "validation"), ("test", "test")):
+        part = found.get(key)
+        if not isinstance(part, dict):
+            continue
+        if classification:
+            result[label] = _class_split(part, names)
+        else:
+            result[label] = _no_none({k: _rounded(part.get(k)) for k in REGRESSION_KEYS})
+    if classification and len(names) <= MAX_MATRIX_CLASSES:
+        result["classes"] = names
+        result["matrix"] = "confusion_matrix: rows true class, columns predicted (counts)"
+    return _no_none(result)
 
 
 # --------------------------------------------------------------------------- #

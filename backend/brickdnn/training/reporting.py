@@ -39,8 +39,9 @@ class Reporter:
     Call order: ``status``/``log`` while preparing, ``setup`` once data and model are
     ready, then per epoch ``status`` + ``progress`` (about twice per second) +
     ``epoch_end``, ``weights_kept`` once the epochs are over (or the run was stopped),
-    ``test_end`` if there is a test set, ``segmentation_end`` (segmentation only) and exactly
-    one ``finish`` at the end. A
+    ``test_end`` if there is a test set, ``evaluation_end`` (completed runs with a single
+    class or value output), ``segmentation_end`` (segmentation only) and exactly one
+    ``finish`` at the end. A
     hyperparameter search wraps the epochs of every trial in ``trial_start`` and
     ``trial_end`` and calls ``search_end`` before ``weights_kept`` and testing the best
     trial.
@@ -85,6 +86,11 @@ class Reporter:
     def test_end(self, result: dict[str, Any]) -> None:
         """``{"loss", "accuracy", "rmse", "r2"}`` of the kept weights on the test set; a
         segmentation adds ``"iou", "dice", "pixel_accuracy", "class_iou", "class_dice"``."""
+
+    def evaluation_end(self, result: dict[str, Any]) -> None:
+        """The final evaluation of the kept weights on the validation and the test data
+        (state.json key ``evaluation``, see state.py and evaluation.py). Only for runs that
+        complete (not stopped ones) with a single class or value output."""
 
     def segmentation_end(self, result: dict[str, Any]) -> None:
         """Segmentation only, once the weights are saved: the per-class results of the kept

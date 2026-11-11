@@ -22,6 +22,7 @@ import os
 import random
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -247,6 +248,8 @@ class _Run:
         self.best_weights: dict[str, torch.Tensor] | None = None
         self.weights_epoch: int | None = None  # the epoch whose weights are kept
         self.stopped_early = False
+        # The final evaluation of the test set, collected while it is tested
+        self.test_collector: _Collector | None = None
 
     # -- outcome ---------------------------------------------------------- #
 
@@ -275,6 +278,7 @@ class _Run:
         self._keep_best()
         self._report_kept()
         self._test()
+        self._report_evaluation()
 
     def _on_stopped(self) -> None:
         """Called when the user stopped the run, before the weights are saved: keeps the
@@ -718,11 +722,16 @@ class _Run:
             raise self._not_finite(result["loss"], epoch)
         return result
 
-    def _evaluate(self, source: Source) -> dict[str, Any]:
+    def _evaluate(
+        self,
+        source: Source,
+        collect: Callable[[tuple[torch.Tensor, ...], list[torch.Tensor]], None] | None = None,
+    ) -> dict[str, Any]:
         """``{"loss", "accuracy", "rmse", "r2"}`` on ``source``: the accuracy for a single
         classification output, RMSE (in the units of the data) and R² for a regression,
         otherwise None. A segmentation adds ``"iou"`` and ``"dice"`` (means over the classes
-        that occur), ``"pixel_accuracy"`` and per class ``"class_iou"`` and ``"class_dice"``."""
+        that occur), ``"pixel_accuracy"`` and per class ``"class_iou"`` and ``"class_dice"``.
+        ``collect`` gets the outputs and targets of every batch (the final evaluation)."""
         assert self.model is not None
         self.model.eval()
         loss_sum, seen, correct = 0.0, 0, 0
@@ -745,6 +754,8 @@ class _Run:
                     r2.add([outputs[i] for i in values], [targets[i] for i in values])
                 if masks is not None:
                     masks.add(outputs[0], targets[0])
+                if collect is not None:
+                    collect(outputs, targets)
         seen = max(seen, 1)
         loss = loss_sum / seen
         rmse = None
@@ -765,8 +776,73 @@ class _Run:
         if self.data.test is None:
             return
         self.reporter.status("running", "Testing the final model …")
-        self.test_result = self._evaluate(self.data.test)
+        self.test_collector = self._collector()
+        collect = self.test_collector.add if self.test_collector is not None else None
+        self.test_result = self._evaluate(self.data.test, collect)
         self.reporter.test_end(dict(self.test_result))
+
+    # -- final evaluation -------------------------------------------------- #
+
+    def _evaluation_task(self) -> str | None:
+        """ "classification" or "regression" if the run gets a final evaluation: networks
+        with a single class output or a single value (not segmentations)."""
+        targets = self.plan.targets
+        if self.segmentation or len(targets) != 1:
+            return None
+        target = targets[0]
+        if target["kind"] == "class":
+            return "classification"
+        if target["kind"] == "value" and math.prod(target.get("shape") or [1]) == 1:
+            return "regression"
+        return None
+
+    def _collector(self) -> _Collector | None:
+        task = self._evaluation_task()
+        if task is None:
+            return None
+        try:
+            return _Collector(task, self.plan.targets[0], self.data)
+        except ImportError:  # NumPy is missing
+            return None
+
+    def _report_evaluation(self) -> None:
+        """Evaluate the kept weights on the validation data (the test data was collected
+        while it was tested) and report it (state.json key ``evaluation``). A failure is
+        logged and does not fail the run."""
+        collector = self._collector()
+        if collector is None:
+            return
+        try:
+            self.reporter.status("running", "Evaluating the final model …")
+            validated = self._evaluate(self.data.val, collector.add)
+            tested = self.test_collector if self.test_result is not None else None
+            for part in (collector, tested):
+                if part is not None and part.error is not None:
+                    raise part.error
+            from .evaluation import class_names_for, evaluation
+
+            kept = self._kept_entry() or {}
+            target = self.plan.targets[0]
+            names = None
+            if collector.task == "classification":
+                names = class_names_for(self.plan.class_names, int(target["num_classes"]))
+            result = evaluation(
+                collector.task,
+                collector.result(validated["loss"]),
+                tested.result(self.test_result["loss"])
+                if tested is not None and self.test_result is not None
+                else None,
+                {"loss": kept.get("train_loss"), "accuracy": kept.get("train_accuracy")},
+                class_names=names,
+                epoch=self.weights_epoch,
+                trial=self.best_trial["trial"] if self.best_trial else None,
+            )
+            self.reporter.evaluation_end(result)
+        except StopTraining:
+            raise
+        except Exception as exc:
+            traceback.print_exc()
+            self.reporter.log(f"The final evaluation failed: {short_error(exc)}")
 
     # -- segmentation ------------------------------------------------------ #
 
@@ -876,6 +952,7 @@ class _Search(_Run):
         self._use_best()
         self._report_kept()
         self._test()
+        self._report_evaluation()
 
     def _epoch_message(self, epoch: int) -> str:
         return f"Trial {self.trial} of {self.total}: epoch {epoch} of {self.config.epochs}"
@@ -1069,6 +1146,47 @@ class _Search(_Run):
         model = build_model(self.job.graph)
         model.load_state_dict(self.best_state)
         return model.to(self.device)
+
+
+class _Collector:
+    """Collects the outputs of an evaluation pass for the final evaluation (see
+    evaluation.py): class probabilities, or values in the units of the target. An error only
+    switches it off; it is raised when the result is asked for."""
+
+    def __init__(self, task: str, target: dict[str, Any], data: PreparedData):
+        from .evaluation import ClassificationCounter, RegressionCollector
+
+        self.task = task
+        self.error: Exception | None = None
+        self.sink: Any
+        if task == "classification":
+            self.sink = ClassificationCounter(int(target["num_classes"]))
+        else:
+            self.sink = RegressionCollector()
+        # The targets were standardised (CSV data): back to the units of the column.
+        std = data.target_std
+        mean = data.preprocessing.get("target_mean") if std is not None else None
+        self.scale = float(std) if std is not None else 1.0
+        self.shift = float(mean) if isinstance(mean, (int, float)) else 0.0
+
+    def add(self, outputs: tuple[torch.Tensor, ...], targets: list[torch.Tensor]) -> None:
+        if self.error is not None:
+            return
+        try:
+            output, target = outputs[0].detach(), targets[0].detach()
+            if self.task == "classification":
+                proba = torch.softmax(output.double(), dim=1).cpu().numpy()
+                self.sink.add(proba, target.cpu().long().numpy())
+            else:
+                n = len(target)
+                predicted = output.double().reshape(n).cpu().numpy() * self.scale + self.shift
+                actual = target.double().reshape(n).cpu().numpy() * self.scale + self.shift
+                self.sink.add(predicted, actual)
+        except Exception as exc:
+            self.error = exc
+
+    def result(self, loss: float | None) -> dict[str, Any]:
+        return self.sink.result(loss)
 
 
 def entry_score(history: list[dict[str, Any]], weights_epoch: int | None = None) -> float:
