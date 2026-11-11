@@ -265,6 +265,71 @@ separate process, like a training. AI assistants get the weights with `get_weigh
 a download link valid for 15 minutes, the model code, the preprocessing and a snippet like the
 one above (see [mcp.md](mcp.md#downloading-the-weights)).
 
+### Predicting in the web app
+
+A finished or stopped run with weights has **Try the model: predict** in the run view. Everyone
+who can see the run can use it, also viewers of a shared project:
+
+- **Tables** (CSV files, datasets from the Data tab): a form with one field per input column
+  (numbers, a list of the known categories, a date picker for dates, true/false). **Use a
+  sample** fills in a row of the validation data (of the dataset for uploaded CSV files, whose
+  split is not stored) and shows its actual value next to the prediction. **Paste CSV rows**
+  takes a header line and up to 500 rows (pasted or from a file; `,` or `;` separated), sent in
+  requests of 64 rows; the results table can be downloaded as a CSV file with the inputs and
+  the predictions. Classification shows the class, its probability and the top 3 classes;
+  regression the value in the units of the target, a Gaussian process with ± its standard
+  deviation.
+- **Images** (built-in sets, image folders): drop or choose an image file; it is resized to
+  the training size (and turned grayscale for one channel) in the browser, then normalised by
+  the server like the training images. Grayscale sets of at most 64×64 pixels (MNIST,
+  Fashion-MNIST) can also be **drawn**: the drawing is scaled into the inner 20×20 of 28×28
+  pixels and centred by its centre of mass, like the MNIST digits (white on black). The panel
+  shows what the network gets.
+- Runs trained on random demo data only get a note: their predictions mean nothing.
+
+Errors of the server appear next to the field they are about. Predictions use compute; when a
+budget is used up, the panel says so and the server refuses them.
+
+### Raw rows for datasets from the Data tab
+
+A network trained on a dataset exported from a data preparation takes the *prepared* columns
+(one-hot columns, date parts, scaled values …). It can also predict **raw rows**: rows in the
+columns of the imported source table, before the steps (`input_format: "raw"` in the API and
+the MCP tool, **Raw columns** in the web app, the default there). The server prepares them
+exactly like the training rows, with the values the preparation learned from them, then
+predicts:
+
+- **What is stored.** The export keeps the preparation next to the dataset
+  (`datasets/<id>/prepare/recipe.json`): every step with its settings and what it learned
+  (means, medians, categories, bounds, KNN reference rows …), the source columns with their
+  types and the categories of the training rows, and a few validation rows as samples. Tables
+  joined by the preparation are stored with it as they were at the export (`prepare/sources/`),
+  so later changes or the deletion of a source do not change the predictions. A run keeps its
+  own copy when its dataset is deleted. Datasets exported before this feature have no such
+  folder: export the preparation again for raw rows.
+- **Exactly like the training rows.** The steps run as the code of the pandas script that the
+  Data tab exports (`Step.to_pandas`, with the learned values as constants), which reproduces
+  the training table; preparing the training's own source rows this way gives the rows of the
+  exported dataset, value for value. Nothing is learned from the new rows: a row predicted
+  alone gets the same values as in a batch.
+- **Steps that change rows.** Removing duplicates, sorting, class balancing and the removal of
+  outliers from the training rows are skipped: every row you send is predicted, in order.
+  Filters (filter rows, drop rows with missing values, removing outliers from all rows) keep
+  the row and add a warning that the training data had no rows like it; a filter or missing
+  value check on the target is left out. A join looks the row up in the stored table (the
+  first match if a key is repeated); a row without a match gets missing values there. An
+  append step adds only the columns it created.
+- **Columns.** Send the source columns as imported (the target is optional and ignored).
+  Numbers can use the decimal mark of the file, dates are best written `2024-05-31` (or
+  `2024-05-31T14:30`), booleans `true`/`false`. Columns the preparation drops before reading
+  them are not needed. Columns that are left out count as missing values (with a warning);
+  unknown columns, values of the wrong type and rows with an empty feature after the
+  preparation are refused, with one message per row and column. A category that the training
+  rows did not have is a warning (one-hot encoding gives all zeros, ordinal −1 …).
+
+Raw rows count against the same limits as other predictions (64 rows per request, the rate
+limit and compute; preparing them in the web server counts as prediction compute too).
+
 ## Image segmentation
 
 A segmentation network gives every pixel of an image a class instead of one answer for the

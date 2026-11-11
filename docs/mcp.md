@@ -319,9 +319,11 @@ limits and validation as the web app; changes show up in the web app right away.
 4. **Export:** `export_training_dataset` turns the ready preparation into a training dataset
    and returns its `reference`, the task, the target and the feature columns in order.
 5. **Train and predict:** `check_training` and `start_training` with the `reference`; `predict`
-   takes the prepared feature columns (e.g. rows from the sample of `preview_data_prep`).
-   `get_data_prep_script` returns the pandas script whose `prepare(df)` prepares new raw data
-   the same way.
+   with `input_format: "raw"` takes rows in the columns of the imported table (a new date, a
+   store name …) and prepares them on the server with the values the preparation learned from
+   the training rows; do not compute one-hot or date columns yourself. Without it, `predict`
+   takes the prepared feature columns. `get_data_prep_script` returns the pandas script whose
+   `prepare(df)` prepares new raw data the same way offline.
 
 ```text
 import_data {content: "<sales.csv>", filename: "sales.csv"}         → source 7: date (datetime), store (categorical), temperature (numeric, 6 missing), sales …
@@ -331,7 +333,7 @@ preview_data_prep {id: 3}                                           → profiles
 export_training_dataset {id: 3}                                     → reference {"kind": "upload", "id": 12}, features date_year … temperature
 check_training {graph: Input [8] → Linear 16 → ReLU → Linear 1, dataset: {"kind": "upload", "id": 12}} → ok
 start_training {…, config: {epochs: 30}} · get_training_run {id}     → completed, val_rmse …
-predict {run_id, inputs: [{"date_year": 2024, "date_month": 3, …}]} → values in the units of sales
+predict {run_id, input_format: "raw", inputs: [{"date": "2024-12-24", "store": "Köln", "temperature": 3.5}]} → values in the units of sales
 ```
 
 ### Downloading the weights
@@ -351,21 +353,32 @@ snippet loads the file with joblib.
 
 ### Predictions
 
-`predict {run_id, inputs, input_scale?, top_k?}` runs the trained network of a finished or
-stopped run on the server and answers one prediction per sample: for classification the
-`class`, its `index` and `probability` and the `top` classes (`top_k`, default 3, at most
-10); for regression the `value` in the units of the target column. Classical models take
-the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
+`predict {run_id, inputs, input_format?, input_scale?, top_k?}` runs the trained network of a
+finished or stopped run on the server and answers one prediction per sample: for
+classification the `class` with its `probability` and the `top` classes (`top_k`, default 3,
+at most 10); for regression the `value` in the units of the target column. Classical models
+take the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
+(The REST API also returns the class indices; the MCP answer leaves them out.)
 
 | Trained on | `inputs` (at most 64 samples)                                       | `input_scale` |
 | ---------- | ------------------------------------------------------------------- | ------------- |
-| CSV file   | One row per sample: `{"column": value, …}` or a list of the feature values in column order, as in the CSV file (standardised like in training) | `raw` (default) or `normalized` (already standardised) |
+| A dataset from the Data tab, `input_format: "raw"` | One row per sample in the columns of the imported source table: `{"column": value, …}` as in the file (dates `2024-05-31`, the target left out) | – |
+| CSV file (also the prepared columns of a Data tab dataset) | One row per sample: `{"column": value, …}` or a list of the feature values in column order, as in the CSV file (standardised like in training) | `raw` (default) or `normalized` (already standardised) |
 | Images     | One image per sample as a nested array of channels × height × width, e.g. `1×28×28` (grayscale also `28×28`), or in the shape of the Input layer (e.g. `784` values) | required: `raw` (pixels 0–255), `unit` (0–1) or `normalized` (already normalised like in training) |
 | Demo data  | One nested array per sample in the shape of the Input layer, used as it is | – |
 
-For CSV datasets made in the Data tab, the network takes the prepared columns (after the steps
-of the preparation), not the raw data. Inputs are checked first and errors say what the
-network expects; at most 250,000 numbers per request. The network then runs in a separate
+**Raw rows** (`input_format: "raw"`, only for runs trained on a dataset exported from a data
+preparation) are prepared by the server with the steps of the preparation and the values they
+learned from the training rows (frozen at the export; a joined table is the copy stored then),
+so a new date or store name can be sent as it is. Steps that only change rows (duplicates,
+sorting, class balancing) are skipped and filters only warn: every row is predicted. The answer
+lists `warnings` (unknown categories, columns not given, rows unlike the training rows, at most
+10); rows that cannot be prepared are refused with one line per row and column, e.g. `Row 2,
+'temperature': 'warm' is not a number.` `get_weights_download` (`inputs`) names the raw
+columns. Details: [training.md](training.md#raw-rows-for-datasets-from-the-data-tab).
+
+Inputs are checked first and errors say what the network expects; at most 250,000 numbers per
+request. The network then runs in a separate
 process, like a training (CPU, lower priority, 30 seconds at most, one prediction at a time on
 the server by default: `BRICKDNN_MAX_PREDICTIONS`). Everyone who can see the run may predict,
 also with read-only access. The same is available as

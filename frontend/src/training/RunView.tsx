@@ -88,6 +88,7 @@ import {
   weightsSnippet,
 } from './format';
 import { KernelBoundsHint } from './KernelBounds';
+import { PredictionPanel } from './predict/PredictionPanel';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
 import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
@@ -191,6 +192,7 @@ export function RunView({
   const [logOpened, log] = useDisclosure(false);
   const [tableOpened, table] = useDisclosure(false);
   const [usageOpened, usage] = useDisclosure(false);
+  const [predictOpened, predict] = useDisclosure(false);
   const [downloading, setDownloading] = useState<'weights' | 'script' | null>(null);
   const logViewport = useRef<HTMLDivElement>(null);
 
@@ -604,6 +606,17 @@ export function RunView({
         <Text size="xs" c="dimmed" mt={-8}>
           {keptNote}
         </Text>
+      )}
+
+      {run.has_weights && !active && (
+        <div>
+          <ToggleButton opened={predictOpened} onClick={predict.toggle}>
+            Try the model: predict
+          </ToggleButton>
+          <Collapse expanded={predictOpened}>
+            {predictOpened && <PredictionPanel runId={run.id} runName={run.name} />}
+          </Collapse>
+        </div>
       )}
 
       {run.has_weights && (

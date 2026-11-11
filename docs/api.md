@@ -410,7 +410,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
-| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_scale?, top_k?}` or image files `{image, mask?}` |
+| POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_format?, input_scale?, top_k?}` or image files `{image, mask?}` |
+| GET    | `/api/training/runs/<id>/predict-form/` | What the prediction panel needs: input columns (prepared and raw) with sample rows, or the image size; `available`/`reason` |
 | GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
 | GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
 | GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
@@ -752,6 +753,32 @@ Classical models take the same rows. Classifiers give their own class probabilit
 calibrated with Platt scaling, a Gaussian process its predictive probabilities); a Gaussian
 process regressor adds `"std"`, its predictive standard deviation in the units of the target,
 to every prediction (`{"value": 101.3, "std": 0.4}`), and the answer a `std_note`.
+
+**Raw rows.** A run trained on a dataset exported from a data preparation also takes rows in
+the columns of the imported source table, before the steps of the preparation, with
+`"input_format": "raw"` (default `"prepared"`: the feature columns of the dataset). The server
+prepares them with the steps and the values they learned from the training rows, stored at the
+export, then predicts (see [training.md](training.md#raw-rows-for-datasets-from-the-data-tab)):
+
+```json
+{ "input_format": "raw", "inputs": [{ "date": "2024-12-24", "store": "Köln", "promo": 1, "temp": null }] }
+```
+
+The answer adds `warnings` (unknown categories, columns not given, rows that a filter of the
+preparation would have removed from the training data …). Rows that cannot be prepared are
+refused with `400` and `errors`, one message per row and column:
+`{"detail", "inputs", "errors": ["Row 2, 'temp': 'warm' is not a number.", …]}`.
+`input_format: "raw"` for other runs is a `400` that says so.
+
+**The prediction form.** `GET /api/training/runs/<id>/predict-form/` (everyone who can see the
+run) describes the inputs for the panel of the web app: `available` and `reason`, `kind`
+(`tabular`, `image`, `demo`), `task`, `class_names`, `max_rows` (64 per request),
+`budget_note` (set when a compute budget is used up), for tables `prepared` (`columns` with
+the training's mean and standard deviation, a few `samples` with their actual `target`) and,
+for runs from a preparation, `raw` (the source columns with `kind`, the `categories` of the
+training rows, `min`/`max`, `used: false` for columns the preparation drops unread, validation
+rows as `samples`, `skipped_steps`, `joined` tables); for images `image` (`channels`, `height`,
+`width`).
 
 The inputs are checked and prepared like the training data from the run's
 `state.preprocessing`; the network then runs in a separate process (CPU, at most 30 seconds,

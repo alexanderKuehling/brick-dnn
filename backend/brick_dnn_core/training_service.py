@@ -43,6 +43,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from pathlib import Path
@@ -1556,6 +1557,10 @@ class Prediction:
     run: TrainingRun
     preprocessing: dict[str, Any]
     inputs: inference.PreparedInputs
+    # Raw rows (input_format "raw"): what to know about them, and the CPU time their
+    # preparation took in this process.
+    warnings: list[str] = dataclass_field(default_factory=list)
+    prepare_seconds: float = 0.0
     mask_format: str = "png"  # segmentation: how the class maps are returned
 
 
@@ -1566,18 +1571,28 @@ def prepare_prediction(
     top_k: Any = None,
     image: Any = None,
     mask: Any = None,
+    input_format: Any = None,
 ) -> Prediction:
     """Check that ``run`` can predict and prepare ``inputs`` like its training data (cheap:
-    no process is started). Image networks also take ``image`` instead: image files as
-    base64 text, which the prediction process decodes. ``mask``: how a segmentation returns
-    its class maps (inference.MASK_FORMATS). Raises :class:`TrainingUnavailable`,
+    no process is started). ``input_format`` "raw": rows of the source table of a data
+    preparation, prepared first (see raw_predictions.py). Image networks also take ``image``
+    instead: image files as base64 text, which the prediction process decodes. ``mask``: how
+    a segmentation returns its class maps (inference.MASK_FORMATS). Raises
+    :class:`TrainingUnavailable`,
     :class:`PredictionUnavailable` or :class:`TrainingInputError`."""
+    from . import raw_predictions
+
     reason = unavailable_reason(run_family(run))
     if reason:
         raise TrainingUnavailable(reason)
     if weights_path(run) is None:
         raise PredictionUnavailable(no_weights_reason(run))
     preprocessing = (state_of(run) or {}).get("preprocessing")
+    warnings: list[str] = []
+    started = time.thread_time()
+    if raw_predictions.check_format(input_format) == "raw":
+        inputs, warnings = raw_predictions.prepare_raw(run, inputs)
+        input_scale = None  # the prepared rows are in the units of the training CSV file
     try:
         mask_format = inference.mask_format(mask)
         if image is not None and inputs is not None:
@@ -1589,17 +1604,35 @@ def prepare_prediction(
     except inference.UnknownPreprocessing as exc:
         raise PredictionUnavailable(str(exc)) from None
     except inference.InvalidInputs as exc:
-        raise TrainingInputError(str(exc)) from None
-    return Prediction(run, preprocessing, prepared, mask_format)
+        message = str(exc)
+        if "unknown column" in message and input_format != "raw" and raw_predictions.recipe_of(run):
+            message += (
+                " Rows in the columns of the source table (before the data preparation) "
+                "need input_format 'raw'."
+            )
+        raise TrainingInputError(message) from None
+    spent = time.thread_time() - started if input_format == "raw" else 0.0
+    return Prediction(
+        run,
+        preprocessing,
+        prepared,
+        mask_format=mask_format,
+        warnings=warnings,
+        prepare_seconds=spent,
+    )
 
 
 def describe_inputs(run: TrainingRun) -> str | None:
     """What the network of ``run`` takes, for error messages (None if unknown)."""
+    from . import raw_predictions
+
     preprocessing = (state_of(run) or {}).get("preprocessing")
     try:
-        return inference.describe_inputs(run.plan, preprocessing)
+        text = inference.describe_inputs(run.plan, preprocessing)
     except inference.UnknownPreprocessing:
         return None
+    raw = raw_predictions.raw_hint(run)
+    return f"{text} {raw}" if raw else text
 
 
 def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
@@ -1611,6 +1644,8 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
     """
     run, prepared = prediction.run, prediction.inputs
     budgets.check_compute(actor)
+    if prediction.prepare_seconds > 0:  # preparing raw rows (in this process)
+        budgets.record_prediction(actor, run, prediction.prepare_seconds)
     request: dict[str, Any] = {"inputs": prepared.tensors, "kind": prepared.kind}
     if prepared.files is not None:
         request = {"images": prepared.files, "image": prepared.image, "kind": prepared.kind}
@@ -1662,6 +1697,8 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
         answer["target"] = prediction.preprocessing.get("target")
     if prepared.kind == "demo":
         answer["note"] = "Trained on random demo data: the predictions mean nothing."
+    if prediction.warnings:
+        answer["warnings"] = prediction.warnings
     if result.get("std") is not None:
         answer["std_note"] = (
             "std is the Gaussian process's predictive standard deviation, in the units of "

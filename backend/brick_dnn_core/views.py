@@ -16,7 +16,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
-from . import approvals, downloads, notices, recovery, shared_data
+from . import approvals, downloads, notices, raw_predictions, recovery, shared_data
 from . import health as health_checks
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
@@ -432,10 +432,11 @@ class TrainingRunViewSet(
 
     @action(detail=True, methods=["post"], throttle_scope="predict")
     def predict(self, request: Request, pk=None) -> Response:
-        """Run the trained network on a few inputs: ``{"inputs", "input_scale"?, "top_k"?}``
-        (see brickdnn.training.inference). Image networks also take ``{"image"}`` instead of
-        ``inputs``: an image file (PNG, JPEG …) as base64 text, or a list of them. A
-        segmentation answers with a class map per image; ``mask`` ("png", "rle" or "none")
+        """Run the trained network on a few inputs: ``{"inputs", "input_scale"?, "top_k"?,
+        "input_format"?}`` (see brickdnn.training.inference; "raw": rows of the source table
+        of a data preparation, see raw_predictions.py). Image networks also take ``{"image"}``
+        instead of ``inputs``: an image file (PNG, JPEG …) as base64 text, or a list of them.
+        A segmentation answers with a class map per image; ``mask`` ("png", "rle" or "none")
         says how it is returned. Everyone who can see the run may."""
         run = self.get_object()
         data = request.data if isinstance(request.data, dict) else {}
@@ -447,14 +448,15 @@ class TrainingRunViewSet(
                 data.get("top_k"),
                 data.get("image"),
                 data.get("mask"),
+                input_format=data.get("input_format"),
             )
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except training.TrainingInputError as exc:
-            return Response(
-                {"detail": str(exc), "inputs": training.describe_inputs(run)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            body = {"detail": str(exc), "inputs": training.describe_inputs(run)}
+            if isinstance(exc, raw_predictions.RawRowsError):
+                body["errors"] = exc.errors  # every row and column with a problem
+            return Response(body, status=status.HTTP_400_BAD_REQUEST)
         except training.PredictionUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         # Only requests that start a process count against the rate limit.
@@ -473,6 +475,13 @@ class TrainingRunViewSet(
             )
         except training.PredictionFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=["get"], url_path="predict-form")
+    def predict_form(self, request: Request, pk=None) -> Response:
+        """What the prediction panel needs: the input columns (prepared or raw) with example
+        rows, or the image size; why the run cannot predict otherwise."""
+        run = self.get_object()
+        return Response(raw_predictions.prediction_form(run, Actor.of(request)))
 
     @action(detail=True, methods=["get"])
     def previews(self, request: Request, pk=None) -> Response:
