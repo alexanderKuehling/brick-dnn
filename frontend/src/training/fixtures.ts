@@ -1,8 +1,10 @@
 /** Test data for the training panel (only imported by tests). */
 import type {
   Analysis,
+  ClassificationEvaluation,
   Dataset,
   GraphDocument,
+  RegressionEvaluation,
   RunDetail,
   RunPreviews,
   RunQueue,
@@ -906,6 +908,111 @@ export function previews(overrides: Partial<RunPreviews> = {}): RunPreviews {
     colors: SHAPE_COLORS,
     ignore_color: '#8a8f98',
     samples: [sample(0, 0.9206, 0.9744, [0, 1, 3]), sample(1, 0.4512, 0.9012, [0, 2, 3])],
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The final evaluation of a run (state.evaluation)
+// ---------------------------------------------------------------------------
+
+/** Three classes; validation rows 30 (10 per class), test rows 20. */
+export function classificationEvaluation(
+  overrides: Partial<ClassificationEvaluation> = {}
+): ClassificationEvaluation {
+  return {
+    task: 'classification',
+    epoch: 3,
+    trial: null,
+    train: { loss: 0.2, accuracy: 0.94 },
+    class_names: ['cat', 'dog', 'bird'],
+    matrix_classes_max: 50,
+    val: {
+      size: 30,
+      loss: 0.31,
+      accuracy: 0.8,
+      balanced_accuracy: 0.8,
+      macro_f1: 0.7968,
+      weighted_f1: 0.7968,
+      log_loss: 0.31,
+      top_k_accuracy: null,
+      per_class: {
+        precision: [0.75, 0.7778, 0.9],
+        recall: [0.9, 0.7, 0.8],
+        f1: [0.8182, 0.7368, 0.8471],
+        support: [10, 10, 10],
+      },
+      // rows: true class, columns: predicted class
+      confusion_matrix: [
+        [9, 1, 0],
+        [2, 7, 1],
+        [1, 1, 8],
+      ],
+      most_confused: [
+        { true: 1, predicted: 0, count: 2 },
+        { true: 0, predicted: 1, count: 1 },
+      ],
+    },
+    test: {
+      size: 20,
+      loss: 0.35,
+      accuracy: 0.75,
+      balanced_accuracy: 0.5167,
+      macro_f1: 0.4889,
+      weighted_f1: 0.6667,
+      log_loss: 0.35,
+      top_k_accuracy: null,
+      per_class: {
+        precision: [0.8, 0.6, null],
+        recall: [0.8, 0.75, 0],
+        f1: [0.8, 0.6667, 0],
+        support: [10, 8, 2],
+      },
+      confusion_matrix: [
+        [8, 2, 0],
+        [2, 6, 0],
+        [0, 2, 0],
+      ],
+      most_confused: [{ true: 0, predicted: 1, count: 2 }],
+    },
+    ...overrides,
+  };
+}
+
+export function regressionEvaluation(
+  overrides: Partial<RegressionEvaluation> = {}
+): RegressionEvaluation {
+  return {
+    task: 'regression',
+    epoch: 3,
+    trial: null,
+    train: { loss: 0.18, accuracy: null },
+    val: {
+      size: 4,
+      loss: 0.2,
+      mae: 30.5,
+      mse: 1703.2,
+      rmse: 41.27,
+      r2: 0.823,
+      mape: 0.0412,
+      median_absolute_error: 25.1,
+      max_error: 98.4,
+      residuals: { q05: -70.2, q25: -20.1, median: 1.5, q75: 22.4, q95: 80.3 },
+      sample: { actual: [100, 200, 300, 400], predicted: [110, 190, 320, 380] },
+    },
+    test: {
+      size: 3,
+      loss: 0.22,
+      mae: 33.1,
+      mse: 1927.2,
+      rmse: 43.9,
+      r2: 0.796,
+      mape: null,
+      median_absolute_error: 28,
+      max_error: 101.2,
+      residuals: { q05: -80, q25: -25, median: 0, q75: 25, q95: 85 },
+      sample: { actual: [0, 150, 250], predicted: [20, 140, 260] },
+    },
     ...overrides,
   };
 }

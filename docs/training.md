@@ -197,6 +197,59 @@ epochs, and in the table of the trials of a search; the list of runs shows the t
 (without a test set, the validation R²). Runs of older versions of Brick DNN have no R² for
 neural networks.
 
+### Metrics of the finished model
+
+When a classification or regression run completes, the kept weights (in a search: those of the
+best trial; a [classical model](#classical-models): the fitted model) are measured once more,
+on the validation rows and, if there is a test set, on the test rows. The run view shows them
+under **Metrics**, validation and test side by side; `brickdnn train` prints them as a table at
+the end. The validation numbers come from the rows that chose the kept epoch (and the best
+trial), so they are slightly optimistic; the test numbers are the ones to report. Stopped and
+failed runs, segmentations ([their own metrics](#metrics)) and networks with several outputs
+get none, and runs of older versions show nothing new.
+
+**Classification**
+
+- **Confusion matrix**: how many rows of each true class (row) were predicted as each class
+  (column); the diagonal is right. The run view colours every cell by its share of the true
+  class (so small and large classes read alike) and shows the counts or, switched, that
+  share; hovering a cell shows both. With more than 50 classes (CIFAR-100, say) no matrix is
+  kept; the ten most confused pairs (true → predicted, with their count) are shown instead.
+- Per class: **precision** (of the rows predicted as the class, the share that is right),
+  **recall** (of the rows of the class, the share that was found), **F1** (their harmonic
+  mean) and **support** (rows of the class). A class that was never predicted has no
+  precision, one without rows no recall (*–*); the averages count them as 0, like
+  scikit-learn with `zero_division=0`. The table sorts by any column.
+- **Accuracy** (share of right predictions), **balanced accuracy** (the mean recall over the
+  classes that occur: 50 % for a model that always predicts the larger of two classes, however
+  unbalanced they are), **macro F1** (the mean F1 over the classes that occur in the true or
+  predicted labels) and **weighted F1** (weighted by support).
+- **Log loss**: the cross-entropy of the predicted probabilities, the classification loss of
+  both families.
+- **Top-3 / top-5 accuracy**: the share of rows whose true class is among the 3 (5) most
+  probable ones; only with more than 3 (5) classes.
+
+**Regression** (in the units of the target column; a neural network's standardised target is
+turned back first):
+
+- **MAE** (mean absolute error), **MSE** and **RMSE** (mean and root mean squared error),
+  **R²** (see [above](#regression-metrics)), **median absolute error** (half of the rows are
+  closer) and **max error** (the worst row).
+- **MAPE**, the mean absolute percentage error, only when no target is close to 0: it is left
+  out (*–*) when a target is 0 or smaller in size than 1 % of the mean absolute target, because
+  the relative error of such a row would dominate the mean.
+- **Residuals** (predicted − actual): the 5 %, 25 %, 50 %, 75 % and 95 % quantiles, and a
+  scatter plot of predicted against actual values (up to 500 evenly spaced rows; on the
+  dashed line the prediction is exact).
+
+**Loss**: the loss of the kept epoch on the training rows (the mean over the batches of that
+epoch, as in the curves; classical models: the fitted model on its training rows), on the
+validation rows and on the test rows. Per epoch, the train and validation loss and, for
+classification, the train and validation accuracy are in the curves and in *Values per epoch*.
+
+The evaluation costs one more pass over the validation rows (the test rows are collected while
+they are tested). It is stored in the run state (`evaluation`, see the [REST API](api.md)).
+
 ### Early stopping and the kept weights
 
 Training longer does not always help: once the network starts to memorise the training data

@@ -76,3 +76,68 @@
   /* Inputs are small (e.g. 64 × 64): show their pixels instead of a blur. */
   image-rendering: pixelated;
 }
+
+/* Confusion matrix: a table of coloured cells; it scrolls in its own box. */
+.matrix {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.matrixCorner {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  vertical-align: bottom;
+  padding: 0 6px 4px 0;
+  font-weight: 400;
+  color: var(--mantine-color-dimmed);
+  text-align: right;
+  white-space: nowrap;
+  background: var(--mantine-color-body);
+}
+
+.matrixColumn {
+  height: 1px;
+  padding: 0 0 4px;
+  font-weight: 500;
+  vertical-align: bottom;
+
+  & span {
+    display: inline-block;
+    max-height: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+}
+
+.matrixRow {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  max-width: 140px;
+  padding: 0 8px 0 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--mantine-color-body);
+}
+
+.matrixCell {
+  min-width: 36px;
+  height: 30px;
+  padding: 0 4px;
+  text-align: center;
+  white-space: nowrap;
+  border-radius: 2px;
+
+  &[data-diagonal] {
+    font-weight: 700;
+  }
+}
