@@ -402,6 +402,8 @@ also apply to new data; class balancing does not.
 | -------- | ------- | ------- |
 | `BRICKDNN_DATA_PREP` | `true` | Set to `false` to switch the Data tab off |
 | `BRICKDNN_DATA_MAX_UPLOAD_MB` | `200` | Largest import in MB: uploads, downloads from links and the unpacked content of `.gz` / `.zip` files |
+| `BRICKDNN_DATA_IMPORT_PROCESS_MB` | `20` | Files from this size on (MB) are read in a process of their own. Reading needs several times the file's size in memory for a moment; if that is more than the server has, that process is stopped and the import fails with a message, instead of the web server being killed |
+| `BRICKDNN_DATA_IMPORT_TIMEOUT` | `270` | Seconds such an import may take |
 | `BRICKDNN_DATA_MAX_ROWS` | `2000000` | Most rows per imported file |
 | `BRICKDNN_DATA_MAX_COLUMNS` | no limit | Most columns per imported file (a single step may add at most 2,000 columns) |
 | `BRICKDNN_DATA_URL_IMPORT` | `true` | Set to `false` to switch imports from links off |

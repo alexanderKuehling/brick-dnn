@@ -18,6 +18,9 @@ import json
 import logging
 import os
 import shutil
+import signal
+import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -242,8 +245,6 @@ def _original_name(filename: str) -> str:
 def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataSource:
     """Store the file ``save(work_folder)`` writes, read it and create the source."""
     from brickdnn.data.io import ImportOptions
-    from brickdnn.data.readers import read_file
-    from brickdnn.data.store import save_table
 
     requested = {key: fields[key] for key in OPTION_FIELDS if fields.get(key) not in (None, "")}
     with _user_errors():
@@ -261,23 +262,26 @@ def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataS
         budgets.check_storage(user, original.stat().st_size)
         name = fields.get("name")
         name = (str(name or "").strip() or _stem(filename) or "Data")[:120]
-        with _user_errors():
-            table, report = read_file(
-                original,
-                options,
-                filename=filename,
-                max_rows=settings.DATA_MAX_ROWS,
-                max_columns=settings.DATA_MAX_COLUMNS,
-                max_bytes=max_upload_bytes(),
-            )
-            save_table(table, work / TABLE_DIR)
-        missing = table.df.isna().sum()
-        columns = [
-            {"name": column, "kind": table.kinds[column], "missing": int(missing[column])}
-            for column in table.columns
-        ]
+        read = {
+            "path": str(original),
+            "filename": filename,
+            "options": options.to_dict(),
+            "out": str(work / TABLE_DIR),
+            "max_rows": settings.DATA_MAX_ROWS,
+            "max_columns": settings.DATA_MAX_COLUMNS,
+            "max_bytes": max_upload_bytes(),
+        }
+        if original.stat().st_size >= settings.DATA_IMPORT_PROCESS_MB * 1024 * 1024:
+            answer = _read_in_process(read)
+        else:
+            from brickdnn.data.import_job import run as read_here
+
+            answer = read_here(read)
+        if not answer["ok"]:
+            raise DataInputError(answer["error"], sheets=answer.get("sheets"))
+        n_rows, columns = answer["n_rows"], answer["columns"]
         stored_options = {key: options.to_dict().get(key) for key in OPTION_FIELDS}
-        stored_report = report.to_dict()
+        stored_report = answer["report"]
         if url:
             stored_report["url"] = _shown_url(url)
         source = DataSource.objects.create(
@@ -285,7 +289,7 @@ def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataS
             name=name,
             filename=filename[:255],
             size_bytes=original.stat().st_size,
-            n_rows=table.n_rows,
+            n_rows=n_rows,
             n_columns=len(columns),
             columns=columns,
             import_options=stored_options,
@@ -300,6 +304,44 @@ def _import(user, save, fields: dict[str, Any], url: str | None = None) -> DataS
             source.delete()
         raise
     return source
+
+
+TOO_LITTLE_MEMORY_MESSAGE = (
+    "Reading this file needs more memory than the server has. "
+    "Import a smaller file (fewer rows or columns, or split it and append the parts in a "
+    "preparation), or ask the operator to raise BRICKDNN_WEB_MEMORY."
+)
+IMPORT_TIMEOUT_MESSAGE = (
+    "Reading this file took longer than {seconds} seconds. Import a smaller file or "
+    "split it and append the parts in a preparation."
+)
+
+
+def _read_in_process(job: dict[str, Any]) -> dict[str, Any]:
+    """Read a large file in a process of its own (brickdnn.data.import_job): if it needs
+    more memory than there is, the kernel kills that process and not the web server."""
+    timeout = settings.DATA_IMPORT_TIMEOUT
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "brickdnn.data.import_job"],
+            input=json.dumps(job),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=training._subprocess_env(),
+            cwd=str(settings.BASE_DIR),
+        )
+    except subprocess.TimeoutExpired:
+        raise DataInputError(IMPORT_TIMEOUT_MESSAGE.format(seconds=timeout)) from None
+    if result.returncode in (-signal.SIGKILL, 137) or "MemoryError" in result.stderr:
+        raise DataInputError(TOO_LITTLE_MEMORY_MESSAGE)
+    for line in reversed(result.stdout.strip().splitlines()):
+        with contextlib.suppress(ValueError):
+            answer = json.loads(line)
+            if isinstance(answer, dict) and "ok" in answer:
+                return answer
+    logger.error("Import process failed (%s): %s", result.returncode, result.stderr[-2000:])
+    raise DataInputError("The file could not be read (the import stopped unexpectedly).")
 
 
 def _stem(filename: str) -> str:

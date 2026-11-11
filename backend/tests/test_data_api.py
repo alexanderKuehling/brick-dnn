@@ -1193,3 +1193,34 @@ def test_export_with_a_group_split(auth_client, settings):
     assert response.status_code == 201, response.data
     info = response.data["info"]
     assert sum(info["predefined_split"]) == source["n_rows"] - 10
+
+
+@pytest.mark.django_db
+def test_large_files_are_read_in_a_process_of_their_own(auth_client, settings):
+    settings.DATA_IMPORT_PROCESS_MB = 0  # every file
+    response = import_csv(auth_client, "churn.csv", churn_csv(30), name="Churn")
+    assert response.status_code == 201, response.content
+    source = response.json()
+    assert source["n_rows"] == 30
+    assert [c["name"] for c in source["columns"]] == ["customer", "age", "income", "churn"]
+    # The stored table is the one the process wrote.
+    detail = auth_client.get(f"/api/data/sources/{source['id']}/")
+    assert detail.status_code == 200
+
+    # Problems with the data come back as the same 400 as in the web server.
+    response = import_csv(auth_client, "empty.csv", b"")
+    assert response.status_code == 400
+    assert response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_an_import_that_runs_out_of_memory_does_not_take_the_server_down(
+    auth_client, settings, monkeypatch
+):
+    settings.DATA_IMPORT_PROCESS_MB = 0
+    killed = data_service.subprocess.CompletedProcess(args=[], returncode=-9, stdout="", stderr="")
+    monkeypatch.setattr(data_service.subprocess, "run", lambda *a, **k: killed)
+    response = import_csv(auth_client, "churn.csv", churn_csv(30))
+    assert response.status_code == 400
+    assert "more memory than the server has" in response.json()["detail"]
+    assert auth_client.get("/api/data/sources/").json() == []  # nothing half-imported

@@ -376,6 +376,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_QUEUE_MAX_WAITING`   | `3` with plans, else unlimited | Trainings of one account that may wait in the queue |
 | `BRICKDNN_MAX_UPLOAD_MB`       | `500`                      | Maximum size of an uploaded dataset                  |
 | `BRICKDNN_DATA_MAX_UPLOAD_MB`  | `200`                      | Largest import in the Data tab (file, link or unpacked) |
+| `BRICKDNN_DATA_IMPORT_PROCESS_MB` | `20`                  | Imports from this size on are read in a process of their own, so running out of memory does not stop the web server |
 | `BRICKDNN_DATA_URL_IMPORT`     | `true`                     | Set to `false` to switch imports from links off      |
 | `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false`                 | Allow links to private network addresses (trusted local installations only) |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |

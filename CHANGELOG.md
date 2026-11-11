@@ -528,6 +528,11 @@
   without one keep working.
 
 ### Fixed
+- **Large imports no longer take the web server down.** Files from 20 MB on
+  (`BRICKDNN_DATA_IMPORT_PROCESS_MB`) are read in a process of their own. Reading needs several
+  times the file's size in memory for a moment; when that is more than the server has, that
+  process is stopped and the import fails with a message, instead of the web server's worker
+  being killed (HTTP 502).
 - The cap for compute beyond the allowance cannot be set below what an account has already
   used and not been billed for: lowering it afterwards would have shrunk the bill.
 - The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have

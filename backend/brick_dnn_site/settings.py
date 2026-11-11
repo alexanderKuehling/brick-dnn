@@ -326,6 +326,11 @@ DATA_MAX_COLUMNS = int(os.environ.get("BRICKDNN_DATA_MAX_COLUMNS", "0")) or None
 # .zip files). Imports are parsed in memory (roughly 10-15 times the file size while reading),
 # so this is lower than the training upload limit.
 DATA_MAX_UPLOAD_MB = float(os.environ.get("BRICKDNN_DATA_MAX_UPLOAD_MB", "200"))
+# Files from this size on (MB) are read in a process of its own: reading needs several times
+# the file's size in memory for a moment, and if that is too much, the kernel kills that
+# process instead of the web server. Its time limit stays below gunicorn's (300 s).
+DATA_IMPORT_PROCESS_MB = float(os.environ.get("BRICKDNN_DATA_IMPORT_PROCESS_MB", "20"))
+DATA_IMPORT_TIMEOUT = int(os.environ.get("BRICKDNN_DATA_IMPORT_TIMEOUT", "270"))
 # Imports from links (http/https): the server downloads the file. Only public internet
 # addresses are allowed, unless BRICKDNN_DATA_URL_ALLOW_PRIVATE=true (for local installations
 # that import from servers in their own network).
