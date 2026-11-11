@@ -600,3 +600,19 @@ def test_profile_speed():
     json_safe(profile)
     assert profile["analysis_rows"] == profile_module.ANALYSIS_ROWS
     assert elapsed < 8, f"profile took {elapsed:.1f} s"
+
+
+def test_no_outlier_warning_once_a_column_is_clipped():
+    """A skewed column clipped to its 1st–99th percentile still has values outside 1.5 × IQR;
+    offering the same clip again would change nothing (and added a step on every click)."""
+    rng = np.random.default_rng(0)
+    amount = rng.lognormal(mean=1.0, sigma=1.0, size=5000)
+    before = profile_table(Table.from_frame(pd.DataFrame({"amount": amount})))
+    assert warning(before, "outliers", "amount")["fix"]["type"] == "clip"
+
+    clipped = np.clip(amount, *np.quantile(amount, [0.01, 0.99]))
+    after = profile_table(Table.from_frame(pd.DataFrame({"amount": clipped})))
+    stats = next(c for c in after["columns"] if c["name"] == "amount")["stats"]
+    assert stats["iqr_outliers"] > 0.01 * len(clipped)  # still "outliers" by the IQR rule
+    assert stats["at_min"] == stats["at_max"] == 50
+    assert not [w for w in after["warnings"] if w["code"] == "outliers"]
