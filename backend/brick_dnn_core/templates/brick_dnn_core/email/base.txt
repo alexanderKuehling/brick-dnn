@@ -1,0 +1,13 @@
+{% autoescape off %}{{ greeting }}
+
+{% for paragraph in paragraphs %}{{ paragraph }}
+
+{% endfor %}{% if action %}{{ action.0 }}:
+{{ action.1 }}
+
+{% endif %}{% for paragraph in after %}{{ paragraph }}
+
+{% endfor %}--
+{{ site_name }}{% if site_url %} · {{ site_url }}{% endif %}
+{% if reason %}{{ reason }}
+{% endif %}{% endautoescape %}

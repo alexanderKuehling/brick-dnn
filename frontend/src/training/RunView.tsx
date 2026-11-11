@@ -50,8 +50,10 @@ import { downloadBlob, downloadText } from '@/builder/download';
 import { formatCount } from '@/builder/format';
 import { semanticKey, slugify } from '@/builder/graph';
 import { kernelLines, kernelTerms } from '@/builder/kinds';
+import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { ExplainButton } from '@/explain/ExplainButton';
 import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
@@ -75,6 +77,7 @@ import {
   formatSetting,
   isActive,
   isClassification,
+  isSegmentation,
   preprocessingJson,
   queueText,
   reportsR2,
@@ -84,7 +87,10 @@ import {
   weightsNote,
   weightsSnippet,
 } from './format';
+import { KernelBoundsHint } from './KernelBounds';
+import { PredictionPanel } from './predict/PredictionPanel';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
+import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
 
 interface RunViewProps {
@@ -179,11 +185,14 @@ export function RunView({
   const queued = run.status === 'queued';
   const history = useMemo(() => state?.history ?? [], [state?.history]);
   const classification = isClassification(run, history);
+  // A class for every pixel: mean IoU, Dice and pixel accuracy instead of accuracy or RMSE.
+  const segmentation = isSegmentation(run, history);
   const r2 = reportsR2(run, history);
   const now = useNow(active);
   const [logOpened, log] = useDisclosure(false);
   const [tableOpened, table] = useDisclosure(false);
   const [usageOpened, usage] = useDisclosure(false);
+  const [predictOpened, predict] = useDisclosure(false);
   const [downloading, setDownloading] = useState<'weights' | 'script' | null>(null);
   const logViewport = useRef<HTMLDivElement>(null);
 
@@ -351,7 +360,25 @@ export function RunView({
           <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
             <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
             <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
-            {classification ? (
+            {segmentation ? (
+              <>
+                <Tile
+                  label="Validation IoU"
+                  value={formatPercent(metrics?.val_iou)}
+                  hint="mean over the classes"
+                />
+                <Tile
+                  label="Validation Dice"
+                  value={formatPercent(metrics?.val_dice)}
+                  hint="mean over the classes"
+                />
+                <Tile
+                  label="Pixel accuracy"
+                  value={formatPercent(metrics?.val_pixel_accuracy)}
+                  hint="validation"
+                />
+              </>
+            ) : classification ? (
               <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
             ) : (
               <Tile
@@ -366,9 +393,11 @@ export function RunView({
                 value={bestTrial ? String(bestTrial.trial) : '–'}
                 hint={
                   bestTrial
-                    ? typeof bestTrial.val_accuracy === 'number'
-                      ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
-                      : `loss ${formatMetric(bestTrial.val_loss)}`
+                    ? typeof bestTrial.val_iou === 'number'
+                      ? `IoU ${formatPercent(bestTrial.val_iou)}`
+                      : typeof bestTrial.val_accuracy === 'number'
+                        ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
+                        : `loss ${formatMetric(bestTrial.val_loss)}`
                     : undefined
                 }
               />
@@ -378,9 +407,11 @@ export function RunView({
                 value={best ? String(best.epoch) : '–'}
                 hint={
                   best
-                    ? typeof best.val_accuracy === 'number'
-                      ? `accuracy ${formatPercent(best.val_accuracy)}`
-                      : `loss ${formatMetric(best.val_loss)}`
+                    ? typeof best.val_iou === 'number'
+                      ? `IoU ${formatPercent(best.val_iou)}`
+                      : typeof best.val_accuracy === 'number'
+                        ? `accuracy ${formatPercent(best.val_accuracy)}`
+                        : `loss ${formatMetric(best.val_loss)}`
                     : undefined
                 }
               />
@@ -397,7 +428,13 @@ export function RunView({
             <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
           </SimpleGrid>
 
-          <TestResultCard run={run} classification={classification} r2={r2} active={active} />
+          <TestResultCard
+            run={run}
+            classification={classification}
+            segmentation={segmentation}
+            r2={r2}
+            active={active}
+          />
 
           {tuning && (
             <TrialsTable
@@ -408,6 +445,7 @@ export function RunView({
               best={bestTrialNumber}
               active={active}
               classification={classification}
+              segmentation={segmentation}
             />
           )}
 
@@ -423,7 +461,17 @@ export function RunView({
                 </Text>
               )}
               <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />
-              {classification ? (
+              {charts.iou.length > 0 && (
+                <LineChart
+                  title="Validation IoU"
+                  x={charts.x}
+                  series={charts.iou}
+                  yBounds={[0, 1]}
+                  formatYTick={formatPercentTick}
+                  formatValue={(value) => formatPercent(value)}
+                />
+              )}
+              {segmentation ? null : classification ? (
                 <LineChart
                   title="Accuracy"
                   x={charts.x}
@@ -459,6 +507,7 @@ export function RunView({
                   <HistoryTable
                     history={history}
                     classification={classification}
+                    segmentation={segmentation}
                     r2={r2}
                     kept={keptEpoch}
                   />
@@ -472,6 +521,9 @@ export function RunView({
               </Text>
             )
           )}
+
+          {state?.segmentation && <ClassTable results={state.segmentation} />}
+          <PreviewGallery run={run} />
         </>
       )}
 
@@ -520,6 +572,8 @@ export function RunView({
             Preprocessing (.json)
           </Button>
         )}
+        {/* Explanations of the trained model (src/explain). */}
+        {run.has_weights && !active && <ExplainButton run={run} />}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}
@@ -552,6 +606,17 @@ export function RunView({
         <Text size="xs" c="dimmed" mt={-8}>
           {keptNote}
         </Text>
+      )}
+
+      {run.has_weights && !active && (
+        <div>
+          <ToggleButton opened={predictOpened} onClick={predict.toggle}>
+            Try the model: predict
+          </ToggleButton>
+          <Collapse expanded={predictOpened}>
+            {predictOpened && <PredictionPanel runId={run.id} runName={run.name} />}
+          </Collapse>
+        </div>
       )}
 
       {run.has_weights && (
@@ -973,6 +1038,9 @@ function ClassicalResults({
         </Text>
       )}
 
+      {gaussianProcess && fit?.at_bounds?.length ? (
+        <KernelBoundsHint bounds={fit.at_bounds} />
+      ) : null}
       {gaussianProcess && fit?.kernel && <KernelBlock label="Fitted kernel" code={fit.kernel} />}
       {gaussianProcess && fit?.initial_kernel && (
         <KernelBlock label="Starting kernel" code={fit.initial_kernel} dimmed />
@@ -1066,17 +1134,41 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
       history.map((h) => h.val_r2)
     ),
   ].filter((s) => has(s.values));
-  return { x, loss, accuracy, rmse, r2 };
+  // Segmentation: three shares of the validation pixels, on one scale from 0 to 100 %.
+  const iou = [
+    series(
+      'val_iou',
+      'Mean IoU',
+      SERIES_COLORS[1],
+      history.map((h) => h.val_iou)
+    ),
+    series(
+      'val_dice',
+      'Dice',
+      seriesColor(2),
+      history.map((h) => h.val_dice)
+    ),
+    series(
+      'val_pixel_accuracy',
+      'Pixel accuracy',
+      seriesColor(3),
+      history.map((h) => h.val_pixel_accuracy)
+    ),
+  ].filter((s) => has(s.values));
+  return { x, loss, accuracy, rmse, r2, iou };
 }
 
 function HistoryTable({
   history,
   classification,
+  segmentation = false,
   r2,
   kept,
 }: {
   history: HistoryEntry[];
   classification: boolean;
+  /** Mean IoU, Dice and pixel accuracy instead of an RMSE. */
+  segmentation?: boolean;
   /** Add the validation R² (regressions). */
   r2: boolean;
   /** The epoch whose weights are kept (shown in bold). */
@@ -1090,7 +1182,13 @@ function HistoryTable({
             <Table.Th>Epoch</Table.Th>
             <Table.Th>Train loss</Table.Th>
             <Table.Th>Val. loss</Table.Th>
-            {classification ? (
+            {segmentation ? (
+              <>
+                <Table.Th>Val. IoU</Table.Th>
+                <Table.Th>Val. Dice</Table.Th>
+                <Table.Th>Pixel acc.</Table.Th>
+              </>
+            ) : classification ? (
               <>
                 <Table.Th>Train acc.</Table.Th>
                 <Table.Th>Val. acc.</Table.Th>
@@ -1108,7 +1206,13 @@ function HistoryTable({
               <Table.Td>{entry.epoch}</Table.Td>
               <Table.Td>{formatMetric(entry.train_loss)}</Table.Td>
               <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>
-              {classification ? (
+              {segmentation ? (
+                <>
+                  <Table.Td>{formatPercent(entry.val_iou)}</Table.Td>
+                  <Table.Td>{formatPercent(entry.val_dice)}</Table.Td>
+                  <Table.Td>{formatPercent(entry.val_pixel_accuracy)}</Table.Td>
+                </>
+              ) : classification ? (
                 <>
                   <Table.Td>{formatPercent(entry.train_accuracy)}</Table.Td>
                   <Table.Td>{formatPercent(entry.val_accuracy)}</Table.Td>
@@ -1134,11 +1238,14 @@ function HistoryTable({
 function TestResultCard({
   run,
   classification,
+  segmentation = false,
   r2,
   active,
 }: {
   run: RunDetail;
   classification: boolean;
+  /** Show the mean IoU with Dice and pixel accuracy. */
+  segmentation?: boolean;
   /** Show the R² next to the RMSE (regressions). */
   r2: boolean;
   active: boolean;
@@ -1153,6 +1260,9 @@ function TestResultCard({
           accuracy: metrics.test_accuracy ?? null,
           rmse: metrics.test_rmse ?? null,
           r2: metrics.test_r2 ?? null,
+          iou: metrics.test_iou ?? null,
+          dice: metrics.test_dice ?? null,
+          pixel_accuracy: metrics.test_pixel_accuracy ?? null,
         }
       : null;
   const result = state?.test ?? fromMetrics;
@@ -1162,14 +1272,23 @@ function TestResultCard({
   }
 
   const rmse = typeof result?.rmse === 'number';
-  const label = classification ? 'Test accuracy' : rmse ? 'Test RMSE' : 'Test loss';
-  const value = classification
-    ? formatPercent(result?.accuracy)
-    : formatMetric(rmse ? result?.rmse : result?.loss);
+  const label = segmentation
+    ? 'Test IoU'
+    : classification
+      ? 'Test accuracy'
+      : rmse
+        ? 'Test RMSE'
+        : 'Test loss';
+  const value = segmentation
+    ? formatPercent(result?.iou)
+    : classification
+      ? formatPercent(result?.accuracy)
+      : formatMetric(rmse ? result?.rmse : result?.loss);
   const samples = size !== null ? `${size.toLocaleString('en-US')} test samples` : 'The test set';
   let note: string;
   if (result) {
-    const loss = classification || rmse ? `loss ${formatMetric(result.loss)} · ` : '';
+    const loss =
+      segmentation || classification || rmse ? `loss ${formatMetric(result.loss)} · ` : '';
     note = `${loss}${samples}, measured once after training`;
   } else if (active) {
     note = `${samples} ${size !== null ? 'are' : 'is'} held out until training has finished.`;
@@ -1182,6 +1301,10 @@ function TestResultCard({
         <Group gap="md" wrap="nowrap" align="flex-start" style={{ flexShrink: 0 }}>
           <Metric label={label} value={value} />
           {r2 && <Metric label="R²" value={formatR2(result?.r2)} />}
+          {segmentation && <Metric label="Dice" value={formatPercent(result?.dice)} />}
+          {segmentation && (
+            <Metric label="Pixel acc." value={formatPercent(result?.pixel_accuracy)} />
+          )}
         </Group>
         <Text size="xs" c="dimmed" ta="right">
           {note}
@@ -1201,6 +1324,7 @@ function TrialsTable({
   best,
   active,
   classification,
+  segmentation = false,
 }: {
   tuning: TuningConfig;
   trials: TrialEntry[];
@@ -1209,6 +1333,8 @@ function TrialsTable({
   best: number | null;
   active: boolean;
   classification: boolean;
+  /** Show the mean IoU of every trial. */
+  segmentation?: boolean;
 }) {
   const settings = searchedSettings(tuning);
   const showRmse = !classification && trials.some((t) => typeof t.val_rmse === 'number');
@@ -1250,6 +1376,7 @@ function TrialsTable({
                 {classification && <Table.Th>Val. acc.</Table.Th>}
                 {showRmse && <Table.Th>Val. RMSE</Table.Th>}
                 {showR2 && <Table.Th>Val. R²</Table.Th>}
+                {segmentation && <Table.Th>Val. IoU</Table.Th>}
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -1270,6 +1397,7 @@ function TrialsTable({
                     {classification && <Table.Td>{formatPercent(entry.val_accuracy)}</Table.Td>}
                     {showRmse && <Table.Td>{formatMetric(entry.val_rmse)}</Table.Td>}
                     {showR2 && <Table.Td>{formatR2(entry.val_r2)}</Table.Td>}
+                    {segmentation && <Table.Td>{formatPercent(entry.val_iou)}</Table.Td>}
                     <Table.Td>
                       <TrialStatus entry={entry} best={isBest} epochs={epochs} active={active} />
                     </Table.Td>

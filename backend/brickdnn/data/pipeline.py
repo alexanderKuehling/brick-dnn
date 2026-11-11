@@ -50,6 +50,7 @@ from .checks import (
     issue,
     numbers_in_text,
     regression_target_issues,
+    relation_issues,
     row_issues,
     row_structure_issues,
     sort_issues,
@@ -57,6 +58,7 @@ from .checks import (
     string_feature_issues,
     target_variant_issues,
 )
+from .relations import Relations
 from .steps import REGISTRY, StepContext, StepResult, get_step
 from .table import MAX_NEW_COLUMNS, NUMERIC_KINDS, TEST, TRAIN, VAL, DataError, Table
 
@@ -867,6 +869,7 @@ def readiness(
     *,
     checks: bool = True,
     split: dict[str, Any] | None = None,
+    relations: Relations | None = None,
 ) -> dict[str, Any]:
     """Can ``table`` be exported as a training dataset? See ``Readiness`` in
     ``frontend/src/api/types.ts``.
@@ -886,6 +889,8 @@ def readiness(
     False leaves out the sanity checks (only the errors decide whether data can be exported).
     ``split``: the ``PipelineResult.split`` of the run (``SplitInfo``); its ``error`` (the
     group column is missing where the split is assigned) is an error here.
+    ``relations``: the column relations (:mod:`brickdnn.data.relations`) if already computed
+    for the preview, for the check of columns without a strong partner.
     """
     target = settings.get("target") or None
     errors: list[dict[str, Any]] = []
@@ -1197,6 +1202,7 @@ def readiness(
             )
             warnings.extend(row_issues(table, target if has_target else None, task, len(features)))
             warnings.extend(row_structure_issues(table, target if has_target else None, settings))
+            warnings.extend(relation_issues(table, target if has_target else None, task, relations))
 
     # ---- rows and split
     group_by = (settings.get("split") or {}).get("group_by")

@@ -144,7 +144,8 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
         "reference": {"kind": "upload", "id": dataset.pk},
     }
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
-    assert sizes["get_training_options"] < 4000 < full
+    # Four built-in datasets with their class names, the limits and the defaults.
+    assert sizes["get_training_options"] < 4400 < full
 
     # A run with 200 epochs and a long log.
     run = long_run(user, training_dir)
@@ -173,6 +174,12 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
     assert len(missing["columns"]) == 11 and missing["columns"][-1] == "… and 257 more"
     assert len(preview["columns"]) == 50 and "columns_offset=50" in preview["columns_note"]
     assert len(preview["profiles"]) == 20 and len(preview["sample"]["rows"][0]) == 20
+    # How the 799 number columns relate: counts, a coarse histogram, the weakest ones.
+    relations = preview["column_relations"]
+    assert 700 < relations["columns"] <= 799 and size(relations) < 2500
+    assert len(relations["weakest"]) == 15
+    source_answer, _ = answer(mcp, "get_data_source", id=source["id"])
+    assert 700 < source_answer["column_relations"]["columns"] <= 799
     with capsys.disabled():
         print("\nMCP answer sizes (bytes):", sizes, {"before": {"options": full, "run": full_run}})
 
@@ -256,3 +263,26 @@ def test_check_training_caps_class_names(user, mcp, training_dir):
     check, _ = answer(mcp, "check_training", graph=graph, dataset=uploaded["reference"])
     names = check["plan"]["class_names"]
     assert len(names) == 51 and names[-1] == "… and 70 more" and time.monotonic() - started < 30
+
+
+def test_column_relations_summary_points_at_noise_columns():
+    import numpy as np
+    import pandas as pd
+
+    from brick_dnn_core.mcp_data import relations_view
+    from brickdnn.data.relations import column_relations, to_json
+    from brickdnn.data.table import Table
+
+    rng = np.random.default_rng(0)
+    latent = rng.normal(size=(500, 3))
+    data = {f"r{i}": latent[:, i % 3] + 0.5 * rng.normal(size=500) for i in range(30)}
+    data.update({f"n{i}": rng.normal(size=500) for i in range(60)})
+    relations = to_json(column_relations(Table.from_frame(pd.DataFrame(data))))
+    view = relations_view(relations)
+    assert view["columns"] == 90
+    assert view["without_partner"]["threshold"] == relations["suggested_level"]
+    assert 55 <= view["without_partner"]["columns"] <= 60
+    assert view["with_partner"]["columns"] == 30
+    assert all(name.startswith("n") for name in view["weakest"])
+    assert '"method": "no_partner"' in view["drop_them"] and size(view) < 2000
+    assert relations_view(None) is None

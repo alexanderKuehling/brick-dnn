@@ -1011,6 +1011,8 @@ EQUIVALENCE_CASES = [
     ("datetime_features", {}),
     ("datetime_features", {"parts": ["month", "weekday", "hour"], "cyclical": True}),
     ("feature_selection", {"method": "target_correlation", "min_association": 0.1}),
+    ("feature_selection", {"method": "no_partner"}),
+    ("feature_selection", {"method": "no_partner", "partner_method": "pearson"}),
 ]
 
 

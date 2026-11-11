@@ -1,0 +1,39 @@
+name: Uptime
+
+# Checks every 15 minutes that the site answers (its /api/health/ and the front page), see
+# deploy/server/README.md, "Monitoring". When it is down, one issue labelled "outage" is
+# opened (and commented on while it lasts); GitHub notifies who watches the repository. The
+# issue is closed when the site is back. Needs the variable DEPLOY_URL; without it, nothing
+# runs. GitHub may start scheduled runs late and switches them off after 60 days without
+# activity in the repository (Actions → Uptime → Enable workflow).
+on:
+  schedule:
+    # Not at the full hour, when GitHub's scheduler is busiest.
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# One check at a time, so that two runs never open two issues.
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Site answers
+    if: vars.DEPLOY_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: deploy/server/uptime.py
+          sparse-checkout-cone-mode: false
+      - name: Check the site, open or close the outage issue
+        env:
+          SITE_URL: ${{ vars.DEPLOY_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 deploy/server/uptime.py

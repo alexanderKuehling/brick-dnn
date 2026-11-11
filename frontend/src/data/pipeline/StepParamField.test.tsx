@@ -93,6 +93,32 @@ describe('StepParamField', () => {
     expect(onChange).toHaveBeenLastCalledWith(['age']);
   });
 
+  it('columns: selects all columns matching the search', async () => {
+    const param = catalogParam('drop_columns', 'columns');
+    render(<Field param={param} initial={['city']} />);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Columns' }), 'IN');
+    await userEvent.click(screen.getByRole('button', { name: 'Select all 1 matching “IN”' }));
+    expect(latest).toEqual(['city', 'income']);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Columns' }), 'g');
+    // age and signup match; nothing chosen twice
+    await userEvent.click(screen.getByRole('button', { name: 'Select all 2 matching “g”' }));
+    expect(latest).toEqual(['city', 'income', 'age', 'signup']);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear (4)' }));
+    expect(latest).toEqual([]);
+  });
+
+  it('columns: pastes a list of names and reports unknown ones', async () => {
+    const param = catalogParam('drop_columns', 'columns');
+    render(<Field param={param} initial={['age']} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Paste a list' }));
+    const box = screen.getByRole('textbox', { name: 'Paste column names for Columns' });
+    await userEvent.click(box);
+    await userEvent.paste("['income', 'age']\ncity nope");
+    await userEvent.click(screen.getByRole('button', { name: 'Add these columns' }));
+    expect(latest).toEqual(['age', 'income', 'city']);
+    expect(screen.getByRole('status')).toHaveTextContent('Added 2 columns; not found: nope.');
+  });
+
   it('columns: explains columns of the wrong kind', () => {
     render(<Field param={catalogParam('clip', 'columns')} initial={['city']} />);
     expect(

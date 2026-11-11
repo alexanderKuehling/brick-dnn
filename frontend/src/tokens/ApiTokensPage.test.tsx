@@ -15,6 +15,7 @@ vi.mock('@/api', async (importOriginal) => {
       apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
       connections: { list: vi.fn(), revoke: vi.fn(), setBudget: vi.fn() },
       agentActivity: { summary: vi.fn() },
+      approvals: { rules: vi.fn(), setRule: vi.fn() },
     },
   };
 });
@@ -70,6 +71,17 @@ const CREATED: NewApiToken = {
   token: SECRET,
 };
 
+const DEFAULT_RULE = { training_cpu_minutes: 15, publishing: true, deleting: false };
+const OFF = { training_cpu_minutes: null, publishing: false, deleting: false };
+
+const RULES = {
+  default: DEFAULT_RULE,
+  builtin_default: DEFAULT_RULE,
+  agents: { 'token:2': DEFAULT_RULE, 'token:1': OFF, 'app:7': OFF },
+  gated_tools: { training: [], publishing: [], deleting: [] },
+  expiry_hours: 24,
+};
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -93,6 +105,7 @@ beforeEach(() => {
     latest_at: null,
     retention_days: 90,
   });
+  vi.mocked(api.approvals.rules).mockResolvedValue(RULES);
 });
 
 describe('setup snippets', () => {
@@ -505,4 +518,53 @@ test('removing a budget and errors', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Remove budget' }));
   await waitFor(() => expect(api.apiTokens.setBudget).toHaveBeenLastCalledWith(LAPTOP.id, null));
   expect(await within(laptop).findByText('1 CPU min')).toBeInTheDocument();
+});
+
+describe('approvals on the tokens page', () => {
+  it('shows and changes what each token and app may do without asking', async () => {
+    vi.mocked(api.connections.list).mockResolvedValue([CLAUDE]);
+    const changed = { training_cpu_minutes: 1, publishing: true, deleting: false };
+    vi.mocked(api.approvals.setRule).mockResolvedValue(changed);
+    renderPage();
+    const laptop = await screen.findByRole('listitem', { name: 'Claude on my laptop' });
+    expect(
+      await within(laptop).findByText('Asks before trainings above 15 CPU min and publishing')
+    ).toBeInTheDocument();
+    const script = screen.getByRole('listitem', { name: 'Nightly report' });
+    expect(within(script).getByText('Never asks')).toBeInTheDocument();
+    const app = screen.getByRole('listitem', { name: 'Claude' });
+    expect(within(app).getByText('Never asks')).toBeInTheDocument();
+
+    await userEvent.click(
+      within(laptop).getByRole('button', {
+        name: 'Change what “Claude on my laptop” may do without asking',
+      })
+    );
+    const minutes = screen.getByLabelText('CPU minutes a training may use without asking');
+    await userEvent.clear(minutes);
+    await userEvent.type(minutes, '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.approvals.setRule).toHaveBeenCalledWith({ kind: 'token', id: 2 }, changed)
+    );
+    expect(
+      await within(laptop).findByText('Asks before trainings above 1 CPU min and publishing')
+    ).toBeInTheDocument();
+  });
+
+  it('sets the default for new tokens and apps', async () => {
+    vi.mocked(api.approvals.setRule).mockResolvedValue(OFF);
+    renderPage();
+    const section = await screen.findByRole('region', { name: 'Approvals' });
+    await userEvent.click(
+      within(section).getByRole('button', {
+        name: 'Change what new tokens and apps may do without asking',
+      })
+    );
+    await userEvent.click(screen.getByLabelText('Trainings above'));
+    await userEvent.click(screen.getByLabelText('Publishing'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.approvals.setRule).toHaveBeenCalledWith(null, OFF));
+    expect(await within(section).findByText('Never asks')).toBeInTheDocument();
+  });
 });

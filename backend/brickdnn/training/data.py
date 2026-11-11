@@ -347,6 +347,10 @@ def prepare_data(
 ) -> PreparedData:
     """Load (or generate) the data for ``plan``. Raises :class:`TrainingError`."""
     try:
+        if plan.task == "segmentation":
+            from .segdata import segmentation_data
+
+            return segmentation_data(plan, info, path, config, reporter, generator)
         if info.kind == "random":
             return demo_data(plan, config, generator, reporter)
         if info.kind == "builtin":

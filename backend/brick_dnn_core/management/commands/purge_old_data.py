@@ -3,8 +3,9 @@
 What counts as old comes from the settings ``BRICKDNN_DELETE_UNUSED_UPLOADS_DAYS`` and
 ``BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS`` (both off by default), ``BRICKDNN_AGENT_LOG_DAYS``
 (the activity log of agents, 90 days by default) or the options below. Expired logins are
-always cleaned up. Docker Compose runs this once a day (the ``cleanup`` service);
-see docs/privacy.md.
+always cleaned up. With e-mail set up, inactive accounts are warned before they are deleted
+(``BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS``, see retention.py). Docker Compose runs this once a
+day (the ``cleanup`` service); see docs/privacy.md.
 """
 
 from __future__ import annotations
@@ -89,6 +90,11 @@ class Command(BaseCommand):
         )
         if not dry_run:
             call_command("clearsessions")  # expired logins of the Django admin
+        if result.warned or result.not_warned_yet:
+            self.stdout.write(
+                f"{'Would warn' if dry_run else 'Warned'} {result.warned} inactive accounts by "
+                f"e-mail; kept {result.not_warned_yet} that were not warned in time yet."
+            )
         done = "Would delete" if dry_run else "Deleted"
         self.stdout.write(
             f"{done} {result.accounts} accounts, {result.data_sources} data sources, "

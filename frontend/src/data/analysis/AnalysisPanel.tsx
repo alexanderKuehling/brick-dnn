@@ -4,10 +4,11 @@ import { useElementSize } from '@mantine/hooks';
 import type { DataProfile, DataSample, NewStep } from '@/api/types';
 import { ColumnsView } from './ColumnsView';
 import { CompareView } from './CompareView';
-import { CorrelationsView, type CorrelationMethod } from './CorrelationsView';
+import { type CorrelationMethod } from './CorrelationsView';
 import { DistributionView, type DistributionOptions } from './DistributionView';
 import { MissingView } from './MissingView';
 import { OverviewView } from './OverviewView';
+import { RelationshipsView } from './RelationshipsView';
 import { RowsView, type RowsSource } from './rows/RowsView';
 import { sampleColumn } from './sampleData';
 import { defaultScatterAxes, ScatterView, type ScatterOptions } from './ScatterView';
@@ -19,7 +20,8 @@ export type AnalysisView =
   | 'columns'
   | 'distribution'
   | 'missing'
-  | 'correlations'
+  // column side: how the number columns relate (strongest partners, heatmaps)
+  | 'relationships'
   | 'scatter'
   | 'target'
   | 'compare'
@@ -31,7 +33,7 @@ export const ANALYSIS_VIEWS: { value: AnalysisView; label: string }[] = [
   { value: 'columns', label: 'Columns' },
   { value: 'distribution', label: 'Distribution' },
   { value: 'missing', label: 'Missing values' },
-  { value: 'correlations', label: 'Correlations' },
+  { value: 'relationships', label: 'Relationships' },
   { value: 'scatter', label: 'Scatter' },
   { value: 'target', label: 'Target' },
   { value: 'compare', label: 'Compare' },
@@ -65,7 +67,7 @@ export interface AnalysisPanelProps {
 
 /**
  * Visual analysis of the previewed data: overview, columns, distributions, missing values,
- * correlations, scatter plots, the target and a before/after comparison. Has its natural
+ * relationships between columns (strongest partners, correlations), scatter plots, the target and a before/after comparison. Has its natural
  * height (the page scrolls it); works from phone width up.
  */
 export function AnalysisPanel({
@@ -128,7 +130,7 @@ export function AnalysisPanel({
     split: true,
     zoom: null,
   });
-  const [method, setMethod] = useState<CorrelationMethod>('pearson');
+  const [method, setMethod] = useState<CorrelationMethod>('spearman');
   const [compareLog, setCompareLog] = useState(false);
   const [scatter, setScatter] = useState<ScatterOptions>(() => {
     const [x, y] = defaultScatterAxes(profile, sample, target);
@@ -211,12 +213,15 @@ export function AnalysisPanel({
             onShowColumn={showColumn}
           />
         )}
-        {view === 'correlations' && (
-          <CorrelationsView
+        {view === 'relationships' && (
+          <RelationshipsView
             profile={profile}
+            sample={sample}
+            target={target}
+            onAddStep={onAddStep}
+            onScatter={openScatter}
             method={method}
             onMethodChange={setMethod}
-            onScatter={openScatter}
           />
         )}
         {view === 'scatter' && (
@@ -229,7 +234,13 @@ export function AnalysisPanel({
           />
         )}
         {view === 'target' && (
-          <TargetView profile={profile} sample={sample} target={target} onShowColumn={showColumn} />
+          <TargetView
+            profile={profile}
+            sample={sample}
+            target={target}
+            onShowColumn={showColumn}
+            onAddStep={onAddStep}
+          />
         )}
         {view === 'rows' &&
           (rows ? (

@@ -2,7 +2,31 @@
 
 ## Unreleased
 
+### Added
+- **Data tab: Relationships view for wide tables.** For every number column its strongest
+  partner (Spearman ρ and Pearson r), its number of partners and its group of related columns,
+  computed for all columns on the training rows. A histogram of the strongest |ρ| with a
+  draggable threshold and the chance level, an overview of all columns ordered by
+  hierarchical clustering, a sortable and filterable table with selection (*Drop selected*,
+  *Keep only selected*), the partners of a column with a scatter plot, and a heatmap of chosen
+  columns (strongest pairs, selection, filter, group) with a note how many it shows. Replaces
+  the Correlations view, which showed the 40 most complete columns only.
+- *Select features* method **no strong partner**: drops number features whose strongest
+  correlation with any other feature stays below a threshold (Spearman or Pearson), learned
+  on the training rows; also in the pandas script.
+- Readiness check **features without a strong partner**: many number features unrelated to
+  all others in a table whose other features are clearly related – the signature of noise
+  columns – with the selection step as fix. Ordinary tables stay quiet.
+- Step editor: column lists have *Select all matching* the search, *Paste a list* and *Clear*.
+- MCP: `preview_data_prep` and `get_data_source` add a short `column_relations` summary
+  (counts, a coarse histogram, the weakest columns, how to drop them).
+
 ### Changed
+- Analysis overview: warnings of one kind about many columns are grouped into one entry with
+  one fix for all of them (1,062 warnings of a table with 833 columns become 4 entries).
+- **Logging in with two-factor authentication** answers `{two_factor_required, challenge}`
+  instead of tokens for accounts that turned it on; clients of `POST /api/auth/token/` that
+  log in such an account need the second step. Accounts without it log in as before.
 - **Compact MCP answers.** `get_training_options` lists datasets without their columns (new
   `get_dataset` pages through them), `get_training_run` is a summary (`include` adds the
   history, at most 50 epochs, the graph, plan, log, trials and preprocessing),
@@ -10,6 +34,8 @@
   `project_id`), `list_layer_types` one line per parameter (`types` for full specs),
   `list_examples` names and descriptions (`id` for a graph), and `check_training` and the
   data tools cap long lists with their totals. A run with 200 epochs went from 71 KB to 1 KB.
+- The MCP tool `predict` answers without the class indices (the class names say the same) and
+  with at most 10 warnings; the REST API is unchanged.
 - gunicorn's access log leaves out query strings, so signed download and upload links are not
   logged.
 - **With Docker Compose, trainings are queued and trained by a worker container** (see
@@ -44,6 +70,141 @@
 - **Readiness**: unusually typical rows, near twins with the share of validation/test rows
   that have a twin in training (fix: find the groups and split by them), a group column left
   as a feature. `preview_data_prep` includes a compact row analysis.
+- **Predictions in the web app.** The run view of a finished or stopped run has *Try the
+  model: predict*: for tables a form with one field per column (number fields, the known
+  categories, date pickers) that *Use a sample* fills with a validation row and its actual
+  value, plus pasted or uploaded CSV rows (up to 500, results downloadable as CSV); for images
+  an upload or drop field, and a drawing pad for MNIST-like grayscale sets. Classification
+  shows the top classes with their probabilities, regression the value (± the standard
+  deviation of a Gaussian process). Viewers of shared projects can use it too.
+  `GET /api/training/runs/<id>/predict-form/` describes a run's inputs for it.
+- **Predictions from raw rows.** Runs trained on a dataset exported from the Data tab predict
+  rows in the columns of the imported table (`input_format: "raw"` in the REST API and the MCP
+  tool `predict`, the default in the web app): the server prepares them exactly like the
+  training rows with the values the preparation learned (stored with the dataset at the export,
+  joined tables included), so a new date or store name can be sent as it is. Steps that only
+  change rows are skipped, filters warn, and problems are reported per row and column. Datasets
+  exported earlier need to be exported again for this.
+- **Training for image segmentation.** Networks whose output is as high and wide as their
+  Input can be trained on data with a class for every pixel
+  ([docs/training.md](docs/training.md#image-segmentation)):
+  - *Datasets:* a ZIP file with the folders `images` and `masks` (same file names; `train`,
+    `val` and `test` folders are the split) becomes a dataset of the new kind `segmentation`,
+    in the web app and through upload links. Masks are PNG files with the class index of
+    every pixel (255 is ignored), black and white, a few grey levels or one colour per class;
+    JPEG masks, smoothed edges and more than 32 classes are refused with the reason.
+    `classes.txt` or `classes.json` name the classes. The built-in dataset **Shapes**
+    (squares, circles and triangles, 400 training and 100 test images of 64×64 pixels) is
+    generated on the server: nothing to upload or download.
+  - *Checks:* the output must have one channel per class (or one channel for two classes) at
+    the size of the Input; the errors say what shrinks it, the fixes set the Input shape and
+    the output channels of the last convolution, and a batch that would not fit into memory
+    (`BRICKDNN_SEGMENTATION_MEMORY_MB`, 900 MB) is refused with the batch size that fits.
+  - *Training:* the cross-entropy of every pixel, optionally with a Dice term (setting
+    `loss`); `val_iou`, `val_dice` and `val_pixel_accuracy` per epoch, the same on the test
+    set, and the IoU of every class. The kept epoch stays the one with the lowest validation
+    loss. The training panel has a batch size of its own for segmentation (8).
+  - *Predictions:* a finished run shows eight validation images with their mask, the
+    predicted mask and the prediction over the image
+    (`GET /api/training/runs/<id>/previews/`). `predict` (REST and MCP) takes image files as
+    base64 (`image`, also for classifiers) and answers a segmentation with the class map as a
+    small PNG or run-lengths and the share of every class.
+  - `brickdnn train` reads the new datasets and has `--loss` and `--previews`; the MCP tools
+    and the activity log know the new datasets and metrics.
+- **Explanations of trained models and views inside them** (*Explain* in a finished run, see
+  [docs/explain.md](docs/explain.md)): saliency maps (SmoothGrad), Grad-CAM (any brick with
+  feature maps) and occlusion over the image for image classifiers, for a validation image,
+  a drawing or an uploaded file; Shapley values against the mean training row (exact up to
+  10 features), integrated gradients and permutation importance for models trained on CSV
+  files, also classical ones; decision boundaries with the training points for models with
+  two input features (with the predictive std of Gaussian processes); the output of every
+  brick for one sample, the learned filters of the first convolution and weight histograms.
+  They run like predictions (same process, limits and rate limit, counted as predictions),
+  are cached per run, and are available as `GET/POST /api/training/runs/<id>/explain/` and
+  the MCP tools `explain_prediction` and `get_layer_activations` (compact: coarse grids
+  instead of pictures).
+- **Learning aids in the builder** (also in the online demo): *How data flows* steps one
+  sample through the network brick by brick with the shapes before and after and what each
+  brick computes; the inspector shows how a brick's parameters add up (`3×3×32×64 + 64 =
+  18,496`) and the receptive field of bricks in a convolution stack.
+- **Example *U-Net classifier (Fashion-MNIST)*.** The U-Net example with a classification
+  head: instead of the 1×1 mask convolution, `AdaptiveAvgPool2d` → `Flatten` → `Linear(10)`.
+  Its Input is `[1, 32, 32]` (Fashion-MNIST's 28×28 images are resized, so that three
+  halvings fit) and its filters are halved (16/32/64, bottleneck 128, 482k parameters), so
+  that it trains on a CPU server. It follows the U-Net in the examples; for this task a plain
+  CNN is smaller and faster.
+- **A guide for new users.** On the first visit, the builder walks through five short steps
+  (the palette, connecting layers, the analysis badge and the properties, code and export,
+  training with a built-in dataset) with Mantine's `Tour`: keyboard and screen reader
+  friendly, at phone width it points at the phone's buttons, *Skip* or Escape end it. It is
+  remembered per browser and opens again with the *?* button of the toolbar or *File* →
+  *Guide to the builder*; the online demo shows it too. An empty canvas offers cards to start
+  from an example (MLP on MNIST, CNN, U-Net, Gaussian process).
+- **Kernel hyperparameters at a bound.** After a Gaussian process fit, Brick DNN finds the
+  optimised kernel hyperparameters that ended at one of their bounds (scikit-learn only logs a
+  `ConvergenceWarning`) and stores them in `state.classical.at_bounds` with the brick, the
+  side and a suggested change. The run's results say what it may mean ("Noise level of
+  white_1 ended at its lower bound 1e-05: the model may be overfitting; set custom bounds,
+  e.g. ≥ 0.001"), and a button sets the suggested custom bounds on the brick in the builder,
+  with *Undo*. The MCP tool `get_training_run` includes the messages in its summary.
+- **Backups: `manage.py backup` and `manage.py restore`.** A backup is a folder with the
+  database as of one moment (Django's `dumpdata` in one transaction, which loads into any
+  PostgreSQL or SQLite; `pg_dump` where installed; SQLite's online backup), the files of the
+  data directory as a tarball (only listed above `BRICKDNN_BACKUP_MAX_FILES_MB`) and a
+  manifest. Old backups are rotated (7 daily, 4 weekly). Docker Compose's cleanup service runs
+  it daily after the clean-up when `BRICKDNN_BACKUP_DIR` is set, `/api/health/` reports a
+  failed or old backup, and `restore` puts a backup back (`--database-only`, `--files-only`).
+  brickdnn.com backs up to `/data/backups`. `deploy/server/README.md` has a new section
+  *Backups*: Hetzner's server backups as offsite copy, Supabase's backups, the restore drill.
+- **Uptime monitoring without another service.** A scheduled GitHub Actions workflow
+  (`uptime.yml`, every 15 minutes) checks `DEPLOY_URL/api/health/` and the front page, and
+  when the site is down opens one issue labelled `outage` (GitHub notifies the owner), comments
+  on it while the problem lasts or changes, and closes it when the site is back.
+  `/api/health/` now checks the database (`503` without it), the training worker's heartbeat
+  and the free disk space (`BRICKDNN_HEALTH_MIN_FREE_MB`), and answers `degraded` when one of
+  the latter fails. It names the checks only; the details are for staff accounts and requests
+  with the `X-Health-Token` header (`BRICKDNN_HEALTH_TOKEN`). See
+  [deploy/server/README.md](deploy/server/README.md#monitoring).
+- **Approvals for agents.** Per API token and connected app you decide what an agent may do
+  on its own: start trainings up to N estimated CPU minutes (above that, or always with 0, it
+  asks), publish (a weights link that works without logging in, sharing a dataset or data
+  preparation in a project) and, optionally, delete. Such a call does nothing yet: the agent
+  gets the id of an approval request (not an error) and follows it with the new MCP tools
+  `get_approval` and `list_approvals`. Waiting requests show at the top of *Agent activity*
+  (with the estimate, the agent, network and dataset, and what would become visible) and as a
+  count in the account menu; *Approve* does it right away on the server as that agent, with
+  its budgets checked again, and stores the result (e.g. the run) for `get_approval`; *Deny*
+  takes a message for the agent. Requests expire after 24 hours. New tokens and apps get the
+  account's default (unless changed: trainings above 15 CPU minutes and publishing ask);
+  existing ones ask for nothing until you set a rule. The REST API refuses what a token's rule
+  covers. See docs/mcp.md (*Approvals*) and `/api/approvals/` in docs/api.md.
+- **E-mail, password reset and confirmed addresses.** With an SMTP provider configured
+  (`BRICKDNN_EMAIL_HOST`, `_PORT`, `_USER`, `_PASSWORD` (secret, `.env` only), `_FROM`,
+  `_REPLY_TO`; off without them) the app sends e-mail in one plain-text + HTML layout, in a
+  background thread so that no request waits. "Forgot password?" on the login page sends a
+  one-hour, one-time link (the same answer for every login, limited per IP address and per
+  account); the new password ends every login of the account. New and changed addresses get a
+  link that confirms them for the logged-in account it was sent to; reset links only go to a
+  confirmed address or the unchanged address of an account from before this release. Short
+  security notices: password or e-mail address changed (to the old address), two-factor
+  authentication on or off, API token created, app connected. Without e-mail the reset page
+  says that the server cannot send links. `manage.py send_test_email <address>` checks the
+  settings; [docs/email.md](docs/email.md) explains providers, DNS records and which values
+  are secret.
+- **Warnings before inactive accounts are deleted.** With e-mail, owners of inactive accounts
+  are warned 14 and 3 days before (`BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS`), and an account
+  with an address is only deleted once it was warned: accounts that are overdue when e-mail is
+  switched on are warned first and deleted 3 days later.
+- **Server errors by e-mail.** Unhandled errors (HTTP 500) are mailed to
+  `BRICKDNN_ADMIN_EMAIL`, at most one e-mail per kind of error an hour.
+- **Two-factor authentication.** Every account can turn on codes from an authenticator app
+  (TOTP) on the account page: a QR code, ten recovery codes shown once. Logging in then
+  answers a short-lived challenge (`two_factor_required`) instead of tokens, and
+  `POST /api/auth/token/two-factor/` with a code completes it; the OAuth consent page and the
+  Django admin ask for the code too. Codes work once, with one time step of drift; five wrong
+  codes lock the account for 15 minutes. `BRICKDNN_REQUIRE_2FA_FOR_STAFF=true` keeps staff
+  accounts without it out of the Django admin. `manage.py reset_two_factor <username>` turns it
+  off for someone who lost phone and codes.
 - **Administrators from the settings.** `BRICKDNN_ADMIN_USERS` lists usernames whose accounts
   become staff and superusers when the backend starts (Django admin, no limits by default).
   Nobody can register a listed name; removing a name takes no rights away. A public
@@ -52,9 +213,9 @@
 - **U-Net example and `ConvTranspose2d`.** A new brick for transposed 2-D convolutions
   (learned upsampling: kernel 2 with stride 2 doubles the size; padding and output padding
   as in PyTorch), and the example *U-Net (image segmentation)*: three levels down with
-  `MaxPool2d`, three up with `ConvTranspose2d`, skip connections with `Concat`, one value per
-  pixel as output. It is an example for building and exporting code: the datasets the app
-  trains on have one label per image, not one per pixel.
+  `MaxPool2d`, three up with `ConvTranspose2d`, skip connections with `Concat`, one score per
+  class for every pixel as output (3 × 64 × 64 in, 4 × 64 × 64 out). It trains on the
+  built-in dataset Shapes as it is.
 - **A training queue with a separate worker.** With `BRICKDNN_TRAINING_WORKER` the web server
   only stores a new run as `queued`; `manage.py training_worker` (its own process or
   container, `--slots N`, `--once` for one run) takes the runs from the database and trains

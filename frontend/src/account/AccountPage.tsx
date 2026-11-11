@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconAlertCircle, IconAlertTriangle, IconDownload, IconTrash } from '@tabler/icons-react';
+import {
+  IconAlertCircle,
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconDownload,
+  IconMailQuestion,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
+  Badge,
   Button,
   Center,
   Container,
@@ -18,7 +26,7 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { api, ApiError, setTokens, type Account } from '@/api';
+import { api, setTokens, type Account } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { PlanSection } from '@/billing/PlanSection';
 import { useBillingInfo } from '@/billing/useBillingInfo';
@@ -27,20 +35,8 @@ import { LegalLinks } from '@/legal/LegalLinks';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { formatBytes, formatDate } from '@/training/format';
 import { UsageSection } from '@/usage/UsageSection';
-
-/** The first message the API gave for `field`, or null. */
-export function fieldError(error: unknown, field: string): string | null {
-  if (error instanceof ApiError && error.data && typeof error.data === 'object') {
-    const value = (error.data as Record<string, unknown>)[field];
-    if (Array.isArray(value) && typeof value[0] === 'string') {
-      return value[0];
-    }
-    if (typeof value === 'string') {
-      return value;
-    }
-  }
-  return null;
-}
+import { fieldError } from './fieldError';
+import { TwoFactorSection } from './TwoFactorSection';
 
 function plural(count: number, word: string, words = `${word}s`): string {
   return `${count.toLocaleString('en-US')} ${count === 1 ? word : words}`;
@@ -90,6 +86,64 @@ function Section({
   );
 }
 
+/** Whether the address is confirmed, and sending the link again. */
+function EmailStatus({ account }: { account: Account }) {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  if (!account.email || !account.email_sending) {
+    return null;
+  }
+  if (account.email_verified) {
+    return (
+      <Group gap={6}>
+        <Badge color="green" variant="light" leftSection={<IconCircleCheck size={12} />}>
+          Confirmed
+        </Badge>
+        {account.email_verified_at && (
+          <Text size="xs" c="dimmed">
+            {formatDate(account.email_verified_at)}
+          </Text>
+        )}
+      </Group>
+    );
+  }
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      const { detail } = await api.account.resendVerification();
+      setSent(true);
+      notifications.show({ color: 'green', message: detail });
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not send the link',
+        message: (err as Error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Alert color="yellow" icon={<IconMailQuestion size={18} />} title="Not confirmed yet">
+      <Stack gap="xs">
+        <Text size="sm">
+          {account.password_reset_available
+            ? 'Open the link we sent to this address to confirm it.'
+            : 'Open the link we sent to this address to confirm it. Until then, a forgotten password cannot be reset by e-mail.'}
+        </Text>
+        <Group>
+          <Button size="xs" variant="light" color="yellow" loading={busy} onClick={resend}>
+            {sent ? 'Send the link again' : 'Send me a new link'}
+          </Button>
+        </Group>
+      </Stack>
+    </Alert>
+  );
+}
+
 function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Account) => void }) {
   const [email, setEmail] = useState(account.email);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +158,12 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
       const updated = await api.account.changeEmail(email.trim());
       onSaved(updated);
       setEmail(updated.email);
-      notifications.show({ color: 'green', message: 'Your e-mail address was changed.' });
+      notifications.show({
+        color: 'green',
+        message: updated.email_sending
+          ? `Your e-mail address was changed. We sent a link to ${updated.email} to confirm it.`
+          : 'Your e-mail address was changed.',
+      });
     } catch (err) {
       setError(fieldError(err, 'email') ?? (err as Error).message);
     } finally {
@@ -118,7 +177,7 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
         {!account.email && (
           <Alert color="yellow" icon={<IconAlertTriangle size={18} />}>
             Your account has no e-mail address yet. Add one, so that people can invite you to their
-            networks by e-mail.
+            networks by e-mail{account.email_sending && ' and you can reset a forgotten password'}.
           </Alert>
         )}
         <TextInput
@@ -136,6 +195,7 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
           onChange={(e) => setEmail(e.currentTarget.value)}
           error={error}
         />
+        {!changed && <EmailStatus account={account} />}
         <Group justify="flex-end">
           <Button type="submit" loading={busy} disabled={!changed}>
             Save e-mail address
@@ -415,6 +475,14 @@ export function AccountPage() {
 
         <Section title="Password">
           <PasswordForm />
+        </Section>
+
+        <Section title="Two-factor authentication">
+          <TwoFactorSection
+            username={account.username}
+            state={account.two_factor}
+            onChange={(twoFactor) => setAccount({ ...account, two_factor: twoFactor })}
+          />
         </Section>
 
         {billing && (

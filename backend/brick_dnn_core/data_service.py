@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -49,6 +50,8 @@ from .retention import touch
 if TYPE_CHECKING:
     from brickdnn.data.pipeline import PipelineResult
     from brickdnn.data.table import Table
+
+logger = logging.getLogger(__name__)
 
 DISABLED_REASON = "Data preparation is disabled on this server."
 WRONG_FILE_MESSAGE = (
@@ -507,6 +510,7 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
     """``PreviewResult`` for a ``PreviewRequest`` (see frontend/src/api/types.ts)."""
     from brickdnn.data.pipeline import readiness
     from brickdnn.data.profile import profile_table, sample_table
+    from brickdnn.data.relations import column_relations
 
     started = time.perf_counter()
     if body is None:
@@ -522,11 +526,19 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
     run = _run(prep, body.get("steps"), body.get("settings"), upto)
     result, prep_settings = run.result, run.settings
     with _user_errors():
+        # How the number columns relate (training rows): for the profile and the readiness.
+        relations = column_relations(result.table, prep_settings.get("target"))
         profile = profile_table(
-            result.table, **_target_args(result.table, prep_settings, result.task)
+            result.table,
+            **_target_args(result.table, prep_settings, result.task),
+            relations=relations,
         )
         before = (
-            profile_table(result.before, **_target_args(result.before, prep_settings, result.task))
+            profile_table(
+                result.before,
+                **_target_args(result.before, prep_settings, result.task),
+                relations=False,
+            )
             if compare
             else None
         )
@@ -535,7 +547,9 @@ def preview(prep: DataPrep, body: Any) -> dict[str, Any]:
         columns = max(1, len(result.table.columns))
         rows = max(MIN_SAMPLE_ROWS, min(sample_rows, MAX_SAMPLE_CELLS // columns))
         sample = sample_table(result.table, rows, seed=int(prep_settings["split"]["seed"]))
-        ready = readiness(result.table, prep_settings, result.task, split=result.split)
+        ready = readiness(
+            result.table, prep_settings, result.task, split=result.split, relations=relations
+        )
     failed = _failed_step(run)
     if failed:
         # The data shown is the data before that step; it cannot be exported like this.
@@ -787,7 +801,8 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
         info.predefined_split = [int(n) for n in written["split_counts"]]
         class_names = written.get("class_names")
         info.class_names = [str(c) for c in class_names] if class_names else None
-        size = sum(p.stat().st_size for p in work.iterdir() if p.is_file())
+        _freeze(prep, run, work)
+        size = budgets.folder_size(work)
         budgets.check_storage(prep.owner, size)
         dataset = Dataset.objects.create(
             owner=prep.owner,
@@ -808,6 +823,28 @@ def export_dataset(prep: DataPrep, name: Any = None) -> Dataset:
             dataset.delete()
         raise
     return dataset
+
+
+def _freeze(prep: DataPrep, run: _Run, work: Path) -> None:
+    """Keep the preparation with the values it learned next to the dataset, so that runs
+    trained on it can predict from raw rows (brickdnn.data.frozen). Without it the dataset
+    still works; only raw predictions are not possible."""
+    from brickdnn.data.frozen import FROZEN_DIR, freeze
+
+    try:
+        freeze(
+            work / FROZEN_DIR,
+            result=run.result,
+            steps=run.steps,
+            source=_load_table(prep.source),
+            source_info=source_info(prep.source),
+            prep={"id": prep.pk, "name": prep.name},
+            load_source=run.sources.load,
+            source_name=run.sources.name,
+        )
+    except Exception:
+        logger.exception("Could not store the preparation %s for raw predictions", prep.pk)
+        shutil.rmtree(work / FROZEN_DIR, ignore_errors=True)
 
 
 def _check_written(info: DatasetInfo, written: dict[str, Any]) -> None:

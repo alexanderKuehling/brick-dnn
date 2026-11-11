@@ -9,8 +9,9 @@ class BrickDnnCoreConfig(AppConfig):
 
     def ready(self) -> None:
         # Connects the signal handlers that delete training and data files with their objects.
-        # billing: its check of the Paddle settings.
-        from . import billing, data_service, training_service  # noqa: F401
+        # billing: its check of the Paddle settings. raw_predictions: runs keep the frozen
+        # preparation of a deleted dataset.
+        from . import billing, data_service, raw_predictions, training_service  # noqa: F401
         from .site_admins import promote_after_migrate
         from .supabase import protect_after_migrate
 

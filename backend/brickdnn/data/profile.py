@@ -6,6 +6,8 @@ duplicate checks on very large tables use a seeded random sample of rows (``ANAL
 the profile says how many rows they are based on. Every number in the output is a plain
 Python ``float``/``int`` or ``None`` (never NaN or infinity), so it can be sent as JSON.
 Datetimes (statistics, histogram edges, sample values) are milliseconds since the epoch.
+How the number columns relate to each other (``relations``: strongest partner of every column)
+comes from :mod:`brickdnn.data.relations`, computed on the training rows.
 
 The JSON shapes are documented in ``frontend/src/api/types.ts`` (``DataProfile``,
 ``ColumnProfile``, ``DataSample`` ...); keep both in sync.
@@ -21,6 +23,8 @@ import numpy as np
 import pandas as pd
 
 from .io import _LEADING_ZERO, LEADING_ZERO_SHARE, parse_numbers
+from .relations import Relations, column_relations
+from .relations import to_json as relations_json
 from .table import NUMERIC_KINDS, SPLIT_NAMES, Table
 
 # Correlations / associations / duplicate checks look at most at this many rows.
@@ -66,21 +70,29 @@ _CAMEL_ID = re.compile(r"[a-z](?:Id|ID)$")
 
 
 def profile_table(
-    table: Table, *, target: str | None = None, task: str | None = None
+    table: Table,
+    *,
+    target: str | None = None,
+    task: str | None = None,
+    relations: Relations | bool = True,
 ) -> dict[str, Any]:
     """Profile of the whole table, see ``DataProfile`` in ``frontend/src/api/types.ts``.
 
     ``target`` / ``task`` ("classification" | "regression") add the target analysis and the
     association of every column with the target. Warnings carry a suggested fix where one
     exists (``{"type": "impute", "params": {...}}``, using the step types of
-    :mod:`brickdnn.data.steps`).
+    :mod:`brickdnn.data.steps`). ``relations``: the column relations of
+    :func:`brickdnn.data.relations.column_relations` if already computed, True to compute
+    them, False to leave them out.
     """
     # Overflows (values near ±1e308) give infinite statistics, which become None.
     with np.errstate(all="ignore"):
-        return _profile(table, target, task)
+        return _profile(table, target, task, relations)
 
 
-def _profile(table: Table, target: str | None, task: str | None) -> dict[str, Any]:
+def _profile(
+    table: Table, target: str | None, task: str | None, relations: Relations | bool
+) -> dict[str, Any]:
     df = table.df
     n = table.n_rows
     if target not in table.kinds:
@@ -98,6 +110,8 @@ def _profile(table: Table, target: str | None, task: str | None) -> dict[str, An
         target_profile = _target_profile(table, target, task)
         _add_associations(table, analysis, columns, target, task)
     correlations = _correlations(table, analysis, columns)
+    if relations is True:
+        relations = column_relations(table, target)
     duplicates = _duplicate_rows(analysis) if n and table.columns else 0
 
     profile = {
@@ -112,6 +126,7 @@ def _profile(table: Table, target: str | None, task: str | None) -> dict[str, An
         "correlations": correlations,
         "target": target_profile,
         "warnings": [],
+        "relations": relations_json(relations) if isinstance(relations, Relations) else None,
     }
     profile["warnings"] = _warnings(table, profile, target, task)
     return _clean_json(profile)

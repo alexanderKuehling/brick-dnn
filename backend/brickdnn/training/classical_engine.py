@@ -45,6 +45,7 @@ from .compat import TrainingPlan, check_compatibility
 from .config import TrainingConfig
 from .datasets import DatasetInfo
 from .job import TrainingJob, TrainingResult
+from .kernel_bounds import at_bounds
 from .reporting import Reporter, StopTraining, TrainingError, short_error
 from .state import finite, preprocessing_path, write_json_atomic
 from .tabular import CHANGED, csv_columns, csv_rows, held_out_size, read_split, split_sizes
@@ -281,6 +282,8 @@ class _ClassicalRun:
             "val_accuracy": entry["val_accuracy"],
         }
         self.details.update(fit_seconds=round(fit_seconds, 3), train=trained, **self._learned())
+        if self.layer.scale == "gaussian_process":
+            self.details["at_bounds"] = self._at_bounds(analysis)
         reporter.setup({"classical": dict(self.details), "preprocessing": self._preprocessing()})
         reporter.epoch_end(dict(entry), dict(self.best))
         reporter.weights_kept({"weights_epoch": 1, "stopped_early": False})
@@ -515,6 +518,14 @@ class _ClassicalRun:
             }
         support = getattr(model, "support_", None)
         return {"support_vectors": int(len(support)) if support is not None else None}
+
+    def _at_bounds(self, analysis: Any) -> list[dict[str, Any]]:
+        """Kernel hyperparameters that ended at a bound (see kernel_bounds.py), also logged."""
+        model = final_estimator(self.pipeline)
+        found = at_bounds(model, self.layer.kernel, analysis, self.plan.class_names)
+        for entry in found:
+            self.reporter.log(entry["message"])
+        return found
 
     def _fitted_kernel(self, model: Any) -> str:
         """The fitted kernel; with more than two classes a Gaussian process classifier fits

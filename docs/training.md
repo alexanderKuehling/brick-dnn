@@ -2,7 +2,8 @@
 
 Brick DNN can train the network you built **on the machine that runs the backend**, with
 PyTorch. You start and watch the training in the editor; nothing is computed in the browser.
-The same engine is available on the command line as `brickdnn train`. Classical models
+The same engine is available on the command line as `brickdnn train`. Networks that give
+every pixel a class are covered in [Image segmentation](#image-segmentation). Classical models
 (Gaussian processes and support vector machines) are fitted with scikit-learn instead, see
 [Classical models](#classical-models).
 
@@ -12,7 +13,9 @@ The same engine is available on the command line as `brickdnn train`. Classical 
 
 Training needs PyTorch and torchvision in the backend environment. Everything else in Brick DNN
 works without them. Classical models only need scikit-learn, which is part of the backend's
-requirements (and of the default Docker image), so they train even without PyTorch.
+requirements (and of the default Docker image), so they train even without PyTorch. Pillow,
+which reads the masks of an uploaded [segmentation dataset](#image-segmentation), is part of
+the requirements too.
 
 ```bash
 # local development setup (see the README)
@@ -46,8 +49,9 @@ stored per user.
    [early stopping](#early-stopping-and-the-kept-weights) end the training when the network
    stops improving, or let a [hyperparameter search](#hyperparameter-search) choose some of
    the settings.
-5. Watch loss and accuracy (for a regression: RMSE and R²) per epoch. You can close the panel;
-   the training continues and the button in the toolbar shows its progress.
+5. Watch loss and accuracy (for a regression: RMSE and R², for a segmentation: mean IoU,
+   Dice and pixel accuracy) per epoch. You can close the panel; the training continues and
+   the button in the toolbar shows its progress.
 6. When the run is finished (or stopped), download the **weights** (`.pt`) and the matching
    **script** (`.py`).
 
@@ -65,6 +69,8 @@ by default (`BRICKDNN_TRAINING_MAX_RUNS`), and refuses a start while it is busy.
 | **CIFAR-10** | 60,000 colour 32×32 photos, 10 classes. Downloaded on first use (170 MB). | Input `3, 32, 32` or `3072`; 10 outputs |
 | **CSV file** | Upload a `.csv`: every column but the last is a numeric feature, the last column is the target. | Input = number of feature columns; 1 output (regression) or one output per class |
 | **Image folder** | Upload a `.zip` with one folder per class, e.g. `cats/001.jpg`, `dogs/001.jpg`. | Input `1, H, W` or `3, H, W` (or flat: `3·S·S` or `S·S` values for S×S images); one output per class |
+| **Shapes** | 500 generated 64×64 images of squares, circles and triangles with a class for every pixel (4 classes). Nothing is downloaded. See [Image segmentation](#image-segmentation). | Input `3, H, W` or `1, H, W`; output `4, H, W` |
+| **Images with masks** | Upload a `.zip` with the folders `images` and `masks` (same file names), see [Image segmentation](#image-segmentation). | Input `1, H, W` or `3, H, W`; output one channel per class at the same height and width |
 
 Details:
 
@@ -103,7 +109,8 @@ check also says how to fix it, and Brick DNN applies the fix for you:
 
 Only two layers are ever changed: the Input layer (`shape`, data type `float`) and the last
 Linear layer (also behind activations or dropout; `out_features` = one per class for
-classification, 1 for a regression). A shape that works is kept (a CNN for 1×28×28 also trains
+classification, 1 for a regression); for a segmentation dataset instead the last `Conv2d` or
+`ConvTranspose2d` layer (`out_channels` = one per class). A shape that works is kept (a CNN for 1×28×28 also trains
 on CIFAR-10); otherwise the Input gets the shape of the data, flat when it is flat now (e.g.
 `784` for MNIST before a Linear layer). Nothing is suggested when other layers would have to
 change too, e.g. a CNN on a CSV file or a Linear layer with a fixed number of input features;
@@ -129,9 +136,11 @@ follows the data.
 | Seed | random | Fix it for reproducible runs |
 | Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs |
 | Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch |
+| Loss | Cross-entropy | Segmentation only: *Cross-entropy + Dice* for classes with few pixels |
 
 The loss is chosen from the task: cross-entropy for classification (the network should end
-with raw scores, not Softmax), mean squared error for regression.
+with raw scores, not Softmax), mean squared error for regression, the cross-entropy of every
+pixel for a [segmentation](#image-segmentation).
 
 ### Validation and test data
 
@@ -154,6 +163,9 @@ The data is split randomly (with the seed) into up to three parts:
 When rows belong together (several measurements of one person), split them by group in the
 *Data* tab (*Target & split → Keep rows of a group together*): the exported dataset brings
 that split along, so no person is in training and validation at once.
+| Shapes | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
+| Images with masks | `val_split` of the data, or the folder `val` | `test_split` of the data, or the folder `test` (none without it) |
+| Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |
 
 The official test images of the built-in datasets are never used to choose an epoch or a trial,
 so their test result is not optimistic. With 20 % validation, MNIST trains on 48,000 images,
@@ -258,6 +270,220 @@ separate process, like a training. AI assistants get the weights with `get_weigh
 a download link valid for 15 minutes, the model code, the preprocessing and a snippet like the
 one above (see [mcp.md](mcp.md#downloading-the-weights)).
 
+### Predicting in the web app
+
+A finished or stopped run with weights has **Try the model: predict** in the run view. Everyone
+who can see the run can use it, also viewers of a shared project:
+
+- **Tables** (CSV files, datasets from the Data tab): a form with one field per input column
+  (numbers, a list of the known categories, a date picker for dates, true/false). **Use a
+  sample** fills in a row of the validation data (of the dataset for uploaded CSV files, whose
+  split is not stored) and shows its actual value next to the prediction. **Paste CSV rows**
+  takes a header line and up to 500 rows (pasted or from a file; `,` or `;` separated), sent in
+  requests of 64 rows; the results table can be downloaded as a CSV file with the inputs and
+  the predictions. Classification shows the class, its probability and the top 3 classes;
+  regression the value in the units of the target, a Gaussian process with ± its standard
+  deviation.
+- **Images** (built-in sets, image folders): drop or choose an image file; it is resized to
+  the training size (and turned grayscale for one channel) in the browser, then normalised by
+  the server like the training images. Grayscale sets of at most 64×64 pixels (MNIST,
+  Fashion-MNIST) can also be **drawn**: the drawing is scaled into the inner 20×20 of 28×28
+  pixels and centred by its centre of mass, like the MNIST digits (white on black). The panel
+  shows what the network gets.
+- Runs trained on random demo data only get a note: their predictions mean nothing.
+
+Errors of the server appear next to the field they are about. Predictions use compute; when a
+budget is used up, the panel says so and the server refuses them.
+
+### Raw rows for datasets from the Data tab
+
+A network trained on a dataset exported from a data preparation takes the *prepared* columns
+(one-hot columns, date parts, scaled values …). It can also predict **raw rows**: rows in the
+columns of the imported source table, before the steps (`input_format: "raw"` in the API and
+the MCP tool, **Raw columns** in the web app, the default there). The server prepares them
+exactly like the training rows, with the values the preparation learned from them, then
+predicts:
+
+- **What is stored.** The export keeps the preparation next to the dataset
+  (`datasets/<id>/prepare/recipe.json`): every step with its settings and what it learned
+  (means, medians, categories, bounds, KNN reference rows …), the source columns with their
+  types and the categories of the training rows, and a few validation rows as samples. Tables
+  joined by the preparation are stored with it as they were at the export (`prepare/sources/`),
+  so later changes or the deletion of a source do not change the predictions. A run keeps its
+  own copy when its dataset is deleted. Datasets exported before this feature have no such
+  folder: export the preparation again for raw rows.
+- **Exactly like the training rows.** The steps run as the code of the pandas script that the
+  Data tab exports (`Step.to_pandas`, with the learned values as constants), which reproduces
+  the training table; preparing the training's own source rows this way gives the rows of the
+  exported dataset, value for value. Nothing is learned from the new rows: a row predicted
+  alone gets the same values as in a batch.
+- **Steps that change rows.** Removing duplicates, sorting, class balancing and the removal of
+  outliers from the training rows are skipped: every row you send is predicted, in order.
+  Filters (filter rows, drop rows with missing values, removing outliers from all rows) keep
+  the row and add a warning that the training data had no rows like it; a filter or missing
+  value check on the target is left out. A join looks the row up in the stored table (the
+  first match if a key is repeated); a row without a match gets missing values there. An
+  append step adds only the columns it created.
+- **Columns.** Send the source columns as imported (the target is optional and ignored).
+  Numbers can use the decimal mark of the file, dates are best written `2024-05-31` (or
+  `2024-05-31T14:30`), booleans `true`/`false`. Columns the preparation drops before reading
+  them are not needed. Columns that are left out count as missing values (with a warning);
+  unknown columns, values of the wrong type and rows with an empty feature after the
+  preparation are refused, with one message per row and column. A category that the training
+  rows did not have is a warning (one-hot encoding gives all zeros, ordinal −1 …).
+
+Raw rows count against the same limits as other predictions (64 rows per request, the rate
+limit and compute; preparing them in the web server counts as prediction compute too).
+
+## Image segmentation
+
+A segmentation network gives every pixel of an image a class instead of one answer for the
+whole image: its output is as high and wide as its Input. Load the example **U-Net (image
+segmentation)**, press **Train**, choose **Built-in → Shapes** and start: it fits as it is
+(Input `3, 64, 64`, four classes) and reaches about 80 % mean IoU in ten epochs on a CPU.
+
+![A finished U-Net run on Shapes: the IoU of every class and, for validation images, the true and the predicted masks](images/training-segmentation.png)
+
+### Datasets
+
+**Shapes** is built in and generated on the server (nothing is uploaded or downloaded): 400
+training and 100 test images of 64×64 pixels with one to three squares, circles and triangles
+on a noisy background, and for every pixel its class (*background*, *square*, *circle*,
+*triangle*). The colour of a shape hints at its class (squares are bluish, circles reddish,
+triangles greenish), but the hues overlap, so a network needs the outlines for the rest. That
+makes it quick to learn; it shows that a network trains, not how good it is on photos.
+
+**Your own data** is a `.zip` file with the images in a folder `images` and one mask per
+image in a folder `masks`. An image and its mask have the same file name; the ending may
+differ, and the mask may end in `_mask`, `_label`, `_seg` or `_gt`:
+
+```text
+images/001.jpg        masks/001.png
+images/002.jpg        masks/002_mask.png
+classes.txt           (optional: one class name per line, the first one for the value 0)
+```
+
+- The folders may also be called `image`, `imgs`, `img` and `mask`, `labels`, `label`,
+  `annotations`, and may lie inside other folders.
+- With `train/images`, `train/masks`, `val/images`, `val/masks` (and optionally `test/…`;
+  also `images/train`, `masks/train` …) the folders are the split: training uses them
+  instead of the validation and test split of the settings. Both a training and a validation
+  folder are needed for that; otherwise all pairs are split at random.
+- Images may have any size (up to 4096×4096) and are resized to the Input of the network;
+  masks are resized with nearest neighbour, so no classes are mixed. A dataset has at most
+  20,000 images with masks.
+
+How the **masks** are read is decided once for the whole dataset, from the values that occur
+in them:
+
+| Masks | Read as |
+| ----- | ------- |
+| only black (0) and white (255) | two classes: *background* and *foreground* |
+| grey values or palette indices below 32 (a palette PNG counts by its indices, not its colours) | the class of each pixel: 0, 1, 2 …; the value **255 marks pixels to ignore** (they count neither for the loss nor for the metrics) |
+| at most 32 other grey values, e.g. 0, 128, 255 | classes in ascending order (0, 128, 255 → 0, 1, 2) |
+| colour masks with at most 32 different colours | one class per colour: black first, then sorted by red, green, blue, or in the order of `classes.json` |
+
+Everything else is refused when the file is uploaded, with the reason: no folder of masks, no
+image with a mask of the same name, more than 32 classes, masks that are all background, and
+masks with many in-between values. The last one is what JPEG compression and smoothed
+(anti-aliased) edges do to a mask: save masks as PNG, without smoothing. Images without a
+mask and masks without an image are left out and counted, and masks whose size differs from
+their image are counted too (they are resized).
+
+`classes.txt` names the classes in the order of their values. `classes.json` does the same as
+a list of names, or for colour masks as a list like
+`[{"name": "road", "color": [128, 64, 128]}, …]`, which also fixes the order of the classes.
+Without either, the classes are called *background*, *class 1*, *class 2* …
+
+A ZIP file with these folders becomes a segmentation dataset by itself; in the API the form
+field `kind` (`segmentation` or `images`) says which one is meant when the folders should not
+decide. The usual limits of ZIP uploads apply (size, number of files, unpacked size, the
+storage of the account).
+
+### Networks
+
+- The **Input** is `channels, height, width` with 1 or 3 channels, at most 512×512.
+- The **output** has the height and width of the Input and one channel per class: shape
+  `classes, height, width`. For two classes a single channel works too: its value is the
+  score of the second class (binary cross-entropy on logits).
+- The network ends with raw scores, not with Softmax or Sigmoid.
+
+When the output is smaller than the Input, the check says so and what usually causes it:
+convolutions with *valid* padding (use *same*), or pooling layers that no upsampling layer
+(`ConvTranspose2d`) undoes; with pooling, height and width must also be divisible
+by 2 for every pooling layer (by 8 for the U-Net example). The fixes that
+[adapt the network](#adapting-the-network-to-the-data) set the Input shape and the
+`out_channels` of the last `Conv2d` or `ConvTranspose2d` layer. A classifier (one answer per
+image) is refused on a segmentation dataset and a segmentation network on MNIST or a CSV
+file, both with the reason; classical models do not segment.
+
+### Settings, memory and time
+
+- **Batch size.** Every layer keeps its output for all pixels of a batch, so batches are
+  much smaller than for classification: 4 to 16 is usual, and the form has a batch size of
+  its own for segmentation (8). Small datasets learn faster with small batches: 44 images
+  in batches of 16 are only three optimizer steps per epoch. A batch that would need more than
+  `BRICKDNN_SEGMENTATION_MEMORY_MB` (default 900 MB) is refused before the start with the
+  batch size that fits, e.g. 52 for the U-Net example at 64×64 and 13 at 128×128.
+- **Loss.** *Cross-entropy* of every pixel, or *Cross-entropy + Dice* (`loss`:
+  `cross_entropy_dice`), which adds one minus the Dice score of the predicted probabilities.
+  The Dice term helps when a class covers only a few pixels; the check suggests it when one
+  class has more than 97 % of the pixels.
+- **Time.** CPU time grows with the number of pixels. On an otherwise idle CPU, the U-Net
+  example needs about 0.05 CPU seconds per training image and epoch at 64×64 (about four
+  times that at 128×128): ten epochs on Shapes take about 3 CPU minutes, on a busy machine
+  up to three times as much. The estimate before the start is cautious for this network
+  (about 9 CPU minutes for ten epochs). Use a smaller Input, *Max. samples* or fewer epochs
+  for a first try.
+- Datasets up to 256 MB (at the size of the Input, one byte per pixel and channel plus the
+  mask) are loaded into memory; larger ones are read from disk batch by batch.
+
+### Metrics
+
+After every epoch the validation images are measured, and the test images once at the end:
+
+- **Mean IoU** (`val_iou`, `test_iou`): for each class the pixels that are both predicted and
+  truly of that class, divided by the pixels that are predicted or truly of it (intersection
+  over union), counted over all pixels of the split together; then the mean over the classes
+  that occur in the masks or the predictions.
+- **Dice** (`val_dice`, `test_dice`): `2 · overlap / (predicted + true pixels)` per class,
+  averaged the same way. It is always at least the IoU.
+- **Pixel accuracy** (`val_pixel_accuracy`, `test_pixel_accuracy`): the share of pixels with
+  the right class. With much background it is high even for a poor network, which is why the
+  mean IoU is the headline number of a run.
+
+The kept weights are those of the epoch with the **lowest validation loss**, as for every
+other training (also for early stopping and for the best trial of a search), so the kept
+epoch is not always the one with the highest IoU. The run view shows the three numbers as
+tiles and as curves per epoch, a table with the IoU of every class for the kept weights
+(validation and test), and the IoU of every trial of a search. Run lists show the
+test mean IoU (without a test set, the validation mean IoU).
+
+### Seeing the predictions
+
+Once the weights are saved (also when a run is stopped), the training predicts the first
+eight validation images with the kept weights and saves them as small PNG files in the run
+directory (`previews/`): the image as the network got it, its mask, the predicted mask and
+the prediction drawn over the image, scaled down to at most 192 pixels. The run view shows
+them as **Predictions**, with a legend of the class colours and the IoU and pixel accuracy
+of every image. They count as storage of the run (a few hundred KB at most) and are deleted
+with it. Everyone who may see the run may see them; in the API:
+`GET /api/training/runs/<id>/previews/`.
+
+To predict a new image, send it as a file: `POST /api/training/runs/<id>/predict/` with
+`{"image": "<base64 of a PNG or JPEG file>"}` (or the MCP tool `predict`). It is converted and
+resized like the training images, and the answer has the share of the pixels of every class
+and the predicted class map as a small PNG whose pixel values are the class indices. *How to
+use the weights* shows the same in Python: `output.argmax(dim=1)` is the class of every pixel.
+
+### Explaining the trained model
+
+**Explain** in a finished run opens explanations of the trained model and views inside it:
+saliency maps, Grad-CAM and occlusion for images, Shapley values, integrated gradients and
+permutation importance for CSV data, decision boundaries for models with two input features,
+the output of every brick for one sample, the learned filters and weight histograms. They run
+like predictions (and count as such); see [explain.md](explain.md).
+
 ## Classical models
 
 Besides neural networks, Brick DNN builds and trains classical models for tabular data
@@ -326,7 +552,20 @@ history and API, but **fitted once instead of epoch by epoch**:
   accuracy or the RMSE and R², the test result if there is a test set, the fit time, the
   fitted kernel and log marginal likelihood of a Gaussian process (one kernel per class for
   a classifier with more than two classes) or the number of support vectors of an SVM, and
-  warnings of the fit in the log (e.g. a hyperparameter that ended at its bound).
+  warnings of the fit in the log.
+- **Hyperparameters at a bound**: scikit-learn only warns when the optimiser stops at a bound
+  of a kernel hyperparameter. Brick DNN compares every optimised hyperparameter with its
+  bounds after the fit and reports the ones that ended there (in log space, within 0.1 %) in
+  `state.classical.at_bounds`, in the log, in the run's results and in the MCP tool
+  `get_training_run`: *"Noise level of white_1 ended at its lower bound 1e-05: the model may
+  be overfitting; set custom bounds, e.g. ≥ 0.001."* A noise level or length scale at its
+  lower bound usually means the model follows every training point; at the upper bound, the
+  fit wanted a larger value (a length scale there often means the kernel does not matter).
+  In the builder, a button on the hint switches the brick to *custom bounds* with the
+  suggested bound (two orders of magnitude further in, or out for an upper bound) and
+  selects it; *Undo* puts the old settings back. Each entry has the brick (`node`, `name`,
+  `type`), `parameter`, `value`, `bound`, `side` (`lower`/`upper`), the classes of a
+  multi-class classifier, the `suggestion` (new brick parameters) and the `message`.
 - **Stopping**: scikit-learn cannot be interrupted, so stopping during the fit ends the
   training process at once and nothing is saved.
 - **The model**: the fitted pipeline is saved with joblib as `model.joblib` (download:
@@ -356,6 +595,8 @@ brickdnn train my_network.json --data mnist --epochs 5          # built-in datas
 brickdnn train --example tabular_regression --data houses.csv   # CSV file
 brickdnn train my_cnn.json --data ./pets/ --epochs 20           # image folder (or a .zip)
 brickdnn train --example lstm_sentiment --data demo             # demo data
+brickdnn train --example unet --data shapes --batch-size 16     # segmentation: a class per pixel
+brickdnn train my_unet.json --data scans.zip --previews out/    # images/ and masks/ (or a folder)
 brickdnn train my_cnn.json --data houses.csv --test-split 0.2   # hold out 20 % as a test set
 brickdnn train --example gp_regression --data houses.csv        # a classical model: houses.joblib
 ```
@@ -366,7 +607,9 @@ includes it) and save the fitted model as `<name>.joblib`.
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,
 `--test-split`, `--device`, `--max-samples`, `--seed`, `--patience N` (early stopping),
 `--no-restore-best` (keep the weights of the last epoch), `--save weights.pt`, `--data-root`
-(download folder for built-in datasets, default `~/.cache/brickdnn/datasets`). Press
+(download folder for built-in datasets, default `~/.cache/brickdnn/datasets`), and for a
+segmentation `--loss cross_entropy_dice` and `--previews DIR` (write the
+[predictions](#seeing-the-predictions) for eight validation images into a folder). Press
 <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop; the weights of the best epoch so far are saved anyway.
 
 Hyperparameter search: any of the following options starts one. `VALUES` is a comma-separated
@@ -391,7 +634,9 @@ brickdnn train net.json --data houses.csv --search grid --tune-lr 0.01,0.001 --t
 The command prints every trial, a table of all trials (best first) and the test result, and
 saves the weights of the best trial. Regressions add the RMSE and R² everywhere, for example
 `Epoch   3/10  train loss 0.2412  val loss 0.2287  val rmse 41.27  val R² 0.823` and
-`Test: loss 0.2034, rmse 43.9, R² 0.796`.
+`Test: loss 0.2034, rmse 43.9, R² 0.796`. Segmentations print the mean IoU, Dice and pixel
+accuracy instead (`val IoU 76.6%  val Dice 86.0%  val pixel acc 96.9%`) and, at the end, a
+table with the IoU of every class.
 
 ## How it works
 
@@ -411,8 +656,10 @@ editor ──REST (polls every second)──▶ Django API ──spawns──▶
   weights always match the exported script.
 - Run directories live in `BRICKDNN_DATA_DIR/training/runs/<id>/` (`job.json`, `state.json`,
   `weights.pt`, `weights.preprocessing.json` and `output.log` with the full output, useful when
-  a run fails). Uploaded datasets
+  a run fails; a segmentation adds `previews/`). Uploaded datasets
   are in `training/datasets/`, downloaded built-in datasets in `training/builtin/`.
+  Explanations keep the validation samples they read and their cached answers in
+  `explain/` inside the run directory ([explain.md](explain.md#limits-and-costs)).
 - Stopping creates a `STOP` file; the runner finishes the current batch, saves the weights
   (of the best epoch so far) and exits. A run whose process disappears (for example because the server was restarted) is
   marked as failed.
@@ -682,6 +929,7 @@ limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
 | `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process regression is fitted on at most (more are subsampled) |
 | `BRICKDNN_GPC_MAX_ROWS` | `2000` | Training rows a Gaussian process classifier is fitted on at most (more are subsampled) |
 | `BRICKDNN_SVM_MAX_ROWS` | `50000` | Training rows an SVM is fitted on at most (more are subsampled) |
+| `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900` | Memory a batch of a segmentation training may need (every layer's output for all its images); larger batches are refused before the start. Fits a training process with about 1.8 GB; raise it on larger servers |
 | `BRICKDNN_PLANS` | unset | The plans and their limits as JSON (see [Plans and limits](#plans-and-limits)) |
 | `BRICKDNN_DEFAULT_PLAN` | the first plan | The plan of accounts without one |
 | `BRICKDNN_BUDGET_CPU_MINUTES_PER_MONTH` | `0` (unlimited) | Without plans: compute per account and calendar month |

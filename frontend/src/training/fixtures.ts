@@ -4,6 +4,7 @@ import type {
   Dataset,
   GraphDocument,
   RunDetail,
+  RunPreviews,
   RunQueue,
   RunSummary,
   TrainingConfig,
@@ -663,6 +664,248 @@ export function svcDetail(overrides: Partial<RunDetail> = {}): RunDetail {
         train: { loss: 0.2, accuracy: 0.95, rmse: null, r2: null },
       },
     },
+    ...overrides,
+  };
+}
+
+// --------------------------------------------------------------------------
+// Segmentation (a class for every pixel)
+// --------------------------------------------------------------------------
+
+const SHAPE_CLASSES = ['background', 'square', 'circle', 'triangle'];
+const SHAPE_COLORS = ['#1a1a19', '#3987e5', '#d95926', '#199e70'];
+
+/** A server with segmentation: the generated dataset Shapes and the limits. */
+export const SEGMENTATION_STATUS: TrainingStatus = {
+  ...STATUS,
+  builtin_datasets: [
+    { ...STATUS.builtin_datasets[0], task: 'classification' },
+    {
+      id: 'shapes',
+      name: 'Shapes',
+      description:
+        'Segmentation: squares, circles and triangles on noisy backgrounds, with a class for ' +
+        'every pixel. Generated, RGB 64×64.',
+      task: 'segmentation',
+      sample_shape: [3, 64, 64],
+      num_classes: 4,
+      class_names: SHAPE_CLASSES,
+      train_size: 400,
+      test_size: 100,
+      download_mb: 0,
+      available: true,
+    },
+  ],
+  segmentation: {
+    max_classes: 32,
+    max_images: 20000,
+    max_input_side: 512,
+    batch_memory_mb: 900,
+    losses: ['cross_entropy', 'cross_entropy_dice'],
+  },
+};
+
+/** An uploaded ZIP file with images and masks. */
+export function segmentationDataset(overrides: Partial<Dataset> = {}): Dataset {
+  const name = overrides.name ?? 'cells';
+  return {
+    id: 9,
+    name,
+    kind: 'segmentation',
+    size_bytes: 2_400_000,
+    created_at: '2026-11-10T10:00:00Z',
+    info: {
+      kind: 'segmentation',
+      name,
+      num_samples: 120,
+      builtin: null,
+      sample_shape: [3, 256, 256],
+      train_size: null,
+      test_size: null,
+      num_features: null,
+      columns: [],
+      has_header: null,
+      delimiter: null,
+      target_kind: null,
+      target_range: null,
+      class_names: ['background', 'cell', 'nucleus'],
+      class_counts: null,
+      subdir: null,
+      num_classes: 3,
+      task: 'segmentation',
+      segmentation: {
+        mask_format: 'indices',
+        ignore_index: null,
+        class_pixel_share: [0.81, 0.154, 0.036],
+        image_sizes: { most_common: [256, 256], min: [256, 256], max: [256, 256], different: 1 },
+        unmatched_images: 2,
+        unmatched_masks: 0,
+        unmatched_examples: ['images/a.png', 'images/b.png'],
+        mask_size_mismatches: 0,
+      },
+    },
+    owner: 'ada',
+    mine: true,
+    shared_in: [],
+    ...overrides,
+  };
+}
+
+/**
+ * A finished segmentation run (a U-Net on Shapes): 3 epochs, the weights of epoch 3 are kept,
+ * measured on the test images, with eight preview images.
+ */
+export function segmentationDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = detail({
+    name: 'U-Net',
+    status: 'completed',
+    message: 'Finished: validation mean IoU 78.2%, pixel accuracy 97.2%; test mean IoU 77.8%, …',
+    dataset: { kind: 'builtin', id: 'shapes', name: 'Shapes' },
+    config: { ...CONFIG, epochs: 3, batch_size: 16, loss: 'cross_entropy' },
+    task: 'segmentation',
+    epochs: 3,
+    epochs_done: 3,
+    metrics: {
+      train_loss: 0.14,
+      val_loss: 0.08,
+      val_accuracy: null,
+      val_rmse: null,
+      val_iou: 0.7821,
+      val_dice: 0.8702,
+      val_pixel_accuracy: 0.9718,
+      test_loss: 0.09,
+      test_accuracy: null,
+      test_rmse: null,
+      test_iou: 0.7779,
+      test_dice: 0.8671,
+      test_pixel_accuracy: 0.9694,
+    },
+    best: { epoch: 3, val_loss: 0.08, val_accuracy: null, val_iou: 0.7821 },
+    has_weights: true,
+    total_params: 1925700,
+    finished_at: '2026-10-28T10:01:30Z',
+  });
+  const epoch = (n: number, loss: number, iou: number, dice: number, accuracy: number) => ({
+    epoch: n,
+    train_loss: loss + 0.06,
+    val_loss: loss,
+    train_accuracy: null,
+    val_accuracy: null,
+    val_iou: iou,
+    val_dice: dice,
+    val_pixel_accuracy: accuracy,
+    seconds: 8,
+  });
+  const split = (iou: number, dice: number, accuracy: number, classIou: number[]) => ({
+    iou,
+    dice,
+    pixel_accuracy: accuracy,
+    class_iou: classIou,
+    class_dice: classIou.map((value) => (2 * value) / (1 + value)),
+  });
+  return {
+    ...base,
+    plan: {
+      task: 'segmentation',
+      summary:
+        'Segmentation into 4 classes at 64×64 pixels (Shapes, 400 training and 100 test images).',
+      inputs: [{ shape: [3, 64, 64], dtype: 'float', vocab: null }],
+      targets: [{ kind: 'mask', num_classes: 4, binary: false }],
+      image: { channels: 3, height: 64, width: 64, layout: 'chw' },
+      num_classes: 4,
+      class_names: SHAPE_CLASSES,
+      notes: [],
+      segmentation: {
+        binary: false,
+        ignore_index: null,
+        fixed_bytes: 30_811_200,
+        sample_bytes: 17_118_003,
+      },
+    },
+    state: {
+      ...base.state!,
+      status: 'completed',
+      message: base.message,
+      finished_at: 1761645690,
+      device: 'cpu',
+      device_label: 'CPU',
+      task: 'segmentation',
+      num_classes: 4,
+      class_names: SHAPE_CLASSES,
+      train_size: 320,
+      val_size: 80,
+      test_size: 100,
+      epochs: 3,
+      steps_per_epoch: 20,
+      total_params: 1925700,
+      history: [
+        epoch(1, 0.46, 0.2163, 0.2319, 0.865),
+        epoch(2, 0.19, 0.5401, 0.6372, 0.9331),
+        epoch(3, 0.08, 0.7821, 0.8702, 0.9718),
+      ],
+      progress: null,
+      best: { epoch: 3, val_loss: 0.08, val_accuracy: null, val_iou: 0.7821 },
+      weights_epoch: 3,
+      stopped_early: false,
+      test: {
+        loss: 0.09,
+        accuracy: null,
+        rmse: null,
+        r2: null,
+        ...split(0.7779, 0.8671, 0.9694, [0.981, 0.749, 0.809, 0.573]),
+      },
+      weights: true,
+      preprocessing: {
+        kind: 'image',
+        task: 'segmentation',
+        channels: 3,
+        height: 64,
+        width: 64,
+        layout: 'chw',
+        mean: [0.5556, 0.5575, 0.5419],
+        std: [0.1903, 0.192, 0.2007],
+        class_names: SHAPE_CLASSES,
+        mask: { resize: 'nearest', binary: false, ignore_index: null },
+      },
+      log: [],
+      segmentation: {
+        loss: 'cross_entropy',
+        binary: false,
+        ignore_index: null,
+        class_names: SHAPE_CLASSES,
+        colors: SHAPE_COLORS,
+        validation: { epoch: 3, ...split(0.7821, 0.8702, 0.9718, [0.984, 0.802, 0.78, 0.563]) },
+        test: split(0.7779, 0.8671, 0.9694, [0.981, 0.749, 0.809, 0.573]),
+        previews: { count: 2, epoch: 3, split: 'validation' },
+      },
+    },
+    ...overrides,
+  };
+}
+
+/** The preview images of `segmentationDetail` (two samples; the pictures are 1×1 PNGs). */
+export function previews(overrides: Partial<RunPreviews> = {}): RunPreviews {
+  const pixel =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
+  const sample = (index: number, iou: number, accuracy: number, classes: number[]) => ({
+    index,
+    image: { file: `${index}_image.png`, url: pixel },
+    truth: { file: `${index}_truth.png`, url: pixel },
+    prediction: { file: `${index}_prediction.png`, url: pixel },
+    overlay: { file: `${index}_overlay.png`, url: pixel },
+    iou,
+    pixel_accuracy: accuracy,
+    classes,
+  });
+  return {
+    epoch: 3,
+    split: 'validation',
+    width: 64,
+    height: 64,
+    class_names: SHAPE_CLASSES,
+    colors: SHAPE_COLORS,
+    ignore_color: '#8a8f98',
+    samples: [sample(0, 0.9206, 0.9744, [0, 1, 3]), sample(1, 0.4512, 0.9012, [0, 2, 3])],
     ...overrides,
   };
 }

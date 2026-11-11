@@ -158,12 +158,63 @@ export interface Tokens {
   refresh: string;
 }
 
+/** The answer of the password login when the account has two-factor authentication on. */
+export interface TwoFactorChallenge {
+  two_factor_required: true;
+  /** Signed, valid for `expires_in` seconds: send it with the code. */
+  challenge: string;
+  expires_in: number;
+}
+
+export type LoginResult = Tokens | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(result: LoginResult): result is TwoFactorChallenge {
+  return (result as TwoFactorChallenge).two_factor_required === true;
+}
+
+export interface TwoFactorState {
+  enabled: boolean;
+  enabled_at: string | null;
+  recovery_codes_left: number;
+}
+
+/** The start of the setup: shown once, never again. */
+export interface TwoFactorSetup {
+  secret: string;
+  /** For the QR code. */
+  otpauth_uri: string;
+}
+
+/** Two-factor authentication is on: the recovery codes (shown once) and new tokens. */
+export interface TwoFactorEnabled extends Tokens {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface RecoveryCodes {
+  recovery_codes: string[];
+  state: TwoFactorState;
+}
+
+export interface PasswordResetLink {
+  valid: boolean;
+  username: string | null;
+}
+
 // --------------------------------------------------------------------------
 // The own account and the legal pages
 // --------------------------------------------------------------------------
 
 /** The logged-in user's account (page /account) and how much the server stores for it. */
 export interface Account extends User {
+  /** The address was confirmed with a link sent to it (and has not changed since). */
+  email_verified: boolean;
+  email_verified_at: string | null;
+  /** Whether the server sends e-mail at all. */
+  email_sending: boolean;
+  /** Whether a forgotten password could be reset by e-mail (needs a confirmed address). */
+  password_reset_available: boolean;
+  two_factor: TwoFactorState;
   last_login: string | null;
   last_active_at: string | null;
   /** When the terms of use were accepted at sign-up; null if the server had none then. */
@@ -466,7 +517,8 @@ export interface AgentAction {
   method: string;
   /** Changes something rather than only reading. */
   writes: boolean;
-  outcome: 'ok' | 'error';
+  /** pending: waited for the user's approval; approved: approved and done; denied. */
+  outcome: AgentOutcome;
   /** What the agent was told went wrong ("" when it worked). */
   error: string;
   /** REST requests: the HTTP status. */
@@ -478,12 +530,16 @@ export interface AgentAction {
   targets: AgentTarget[];
   /** The network it was about, if any. */
   project: number | null;
+  /** The approval request it belongs to, if any. Missing on older servers. */
+  approval?: number | null;
 }
+
+export type AgentOutcome = 'ok' | 'error' | 'pending' | 'approved' | 'denied';
 
 export interface AgentActivityQuery {
   agent?: AgentKey;
   tool?: string;
-  outcome?: 'ok' | 'error';
+  outcome?: AgentOutcome;
   project?: number;
   /** Older entries than this id (the next page). */
   before?: number;
@@ -501,6 +557,88 @@ export interface AgentActivityPage {
   latest_id: number;
   /** How long entries are kept; 0: this server keeps no log. */
   retention_days: number;
+  /** Requests waiting for the user's approval, with every poll. Missing on older servers. */
+  approvals?: PendingApprovals;
+}
+
+// --------------------------------------------------------------------------
+// Approvals: actions of agents that wait for the user's OK
+// --------------------------------------------------------------------------
+
+/** What a token or app may do without asking. */
+export interface ApprovalRule {
+  /** Trainings estimated above this many CPU minutes ask (0: every one; null: none). */
+  training_cpu_minutes: number | null;
+  /** Sharing in projects and links that work without logging in ask. */
+  publishing: boolean;
+  /** Deleting networks, runs, datasets and data asks. */
+  deleting: boolean;
+}
+
+export interface ApprovalRules {
+  /** What new tokens and apps get. */
+  default: ApprovalRule;
+  builtin_default: ApprovalRule;
+  /** By "token:<id>" and "app:<id>". */
+  agents: Partial<Record<AgentKey, ApprovalRule>>;
+  gated_tools: Record<ApprovalCategory, string[]>;
+  expiry_hours: number;
+}
+
+export type ApprovalCategory = 'training' | 'publishing' | 'deleting';
+export type ApprovalStatus = 'pending' | 'approved' | 'executed' | 'failed' | 'denied' | 'expired';
+
+export interface ApprovalEstimate {
+  cpu_minutes: number | null;
+  low_cpu_minutes: number | null;
+  high_cpu_minutes: number | null;
+  cost: number | null;
+  currency: string | null;
+}
+
+export interface ApprovalRequest {
+  id: number;
+  status: ApprovalStatus;
+  category: ApprovalCategory;
+  /** The tool the agent called, and what the server does once approved. */
+  tool: string;
+  action: string;
+  agent: AgentRef & { active: boolean };
+  /** 'Start training “GP 1” on dataset “houses.csv” (#3)'. */
+  summary: string;
+  /** Why it needs approval. */
+  reason: string;
+  estimate: ApprovalEstimate | null;
+  limit_cpu_minutes: number | null;
+  /** Trainings: the network ("5 layers (…), 4 connections") and the data. */
+  network: string | null;
+  dataset: string | null;
+  /** Publishing: what would become visible, and to whom. */
+  exposes: string | null;
+  warning: string | null;
+  targets: AgentTarget[];
+  arguments: Record<string, AgentArgument>;
+  created_at: string;
+  expires_at: string;
+  decided_at: string | null;
+  finished_at: string | null;
+  /** The user's message with a denial. */
+  message: string;
+  /** Why it failed once approved. */
+  error: string;
+  /** What was done once approved. */
+  done: string | null;
+}
+
+export interface PendingApprovals {
+  pending_count: number;
+  /** Newest first. */
+  pending: ApprovalRequest[];
+}
+
+export interface ApprovalList {
+  results: ApprovalRequest[];
+  pending_count: number;
 }
 
 /** A token or app that acted, for filters and the API tokens page. */
@@ -603,7 +741,7 @@ export interface ProjectDataItem {
   owner: string;
   created_at: string;
   /** Datasets only. */
-  kind?: 'csv' | 'images';
+  kind?: 'csv' | 'images' | 'segmentation';
   /** Datasets only. */
   size_bytes?: number;
 }
@@ -741,6 +879,11 @@ export interface BuiltinDataset {
   id: string;
   name: string;
   description: string;
+  /**
+   * `segmentation`: a class for every pixel (Shapes, generated on the server); otherwise one
+   * label per image. Missing on older servers.
+   */
+  task?: 'classification' | 'segmentation';
   /** Channels, height, width. */
   sample_shape: number[];
   num_classes: number;
@@ -749,9 +892,23 @@ export interface BuiltinDataset {
   /** The official test images: always the test set. */
   test_size: number;
   download_mb: number;
-  /** False when torchvision is missing on the server. */
+  /** False when torchvision is missing on the server (generated datasets do not need it). */
   available: boolean;
 }
+
+/** What a segmentation dataset and training may be on this server. */
+export interface SegmentationLimits {
+  max_classes: number;
+  max_images: number;
+  /** The largest Input height and width. */
+  max_input_side: number;
+  /** The memory a batch may need (every layer's output for all its images). */
+  batch_memory_mb: number;
+  losses: SegmentationLoss[];
+}
+
+/** The loss of a segmentation: the cross-entropy per pixel, optionally plus a Dice term. */
+export type SegmentationLoss = 'cross_entropy' | 'cross_entropy_dice';
 
 /** Capabilities of the server: GET /api/training/. */
 export interface TrainingStatus {
@@ -778,6 +935,8 @@ export interface TrainingStatus {
    * classical models train without it. Missing on older servers.
    */
   classical?: ClassicalCapabilities;
+  /** Segmentation (a class for every pixel). Missing on servers without it. */
+  segmentation?: SegmentationLimits;
 }
 
 export interface ClassicalCapabilities {
@@ -790,7 +949,31 @@ export interface ClassicalCapabilities {
   tuning: boolean;
 }
 
-export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images';
+export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images' | 'segmentation';
+
+/** What the inspection of a segmentation dataset found (images with one mask each). */
+export interface SegmentationInfo {
+  /** How the masks are read: black and white, class indices, grey levels or colours. */
+  mask_format: 'binary' | 'indices' | 'levels' | 'colors';
+  mask_values?: unknown[] | null;
+  /** 255 if the masks mark pixels that are ignored. */
+  ignore_index: number | null;
+  ignored_share?: number;
+  /** The share of the pixels of every class. */
+  class_pixel_share: number[];
+  image_sizes?: {
+    /** Width, height. */
+    most_common: number[];
+    min: number[];
+    max: number[];
+    different: number;
+  };
+  unmatched_images?: number;
+  unmatched_masks?: number;
+  unmatched_examples?: string[];
+  /** Masks with another size than their image (they are resized). */
+  mask_size_mismatches?: number;
+}
 
 /** What the server knows about a dataset without loading it. */
 export interface DatasetInfo {
@@ -815,16 +998,20 @@ export interface DatasetInfo {
   num_classes: number | null;
   /**
    * Datasets made in the Data tab come with their own split: [train, validation, test] rows.
-   * Training then uses it instead of `val_split` / `test_split`.
+   * Training then uses it instead of `val_split` / `test_split`. Segmentation datasets with
+   * train/, val/ (and test/) folders have one too: their images.
    */
   predefined_split?: number[] | null;
+  /** `segmentation` for data with a class for every pixel. */
+  task?: 'segmentation' | null;
+  segmentation?: SegmentationInfo | null;
 }
 
-/** An uploaded dataset (CSV file or ZIP of image folders). */
+/** An uploaded dataset (CSV file, ZIP of image folders or ZIP of images with masks). */
 export interface Dataset {
   id: number;
   name: string;
-  kind: 'csv' | 'images';
+  kind: 'csv' | 'images' | 'segmentation';
   size_bytes: number;
   created_at: string;
   info: DatasetInfo;
@@ -841,13 +1028,18 @@ export interface Dataset {
 export type DatasetRef =
   { kind: 'random' } | { kind: 'builtin'; id: string } | { kind: 'upload'; id: number };
 
-export type TrainingTask = 'classification' | 'regression' | 'demo';
+export type TrainingTask = 'classification' | 'regression' | 'segmentation' | 'demo';
 
 export interface TrainingPlan {
   task: TrainingTask;
   summary: string;
   inputs: { shape: number[]; dtype: 'float' | 'long'; vocab: number | null }[];
-  targets: ({ kind: 'class'; num_classes: number } | { kind: 'value'; shape: number[] })[];
+  targets: (
+    | { kind: 'class'; num_classes: number }
+    | { kind: 'value'; shape: number[] }
+    /** Segmentation; `binary`: one output channel, the score of class 1. */
+    | { kind: 'mask'; num_classes: number; binary: boolean }
+  )[];
   image: {
     channels: number;
     height: number;
@@ -859,6 +1051,16 @@ export interface TrainingPlan {
   notes: string[];
   /** Classical models: what is fitted (missing for neural networks and older runs). */
   classical?: ClassicalPlan | null;
+  /**
+   * Segmentation: a training step needs about `fixed_bytes + batch size × sample_bytes` of
+   * memory (null otherwise).
+   */
+  segmentation?: {
+    binary: boolean;
+    ignore_index: number | null;
+    fixed_bytes: number;
+    sample_bytes: number;
+  } | null;
 }
 
 export interface ClassicalPlan {
@@ -874,8 +1076,8 @@ export interface ClassicalPlan {
 
 /**
  * A suggested change that makes the network fit the data: set `params` on the layer `node`.
- * Only the Input layer (`shape`, `dtype`) and the last Linear layer (`out_features`) are ever
- * changed.
+ * Only the Input layer (`shape`, `dtype`) and the last layer are ever changed: `out_features`
+ * of a Linear layer, for segmentation `out_channels` of a convolution.
  */
 export interface CompatibilityFix {
   node: string;
@@ -930,6 +1132,8 @@ export interface TrainingConfig {
    * of the last epoch (default true; missing in older runs, which kept the last epoch).
    */
   restore_best?: boolean;
+  /** Segmentation only (missing in older runs). */
+  loss?: SegmentationLoss;
 }
 
 // --------------------------------------------------------------------------
@@ -1010,6 +1214,10 @@ export interface TrialEntry {
   val_rmse: number | null;
   /** Regression only (missing in older runs). */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
   /** The epoch whose weights the trial keeps (missing in older runs). */
   weights_epoch?: number | null;
   /** Ended by early stopping. */
@@ -1026,6 +1234,8 @@ export interface BestTrial {
   val_rmse: number | null;
   /** Regression only (missing in older runs). */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
   weights_epoch?: number | null;
 }
 
@@ -1036,6 +1246,13 @@ export interface TestResult {
   rmse: number | null;
   /** Coefficient of determination: regression only (missing in older runs). */
   r2?: number | null;
+  /** Segmentation only: mean IoU and Dice over the classes, and the share of right pixels. */
+  iou?: number | null;
+  dice?: number | null;
+  pixel_accuracy?: number | null;
+  /** Per class; null for a class that occurs neither in the masks nor the predictions. */
+  class_iou?: (number | null)[];
+  class_dice?: (number | null)[];
 }
 
 /**
@@ -1057,12 +1274,24 @@ export interface RunMetrics {
    */
   val_r2?: number | null;
   test_r2?: number | null;
+  /**
+   * Segmentation only (other runs do not have the keys): mean IoU and Dice over the classes
+   * that occur, and the share of pixels with the right class.
+   */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
+  test_iou?: number | null;
+  test_dice?: number | null;
+  test_pixel_accuracy?: number | null;
 }
 
 export interface BestEpoch {
   epoch: number;
   val_loss: number | null;
   val_accuracy: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
 }
 
 export interface RunSummary {
@@ -1129,6 +1358,10 @@ export interface HistoryEntry {
   val_rmse?: number | null;
   /** Coefficient of determination; null when the validation targets are all equal. */
   val_r2?: number | null;
+  /** Segmentation only. */
+  val_iou?: number | null;
+  val_dice?: number | null;
+  val_pixel_accuracy?: number | null;
   seconds?: number | null;
 }
 
@@ -1186,6 +1419,69 @@ export interface RunState {
   family?: 'neural' | 'classical';
   /** What the fit of a classical model found (null for neural networks). */
   classical?: ClassicalRunState | null;
+  /** Segmentation: the results per class and the preview images, once the weights are saved. */
+  segmentation?: SegmentationRunState | null;
+}
+
+/** The results of the kept weights of a segmentation on one split, with the values per class. */
+export interface SegmentationSplit {
+  /** Validation only: the epoch of the kept weights. */
+  epoch?: number | null;
+  iou: number | null;
+  dice: number | null;
+  pixel_accuracy: number | null;
+  class_iou: (number | null)[];
+  class_dice: (number | null)[];
+}
+
+export interface SegmentationRunState {
+  loss: SegmentationLoss;
+  /** One output channel (two classes). */
+  binary: boolean;
+  ignore_index: number | null;
+  class_names: string[];
+  /** One colour per class, as in the preview images. */
+  colors: string[];
+  /** Null if the kept weights are not those of a finished epoch. */
+  validation: SegmentationSplit | null;
+  test: SegmentationSplit | null;
+  /** How many preview images there are (GET …/runs/<id>/previews/), or null. */
+  previews: { count: number; epoch: number | null; split: string } | null;
+}
+
+/** One picture of a preview: its file name and, embedded, a data URL. */
+export interface PreviewImage {
+  file: string;
+  url?: string;
+}
+
+/** A validation image of a segmentation run with what the kept weights predict for it. */
+export interface PreviewSample {
+  index: number;
+  image: PreviewImage;
+  /** The true mask and the predicted one: one colour per class. */
+  truth: PreviewImage;
+  prediction: PreviewImage;
+  /** The prediction drawn over the image. */
+  overlay: PreviewImage;
+  /** Mean IoU over the classes in its mask or prediction. */
+  iou: number | null;
+  pixel_accuracy: number | null;
+  /** The classes in its mask or prediction. */
+  classes: number[];
+}
+
+/** GET /api/training/runs/<id>/previews/. */
+export interface RunPreviews {
+  epoch: number | null;
+  split: string;
+  /** Size of the pictures (large inputs are scaled down). */
+  width: number;
+  height: number;
+  class_names: string[];
+  colors: string[];
+  ignore_color: string;
+  samples: PreviewSample[];
 }
 
 /** The metrics of a fitted classical model on some rows. */
@@ -1216,6 +1512,29 @@ export interface ClassicalRunState {
   support_vectors: number | null;
   /** The metrics on the training rows. */
   train: ClassicalMetrics | null;
+  /** Gaussian processes: kernel hyperparameters the fit left at a bound (older servers: none). */
+  at_bounds?: KernelBound[] | null;
+}
+
+/** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */
+export interface KernelBound {
+  /** The kernel brick (null: the default kernel of a Gaussian process without kernel bricks). */
+  node: string | null;
+  /** Its name in the network, e.g. "white_1". */
+  name: string;
+  type: string;
+  /** E.g. "noise_level", with its label "Noise level". */
+  parameter: string;
+  label: string;
+  value: number;
+  bound: number;
+  side: 'lower' | 'upper';
+  /** Classifiers with one kernel per class: the classes whose kernel hit the bound. */
+  classes: string[] | null;
+  /** New parameters for the brick: custom bounds that move this bound. */
+  suggestion: Params | null;
+  /** "Noise level of white_1 ended at its lower bound 1e-05: the model may be overfitting; …" */
+  message: string;
 }
 
 export interface RunDetail extends RunSummary {
@@ -1224,6 +1543,124 @@ export interface RunDetail extends RunSummary {
   state: RunState | null;
   /** In the answer to starting it: it will probably be stopped by its compute limit. */
   budget_warning?: string | null;
+}
+
+// --------------------------------------------------------------------------
+// Predictions with a trained run (POST /api/training/runs/<id>/predict/)
+// --------------------------------------------------------------------------
+
+/** A cell value of an input row: numbers, text, true/false; null for a missing value. */
+export type PredictionCell = string | number | boolean | null;
+
+/** A row from the data with its actual target value, to try the model with. */
+export interface PredictionSample {
+  values: Record<string, PredictionCell>;
+  target?: PredictionCell;
+}
+
+/** A column of the source table of a data preparation (raw rows), from its training rows. */
+export interface RawColumn {
+  name: string;
+  kind: ColumnKind;
+  /** Text columns: the values of the training rows, most frequent first. */
+  categories?: string[];
+  /** There are more categories than listed. */
+  more_categories?: boolean;
+  /** Numbers and dates (ISO text): the range of the training rows. */
+  min?: number | string | null;
+  max?: number | string | null;
+  /** Numbers that were all whole numbers. */
+  integer?: boolean;
+  /** The training rows have missing values here. */
+  missing?: boolean;
+  /** false: the preparation drops the column before anything reads it. */
+  used?: boolean;
+}
+
+/** GET /api/training/runs/<id>/predict-form/: what the prediction panel shows. */
+export interface PredictionForm {
+  available: boolean;
+  /** Why the run cannot predict (no weights, unknown preprocessing …). */
+  reason: string | null;
+  kind: 'tabular' | 'image' | 'demo' | null;
+  task: 'classification' | 'regression' | null;
+  class_names: string[] | null;
+  /** Rows per request; more rows are sent in several requests. */
+  max_rows: number;
+  /** Rows of a pasted or uploaded CSV file at most. */
+  max_form_rows: number;
+  max_top_k: number;
+  /** Set when a compute budget is used up (the server refuses predictions then). */
+  budget_note: string | null;
+  /** Tabular: the target column. */
+  target?: string | null;
+  gaussian_process?: boolean;
+  /** Tabular: the feature columns of the training dataset (standardised by the server). */
+  prepared?: {
+    columns: { name: string; mean: number; std: number }[];
+    samples: PredictionSample[];
+  };
+  /** Runs on a dataset from a data preparation: rows in the columns of its source table. */
+  raw?: {
+    prep: { id: number; name: string } | null;
+    source: string | null;
+    target: string | null;
+    columns: RawColumn[];
+    samples: PredictionSample[];
+    /** Steps that only change the training rows and do not apply to new rows. */
+    skipped_steps: string[];
+    /** Tables joined by the preparation (stored with the dataset). */
+    joined: string[];
+  };
+  /** From a preparation, but exported before raw rows were supported. */
+  raw_note?: string;
+  image?: { channels: 1 | 3; height: number; width: number };
+}
+
+export interface PredictedClass {
+  class: string;
+  index?: number;
+  probability: number;
+}
+
+/** One prediction: a class with its probability and the top classes, or a value. */
+export interface Prediction {
+  class?: string | null;
+  index?: number | null;
+  probability?: number | null;
+  top?: PredictedClass[];
+  /** Regression: in the units of the target. */
+  value?: number | number[] | null;
+  /** Gaussian processes: the predictive standard deviation. */
+  std?: number | null;
+}
+
+export interface PredictionRequest {
+  inputs: unknown;
+  input_format?: 'prepared' | 'raw';
+  /** Images: 'raw' for pixels 0–255. */
+  input_scale?: 'raw' | 'unit' | 'normalized';
+  top_k?: number;
+}
+
+export interface PredictionResult {
+  run: { id: string; name: string };
+  task: 'classification' | 'regression' | null;
+  predictions: Prediction[];
+  target?: string | null;
+  note?: string;
+  std_note?: string;
+  /** Raw rows: unknown categories, rows unlike the training rows … */
+  warnings?: string[];
+}
+
+/** The answer when inputs are invalid (HTTP 400). */
+export interface PredictionErrorBody {
+  detail: string;
+  /** What the run takes. */
+  inputs?: string | null;
+  /** Raw rows: every problem, per row and column. */
+  errors?: string[];
 }
 
 export interface RunInput {
@@ -1623,7 +2060,63 @@ export interface DataProfile {
   correlations: CorrelationMatrix[];
   target: TargetProfile | null;
   warnings: DataWarning[];
+  /** How the number columns relate (null where not computed, e.g. the "before" profile). */
+  relations?: ColumnRelations | null;
 }
+
+// --- Column relations (backend/brickdnn/data/relations.py) -------------------------------
+
+/**
+ * Every number/yes-no feature's strongest partner: the other feature it correlates with most
+ * (Spearman ρ), on the training rows (a seeded sample on large tables). Indices refer to
+ * `columns`.
+ */
+export interface ColumnRelations {
+  method: 'spearman' | 'pearson';
+  /** The analysed features (number and yes/no columns but the target, not constant). */
+  columns: string[];
+  /** Number features that could not be analysed (constant on these rows). */
+  skipped: string[];
+  /** Number features in the table (with `sampled_columns`, more than were analysed). */
+  total: number;
+  /** Rows used, and the rows they were drawn from. */
+  rows: number;
+  pool_rows: number;
+  /** The rows are training rows (false before the split is assigned). */
+  training_rows: boolean;
+  sampled_columns: boolean;
+  /** Index of each column's strongest partner (null: none). */
+  best: (number | null)[];
+  /** Signed Spearman ρ with it, and Pearson r with the same partner. */
+  best_rho: (number | null)[];
+  best_r: (number | null)[];
+  /** Partners with |ρ| ≥ partner_level. */
+  partners: number[];
+  partner_level: number;
+  /** Up to 5 partners per column (indices), strongest first, and their ρ. */
+  top: number[][];
+  top_rho: number[][];
+  /** Histogram of the strongest-partner |ρ| (bins of 0.02 from 0 to 1). */
+  histogram: { edges: number[]; counts: number[] };
+  /** Default threshold of "no strong partner". */
+  weak_level: number;
+  /** Threshold suggested for these rows: weak_level, more where chance correlations are large. */
+  suggested_level: number;
+  /** Strongest |ρ| an unrelated column reaches by chance: median, and 99.9 % stay below. */
+  chance: number | null;
+  chance_high: number | null;
+  /** Clustered order of the columns (related ones together); null for very wide tables. */
+  order: number[] | null;
+  /** Group of related columns per column (0 = largest), -1 for none. */
+  groups: number[] | null;
+  /**
+   * The whole matrix in the clustered order, in blocks: `starts` index into `order`;
+   * `values[a][b]` is the mean |ρ| of the columns of block a with those of block b.
+   */
+  overview: { starts: number[]; values: (number | null)[][] } | null;
+}
+
+// --- end of column relations ---------------------------------------------------------------
 
 export interface DataSample {
   /** Rows of the whole table. */

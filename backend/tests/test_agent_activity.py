@@ -615,6 +615,7 @@ def test_pages_filters_and_polling(ada):
         "arguments",
         "targets",
         "project",
+        "approval",
     }
     assert item["agent"] == {
         "kind": "token",
@@ -794,3 +795,25 @@ def test_entries_are_written_after_the_response_was_sent(ada):
         request_finished.connect(close_old_connections)
     (written,) = log(ada)
     assert written.summary == "Listed the saved networks" and written.duration_ms == 3
+
+
+@pytest.mark.django_db
+def test_every_mcp_tool_has_a_description(ada):
+    from brick_dnn_core import mcp
+
+    missing = [name for name in mcp.TOOLS if name not in agent_activity.TOOL_DESCRIPTIONS]
+    assert missing == []
+    for name in mcp.TOOLS:  # also with unexpected arguments and answers
+        text = agent_activity.describe_tool(ada, name, {"id": "x"}, {"oops": 1}).phrase
+        assert text and "unknown tool" not in text
+
+
+@pytest.mark.django_db
+def test_data_tools_name_what_they_used(ada):
+    from brick_dnn_core.models import DataSource
+
+    source = DataSource.objects.create(owner=ada, name="sales.csv")
+    described = agent_activity.describe_tool(ada, "delete_data_source", {"id": source.pk}, None)
+    assert described.phrase == f"delete data file “sales.csv” (#{source.pk})"
+    described = agent_activity.describe_tool(ada, "import_data", {"url": "https://x"}, None)
+    assert described.phrase == "import a data file from a link"

@@ -5,6 +5,7 @@ import { formatBytes, formatCount, formatPercent } from '@/components/charts/for
 import { SegmentedBar, StatTile } from '@/components/charts/StatTile';
 import { analysisNote, sampleNote } from './sampleData';
 import { KIND_LABELS, KIND_ORDER, Note } from './shared';
+import { groupWarnings } from './warningGroups';
 import { WarningList } from './WarningList';
 
 export const SPLIT_NAMES = ['Training', 'Validation', 'Test'];
@@ -15,6 +16,18 @@ export interface OverviewViewProps {
   target: string | null;
   onAddStep: (step: NewStep) => void;
   onShowColumn: (column: string) => void;
+}
+
+/** "Warnings (3)", or "Warnings: 5 kinds, 1,062 in all" when many are grouped. */
+export function warningHeading(profile: DataProfile): string {
+  const total = profile.warnings.length;
+  if (!total) {
+    return 'Warnings';
+  }
+  const entries = groupWarnings(profile.warnings, profile).length;
+  return entries < total
+    ? `Warnings: ${formatCount(entries)} ${entries === 1 ? 'entry' : 'entries'}, ${formatCount(total)} in all`
+    : `Warnings (${formatCount(total)})`;
 }
 
 const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
@@ -106,10 +119,11 @@ export function OverviewView({
 
       <Stack gap={6}>
         <Text size="sm" fw={600}>
-          {profile.warnings.length ? `Warnings (${profile.warnings.length})` : 'Warnings'}
+          {warningHeading(profile)}
         </Text>
         <WarningList
           warnings={profile.warnings}
+          profile={profile}
           resetKey={profile}
           onAddStep={onAddStep}
           onShowColumn={onShowColumn}

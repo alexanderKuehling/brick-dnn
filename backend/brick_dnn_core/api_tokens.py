@@ -93,6 +93,11 @@ class ApiTokenAuthentication(authentication.BaseAuthentication):
         writes = request.method not in permissions.SAFE_METHODS
         if token.read_only and writes and url_name not in READ_ONLY_POSTS:
             raise exceptions.PermissionDenied("This API token is read-only.")
+        if writes and token.connection_id is None:
+            # Sharing and deleting the token's approval rule covers (approvals.py).
+            from .approvals import refuse_rest
+
+            refuse_rest(token, url_name, request.method)
 
         if token.last_used_at is None or now - token.last_used_at > LAST_USED_INTERVAL:
             ApiToken.objects.filter(pk=token.pk).update(last_used_at=now)

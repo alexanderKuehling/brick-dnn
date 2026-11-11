@@ -17,6 +17,9 @@ openpyxl>=3.1,<4
 xlrd>=2.0,<3
 pyarrow>=14
 defusedxml>=0.7
+# Segmentation datasets: reading the masks of an upload to find its classes (NumPy above
+# is needed too). Training comes with it anyway (torchvision).
+pillow>=10
 # Classical models (Gaussian processes, SVMs): training and predictions. Brings SciPy and
 # joblib along; PyTorch is not needed for them.
 scikit-learn>=1.3,<2

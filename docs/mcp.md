@@ -101,6 +101,8 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `create_upload_link`    | full   |             | One-time link to upload a local file with curl (data source or training dataset) |
 | `delete_dataset`        | full   | yes         | Delete one of your own datasets                                 |
+| `get_approval`          | read   |             | The state of a request that waits for the user's approval, and its result ([Approvals](#approvals)) |
+| `list_approvals`        | read   |             | The approval requests of this token or app                      |
 | `list_data_sources`     | read   |             | Your imported data files, and what `import_data` accepts        |
 | `get_data_source`       | read   |             | One imported file: columns with types, import report, first rows |
 | `import_data`           | full   |             | Import a file (CSV/JSON text, base64 for Excel/Parquet …, or a public link) |
@@ -123,7 +125,9 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `stop_training`         | full   |             | Stop a run after the current batch, or cancel a queued one (starter, project editors) |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
-| `predict`               | read   |             | Run a trained network on up to 64 samples                       |
+| `predict`               | read   |             | Run a trained network on up to 64 samples, or on image files (base64) |
+| `explain_prediction`    | read   |             | Explain a trained model: saliency/Grad-CAM/occlusion, Shapley values, permutation importance, decision boundary |
+| `get_layer_activations` | read   |             | The output of every brick of a trained network for one sample (shape, statistics, values) |
 
 Read-only tokens and apps allowed read-only access only see the read tools. Networks use the [graph format](graph-format.md).
 
@@ -135,7 +139,8 @@ default, and every capped list says how long it is and how to see more:
   columns_limit?, columns_offset?}` pages through the columns (50 at a time) and shows the
   class names (at most 50).
 - `get_training_run` is a summary: status, settings, epochs done, the best epoch, final and
-  test metrics, rows per split, tuning (trials, best trial), the classical fit, and the end of
+  test metrics, rows per split, tuning (trials, best trial), the classical fit (with
+  `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), and the end of
   the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
   "preprocessing"]` adds those parts; `history` has at most 50 evenly spaced epochs plus the
   best and the last, `log` the last `log_lines` lines (default 20, at most 200).
@@ -151,6 +156,26 @@ default, and every capped list says how long it is and how to see more:
 A dataset with 800 columns took 17 KB in `get_training_options` before and 3.4 KB now (most of
 it the training settings); a run with 200 epochs took 71 KB in `get_training_run` and now
 takes 1 KB. The REST API and the web app keep their full answers.
+
+**Segmentation.** Networks that give every pixel a class
+([training.md](training.md#image-segmentation)) use the same tools. The instructions explain
+what such a network and dataset look like; `get_training_options` lists the generated dataset
+`shapes` (`task` `segmentation`, nothing to upload) and the limits under `segmentation`;
+`create_upload_link {purpose: "training_dataset", filename: "scans.zip", kind:
+"segmentation"}` takes a ZIP file with the folders `images` and `masks`; `get_dataset` shows
+how the masks are read and the share of the pixels of every class; `check_training` explains
+what does not fit (an output smaller than the Input, too few output channels, a batch that
+needs too much memory, with the batch size that fits) and suggests `fixes` for the Input and
+the output channels of the last convolution; `get_training_run` reports `val_iou`,
+`val_dice`, `val_pixel_accuracy` (and the test values) in `metrics` and the IoU per class by
+name in `segmentation`; `predict {run_id, image}` returns the class map. The example graph is
+`list_examples {id: "unet"}`: it fits `shapes` as it is.
+
+```text
+check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "shapes"}, config: {batch_size: 8}} → ok
+start_training {…, config: {epochs: 10, batch_size: 8}} · get_training_run {id} → val_iou 0.77, test_iou 0.81
+predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_png
+```
 
 **Classical models.** The same tools work for Gaussian processes and support vector machines
 ([graph-format.md](graph-format.md#classical-models)): the instructions and
@@ -249,7 +274,9 @@ curl --fail-with-body -F "file=@sales.csv" "https://example.com/api/uploads/?sig
 `purpose` `data_source` imports the file into the Data tab like `import_data` (every format it
 reads, with its options: `delimiter`, `decimal`, `header`, `encoding`, `missing_values`,
 `sheet`); `training_dataset` stores a CSV or ZIP file like `upload_dataset` (optionally shared
-in `project_id`). The answer of curl is the JSON the inline tool returns: the new source with
+in `project_id`): a ZIP file with one folder of images per class, or for segmentation with the
+folders `images` and `masks` (`kind: "segmentation"` says so explicitly; without `kind` the
+folders decide). The answer of curl is the JSON the inline tool returns: the new source with
 its columns, or the dataset with its `reference`. The upload goes through the same functions,
 limits (`BRICKDNN_DATA_MAX_UPLOAD_MB` and `BRICKDNN_MAX_UPLOAD_MB`, not the MCP text limit),
 checks and rate limit (`BRICKDNN_UPLOAD_RATE`) as in the web app. The file is read under the
@@ -292,9 +319,11 @@ limits and validation as the web app; changes show up in the web app right away.
 4. **Export:** `export_training_dataset` turns the ready preparation into a training dataset
    and returns its `reference`, the task, the target and the feature columns in order.
 5. **Train and predict:** `check_training` and `start_training` with the `reference`; `predict`
-   takes the prepared feature columns (e.g. rows from the sample of `preview_data_prep`).
-   `get_data_prep_script` returns the pandas script whose `prepare(df)` prepares new raw data
-   the same way.
+   with `input_format: "raw"` takes rows in the columns of the imported table (a new date, a
+   store name …) and prepares them on the server with the values the preparation learned from
+   the training rows; do not compute one-hot or date columns yourself. Without it, `predict`
+   takes the prepared feature columns. `get_data_prep_script` returns the pandas script whose
+   `prepare(df)` prepares new raw data the same way offline.
 
 ```text
 import_data {content: "<sales.csv>", filename: "sales.csv"}         → source 7: date (datetime), store (categorical), temperature (numeric, 6 missing), sales …
@@ -304,7 +333,7 @@ preview_data_prep {id: 3}                                           → profiles
 export_training_dataset {id: 3}                                     → reference {"kind": "upload", "id": 12}, features date_year … temperature
 check_training {graph: Input [8] → Linear 16 → ReLU → Linear 1, dataset: {"kind": "upload", "id": 12}} → ok
 start_training {…, config: {epochs: 30}} · get_training_run {id}     → completed, val_rmse …
-predict {run_id, inputs: [{"date_year": 2024, "date_month": 3, …}]} → values in the units of sales
+predict {run_id, input_format: "raw", inputs: [{"date": "2024-12-24", "store": "Köln", "temperature": 3.5}]} → values in the units of sales
 ```
 
 ### Downloading the weights
@@ -324,25 +353,70 @@ snippet loads the file with joblib.
 
 ### Predictions
 
-`predict {run_id, inputs, input_scale?, top_k?}` runs the trained network of a finished or
-stopped run on the server and answers one prediction per sample: for classification the
-`class`, its `index` and `probability` and the `top` classes (`top_k`, default 3, at most
-10); for regression the `value` in the units of the target column. Classical models take
-the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
+`predict {run_id, inputs, input_format?, input_scale?, top_k?}` runs the trained network of a
+finished or stopped run on the server and answers one prediction per sample: for
+classification the `class` with its `probability` and the `top` classes (`top_k`, default 3,
+at most 10); for regression the `value` in the units of the target column. Classical models
+take the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
+(The REST API also returns the class indices; the MCP answer leaves them out.)
 
 | Trained on | `inputs` (at most 64 samples)                                       | `input_scale` |
 | ---------- | ------------------------------------------------------------------- | ------------- |
-| CSV file   | One row per sample: `{"column": value, …}` or a list of the feature values in column order, as in the CSV file (standardised like in training) | `raw` (default) or `normalized` (already standardised) |
+| A dataset from the Data tab, `input_format: "raw"` | One row per sample in the columns of the imported source table: `{"column": value, …}` as in the file (dates `2024-05-31`, the target left out) | – |
+| CSV file (also the prepared columns of a Data tab dataset) | One row per sample: `{"column": value, …}` or a list of the feature values in column order, as in the CSV file (standardised like in training) | `raw` (default) or `normalized` (already standardised) |
 | Images     | One image per sample as a nested array of channels × height × width, e.g. `1×28×28` (grayscale also `28×28`), or in the shape of the Input layer (e.g. `784` values) | required: `raw` (pixels 0–255), `unit` (0–1) or `normalized` (already normalised like in training) |
 | Demo data  | One nested array per sample in the shape of the Input layer, used as it is | – |
 
-For CSV datasets made in the Data tab, the network takes the prepared columns (after the steps
-of the preparation), not the raw data. Inputs are checked first and errors say what the
-network expects; at most 250,000 numbers per request. The network then runs in a separate
+**Raw rows** (`input_format: "raw"`, only for runs trained on a dataset exported from a data
+preparation) are prepared by the server with the steps of the preparation and the values they
+learned from the training rows (frozen at the export; a joined table is the copy stored then),
+so a new date or store name can be sent as it is. Steps that only change rows (duplicates,
+sorting, class balancing) are skipped and filters only warn: every row is predicted. The answer
+lists `warnings` (unknown categories, columns not given, rows unlike the training rows, at most
+10); rows that cannot be prepared are refused with one line per row and column, e.g. `Row 2,
+'temperature': 'warm' is not a number.` `get_weights_download` (`inputs`) names the raw
+columns. Details: [training.md](training.md#raw-rows-for-datasets-from-the-data-tab).
+
+Inputs are checked first and errors say what the network expects; at most 250,000 numbers per
+request. The network then runs in a separate
 process, like a training (CPU, lower priority, 30 seconds at most, one prediction at a time on
 the server by default: `BRICKDNN_MAX_PREDICTIONS`). Everyone who can see the run may predict,
 also with read-only access. The same is available as
 [`POST /api/training/runs/<id>/predict/`](api.md#training-login-required).
+
+Image networks also take **image files**: `predict {run_id, image}` with the base64 text of a
+PNG or JPEG file (or a list of at most 8, together at most 900 kB of text) instead of
+`inputs`. The server converts and resizes them like the training images. A **segmentation**
+answers per image with `classes` (the classes that occur and the share of their pixels) and
+`mask_png`, the predicted class of every pixel as a small palette PNG (a data URL; about 1 KB
+for 64×64) whose pixel values are the class indices. `mask: "rle"` returns run-lengths
+(`mask_rle`: class, pixels, class, pixels … row by row) instead, `mask: "none"` only the
+shares, which keeps the answer below 1 KB.
+
+### Explanations
+
+`explain_prediction {run_id, method, sample?, input?, input_scale?, target?, layer?, images?}`
+explains what a trained model does, computed on the server like a prediction (it uses compute
+and counts against the rate limit of predictions; asking the same again is answered from a
+cache). See [explain.md](explain.md) for what each method shows and its limits.
+
+| `method`      | For                       | Answer (compact)                                            |
+| ------------- | ------------------------- | ----------------------------------------------------------- |
+| `samples`     | all with a dataset        | Validation samples with the model's prediction, right or wrong; pick one by its `index` |
+| `image`       | image classifiers         | The predicted classes and three maps as coarse grids (at most 14×14, 0–1): `saliency` (SmoothGrad), `gradcam` (at `layer`, default the last Conv2d) and `occlusion` (drop of the probability) |
+| `tabular`     | models trained on a CSV   | Per feature its value and Shapley value against the mean training row (they add up to `value − base_value`); networks also `integrated_gradients`; Gaussian processes the `std` |
+| `permutation` | models trained on a CSV   | Drop of accuracy or R² on validation rows per shuffled feature, mean and std |
+| `boundary`    | exactly 2 input features  | The predicted class or value on a 16×16 grid (row 0: the largest value of the second feature), the ranges and up to 40 training points |
+
+The sample is `sample` (the `index` of a validation sample from `samples`) or `input` (one
+sample like an entry of `predict`'s `inputs`, with `input_scale` for images). `target` picks
+the class to explain (default: the predicted one). Pictures are left out unless `images` is
+true, and then only while all of them together stay below 60,000 characters.
+
+`get_layer_activations {run_id, sample?, input?, input_scale?, node?, images?}` shows the
+output of every brick (or of one, `node`) of a neural network for one sample: its shape, mean,
+std, min, max and share of zeros, for vectors the first 32 values, for feature maps the mean
+of each of the first 16 channels. A run on demo data takes a random input.
 
 ## Activity log
 
@@ -373,6 +447,83 @@ it happens: the page asks for new entries every few seconds while it is open.
   export and deleted with the account ([privacy.md](privacy.md)).
 - Entries are written after the answer has been sent: logging never delays or breaks a tool
   call. The API is [`GET /api/agent-activity/`](api.md#agent-activity).
+
+## Approvals
+
+You can let an agent do some things only after you said yes. Per API token and per connected
+app (API tokens page, next to its budget):
+
+- **Trainings:** it starts trainings freely up to N estimated CPU minutes; above that it asks.
+  `0` asks before every training, empty never asks. The estimate is the one `check_training`
+  returns (`estimate.cpu_minutes`, the middle of the range `low_cpu_minutes` to
+  `high_cpu_minutes`): the number the web app shows as the estimated CPU time, so the limit
+  means what you see there. A training whose CPU time cannot be estimated asks. What a
+  training really uses is still limited by the budgets.
+- **Publishing:** it asks before something becomes visible to other people or downloadable
+  without logging in. Over MCP these are the tools that can do that today:
+  - `get_weights_download`: a link to the trained weights that works without logging in;
+  - `upload_dataset` and `create_data_prep` with `project_id`: sharing the dataset or the
+    preparation (with its data file) in a project. The upload or the new preparation is done
+    right away for you alone; only the sharing waits;
+  - `create_upload_link` for a training dataset with `project_id`: the link is made once
+    approved (and is valid for 15 minutes from then).
+
+  MCP has no tools for share links of networks or for inviting people; with an API token the
+  REST API has (see below).
+- **Deleting** (optional): `delete_project`, `delete_training_run`, `delete_dataset`,
+  `delete_data_source` and `delete_data_prep` ask first.
+
+New tokens and apps get a copy of your account's default (on the API tokens page: *Approvals
+for new tokens and apps*). Without one of your own it is: trainings above 15 estimated CPU
+minutes and publishing ask, deleting does not. Tokens and apps that existed before approvals
+were added ask for nothing until you set their rule.
+
+**What the agent sees.** A call that needs approval does nothing yet. It is not an error: the
+answer is
+
+```json
+{
+  "approval_required": true,
+  "approval": {"id": 12, "status": "pending", "tool": "start_training", "category": "training",
+               "summary": "Start training “GP 1” on dataset “houses.csv” (#3)",
+               "reason": "The estimated CPU time (42 CPU min, roughly 14 to 126 CPU min) is above the 15 CPU min that trainings may use without approval.",
+               "estimate": {"cpu_minutes": 42.1, "low_cpu_minutes": 14.0, "high_cpu_minutes": 126.3, "cost": null, "currency": null},
+               "expires_at": "2026-11-11T14:03:00+00:00", "next": "…"},
+  "message": "Waiting for the user's approval (request #12, expires 2026-11-11 14:03 UTC). Nothing has been done yet. … Call get_approval with id 12 …"
+}
+```
+
+(For an upload or a preparation shared in a project, the tool's normal answer with `approval`
+and `approval_note` added.) The same call again returns the same request; at most 20 requests
+of a token or app wait at a time. The agent follows the request with **`get_approval {id}`**:
+`status` is `pending`, `approved` (being done), `executed` (`result` is what the tool
+returned, e.g. the run with its id), `failed` (`error`: e.g. the budget was used up in the
+meantime), `denied` (`message`: your reason) or `expired` (requests expire after 24 hours).
+**`list_approvals {status?, limit?}`** lists its requests. An agent sees only its own
+requests and cannot decide them: there is no tool for it, and the approval endpoints need a
+website login.
+
+**Deciding.** Waiting requests appear at the top of the page **Agent activity** (and as a
+count in the header's account menu) with the agent, the network and dataset with links, the
+estimate in CPU minutes (and money, if the server has prices), and what publishing would make
+visible. *Approve* does it right away on the server as that agent: with its token or app (its
+budgets, its rate limits, its name on the run), with the same checks as the tool and the
+budgets checked at that moment. If the token was revoked, the app disconnected or a budget is
+used up, the request ends as `failed` and nothing is done. *Deny* takes an optional message
+for the agent. Approving twice does nothing twice; a denied or expired request cannot be
+approved. The activity log shows each step: the call as *pending*, then *approved* (with what
+was done), *failed* or *denied*.
+
+**REST API.** It cannot ask: a request with a personal API token whose rule covers it is
+refused with `403` and a message that points to MCP or the web app. Covered are the trainings
+above the limit (`POST /api/training/runs/`), publishing (`POST /api/projects/<id>/link/`,
+`…/members/`, `…/data/`) and deleting (`DELETE` of networks, runs, datasets, data files and
+preparations).
+
+Requests keep the validated arguments of the call (e.g. the graph and settings of a
+training), never the content of files. Decided and expired requests are deleted 90 days
+after they were made (`purge_old_data`); they are part of the data export. The endpoints are under
+[`/api/approvals/`](api.md#approvals).
 
 ## Details
 

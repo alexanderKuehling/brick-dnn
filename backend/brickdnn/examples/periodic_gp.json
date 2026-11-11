@@ -2,7 +2,7 @@
   "id": "periodic_gp",
   "name": "Periodic Gaussian process",
   "description": "A classical model (scikit-learn) for seasonal data, e.g. a value over time: a slowly changing periodic pattern (RBF × ExpSineSquared) plus a smooth trend (RBF) and noise. Set the periodicity to the season length in standardised units of the time feature.",
-  "order": 10,
+  "order": 11,
   "graph": {
     "version": 1,
     "nodes": [
