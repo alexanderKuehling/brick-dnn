@@ -171,6 +171,9 @@ describe('The metrics of a classification run', () => {
     show(finished(classificationEvaluation({ test: null }), svcDetail()));
     expect(within(metrics()).getByText('The fitted model')).toBeInTheDocument();
     expect(tile('Accuracy')).toHaveTextContent(/^Accuracy80.0%Validation$/);
+    expect(tile('Log loss (cross-entropy)')).toHaveTextContent(
+      'train: the fitted model on its training rows'
+    );
   });
 });
 

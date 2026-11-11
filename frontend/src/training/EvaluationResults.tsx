@@ -443,7 +443,13 @@ function SplitPicker({
   );
 }
 
-function ClassificationResults({ evaluation }: { evaluation: ClassificationEvaluation }) {
+function ClassificationResults({
+  evaluation,
+  trainHint,
+}: {
+  evaluation: ClassificationEvaluation;
+  trainHint: string;
+}) {
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
   const parts = splitsOf(evaluation.val, evaluation.test);
   const split = (splitKey === 'test' && evaluation.test) || evaluation.val;
@@ -459,7 +465,7 @@ function ClassificationResults({ evaluation }: { evaluation: ClassificationEvalu
       'mean recall per class'
     ),
     tile(parts, 'Macro F1', (s) => s.macro_f1, formatScore, 'mean over the classes'),
-    tile(parts, 'Weighted F1', (s) => s.weighted_f1, formatScore, 'weighted by rows per class'),
+    tile(parts, 'Weighted F1', (s) => s.weighted_f1, formatScore, 'weighted by class size'),
     tile(parts, 'Top-3 accuracy', (s) => s.top_k_accuracy?.['3'], formatPercent),
     tile(parts, 'Top-5 accuracy', (s) => s.top_k_accuracy?.['5'], formatPercent),
   ].filter(Boolean);
@@ -467,11 +473,7 @@ function ClassificationResults({ evaluation }: { evaluation: ClassificationEvalu
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(
-          evaluation,
-          'Log loss (cross-entropy)',
-          'train: mean over the batches of the epoch'
-        )}
+        {lossTile(evaluation, 'Log loss (cross-entropy)', trainHint)}
       </SimpleGrid>
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed">
@@ -511,7 +513,13 @@ function samplePoints(split: RegressionSplit): { actual: number[]; predicted: nu
   return { actual, predicted };
 }
 
-function RegressionResults({ evaluation }: { evaluation: RegressionEvaluation }) {
+function RegressionResults({
+  evaluation,
+  trainHint,
+}: {
+  evaluation: RegressionEvaluation;
+  trainHint: string;
+}) {
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
   const parts = splitsOf(evaluation.val, evaluation.test);
   const split = (splitKey === 'test' && evaluation.test) || evaluation.val;
@@ -535,11 +543,7 @@ function RegressionResults({ evaluation }: { evaluation: RegressionEvaluation })
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(
-          evaluation,
-          'Loss (MSE, standardised)',
-          'train: mean over the batches of the epoch'
-        )}
+        {lossTile(evaluation, 'Loss (MSE, standardised)', trainHint)}
       </SimpleGrid>
       {residuals && (
         <Text size="xs" c="dimmed">
@@ -584,6 +588,9 @@ export function EvaluationResults({
   if (!evaluation || !evaluation.val) {
     return null;
   }
+  const trainHint = classical
+    ? 'train: the fitted model on its training rows'
+    : 'train: mean over the batches of the epoch';
   const kept = classical
     ? 'The fitted model'
     : [
@@ -605,9 +612,9 @@ export function EvaluationResults({
         </Text>
       </Group>
       {evaluation.task === 'classification' ? (
-        <ClassificationResults evaluation={evaluation} />
+        <ClassificationResults evaluation={evaluation} trainHint={trainHint} />
       ) : (
-        <RegressionResults evaluation={evaluation} />
+        <RegressionResults evaluation={evaluation} trainHint={trainHint} />
       )}
     </Stack>
   );
