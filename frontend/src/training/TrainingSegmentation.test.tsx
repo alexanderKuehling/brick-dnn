@@ -219,8 +219,9 @@ describe('Segmentation runs', () => {
     expect(screen.getAllByText('Dice').length).toBeGreaterThan(0);
     expect(screen.queryByRole('slider', { name: /^Accuracy/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Values per epoch' }));
-    const tables = await screen.findAllByRole('table');
-    const rows = within(tables[0]).getAllByRole('row');
+    // Wait for the table of the epochs: the table of the classes is there before it.
+    const header = await screen.findByRole('columnheader', { name: 'Train loss' });
+    const rows = within(header.closest('table')!).getAllByRole('row');
     expect(rows.map((row) => row.textContent)).toEqual([
       'EpochTrain lossVal. lossVal. IoUVal. DicePixel acc.Time',
       '10.520.4621.6%23.2%86.5%8 s',
