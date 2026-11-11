@@ -65,6 +65,7 @@ import {
   type TrainingScope,
 } from './access';
 import { isClassicalRun } from './classical';
+import { EvaluationResults } from './EvaluationResults';
 import {
   describeParams,
   formatCompact,
@@ -241,7 +242,7 @@ export function RunView({
         ? `Trial ${runningTrial} of ${trialsTotal} · Epoch ${currentEpoch} of ${epochs}`
         : `Trial ${Math.min(run.trials_done + 1, trialsTotal)} of ${trialsTotal}`;
   }
-  if (run.message.startsWith('Testing')) {
+  if (run.message.startsWith('Testing') || run.message.startsWith('Evaluating')) {
     headline = run.message;
   }
   const bestTrial = run.best_trial;
@@ -522,6 +523,7 @@ export function RunView({
             )
           )}
 
+          {!active && <EvaluationResults evaluation={state?.evaluation} />}
           {state?.segmentation && <ClassTable results={state.segmentation} />}
           <PreviewGallery run={run} />
         </>
@@ -1037,6 +1039,8 @@ function ClassicalResults({
           {test ? ' The test rows were measured once, after the fit.' : ''}
         </Text>
       )}
+
+      {!active && <EvaluationResults evaluation={state?.evaluation} classical />}
 
       {gaussianProcess && fit?.at_bounds?.length ? (
         <KernelBoundsHint bounds={fit.at_bounds} />

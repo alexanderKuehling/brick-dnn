@@ -59,6 +59,8 @@ export interface ScatterPlotProps {
   color?: ScatterColor;
   /** Draw the least-squares line and report r. */
   trend?: boolean;
+  /** Draw the line y = x (dashed) with this legend label, e.g. "Predicted = actual". */
+  diagonal?: string;
   /** Spread overlapping points of discrete values a little (display only). */
   jitter?: boolean;
   /** Name of point i in the tooltip, e.g. "Row 1,204". */
@@ -123,6 +125,7 @@ export function ScatterPlot({
   formatY,
   color,
   trend = false,
+  diagonal,
   jitter = false,
   pointLabel,
   onPointClick,
@@ -341,6 +344,14 @@ export function ScatterPlot({
           ]}
         />
       )}
+      {diagonal && (
+        <span className={classes.legendItem}>
+          <LegendKey color="var(--mantine-color-dimmed)" shape="line" />
+          <Text size="xs" c="dimmed">
+            {diagonal}
+          </Text>
+        </span>
+      )}
       {fitText && (
         <span className={classes.legendItem}>
           <LegendKey color="var(--mantine-color-text)" shape="line" />
@@ -364,9 +375,25 @@ export function ScatterPlot({
       y2: sy(fit.intercept + fit.slope * x1),
     };
   })();
+  const diagonalLine = (() => {
+    if (!diagonal) {
+      return null;
+    }
+    const lo = Math.min(xAxis.domain[0], yAxis.domain[0]);
+    const hi = Math.max(xAxis.domain[1], yAxis.domain[1]);
+    return { x1: sx(lo), y1: sy(lo), x2: sx(hi), y2: sy(hi) };
+  })();
   // Trend line and focused point: in the SVG, or in a layer above the canvas.
   const marks = (
     <>
+      {diagonalLine && (
+        <line
+          className={classes.diagonal}
+          clipPath={`url(#${clipId})`}
+          data-testid="scatter-diagonal"
+          {...diagonalLine}
+        />
+      )}
       {trendLine && <line className={classes.trend} clipPath={`url(#${clipId})`} {...trendLine} />}
       {highlight !== null && highlight >= 0 && highlight < n && (
         <circle
@@ -399,7 +426,7 @@ export function ScatterPlot({
       caption={caption}
       controls={controls}
       legend={legend}
-      legendExtra={color?.type === 'numeric' || fitText ? legendExtra : undefined}
+      legendExtra={color?.type === 'numeric' || fitText || diagonal ? legendExtra : undefined}
       table={() => ({
         head: [pointLabel ? 'Point' : '#', xLabel, yLabel, ...(color ? [color.label] : [])],
         rows: order

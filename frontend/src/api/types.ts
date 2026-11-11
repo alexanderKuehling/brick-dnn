@@ -1421,7 +1421,85 @@ export interface RunState {
   classical?: ClassicalRunState | null;
   /** Segmentation: the results per class and the preview images, once the weights are saved. */
   segmentation?: SegmentationRunState | null;
+  /**
+   * Completed classification and regression runs: the kept weights evaluated once more on the
+   * validation and the test rows. Missing in runs of older versions.
+   */
+  evaluation?: RunEvaluation | null;
 }
+
+/** Precision, recall, F1 and support per class (in the order of `class_names`). */
+export interface PerClassMetrics {
+  /** Null: the class was never predicted. */
+  precision: (number | null)[];
+  /** Null: the class has no rows in the split. */
+  recall: (number | null)[];
+  /** Null: neither. */
+  f1: (number | null)[];
+  support: number[];
+}
+
+export interface ClassificationSplit {
+  size: number;
+  /** The run's loss (cross-entropy). */
+  loss: number | null;
+  accuracy: number | null;
+  /** Mean recall over the classes that occur. */
+  balanced_accuracy: number | null;
+  macro_f1: number | null;
+  weighted_f1: number | null;
+  log_loss: number | null;
+  /** {"3": 0.97, "5": 0.99}; only for more classes than k. */
+  top_k_accuracy: Record<string, number> | null;
+  per_class: PerClassMetrics;
+  /** Counts; rows: true class, columns: predicted class. Null above matrix_classes_max. */
+  confusion_matrix: number[][] | null;
+  /** The largest off-diagonal cells (class indices). */
+  most_confused: { true: number; predicted: number; count: number }[];
+}
+
+export interface RegressionSplit {
+  size: number;
+  /** The run's loss (MSE of the standardised target). */
+  loss: number | null;
+  mae: number | null;
+  mse: number | null;
+  rmse: number | null;
+  r2: number | null;
+  /** A share (0.04 = 4 %); null when a target is close to 0. */
+  mape: number | null;
+  median_absolute_error?: number | null;
+  max_error?: number | null;
+  /** Quantiles of predicted − actual. */
+  residuals?: Record<'q05' | 'q25' | 'median' | 'q75' | 'q95', number | null>;
+  /** At most 500 rows of the split. */
+  sample?: { actual: (number | null)[]; predicted: (number | null)[] };
+}
+
+interface EvaluationBase {
+  /** The epoch of the kept weights (classical models: 1). */
+  epoch: number | null;
+  /** Hyperparameter search: the best trial. */
+  trial: number | null;
+  /** The kept epoch on the training rows. */
+  train: { loss: number | null; accuracy: number | null } | null;
+}
+
+export interface ClassificationEvaluation extends EvaluationBase {
+  task: 'classification';
+  class_names: string[];
+  matrix_classes_max: number;
+  val: ClassificationSplit;
+  test: ClassificationSplit | null;
+}
+
+export interface RegressionEvaluation extends EvaluationBase {
+  task: 'regression';
+  val: RegressionSplit;
+  test: RegressionSplit | null;
+}
+
+export type RunEvaluation = ClassificationEvaluation | RegressionEvaluation;
 
 /** The results of the kept weights of a segmentation on one split, with the values per class. */
 export interface SegmentationSplit {

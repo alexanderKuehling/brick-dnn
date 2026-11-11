@@ -92,6 +92,14 @@
   stroke-linecap: round;
 }
 
+/* The line y = x of a scatter plot (e.g. predicted = actual): a dashed reference. */
+.diagonal {
+  fill: none;
+  stroke: var(--mantine-color-dimmed);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
 .ring {
   stroke: var(--chart-surface);
   stroke-width: 2;
