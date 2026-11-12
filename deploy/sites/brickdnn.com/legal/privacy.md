@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-Stand: 11. November 2026
+Stand: 12. November 2026
 
 ## 1. Verantwortlicher
 
@@ -16,13 +16,13 @@ Ein Datenschutzbeauftragter ist nicht benannt (gesetzlich nicht vorgeschrieben).
 Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammensetzen, PyTorch-Code erzeugen, Daten aufbereiten und Netze auf diesem Server trainieren können. Die Grundfunktionen sind kostenlos. Für Netze, Daten und Trainings brauchen Sie ein Konto.
 
 - Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
-- Die App versendet **keine E-Mails**.
-- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server bzw. die Datenbank für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
+- E-Mails versendet die App nur zu Ihrem Konto (z. B. zum Bestätigen Ihrer Adresse oder Zurücksetzen des Passworts), keine Werbung und keine Newsletter (Abschnitt 5).
+- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank bzw. den E-Mail-Versand für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Links zu anderen Seiten (z. B. GitHub oder „Buy me a coffee“) werden erst geladen, wenn Sie sie anklicken; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
 
 ## 3. Hosting
 
-**Server:** Die App läuft auf einem Server der Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen, Deutschland, im Rechenzentrum Nürnberg. Dort liegen auch alle hochgeladenen Dateien und Trainingsergebnisse. Mit Hetzner besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
+**Server:** Die App läuft auf einem Server der Infomaniak Network SA, Rue Eugène-Marziano 25, 1227 Les Acacias (Genf), Schweiz, in einem Rechenzentrum in der Schweiz. Dort liegen auch alle hochgeladenen Dateien und Trainingsergebnisse. Mit Infomaniak besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO. Für die Schweiz hat die EU-Kommission festgestellt, dass dort ein angemessenes Datenschutzniveau besteht (Angemessenheitsbeschluss, Art. 45 DSGVO).
 
 **Datenbank:** Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank des Anbieters Supabase Inc., in der Region London (Vereinigtes Königreich). Mit Supabase besteht ein Vertrag zur Auftragsverarbeitung (Data Processing Addendum) nach Art. 28 DSGVO. Für das Vereinigte Königreich hat die EU-Kommission festgestellt, dass dort ein angemessenes Datenschutzniveau besteht (Angemessenheitsbeschluss, Art. 45 DSGVO). Soweit Supabase oder seine Unterauftragnehmer Daten in andere Drittländer, etwa die USA, übermitteln, geschieht das auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO), die Teil dieses Vertrags sind.
 
@@ -30,7 +30,7 @@ Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Dienstes) und li
 
 ## 4. Aufruf der Website und Server-Logdateien
 
-Beim Aufruf der Seite verarbeitet der Server technisch notwendig Ihre IP-Adresse. In den Protokollen (Logdateien) des Webservers werden gespeichert: die **gekürzte** IP-Adresse (bei IPv4 ist der letzte Block 0, bei IPv6 bleiben nur die ersten beiden Blöcke), Datum und Uhrzeit, die aufgerufene Seite ohne Parameter, HTTP-Status, übertragene Datenmenge, Antwortzeit und die Browserkennung (User-Agent). Fehlerprotokolle können vollständige IP-Adressen enthalten.
+Beim Aufruf der Seite verarbeitet der Server technisch notwendig Ihre IP-Adresse. In den Protokollen (Logdateien) des Webservers werden gespeichert: die **gekürzte** IP-Adresse (bei IPv4 ist der letzte Block 0, bei IPv6 bleiben nur die ersten beiden Blöcke), Datum und Uhrzeit, die aufgerufene Seite ohne Parameter, HTTP-Status, übertragene Datenmenge, Antwortzeit und die Browserkennung (User-Agent). Fehlerprotokolle können vollständige IP-Adressen enthalten. Wenn bei einer Anfrage ein Fehler im Server auftritt, erhalte ich per E-Mail einen technischen Fehlerbericht (aufgerufene Adresse, Benutzername, Programmablauf; keine Passwörter oder Token), um den Fehler zu beheben; höchstens eine E-Mail je Fehlerart und Stunde.
 
 Die Protokolle werden nach Größe automatisch überschrieben (höchstens etwa 30 MB je Dienst); bei wenig Verkehr können sie einige Wochen alt werden.
 
@@ -42,11 +42,13 @@ Zweck: Betrieb, Sicherheit, Fehlersuche, Abwehr von Missbrauch. Rechtsgrundlage:
 
 Wenn Sie ein Konto anlegen, speichere ich:
 
-- Benutzername, E-Mail-Adresse und Ihr Passwort (nur als sicherer Hash, nie im Klartext),
+- Benutzername, E-Mail-Adresse (und ob und wann Sie sie bestätigt haben) und Ihr Passwort (nur als sicherer Hash, nie im Klartext),
 - Zeitpunkt der Registrierung, des letzten Logins und der letzten Nutzung,
 - ob und wann Sie die Nutzungsbedingungen akzeptiert haben (mit deren Version).
 
 Die E-Mail-Adresse dient dazu, dass andere Sie zu ihren Netzen einladen können; sie wird anderen Nutzern nicht angezeigt. Ihr Benutzername ist für Personen sichtbar, mit denen Sie zusammenarbeiten.
+
+**E-Mails.** Die App sendet E-Mails nur zu Ihrem Konto: einen Link zur Bestätigung Ihrer E-Mail-Adresse (bei der Registrierung und nach einer Änderung), auf Ihren Wunsch einen Link zum Zurücksetzen des Passworts, kurze Sicherheitshinweise (Passwort geändert, E-Mail-Adresse geändert – dieser Hinweis geht an die bisherige Adresse –, Zwei-Faktor-Anmeldung ein- oder ausgeschaltet, neues API-Token, neu verbundene App) und eine Erinnerung, bevor ein inaktives Konto gelöscht wird (Abschnitt 11). Keine Werbung, keine Newsletter. Gespeichert wird, ob und wann Ihre Adresse bestätigt wurde und wann zuletzt an die Löschung erinnert wurde; die E-Mails selbst werden auf dem Server nicht gespeichert. Für den Versand setze ich den E-Mail-Versanddienstleister **Brevo** (Sendinblue SAS, 106 boulevard Haussmann, 75008 Paris, Frankreich) ein. Er erhält Ihre E-Mail-Adresse, Ihren Benutzernamen und den Inhalt der E-Mail und protokolliert Zustellung und Zustellfehler; mit ihm besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO. Die Daten werden in der EU verarbeitet; soweit Unterauftragnehmer von Brevo Daten in Drittländer übermitteln, geschieht das auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO). Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO, für Sicherheitshinweise und Erinnerungen auch lit. f (Schutz Ihres Kontos).
 
 **Zwei-Faktor-Anmeldung.** Wenn Sie sie unter „Account“ einschalten, speichere ich den geheimen Schlüssel für Ihre Authenticator-App (verschlüsselt), wann Sie sie eingerichtet haben, welcher Code zuletzt verwendet wurde (damit jeder Code nur einmal gilt) und Ihre Wiederherstellungscodes (nur als Hash). Die Codes erzeugt die App auf Ihrem Gerät selbst; dabei werden keine Daten an mich übertragen. Die Angaben werden gelöscht, wenn Sie die Zwei-Faktor-Anmeldung ausschalten oder das Konto löschen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
 
@@ -99,7 +101,7 @@ Verkäufer der Tarife ist nicht der Betreiber dieser Seite, sondern **Paddle.com
 - **Was Sie bei Paddle eingeben:** Zahlungsdaten (z. B. Karte, PayPal), Land und Postleitzahl bzw. Rechnungsanschrift und gegebenenfalls eine Umsatzsteuer-ID geben Sie direkt bei Paddle ein. Zahlungsdaten wie Kartennummern erreichen diesen Server nicht. Im Händlerkonto bei Paddle sind die Angaben zu Ihrem Kauf einsehbar (z. B. E-Mail-Adresse, Land, Tarif, Beträge, Zahlungsstatus).
 - **Inhalte von Paddle im Browser:** Erst wenn Sie den Bezahlvorgang öffnen (oder einem Zahlungslink von Paddle folgen), lädt Ihr Browser ein Skript und das Bezahlformular von Servern von Paddle. Paddle erhält dabei Ihre IP-Adresse und Angaben zu Ihrem Browser und kann eigene Cookies setzen, etwa zur Betrugsprävention. Vorher wird nichts von Paddle geladen, auch nicht auf der Preisseite. Das Kundenportal für Zahlungsmittel und Rechnungen ist eine Seite von Paddle.
 - **Was dieser Server speichert:** Ihre Kunden- und Abonummer bei Paddle, Tarif, Status und Zeitraum des Abos, zu jeder Mitteilung von Paddle über Ihr Abo Art, Zeitpunkt und Abonummer (nicht ihren Inhalt) sowie abgerechnete zusätzliche Rechenzeit. Diese Angaben stehen im Daten-Export und werden mit dem Konto gelöscht.
-- **E-Mails:** Bestätigungen, Rechnungen und Zahlungshinweise versendet Paddle an Ihre E-Mail-Adresse; die App selbst versendet weiterhin keine E-Mails.
+- **E-Mails:** Bestätigungen, Rechnungen und Zahlungshinweise versendet Paddle an Ihre E-Mail-Adresse; die App selbst versendet dazu keine E-Mails.
 - **Speicherdauer bei Paddle:** Rechnungen und Zahlungsdaten bewahrt Paddle nach den für Paddle geltenden gesetzlichen Fristen auf, auch nachdem Ihr Konto hier gelöscht wurde. Wenn Sie Ihr Konto löschen, wird ein laufendes Abo sofort beendet.
 - **Drittland:** Für das Vereinigte Königreich besteht ein Angemessenheitsbeschluss der EU-Kommission (Art. 45 DSGVO). Welche weiteren Dienstleister Paddle einsetzt, auch außerhalb der EU, steht in der Datenschutzerklärung von Paddle.
 
@@ -109,7 +111,7 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 
 - **Konto und Inhalte:** bis Sie sie löschen. Unter „Account“ können Sie Ihr Konto jederzeit selbst löschen; dabei werden alle Ihre Netze, Kommentare, hochgeladenen Dateien, Aufbereitungen, Trainings, API-Token, verbundenen Apps, das Protokoll der Agentenaktionen, Nutzungsdaten, die Angaben zur Zwei-Faktor-Anmeldung und zu einem Abo (Abschnitt 10) gelöscht. Netze anderer, an denen Sie mitgearbeitet haben, bleiben bestehen (ohne Hinweis auf Sie als Bearbeiter).
 - **Ungenutzte Uploads und Trainings** (hochgeladene Dateien, aufbereitete Datensätze und abgeschlossene Trainings) werden nach 180 Tagen ohne Nutzung automatisch gelöscht.
-- **Inaktive Konten** werden nach zwei Jahren (730 Tagen) ohne Login und ohne Nutzung mit allen Inhalten automatisch gelöscht. Die App versendet keine E-Mails, eine Erinnerung vorher gibt es daher nicht.
+- **Inaktive Konten** werden nach zwei Jahren (730 Tagen) ohne Login und ohne Nutzung mit allen Inhalten automatisch gelöscht. Die App erinnert Sie 14 und 3 Tage vorher an Ihre E-Mail-Adresse; ein Login genügt, um das Konto zu behalten. Ein Konto mit E-Mail-Adresse wird erst gelöscht, nachdem Sie erinnert wurden.
 - **Nutzungsdaten** bleiben gespeichert, solange Ihr Konto besteht, auch wenn ein Training, Token oder eine App gelöscht wird (sie gehören zum Verbrauch des Monats).
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
 - **Protokoll der Agentenaktionen** (Abschnitt 9): nach 90 Tagen.
