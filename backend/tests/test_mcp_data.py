@@ -486,7 +486,7 @@ def test_create_data_prep_with_steps_split_and_without_target(ada):
         ({"source_id": 999}, "does not exist"),
         ({"source_id": "first"}, "Choose one of your data sources"),
         ({"task": "forecast"}, "Task: choose auto, classification or regression."),
-        ({"split": {"val": 0}}, "Validation share"),
+        ({"split": {"val": -0.1}}, "Validation share"),
         ({"steps": [{"type": "nope"}]}, "Unknown step type 'nope'"),
         ({"steps": [{"id": "a", "type": "impute"}, {"id": "a", "type": "impute"}]}, "used by two"),
         ({"steps": "impute"}, "The steps must be a list."),

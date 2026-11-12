@@ -83,6 +83,18 @@ def test_training_dataset_is_read_by_the_training_engine(tmp_path):
     assert incomes == prepared.df["income"].tolist()  # exact round trip
 
 
+@pytest.mark.parametrize(("val", "test"), [(0, 0.2), (0, 0)])
+def test_training_dataset_without_validation_rows(tmp_path, val, test):
+    rng = np.random.default_rng(3)
+    source = table({"x": rng.normal(size=50), "label": rng.choice(["yes", "no"], 50)})
+    result = run(source, settings={"target": "label", "split": {"val": val, "test": test}})
+    info = write_training_dataset(result.table, result.settings, result.task, tmp_path)
+    assert info["split_counts"][1] == 0
+    assert (info["split_counts"][2] > 0) == (test > 0)
+    split = np.frombuffer((tmp_path / SPLIT_FILE).read_bytes(), dtype=np.uint8)
+    assert len(split) == 50 and VAL not in split.tolist()
+
+
 def test_numeric_class_labels_are_sorted_numerically(tmp_path):
     prepared, settings, task = ready_table(target_values=[10.0, 2.0, 1.0] * 20)
     assert task == "classification"

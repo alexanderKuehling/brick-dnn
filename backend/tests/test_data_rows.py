@@ -295,6 +295,19 @@ def test_group_split_with_huge_groups_and_missing_values():
     assert len(np.unique(split[:50])) == 1 and len(np.unique(split[50:80])) == 1
 
 
+@pytest.mark.parametrize("classes", [False, True])
+@pytest.mark.parametrize(("n_val", "n_test"), [(0, 150), (150, 0), (0, 0)])
+def test_group_split_leaves_parts_with_share_0_empty(classes, n_val, n_test):
+    rng = np.random.default_rng(4)
+    groups = np.repeat(np.arange(300), rng.integers(1, 6, 300))
+    labels = (rng.random(300) < 0.3).astype(int)[groups] if classes else None
+    split = group_split(groups, n_val, n_test, labels, np.random.default_rng(1))
+    counts = np.bincount(split, minlength=3)
+    assert (counts[VAL] == 0) == (n_val == 0) and (counts[TEST] == 0) == (n_test == 0)
+    for g in np.unique(groups):
+        assert len(np.unique(split[groups == g])) == 1
+
+
 def test_assign_split_by_group_column_and_settings():
     settings = clean_settings({"split": {"group_by": " person "}})
     assert settings["split"]["group_by"] == "person"

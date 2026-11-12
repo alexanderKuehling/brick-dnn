@@ -82,6 +82,12 @@ def test_clean_settings_fills_in_defaults():
     assert clean_settings({"target": "", "unknown": 1})["target"] is None
 
 
+@pytest.mark.parametrize(("val", "test"), [(0, 0.15), (0.15, 0), (0, 0), (0.0, 0.9)])
+def test_clean_settings_allows_empty_validation_and_test_parts(val, test):
+    cleaned = clean_settings({"split": {"val": val, "test": test}})["split"]
+    assert (cleaned["val"], cleaned["test"]) == (val, test)
+
+
 @pytest.mark.parametrize(
     ("options", "message"),
     [
@@ -89,7 +95,6 @@ def test_clean_settings_fills_in_defaults():
         ({"target": 3}, "Target: choose a column"),
         ({"task": "clustering"}, "Task: choose auto"),
         ({"split": "70/30"}, "Split: expected"),
-        ({"split": {"val": 0}}, "must be more than 0"),
         ({"split": {"val": -0.1}}, "Validation share"),
         ({"split": {"val": "0.2"}}, "Validation share"),
         ({"split": {"test": True}}, "Test share"),
@@ -232,6 +237,21 @@ def test_split_of_tiny_tables(n):
     assert len(split) == n
     if n:
         assert (split == TRAIN).sum() >= 1
+
+
+@pytest.mark.parametrize("stratify", [False, True])
+@pytest.mark.parametrize(
+    ("val", "test", "counts"), [(0, 0.2, [80, 0, 20]), (0.2, 0, [80, 20, 0]), (0, 0, [100, 0, 0])]
+)
+def test_split_with_empty_parts(stratify, val, test, counts):
+    labels = np.array(["a"] * 70 + ["b"] * 25 + ["c"] * 5, dtype=object)
+    t = table({"y": labels, "x": np.arange(100.0)})
+    settings = clean_settings(
+        {"target": "y", "split": {"val": val, "test": test, "stratify": stratify}}
+    )
+    split = assign_split(t, settings, "classification")
+    assert np.bincount(split, minlength=3).tolist() == counts
+    assert split_sizes(100, val, test) == tuple(counts)
 
 
 def test_class_labels_order():
@@ -565,8 +585,37 @@ def test_readiness_warnings():
 def test_readiness_without_validation_rows():
     t = table({"x": np.arange(6.0), "y": np.arange(6.0) * 1.5})
     t = t.with_split(np.array([TRAIN] * 5 + [TEST], dtype=np.int8))
+    # Asked for validation rows, but none are left: a warning, not an error.
     check = readiness(t, clean_settings({"target": "y"}), "regression")
-    assert any("no validation rows" in i["message"] for i in check["issues"])
+    assert check["ready"]
+    found = next(i for i in check["issues"] if i["code"] == "no_validation_rows")
+    assert found["severity"] == "warning"
+    assert "keeps the weights of the last epoch" in found["message"]
+    assert "A step removed them" in found["message"]
+    # A validation share of 0: only a note.
+    check = readiness(t, clean_settings({"target": "y", "split": {"val": 0}}), "regression")
+    found = next(i for i in check["issues"] if i["code"] == "no_validation_rows")
+    assert found["severity"] == "info" and "removed" not in found["message"]
+    assert "only on the test rows" in found["message"]
+
+
+def test_readiness_without_held_out_rows():
+    t = table({"x": np.arange(6.0), "y": np.arange(6.0) * 1.5})
+    settings = clean_settings({"target": "y", "split": {"val": 0, "test": 0}})
+    t = t.with_split(assign_split(t, settings, "regression"))
+    assert t.split_counts() == [6, 0, 0]
+    check = readiness(t, settings, "regression")
+    assert check["ready"]
+    codes = {i["code"]: i for i in check["issues"]}
+    assert "no_validation_rows" not in codes
+    assert codes["no_held_out_rows"]["severity"] == "warning"
+    assert (
+        "cannot judge how well the model works on new data" in codes["no_held_out_rows"]["message"]
+    )
+    # With validation rows nothing is said.
+    t = t.with_split(np.array([TRAIN] * 5 + [VAL], dtype=np.int8))
+    check = readiness(t, clean_settings({"target": "y"}), "regression")
+    assert not {"no_validation_rows", "no_held_out_rows"} & {i["code"] for i in check["issues"]}
 
 
 def test_json_safe_turns_numpy_values_into_plain_python():

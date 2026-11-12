@@ -193,8 +193,10 @@ def _share(value: Any, label: str) -> float:
 def clean_settings(data: Any) -> dict[str, Any]:
     """Validate settings and fill in defaults. Raises :class:`DataError`.
 
-    ``split.val`` and ``split.test`` are shares in [0, 0.9] with ``val > 0`` and
-    ``val + test <= 0.9``; ``seed`` is an int in [0, 2**31 - 1].
+    ``split.val`` and ``split.test`` are shares in [0, 0.9] with ``val + test <= 0.9``
+    (either may be 0: without validation rows the training keeps its last epoch, without
+    test rows nothing is held back for the final measurement); ``seed`` is an int in
+    [0, 2**31 - 1].
     """
     if data is None:
         data = {}
@@ -217,11 +219,6 @@ def clean_settings(data: Any) -> dict[str, Any]:
         raise DataError("Split: expected the validation and test shares, a seed and stratify.")
     val = _share(split.get("val", DEFAULT_SPLIT["val"]), "Validation share")
     test = _share(split.get("test", DEFAULT_SPLIT["test"]), "Test share")
-    if val <= 0:
-        raise DataError(
-            "Validation share: must be more than 0; training needs validation data to "
-            "measure progress."
-        )
     if val + test > MAX_SHARE + 1e-9:
         raise DataError(
             f"Validation and test shares together can be at most {MAX_SHARE:g} "
@@ -493,6 +490,7 @@ def group_split(
         st, size = int(strata[g]), float(sizes[g])
         need = target[st] - assigned[st]
         change = np.abs(need - size) - np.abs(need)
+        change[wanted <= 0] = np.inf  # an empty part (share 0) gets no group
         best = np.flatnonzero(change <= change.min() + 1e-9)
         if len(best) > 1:  # ties: the part that misses the most rows overall
             best = best[np.argsort(-(wanted - totals)[best], kind="stable")]
@@ -880,9 +878,10 @@ def readiness(
     stored as text: cast; ID-like values: drop; spellings that differ only in case: replace
     values; many categories: frequency or target mean encoding), text features (fix:
     drop_columns), datetime features (fix: datetime_features), missing feature values (fix:
-    impute), infinite values, an empty training or validation part.
+    impute), infinite values, an empty training part.
     Warnings and notes: constant features (fix: drop_columns), more than 1,000 feature
-    columns, strong class imbalance, and with ``checks`` the sanity checks of
+    columns, strong class imbalance, no validation rows (or no validation and no test rows),
+    and with ``checks`` the sanity checks of
     :mod:`brickdnn.data.checks` (target leakage, duplicates, rare classes …). Every issue is
     ``{"code", "severity", "column", "columns", "message", "fix"}`` with ``fix`` ``{"type":
     step type, "params": {...}, "label": "Impute 3 columns (median)"}`` or None. ``checks``
@@ -1231,15 +1230,7 @@ def readiness(
     elif table.n_rows:
         if split_counts[TRAIN] == 0:
             errors.append(issue("no_training_rows", "error", "There are no training rows left."))
-        if split_counts[VAL] == 0:
-            errors.append(
-                issue(
-                    "no_validation_rows",
-                    "error",
-                    "There are no validation rows left. Increase the validation share or keep "
-                    "more rows.",
-                )
-            )
+        warnings.extend(_held_out_issues(split_counts, settings))
 
     return {
         "ready": not errors,
@@ -1252,6 +1243,42 @@ def readiness(
         "split_counts": split_counts,
         "issues": sort_issues(errors + warnings),
     }
+
+
+def _held_out_issues(split_counts: list[int], settings: dict[str, Any]) -> list[dict[str, Any]]:
+    """Notes on a split without validation rows (or without any held-out rows). Training
+    works without them, but keeps the weights of its last epoch, cannot stop early or search
+    hyperparameters, and can only measure the model on the rows that remain."""
+    if split_counts[VAL] > 0:
+        return []
+    split_settings = settings.get("split") or {}
+    asked_val = float(split_settings.get("val", DEFAULT_SPLIT["val"]) or 0) > 0
+    asked_test = float(split_settings.get("test", DEFAULT_SPLIT["test"]) or 0) > 0
+    lost = (
+        " A step removed them; increase the share or keep more rows if you want them."
+        if asked_val or (asked_test and split_counts[TEST] == 0)
+        else ""
+    )
+    if split_counts[TEST] == 0:
+        return [
+            issue(
+                "no_held_out_rows",
+                "warning",
+                "Nothing is held out: there are no validation and no test rows, so you cannot "
+                "judge how well the model works on new data. Training keeps the weights of the "
+                "last epoch, has no early stopping or hyperparameter search, and its scores "
+                "come from the training rows (optimistic)." + lost,
+            )
+        ]
+    return [
+        issue(
+            "no_validation_rows",
+            "warning" if asked_val else "info",
+            "No validation rows: training keeps the weights of the last epoch, has no early "
+            "stopping or hyperparameter search, and measures the model only on the test rows."
+            + lost,
+        )
+    ]
 
 
 def _is_number_text(name: str) -> bool:
