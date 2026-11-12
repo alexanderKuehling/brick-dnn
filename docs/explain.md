@@ -2,8 +2,24 @@
 
 Brick DNN can explain what a trained model does (explainable AI, XAI) and show what happens
 inside a network, for learning. Everything below works on finished (or stopped) runs with
-trained weights: open a run in the training panel and press **Explain**. AI assistants get the
-same through the MCP tools [`explain_prediction` and `get_layer_activations`](mcp.md#explanations).
+trained weights: open a run in the training panel and press **Explain the model** under its
+name. AI assistants get the same through the MCP tools
+[`explain_prediction` and `get_layer_activations`](mcp.md#explanations).
+
+The run view itself shows a preview in **Why the model decides**, after the results:
+
+- models trained on a CSV file: the permutation importance of the 10 most important features
+  (*Show all* for the rest), and the decision boundary for models with exactly 2 input
+  features;
+- image classifiers: Grad-CAM (or saliency) over three validation images, two the model gets
+  right and its first mistake; click an image to explain it in full.
+
+*Show what matters* (or *Show where it looks*) computes them, since they cost compute like
+predictions (see [Limits and costs](#limits-and-costs)); a run whose preview was shown in this
+browser before shows it at once from the server's cache. *Open the full explanation* opens the
+dialog on the matching tab. When a method does not work for a run, the section says why; runs
+on demo data only offer a look inside the network. With the training panel at full width,
+the section sits in a second column beside the charts and metrics.
 
 The builder also has two aids that need no training at all (and work in the online demo):
 **How data flows** and the **parameter formula and receptive field** in the inspector, see

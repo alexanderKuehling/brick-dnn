@@ -6,6 +6,9 @@
 export type ExplainMethodId =
   'samples' | 'image' | 'tabular' | 'permutation' | 'boundary' | 'activations' | 'weights';
 
+/** The tabs of the Explain dialog. */
+export type ExplainTab = 'prediction' | 'importance' | 'boundary' | 'inside';
+
 export interface ExplainMethod {
   id: ExplainMethodId;
   label: string;

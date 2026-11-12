@@ -53,7 +53,8 @@ import { kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
-import { ExplainButton } from '@/explain/ExplainButton';
+import { ExplainHeadline } from '@/explain/ExplainButton';
+import { RunExplanations } from '@/explain/RunExplanations';
 import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
@@ -344,6 +345,8 @@ export function RunView({
             .filter(Boolean)
             .join(' · ')}
         </Text>
+        {/* Explanations of the trained model (src/explain). */}
+        {run.has_weights && !active && <ExplainHeadline run={run} />}
       </div>
 
       <RunProgress
@@ -529,6 +532,9 @@ export function RunView({
         </>
       )}
 
+      {/* Previews of the explanations; beside the results when the panel is wide. */}
+      {run.has_weights && !active && <RunExplanations run={run} />}
+
       {logLines.length > 0 && (
         <div>
           <ToggleButton opened={logOpened} onClick={log.toggle}>
@@ -574,8 +580,6 @@ export function RunView({
             Preprocessing (.json)
           </Button>
         )}
-        {/* Explanations of the trained model (src/explain). */}
-        {run.has_weights && !active && <ExplainButton run={run} />}
         <Button
           variant="default"
           leftSection={<IconFileCode size={16} />}

@@ -157,9 +157,27 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
   );
 }
 
-/** Mean drop of the score per feature, with one standard deviation as whiskers. */
-export function PermutationView({ answer }: { answer: PermutationAnswer }) {
+/**
+ * Mean drop of the score per feature, with one standard deviation as whiskers. `limit` shows
+ * only the most important features; `compact` leaves out the texts around the bars (for the
+ * preview in the run view, which says itself what they mean).
+ */
+export function PermutationView({
+  answer,
+  limit,
+  compact = false,
+}: {
+  answer: PermutationAnswer;
+  limit?: number;
+  compact?: boolean;
+}) {
   const top = Math.max(1e-12, ...answer.features.map((f) => Math.abs(f.mean ?? 0) + (f.std ?? 0)));
+  const features =
+    limit === undefined
+      ? answer.features
+      : [...answer.features]
+          .sort((a, b) => (b.mean ?? -Infinity) - (a.mean ?? -Infinity))
+          .slice(0, limit);
   const metric = answer.metric === 'accuracy' ? 'accuracy' : 'R²';
   // Drops are differences of scores: round away the floating-point noise.
   const show = (value: number | null) =>
@@ -172,19 +190,31 @@ export function PermutationView({ answer }: { answer: PermutationAnswer }) {
           : value.toFixed(3);
   return (
     <Stack gap="sm">
-      <Text size="sm">
+      <Text size={compact ? 'xs' : 'sm'} c={compact ? 'dimmed' : undefined}>
         Validation {metric} {show(answer.baseline)} on {answer.rows} rows; drop when a feature is
         shuffled ({answer.repeats} {answer.repeats === 1 ? 'repeat' : 'repeats'}):
       </Text>
-      <Table fz="xs" verticalSpacing={4} withRowBorders={false}>
+      <Table
+        fz="xs"
+        verticalSpacing={4}
+        withRowBorders={false}
+        layout={compact ? 'fixed' : undefined}
+        aria-label="Permutation importance"
+      >
         <Table.Tbody>
-          {answer.features.map((feature) => {
+          {features.map((feature) => {
             const mean = feature.mean ?? 0;
             const std = feature.std ?? 0;
             const width = (Math.max(0, mean) / top) * 100;
             return (
               <Table.Tr key={feature.name}>
-                <Table.Td w={140}>{feature.name}</Table.Td>
+                <Table.Td
+                  w={compact ? '34%' : 140}
+                  className={compact ? classes.name : undefined}
+                  title={compact ? feature.name : undefined}
+                >
+                  {feature.name}
+                </Table.Td>
                 <Table.Td>
                   <div
                     className={classes.barTrack}
@@ -210,17 +240,25 @@ export function PermutationView({ answer }: { answer: PermutationAnswer }) {
                     )}
                   </div>
                 </Table.Td>
-                <Table.Td w={150} ta="right" ff="monospace" style={{ whiteSpace: 'nowrap' }}>
-                  {show(mean)} ± {show(std)}
+                <Table.Td
+                  w={compact ? '30%' : 150}
+                  ta="right"
+                  ff="monospace"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {show(mean)}
+                  {compact ? null : <> ± {show(std)}</>}
                 </Table.Td>
               </Table.Tr>
             );
           })}
         </Table.Tbody>
       </Table>
-      <Text size="xs" c="dimmed">
-        {METHOD_TEXT.permutation}
-      </Text>
+      {!compact && (
+        <Text size="xs" c="dimmed">
+          {METHOD_TEXT.permutation}
+        </Text>
+      )}
     </Stack>
   );
 }
@@ -231,8 +269,17 @@ function ticks(low: number, high: number, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => low + ((high - low) * i) / (count - 1));
 }
 
-/** The predictions on a grid over the two features, with the training points. */
-export function BoundaryView({ answer }: { answer: BoundaryAnswer }) {
+/**
+ * The predictions on a grid over the two features, with the training points. `compact`: a
+ * smaller plot without the explanation below it (the preview in the run view).
+ */
+export function BoundaryView({
+  answer,
+  compact = false,
+}: {
+  answer: BoundaryAnswer;
+  compact?: boolean;
+}) {
   const [view, setView] = useState<'prediction' | 'std'>('prediction');
   const { width, height, left, bottom, top, right } = PLOT;
   const innerW = width - left - right;
@@ -267,7 +314,7 @@ export function BoundaryView({ answer }: { answer: BoundaryAnswer }) {
       )}
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className={classes.plot}
+        className={compact ? classes.plotSmall : classes.plot}
         role="img"
         aria-label={`Decision boundary over ${answer.features[0]} and ${answer.features[1]}`}
       >
@@ -368,12 +415,14 @@ export function BoundaryView({ answer }: { answer: BoundaryAnswer }) {
             : `${answer.target ?? 'Prediction'} from ${formatValue(v0)} (dark) to ${formatValue(v1)} (bright)`}
         </Text>
       )}
-      <Paper withBorder p="xs">
-        <Text size="xs" c="dimmed">
-          {view === 'std' ? METHOD_TEXT.boundaryStd : METHOD_TEXT.boundary} Points: up to{' '}
-          {answer.points.length} training rows.
-        </Text>
-      </Paper>
+      {!compact && (
+        <Paper withBorder p="xs">
+          <Text size="xs" c="dimmed">
+            {view === 'std' ? METHOD_TEXT.boundaryStd : METHOD_TEXT.boundary} Points: up to{' '}
+            {answer.points.length} training rows.
+          </Text>
+        </Paper>
+      )}
     </Stack>
   );
 }

@@ -50,7 +50,18 @@
 - MCP: `preview_data_prep` and `get_data_source` add a short `column_relations` summary
   (counts, a coarse histogram, the weakest columns, how to drop them).
 
+- **Why the model decides** in the run view: finished runs with weights preview their
+  explanations without opening the Explain dialog – the permutation importance (top 10, all on
+  request) for CSV data, the decision boundary for two input features, and Grad-CAM or
+  saliency over three validation images for image classifiers. Computed on request (it counts
+  as a prediction), at once for runs explained before in this browser; each opens the dialog
+  on the matching tab, an image with that sample. Unavailable methods say why.
+- **Full-width training panel**: a button in the panel header widens it to the whole window
+  and back (remembered per browser); at full width the run view puts the explanations beside
+  the charts and metrics.
+
 ### Changed
+- The *Explain* button of a run is now **Explain the model** and sits under the run's name.
 - Analysis overview: warnings of one kind about many columns are grouped into one entry with
   one fix for all of them (1,062 warnings of a table with 833 columns become 4 entries).
 - **Logging in with two-factor authentication** answers `{two_factor_required, challenge}`

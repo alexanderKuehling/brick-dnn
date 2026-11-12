@@ -1,0 +1,38 @@
+/* "Why the model decides" in the run view: a calm accent on the left. */
+.section {
+  border-left: 3px solid var(--mantine-color-grape-filled);
+}
+
+/* The previews side by side when there is room (two columns from about 600 px). */
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--mantine-spacing-md);
+}
+
+/* A few validation images with their heatmaps. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mantine-spacing-xs);
+  max-width: 420px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px;
+  border-radius: var(--mantine-radius-sm);
+
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+}
+
+.caption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

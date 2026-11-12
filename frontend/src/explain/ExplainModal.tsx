@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
-import { Alert, Button, Group, Loader, Modal, Stack, Tabs, Text } from '@mantine/core';
+import { Alert, Loader, Modal, Stack, Tabs, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { api, type LayerCatalog, type RunDetail } from '@/api';
 import { explainApi, sampleFields } from './api';
 import { ImageExplanation } from './ImageExplanation';
 import { InsideView } from './InsideView';
+import { Pending } from './Pending';
 import { imageFormat } from './pixels';
 import { ImageSamplePicker, TabularSamplePicker } from './SamplePicker';
 import { BoundaryView, PermutationView, TabularExplanation } from './TabularViews';
@@ -15,6 +15,7 @@ import type {
   ExplainMethodId,
   ExplainMethods,
   ExplainRequest,
+  ExplainTab,
   ImageAnswer,
   PermutationAnswer,
   PickedSample,
@@ -24,75 +25,21 @@ import type {
 } from './types';
 import { useExplanation, type Explanation } from './useExplanation';
 
-type TabId = 'prediction' | 'importance' | 'boundary' | 'inside';
+type TabId = ExplainTab;
 
-/** Loading, error (with a retry) or the content. */
-function Pending<T>({
-  result,
-  children,
-  what,
-}: {
-  result: Explanation<T>;
-  children: (data: T) => React.ReactNode;
-  what: string;
-}) {
-  if (result.error) {
-    return (
-      <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />}>
-        <Stack gap={6} align="flex-start">
-          <Text size="sm">{result.error}</Text>
-          <Button
-            size="compact-xs"
-            variant="light"
-            leftSection={<IconRefresh size={14} />}
-            onClick={result.retry}
-          >
-            Try again
-          </Button>
-        </Stack>
-      </Alert>
-    );
-  }
-  if (result.loading || !result.data) {
-    return (
-      <Group gap="xs">
-        <Loader size="sm" />
-        <Text size="sm" c="dimmed">
-          Computing {what} on the server …
-        </Text>
-      </Group>
-    );
-  }
-  return (
-    <>
-      {children(result.data)}
-      <Notes notes={(result.data as { notes?: string[] }).notes} />
-    </>
-  );
+/** Where the dialog opens: a tab (if it works for the run) and the sample to explain. */
+export interface ExplainStart {
+  tab?: ExplainTab;
+  sample?: PickedSample;
 }
 
-function Notes({ notes }: { notes?: string[] }) {
-  if (!notes || notes.length === 0) {
-    return null;
-  }
-  return (
-    <Stack gap={2} mt="xs">
-      {notes.map((note) => (
-        <Text key={note} size="xs" c="orange">
-          {note}
-        </Text>
-      ))}
-    </Stack>
-  );
-}
-
-interface ExplainModalProps {
+interface ExplainModalProps extends ExplainStart {
   run: RunDetail;
   opened: boolean;
   onClose: () => void;
 }
 
-export function ExplainModal({ run, opened, onClose }: ExplainModalProps) {
+export function ExplainModal({ run, opened, onClose, tab, sample }: ExplainModalProps) {
   const small = useMediaQuery('(max-width: 48em)');
   return (
     <Modal
@@ -103,17 +50,17 @@ export function ExplainModal({ run, opened, onClose }: ExplainModalProps) {
       fullScreen={small}
       zIndex={400}
     >
-      {opened && <ExplainContent run={run} />}
+      {opened && <ExplainContent run={run} tab={tab} sample={sample} />}
     </Modal>
   );
 }
 
-export function ExplainContent({ run }: { run: RunDetail }) {
+export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainStart) {
   const [methods, setMethods] = useState<ExplainMethods | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<LayerCatalog | null>(null);
-  const [tab, setTab] = useState<TabId | null>(null);
-  const [picked, setPicked] = useState<PickedSample | null>(null);
+  const [tab, setTab] = useState<TabId | null>(start.tab ?? null);
+  const [picked, setPicked] = useState<PickedSample | null>(start.sample ?? null);
   const [target, setTarget] = useState<number | undefined>(undefined);
   const [layer, setLayer] = useState<string | undefined>(undefined);
 
@@ -145,7 +92,11 @@ export function ExplainContent({ run }: { run: RunDetail }) {
     { id: 'boundary', label: 'Decision boundary', enabled: can('boundary') },
     { id: 'inside', label: 'Inside the network', enabled: can('activations') || can('weights') },
   ];
-  const shownTab = tab ?? tabs.find((t) => t.enabled)?.id ?? null;
+  // A tab that does not work for the run (e.g. asked for by a link) falls back to the first one.
+  const shownTab =
+    (tab && tabs.find((t) => t.id === tab)?.enabled ? tab : null) ??
+    tabs.find((t) => t.enabled)?.id ??
+    null;
 
   // The validation samples (to pick one), once for the dialog.
   const samples = useExplanation<SamplesAnswer>(
