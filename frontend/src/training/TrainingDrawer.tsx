@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import {
   IconAlertTriangle,
+  IconArrowsMaximize,
+  IconArrowsMinimize,
   IconEye,
   IconHistory,
   IconLock,
@@ -8,6 +10,7 @@ import {
   IconPlugConnectedX,
 } from '@tabler/icons-react';
 import {
+  ActionIcon,
   Alert,
   Button,
   Center,
@@ -20,6 +23,7 @@ import {
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
   useMantineTheme,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
@@ -31,6 +35,30 @@ import { RunView } from './RunView';
 import { SetupView } from './SetupView';
 import type { DatasetFitController } from './useDatasetFit';
 import type { TrainingController } from './useTraining';
+import layout from './RunLayout.module.css';
+
+/** Set while the panel is shown at the full width of the window (per browser). */
+export const WIDE_PANEL_KEY = 'brickdnn:training-panel-wide';
+
+function readWide(): boolean {
+  try {
+    return localStorage.getItem(WIDE_PANEL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeWide(wide: boolean): void {
+  try {
+    if (wide) {
+      localStorage.setItem(WIDE_PANEL_KEY, '1');
+    } else {
+      localStorage.removeItem(WIDE_PANEL_KEY);
+    }
+  } catch {
+    // Storage unavailable: the choice holds until the page is reloaded.
+  }
+}
 
 export interface TrainingDrawerProps {
   training: TrainingController;
@@ -52,22 +80,53 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
   // Kept while the drawer is closed (its content is not).
   const [filter, setFilter] = useState<RunFilter>('network');
   const trainable = canTrain(training.scope);
+  // On phones the panel always fills the screen.
+  const [wide, setWide] = useState(readWide);
+  const toggleWide = () => {
+    setWide(!wide);
+    writeWide(!wide);
+  };
 
   return (
-    <Drawer
+    <Drawer.Root
       opened={training.opened}
       onClose={training.close}
       position="right"
-      size={phone ? '100%' : 560}
-      title={
-        <Group gap="xs">
-          {trainable ? <IconPlayerPlay size={18} /> : <IconHistory size={18} />}
-          <Text fw={600}>{trainable ? 'Train this network' : 'Trainings of this network'}</Text>
-        </Group>
-      }
+      size={phone || wide ? '100%' : 560}
     >
-      <DrawerContent {...props} filter={filter} onFilterChange={setFilter} />
-    </Drawer>
+      <Drawer.Overlay />
+      <Drawer.Content>
+        <Drawer.Header>
+          <Drawer.Title>
+            <Group gap="xs">
+              {trainable ? <IconPlayerPlay size={18} /> : <IconHistory size={18} />}
+              <Text fw={600}>{trainable ? 'Train this network' : 'Trainings of this network'}</Text>
+            </Group>
+          </Drawer.Title>
+          <Group gap={4} wrap="nowrap">
+            {!phone && (
+              <Tooltip label={wide ? 'Back to the side panel' : 'Full width'} position="bottom">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  aria-label="Full width"
+                  aria-pressed={wide}
+                  onClick={toggleWide}
+                >
+                  {wide ? <IconArrowsMinimize size={18} /> : <IconArrowsMaximize size={18} />}
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {/* As before, the dialog's first focus goes to closing it. */}
+            <Drawer.CloseButton data-autofocus />
+          </Group>
+        </Drawer.Header>
+        <Drawer.Body className={layout.panel}>
+          <DrawerContent {...props} filter={filter} onFilterChange={setFilter} />
+        </Drawer.Body>
+      </Drawer.Content>
+    </Drawer.Root>
   );
 }
 

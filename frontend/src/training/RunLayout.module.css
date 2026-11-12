@@ -1,0 +1,35 @@
+/*
+ * The run view at the full width of the window: the results (tiles, charts, metrics) on the
+ * left, the explanations (the element marked data-run-side) on the right, from the top.
+ *
+ * The run view itself stays a plain column of sections. In a wide panel its root (the element
+ * with the side section as a direct child) becomes a grid: every section is placed in the
+ * left column, one per row, and the side section spans all rows on the right. The last row is
+ * flexible, so a side section taller than the results only extends that row (the grid gives
+ * the extra height of items spanning a flexible row to that row alone), instead of spreading
+ * gaps between the sections on the left. Rows without sections have no height; the gaps are
+ * margins, since grid gaps would add up over the empty rows.
+ */
+.panel {
+  container: run-panel / inline-size;
+}
+
+@container run-panel (min-width: 60rem) {
+  .panel :has(> [data-run-side]) {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-rows: repeat(47, auto) 1fr;
+    gap: 0 var(--mantine-spacing-xl);
+    align-items: start;
+
+    & > * {
+      grid-column: 1;
+      margin-bottom: var(--stack-gap, var(--mantine-spacing-md));
+    }
+
+    & > [data-run-side] {
+      grid-column: 2;
+      grid-row: 1 / -1;
+    }
+  }
+}
