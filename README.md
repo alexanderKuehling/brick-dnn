@@ -110,7 +110,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **A short guide** on the first visit (palette, connections, the analysis, code and export,
   training; skippable, and again with the *?* button), and an empty canvas offers examples to
   start from.
-- Dark mode, keyboard shortcuts, works on tablets and phones.
+- Dark mode, keyboard shortcuts (copy and paste bricks with Ctrl+C / Ctrl+V), works on tablets
+  and phones.
 
 <table>
   <tr>
