@@ -142,7 +142,8 @@ default, and every capped list says how long it is and how to see more:
   test metrics, rows per split, tuning (trials, best trial), the classical fit (with
   `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), `evaluation`
   (completed classification and regression runs: the overall metrics of the kept weights on
-  the validation and test rows with 4 significant digits; up to 10 classes also the confusion
+  the validation and test rows with 4 significant digits, or on the training rows as
+  `training_optimistic` for a run that held nothing out; up to 10 classes also the confusion
   matrix and precision/recall/F1/support per class, with more classes the 5 most confused
   pairs and the 5 classes with the lowest F1; regressions without the sample of points), and
   the end of the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
@@ -188,7 +189,8 @@ predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_
 expression; `generate_pytorch_code` returns a scikit-learn script; `get_training_options`
 says under `classical` whether they can be trained and on how many rows at most;
 `start_training` fits them once (only `val_split`, `test_split`, `max_samples` and `seed`
-apply, no `tuning`); `get_training_run` shows the fitted kernel or the support vectors in
+apply, no `tuning`; without validation rows the fit is measured on the test rows, or on its
+training rows); `get_training_run` shows the fitted kernel or the support vectors in
 `state.classical` (see [training.md](training.md#classical-models)).
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and

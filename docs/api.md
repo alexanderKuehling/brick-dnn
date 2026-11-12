@@ -421,7 +421,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 (`mnist`, `fashion_mnist`, `cifar10`, or `shapes` for segmentation) or
 `{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
-`val_split`, `test_split` (0 = no test set; validation and test together at most 0.8; built-in
+`val_split` (0–0.5; 0 = no validation data: the last epoch is kept, and `patience` and `tuning`
+are refused), `test_split` (0 = no test set; validation and test together at most 0.8; built-in
 datasets take `val_split` of their training images and always test on their official test
 images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
@@ -498,7 +499,10 @@ A completed run with a single class or value output (classification, regression;
 classical) has `state.evaluation`: the kept weights measured once more on the validation and
 the test rows ([training.md](training.md#metrics-of-the-finished-model) explains the metrics;
 `backend/brickdnn/training/state.py` has every key). It is `null` or missing for other runs
-and for runs of older versions:
+and for runs of older versions. A run without validation rows (`val_split: 0`, or a dataset
+from the Data tab without them) has `"val": null` and `null` validation values in its history
+and metrics; with neither validation nor test rows, `"training"` holds the same metrics on the
+training rows (optimistic: the model has seen them), otherwise it is `null`:
 
 ```json
 "evaluation": {

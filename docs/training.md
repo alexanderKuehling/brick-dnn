@@ -134,13 +134,13 @@ follows the data.
 | Learning rate | 0.001 | If the loss becomes NaN, lower it |
 | Optimizer | Adam | Adam, AdamW or SGD (momentum 0.9) |
 | Weight decay | 0 | L2 regularisation |
-| Validation split | 0.2 | Share of the data used for validation (built-in datasets: of the training images) |
+| Validation split | 0.2 | Share of the data used for validation (built-in datasets: of the training images); 0 to 0.5, 0 = no validation data (see [Training without validation data](#training-without-validation-data)) |
 | Test split | 0 (none) | Share held out as test set; not used for built-in datasets, which always test on their official test images |
 | Device | Automatic | CUDA → Apple GPU (Apple Silicon) → CPU |
 | Max. samples | all | Train on a subset for quick experiments; validation shrinks in proportion |
 | Seed | random | Fix it for reproducible runs |
-| Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs |
-| Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch |
+| Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs (needs validation data) |
+| Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch (without validation data the last epoch is always kept) |
 | Loss | Cross-entropy | Segmentation only: *Cross-entropy + Dice* for classes with few pixels |
 
 The loss is chosen from the task: cross-entropy for classification (the network should end
@@ -168,6 +168,28 @@ The data is split randomly (with the seed) into up to three parts:
 When rows belong together (several measurements of one person), split them by group in the
 *Data* tab (*Target & split → Keep rows of a group together*): the exported dataset brings
 that split along, so no person is in training and validation at once.
+
+#### Training without validation data
+
+A validation split of 0 (`val_split: 0`, `--val-split 0`), or a dataset from the *Data* tab
+whose split has no validation rows, trains on everything that is not test data. What changes:
+
+- After every epoch only the **training** loss (and accuracy) is known; the validation values
+  in the history are null, and the curves, tiles and the table of the run view show the
+  training values only.
+- The weights of the **last epoch** are kept: there is no best epoch, so *Keep the best
+  weights* has no effect (the run message says *"No validation data, so the weights of the
+  last epoch were kept."*).
+- **Early stopping** and a **hyperparameter search** need validation losses to compare. The
+  training settings, `check_training` and `start_training` refuse them with *"Early stopping
+  needs validation data …"* or *"A hyperparameter search needs validation data …"*.
+- The final model is measured on the **test** data, if there is some. With neither validation
+  nor test data, the final evaluation measures the training rows instead (`evaluation.training`;
+  the run view labels it *Training (optimistic)*): the model has learned from these rows, so the
+  numbers do not say how well it works on new data. Classical models follow the same rules.
+- A segmentation shows its preview images from the test images (without them: the training
+  images); explanations and the *Use a sample* rows of the prediction form take test rows
+  (without them: training rows) instead of validation rows.
 | Shapes | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
 | Images with masks | `val_split` of the data, or the folder `val` | `test_split` of the data, or the folder `test` (none without it) |
 | Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |
