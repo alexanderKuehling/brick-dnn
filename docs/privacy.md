@@ -55,6 +55,7 @@ Put Markdown files into `BRICKDNN_LEGAL_DIR`:
 | `imprint.md` | `/imprint` | Impressum (§ 5 DDG in Germany) |
 | `privacy.md` | `/privacy` | privacy policy |
 | `terms.md`   | `/terms`   | terms of use; sign-up then asks to accept them |
+| `refund.md`  | `/refund`  | refund policy for paid plans (payment providers such as Paddle look for it by name) |
 
 | Setup | `BRICKDNN_LEGAL_DIR` | How to put the files there |
 | ----- | -------------------- | -------------------------- |

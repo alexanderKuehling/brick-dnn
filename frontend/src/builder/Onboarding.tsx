@@ -9,6 +9,7 @@ import { IconSchool } from '@tabler/icons-react';
 import { Paper, SimpleGrid, Text, Title, Tour, UnstyledButton } from '@mantine/core';
 import type { Example } from '@/api/types';
 import { DEMO } from '@/demo';
+import { LegalLinks } from '@/legal/LegalLinks';
 
 /** Set once the guide was finished or skipped in this browser. */
 export const GUIDE_KEY = 'brickdnn:guide-seen';
@@ -188,6 +189,13 @@ export function EmptyCanvas({
       maw={560}
       ta="center"
     >
+      <Text size="sm" mb="sm">
+        <b>Brick DNN</b> builds neural networks from bricks: drag layers together, see the shapes as
+        you go and get clean PyTorch code.
+        {DEMO
+          ? ' This online demo runs in your browser.'
+          : ' Prepare your data and train the network on this server, free to start.'}
+      </Text>
       <Title order={4}>Start building</Title>
       <Text size="sm" c="dimmed" mt={6}>
         Drag an <b>Input</b> layer from the palette onto the canvas, then add layers by clicking
@@ -219,6 +227,7 @@ export function EmptyCanvas({
           </SimpleGrid>
         </>
       )}
+      <LegalLinks mt="md" />
     </Paper>
   );
 }

@@ -53,13 +53,13 @@ def test_no_legal_pages_by_default(legal_dir):
     response = client.get("/api/legal/")
     assert response.status_code == 200
     assert response.data == {
-        "pages": {"imprint": False, "privacy": False, "terms": False},
+        "pages": {"imprint": False, "privacy": False, "terms": False, "refund": False},
         "terms_version": None,
         "privacy_version": None,
         "accept_terms_required": False,
         "retention": {"unused_uploads_days": 0, "inactive_accounts_days": 0},
     }
-    for page in ("imprint", "privacy", "terms"):
+    for page in ("imprint", "privacy", "terms", "refund"):
         response = client.get(f"/api/legal/{page}/")
         assert response.status_code == 404
         assert response.data["detail"] == "This page has not been set up on this server."
@@ -72,7 +72,7 @@ def test_pages_come_from_the_legal_dir(legal_dir, settings):
     client = APIClient()
 
     info = client.get("/api/legal/").data
-    assert info["pages"] == {"imprint": True, "privacy": False, "terms": True}
+    assert info["pages"] == {"imprint": True, "privacy": False, "terms": True, "refund": False}
     assert info["terms_version"] == terms_version
     assert info["accept_terms_required"] is True
     assert info["retention"] == {"unused_uploads_days": 90, "inactive_accounts_days": 0}
@@ -102,7 +102,7 @@ def test_empty_and_oversized_files_are_ignored(legal_dir, monkeypatch):
     write(legal_dir, "privacy", PRIVACY)
     monkeypatch.setattr(legal, "MAX_BYTES", 10)
     pages = APIClient().get("/api/legal/").data["pages"]
-    assert pages == {"imprint": False, "privacy": False, "terms": False}
+    assert pages == {"imprint": False, "privacy": False, "terms": False, "refund": False}
 
 
 def test_several_folders_first_one_wins(settings, tmp_path):
@@ -118,6 +118,7 @@ def test_several_folders_first_one_wins(settings, tmp_path):
         "imprint": True,
         "privacy": True,
         "terms": False,
+        "refund": False,
     }
     assert client.get("/api/legal/imprint/").data["content"] == IMPRINT.strip()
     assert "Vom Server." in client.get("/api/legal/privacy/").data["content"]
@@ -221,3 +222,13 @@ def test_site_settings_are_defaults(tmp_path):
     missing = {"BRICKDNN_SITE_ENV": str(tmp_path / "other-domain" / "settings.env")}
     load_site_settings(missing)  # another domain has no file: nothing changes
     assert missing == {"BRICKDNN_SITE_ENV": str(tmp_path / "other-domain" / "settings.env")}
+
+
+def test_refund_policy_page(legal_dir):
+    write(legal_dir, "refund", "# Refund policy\n\n14 days.\n")
+    client = APIClient()
+    assert client.get("/api/legal/").data["pages"]["refund"] is True
+    page = client.get("/api/legal/refund/").data
+    assert page["page"] == "refund"
+    assert page["title"] == "Refund policy"
+    assert "14 days." in page["content"]

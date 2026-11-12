@@ -11,6 +11,7 @@ import {
   IconKey,
   IconLogout,
   IconMenu2,
+  IconReceiptRefund,
   IconShieldLock,
   IconTable,
   IconTag,
@@ -47,6 +48,7 @@ const LEGAL_ICONS: Record<LegalPageName, React.ReactNode> = {
   imprint: <IconId size={16} />,
   privacy: <IconShieldLock size={16} />,
   terms: <IconFileText size={16} />,
+  refund: <IconReceiptRefund size={16} />,
 };
 
 export function AppHeader() {

@@ -36,7 +36,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.legal.info).mockResolvedValue({
-    pages: { imprint: false, privacy: false, terms: false },
+    pages: { imprint: false, privacy: false, terms: false, refund: false },
     terms_version: null,
     privacy_version: null,
     accept_terms_required: false,
