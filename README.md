@@ -66,8 +66,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   OpenDocument workbooks (choose the sheet), JSON / JSON Lines, Parquet and Feather files, also
   zipped or gzipped, or straight from a link (Google Sheets, GitHub, Hugging Face …), join and
   append tables, fill missing values (median, KNN …), detect and clip outliers (IQR, z-score,
-  quantiles), scale, transform, bin and encode columns, split dates, balance classes, and see
-  every step's effect in charts: distributions, box plots, missing values, correlation
+  quantiles), scale, transform, bin and encode columns, split dates, combine columns into
+  new features (row-wise sums and counts, pairwise ratios, group statistics), balance classes,
+  and see every step's effect in charts: distributions, box plots, missing values, correlation
   heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
   and the result becomes a training dataset with a fixed train/validation/test split, a
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
@@ -109,7 +110,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **A short guide** on the first visit (palette, connections, the analysis, code and export,
   training; skippable, and again with the *?* button), and an empty canvas offers examples to
   start from.
-- Dark mode, keyboard shortcuts, works on tablets and phones.
+- Dark mode, keyboard shortcuts (copy and paste bricks with Ctrl+C / Ctrl+V), works on tablets
+  and phones.
 
 <table>
   <tr>

@@ -1899,6 +1899,7 @@ export type StepGroup =
   | 'missing'
   | 'outliers'
   | 'transform'
+  | 'features'
   | 'encode'
   | 'datetime'
   | 'target'

@@ -237,3 +237,50 @@ export function autoLayout(
 
   return nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position }));
 }
+
+/** Selected bricks and the connections between them, as copied with Ctrl+C. */
+export interface Clipboard {
+  nodes: LayerFlowNode[];
+  edges: Edge[];
+}
+
+/** The selected bricks with the edges among them (copies, so later edits do not change it). */
+export function copySelection(nodes: LayerFlowNode[], edges: Edge[]): Clipboard | null {
+  const chosen = nodes.filter((node) => node.selected);
+  if (chosen.length === 0) {
+    return null;
+  }
+  const ids = new Set(chosen.map((node) => node.id));
+  return {
+    nodes: chosen.map((node) => ({
+      ...node,
+      position: { ...node.position },
+      data: { ...node.data, params: structuredClone(node.data.params) },
+    })),
+    edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
+  };
+}
+
+/**
+ * New bricks for pasting ``clip``: new ids, the connections among them kept, moved by
+ * ``offset`` and selected. Attribute names are dropped, as they must be unique.
+ */
+export function pasteClipboard(
+  clip: Clipboard,
+  offset: XYPosition
+): { nodes: LayerFlowNode[]; edges: Edge[] } {
+  const ids = new Map(clip.nodes.map((node) => [node.id, newId()]));
+  const nodes = clip.nodes.map((node) => ({
+    ...node,
+    id: ids.get(node.id)!,
+    selected: true,
+    position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
+    data: { ...node.data, params: structuredClone(node.data.params), name: undefined },
+  }));
+  const edges = clip.edges.map((edge) => {
+    const source = ids.get(edge.source)!;
+    const target = ids.get(edge.target)!;
+    return { ...edge, id: edgeId(source, target), source, target, selected: false };
+  });
+  return { nodes, edges };
+}

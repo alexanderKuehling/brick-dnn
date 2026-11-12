@@ -156,6 +156,114 @@ def test_target_encoding_of_new_rows_uses_the_training_means(tmp_path):
     np.testing.assert_array_equal(got[unseen], expected[unseen])
 
 
+def fraud_transactions(n: int = 120, seed: int = 11):
+    """Card transactions with amounts, balances, risk flags and categories, some missing."""
+    rng = np.random.default_rng(seed)
+    amount = np.round(rng.lognormal(4, 1.2, n), 2)
+    amount[[3, 40]] = np.nan
+    balance = np.round(rng.lognormal(7, 1, n), 2)
+    balance[[5, 17, 60]] = 0.0  # a division by zero for amount / balance
+    balance[8] = np.nan
+    category = rng.choice(["food", "travel", "electronics", "games", "fuel"], n).astype(object)
+    category[[11, 90]] = None
+    category[-1] = "jewelry"  # only in one row, likely outside the training rows
+    flags = {
+        name: rng.choice([0.0, 1.0], n, p=[0.8, 0.2])
+        for name in ("used_vpn", "is_new_merchant", "ip_country_mismatch")
+    }
+    flags["is_new_merchant"][12] = np.nan
+    return table(
+        {
+            "amount_usd": amount,
+            "account_balance_usd": balance,
+            "txn_count_last_24h": rng.integers(0, 12, n).astype(float),
+            "distance_from_home_km": np.round(rng.exponential(30, n), 1),
+            **flags,
+            "merchant_category": category,
+            "channel": rng.choice(["online", "pos", "atm"], n),
+            "is_fraud": rng.choice(["no", "yes"], n, p=[0.85, 0.15]),
+        },
+        kinds={name: "boolean" for name in flags},
+    )
+
+
+FEATURE_STEPS = (
+    (
+        "combine_columns",
+        {
+            "columns": ["used_vpn", "is_new_merchant", "ip_country_mismatch"],
+            "operations": ["nonzero", "sum", "mean"],
+            "name": "risk_flags",
+        },
+    ),
+    (
+        "combine_columns",
+        {
+            "columns": ["amount_usd", "distance_from_home_km", "txn_count_last_24h"],
+            "operations": ["std", "product", "max"],
+            "missing": "any",
+        },
+    ),
+    (
+        "interactions",
+        {
+            "columns": ["amount_usd", "account_balance_usd", "distance_from_home_km"],
+            "operations": ["multiply", "divide", "subtract", "add"],
+            "both_directions": True,
+        },
+    ),
+    (
+        "group_features",
+        {
+            "group_by": ["merchant_category"],
+            "value": "amount_usd",
+            "stats": ["mean", "median", "std", "min", "max", "count", "rows", "diff_mean"],
+            "unseen": "overall",
+            "min_rows": 3,
+        },
+    ),
+    (
+        "group_features",
+        {
+            "group_by": ["merchant_category", "channel", "used_vpn"],
+            "value": "distance_from_home_km",
+            "stats": ["ratio_mean", "rows"],
+            "unseen": "missing",
+        },
+    ),
+)
+
+
+def test_feature_steps_reproduce_the_training_table(tmp_path):
+    main = fraud_transactions()
+    items = (
+        *FEATURE_STEPS,
+        # Missing values (missing inputs, divisions by zero, unseen groups) get the median.
+        ("impute", {"strategy": "median"}),
+        ("impute", {"columns": ["merchant_category"], "strategy": "most_frequent"}),
+        ("encode", {"columns": ["merchant_category", "channel"], "method": "onehot"}),
+    )
+    probe = run(main, *items, settings={"target": "is_fraud"})
+    failed = [(r["type"], r["error"]) for r in probe.reports if r["status"] != "ok"]
+    assert not failed, failed
+    result, written, recipe, directory = freeze_run(tmp_path, main, items, {"target": "is_fraud"})
+    features = written["features"]
+    assert {
+        "risk_flags_nonzero",
+        "amount_usd/account_balance_usd",
+        "rows_by_merchant_category",
+    } <= (set(features))
+    assert "distance_from_home_km_ratio_mean_by_merchant_category_channel_used_vpn" in features
+    raw = raw_rows(main, recipe)
+    prepared = frozen.prepare_rows(recipe, raw, directory=directory)
+    got = np.array([[row[f] for f in features] for row in prepared.rows])
+    np.testing.assert_array_equal(got, training_rows(tmp_path, features))
+    # A single new row gets the same values: the group statistics come from the recipe.
+    for i in (3, 5, 11, len(raw) - 1):
+        alone = frozen.prepare_rows(recipe, raw[i], directory=directory)
+        np.testing.assert_array_equal([alone.rows[0][f] for f in features], got[i])
+
+
 def test_steps_that_only_change_rows(tmp_path):
     main = customers_table()
     items = (

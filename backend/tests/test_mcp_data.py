@@ -765,6 +765,13 @@ def test_list_prep_steps(ada):
     assert "empty: All columns with missing values" in impute["params"]["columns"]
     assert "only used if add_source_column is true" in steps["append"]["params"]["source_column"]
     assert "Combine steps" in catalog["format"]
+    group = steps["group_features"]
+    assert group["label"] == "Group statistics" and group["group"] == "Feature engineering"
+    assert "training rows" in group["description"]
+    assert group["params"]["stats"].startswith("a list of mean | median")
+    assert "(categorical or boolean columns)" in group["params"]["group_by"]
+    assert steps["combine_columns"]["params"]["operations"].startswith("a list of sum | mean")
+    assert "from 1 to 2000; default 200" in steps["interactions"]["params"]["max_columns"]
 
     detail = ok(ada, "list_prep_steps", type="impute")
     params = {p["name"]: p for p in detail["params"]}

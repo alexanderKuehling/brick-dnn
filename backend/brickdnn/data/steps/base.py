@@ -33,6 +33,7 @@ GROUPS = (
     ("missing", "Missing values"),
     ("outliers", "Outliers & clipping"),
     ("transform", "Transform numbers"),
+    ("features", "Feature engineering"),
     ("encode", "Encode categories"),
     ("datetime", "Dates & times"),
     ("target", "Target & balance"),

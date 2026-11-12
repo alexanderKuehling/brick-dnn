@@ -140,6 +140,7 @@ The exported dataset carries this split in `split.bin`, so training uses it unch
 | **Missing values** | *Mark as missing* (sentinel values like `-999` or `unknown`) · Drop sparse columns · *Fill missing values*: mean, median, most frequent, fixed value, nearest neighbours (KNN), forward/backward fill, interpolation, optionally with an indicator column |
 | **Outliers & clipping** | *Outliers*: IQR rule, z-score, robust z-score (MAD) or quantiles; clip, remove, set missing or flag · *Clip values*: fixed bounds, quantiles (e.g. 1st–99th percentile) or mean ± k standard deviations |
 | **Transform numbers** | Scale (standard, min-max, robust, max-abs) · log, log1p, square root, Box-Cox, Yeo-Johnson … · Quantile transform (uniform or normal) · Bin into intervals |
+| **Feature engineering** | *Combine columns (row-wise)*: sum, mean, min, max, standard deviation, product, count of values or of non-zero values (e.g. risk flags set) · *Pairwise interactions*: a × b, a / b, a − b, a + b · *Group statistics*: mean, median, spread, count and rows per group of a category, difference and ratio to the group mean – see *Feature engineering* below |
 | **Encode categories** | One-hot, ordinal, frequency or target encoding · Group rare categories |
 | **Dates & times** | Date parts (year, quarter, month, weekday, hour …), optionally cyclical (sin/cos) |
 | **Target & balance** | Balance classes (oversample or undersample the training rows) |
@@ -153,6 +154,62 @@ it.
 The training engine standardises all features again (mean 0, standard deviation 1, from the
 training rows), so a *Scale* step is optional for training in Brick DNN; it is useful for the
 exported files.
+
+### Feature engineering
+
+Three steps build new number columns from several columns; the new columns are added at the
+end of the table, and the inputs stay. They run in the pandas script and for predictions from
+raw rows with exactly the same values. None of them accepts the **target** as an input: a
+feature computed from the target hands the model the answer during training (target
+leakage), and new rows have no target to compute it from. The examples use a fraud table
+with `amount_usd`, `account_balance_usd`, `distance_from_home_km`, the 0/1 flags
+`used_vpn`, `is_new_merchant`, `ip_country_mismatch` and the categories
+`merchant_category`, `channel`.
+
+**Combine columns (row-wise)** – one new column per operation for two or more number or
+yes/no columns (yes/no counts as 1/0): *sum*, *mean*, *minimum*, *maximum*, *standard
+deviation* (population: 0 for a single value), *product*, *count of values present* and
+*count of non-zero values*. With *New column name* `risk_flags` and the three flags,
+*Count of non-zero values* gives `risk_flags_nonzero`, the number of risk flags set (0–3).
+With one operation the name is the column's name; with several, its start (`<name>_sum`,
+`<name>_mean` …); empty, the column names joined by `_` (`row_sum` … for more than three
+columns). *Missing values*: *Leave them out* computes over the values present (a row without
+any value gets a missing result, its counts are 0); *Missing if any value is missing* gives
+such a row a missing result in every new column. Results too large for a number (a product
+of huge values) are missing too.
+
+**Pairwise interactions** – for every pair of the chosen number or yes/no columns (or, with
+*Combine with*, every column of the first list with every column of the second), the new
+columns `a*b`, `a/b`, `a-b` and `a+b` (the chosen operations). *Both directions* adds `b/a`
+and `b-a`. Division is safe: a denominator of 0 or a missing value gives a **missing value**
+(not infinity), and the step report counts these divisions by zero; follow with *Fill missing
+values* if the model needs a number there. `amount_usd/account_balance_usd` is the share of
+the balance a transaction uses. Pairs grow fast (20 columns have 190 pairs), so the step
+stops with an error above *Most new columns* (200 by default, at most 2,000) and says how
+many columns the settings would add.
+
+**Group statistics** – for one or more category or yes/no columns (several form one group per
+combination of values, e.g. `merchant_category` × `channel`) and a number *Value column*, per
+group of the **training rows**: *mean*, *median*, *standard deviation* (population), *minimum*,
+*maximum*, *count of values* and *rows per group* (how often the group occurs; needs no value
+column), joined back to every row as `amount_usd_mean_by_merchant_category`,
+`rows_by_merchant_category` …. *Difference from the group mean* (`value − group mean`) and
+*ratio to the group mean* (`value / group mean`, missing for a group mean of 0) say how
+unusual a row is for its group: `amount_usd_ratio_mean_by_merchant_category = 8` is a
+transaction eight times the usual amount of its merchant category.
+
+- The statistics are learned from the training rows only, like *Scale*: validation and test
+  rows (and new rows) are looked up in them, never counted.
+- *Groups not in the training rows* (and rows without a group value): *Use the overall
+  training value* (the statistic of all training rows; the default, so new categories do not
+  leave gaps) or *Missing value*. Counts and rows per group are 0 for them.
+- *Min. rows per group*: groups with fewer training values are treated as unseen, so that a
+  category with two transactions does not decide its "usual" amount. The step warns when
+  most groups have a single training row (an ID-like column): their statistics are that row's
+  own value.
+- The target cannot be the value column (or a group column). For a target per category use
+  *Encode categories* → *Target mean*, which gives the training rows out-of-fold values.
+- At most 20,000 groups; group rare categories first for columns with more values.
 
 ## Analysis
 
