@@ -919,6 +919,56 @@ def test_split_indices_with_a_test_set():
         data.split_indices(2, 0.2, None, gen, test_split=0.1)
 
 
+def test_split_indices_without_validation():
+    gen = torch.Generator().manual_seed(0)
+    train, val, test = data.split_indices(1000, 0.0, None, gen, test_split=0.1)
+    assert (len(train), len(val), len(test)) == (900, 0, 100)
+    train, val, test = data.split_indices(1000, 0.0, 90, gen, test_split=0.1)
+    assert (len(train), len(val), len(test)) == (90, 0, 10)
+    train, val, test = data.split_indices(5, 0.0, None, gen)
+    assert (len(train), len(val), test) == (5, 0, None)
+    train, val, test = data.split_indices(2, 0.0, None, gen, test_split=0.5)
+    assert (len(train), len(val), len(test)) == (1, 0, 1)
+    with pytest.raises(engine.TrainingError, match=r"at least 2 samples \(training \+ test\)"):
+        data.split_indices(1, 0.0, None, gen, test_split=0.5)
+
+
+def test_csv_training_with_a_validation_split_of_0(tmp_path):
+    path = tmp_path / "iris.csv"
+    path.write_text(iris_like())
+    info = inspect_csv(path)
+    result, rec = run_job(
+        mlp(4, 3), info, tmp_path, path=path, epochs=3, batch_size=8, val_split=0, test_split=0.2
+    )
+    assert result.status == "completed", result.message
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (48, 0, 12)
+    assert all(e["val_loss"] is None and e["val_accuracy"] is None for e in rec.history)
+    assert all(e["train_accuracy"] is not None for e in rec.history)
+    assert rec.best is None and rec.kept == {"weights_epoch": 3, "stopped_early": False}
+    assert result.message.startswith("Finished 3 epochs: test accuracy ")
+    assert "weights of the last epoch were kept" in result.message
+    assert 0 <= rec.test["accuracy"] <= 1
+
+
+def test_demo_regression_without_validation_or_test(tmp_path):
+    graph = EXAMPLES["tabular_regression"]["graph"]
+    result, rec = run_job(graph, random_info(), tmp_path, epochs=2, val_split=0)
+    assert result.status == "completed", result.message
+    assert rec.info["val_size"] == 0 and rec.info["test_size"] is None
+    assert len(rec.history) == 2
+    assert all(e["val_loss"] is None and e.get("val_rmse") is None for e in rec.history)
+    assert "training loss " in result.message and "optimistic" in result.message
+    assert (tmp_path / "weights.pt").exists()
+
+
+def test_stopping_without_validation_keeps_the_current_weights(tmp_path):
+    rec = Recorder(stop_after_checks=60)
+    graph = EXAMPLES["mlp_mnist"]["graph"]
+    result, _ = run_job(graph, random_info(), tmp_path, reporter=rec, epochs=50, val_split=0)
+    assert result.status == "stopped" and result.weights
+    assert "lowest validation loss" not in result.message
+
+
 def test_without_a_test_set_the_split_is_unchanged():
     """Seeds of earlier runs still select the same training and validation samples."""
     train, val, test = data.split_indices(500, 0.2, None, torch.Generator().manual_seed(5))
@@ -1841,6 +1891,27 @@ def test_cli_train(tmp_path, capsys):
     assert f"Saved weights to {save}" in out
     model = build_from_code(generate_code(EXAMPLES["mlp_mnist"]["graph"]))
     model.load_state_dict(torch.load(save))
+
+
+def test_cli_train_without_validation(tmp_path, capsys):
+    save = tmp_path / "mlp.pt"
+    code = brickdnn_main(
+        ["train", "--example", "mlp_mnist", "--data", "random", "--epochs", "2"]
+        + ["--save", str(save), "--device", "cpu", "--max-samples", "64", "--seed", "0"]
+        + ["--val-split", "0", "--test-split", "0.2"]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Training on CPU: 64 training, no validation and 16 test samples" in out
+    assert "Epoch   2/2  train loss " in out and "train acc " in out and "val loss" not in out
+    assert "weights of the last epoch were kept" in out
+    # Early stopping and a search need validation data.
+    code = brickdnn_main(
+        ["train", "--example", "mlp_mnist", "--data", "random", "--epochs", "2"]
+        + ["--val-split", "0", "--patience", "1", "--device", "cpu"]
+    )
+    captured = capsys.readouterr()
+    assert code == 1 and "Early stopping needs validation data" in captured.err
 
 
 @needs_pil

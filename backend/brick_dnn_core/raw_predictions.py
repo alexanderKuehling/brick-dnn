@@ -180,7 +180,8 @@ def _keep_frozen_preparation(sender, instance: Dataset, **kwargs) -> None:
 
 
 def _csv_samples(run: TrainingRun, preprocessing: dict[str, Any]) -> list[dict[str, Any]]:
-    """A few rows of the dataset (its validation rows if the split is known)."""
+    """A few rows of the dataset (its validation rows if the split is known, else its test
+    rows)."""
     upload = run.upload
     if upload is None or upload.kind != "csv":
         return []
@@ -195,8 +196,12 @@ def _csv_samples(run: TrainingRun, preprocessing: dict[str, Any]) -> list[dict[s
             marks = split.read_bytes()
         except OSError:
             marks = b""
-        wanted = {i for i, mark in enumerate(marks) if mark == 1}
-        wanted = set(sorted(wanted)[:SAMPLE_ROWS]) or None
+        # The validation rows; without them the test rows, without those the first rows.
+        for label in (1, 2):
+            rows = [i for i, mark in enumerate(marks) if mark == label][:SAMPLE_ROWS]
+            if rows:
+                wanted = set(rows)
+                break
     columns = [str(c) for c in preprocessing.get("columns") or []]
     target = preprocessing.get("target")
     names = inference.class_names(run.plan, preprocessing)

@@ -967,7 +967,7 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
         search = training.parse_tuning(args.get("tuning"))
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
-    result = training.check(args["graph"], dataset, config)
+    result = training.check(args["graph"], dataset, config, search)
     cost = training.budget_check(
         budgets.Actor.of(request), args["graph"], dataset, config, result, search
     )

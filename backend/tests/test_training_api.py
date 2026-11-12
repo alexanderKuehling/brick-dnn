@@ -618,6 +618,36 @@ def test_check_incompatible(auth_client, training_dir):
     assert "Fix the layers marked in red" in data["errors"][0]
 
 
+def test_settings_that_need_validation_data(auth_client, training_dir):
+    from brickdnn.training.config import NO_VALIDATION_PATIENCE, NO_VALIDATION_SEARCH
+
+    no_val = {**QUICK, "val_split": 0, "test_split": 0.2}
+    body = {"graph": DEMO_GRAPH, "dataset": RANDOM, "config": no_val}
+    data = auth_client.post("/api/training/check/", body, format="json").data
+    assert data["ok"] is True and data["errors"] == []
+    assert any("The validation split is 0" in w for w in data["warnings"])
+    # Early stopping and a search compare validation losses.
+    body["config"] = {**no_val, "patience": 2}
+    data = auth_client.post("/api/training/check/", body, format="json").data
+    assert data["ok"] is False and data["errors"] == [NO_VALIDATION_PATIENCE]
+    body = {**body, "config": no_val, "tuning": {"method": "random", "trials": 2}}
+    data = auth_client.post("/api/training/check/", body, format="json").data
+    assert data["ok"] is False and data["errors"] == [NO_VALIDATION_SEARCH]
+    response = start(auth_client, config={**no_val, "patience": 2})
+    assert response.status_code == 400
+    assert response.data["errors"] == [NO_VALIDATION_PATIENCE]
+    response = auth_client.post(
+        "/api/training/runs/",
+        {"graph": DEMO_GRAPH, "dataset": RANDOM, "config": no_val, "tuning": {"trials": 2}},
+        format="json",
+    )
+    assert response.status_code == 400 and response.data["errors"] == [NO_VALIDATION_SEARCH]
+    assert TrainingRun.objects.count() == 0
+    # With validation data nothing changes.
+    body = {"graph": DEMO_GRAPH, "dataset": RANDOM, "config": {**QUICK, "patience": 2}}
+    assert auth_client.post("/api/training/check/", body, format="json").data["ok"] is True
+
+
 @pytest.mark.parametrize(
     ("body", "message"),
     [
@@ -717,6 +747,7 @@ def test_run_lifecycle(auth_client, training_dir):
     assert data["epochs_done"] == 1
     assert data["metrics"] == {
         "train_loss": 0.5,
+        "train_accuracy": 0.8,
         "val_loss": 0.4,
         "val_accuracy": 0.9,
         "val_rmse": None,
@@ -817,6 +848,7 @@ def test_metrics_are_those_of_the_kept_weights(auth_client, training_dir, settin
     assert data["epochs_done"] == 3
     assert data["metrics"] == {
         "train_loss": 0.5,
+        "train_accuracy": 0.8,
         "val_loss": 0.3,
         "val_accuracy": 0.7,
         "val_rmse": None,

@@ -495,6 +495,9 @@ HEADLINE_METRICS = (
     ("val_r2", "validation R²"),
     ("val_rmse", "validation RMSE"),
     ("val_loss", "validation loss"),
+    # Runs without validation and test data: measured on the data they were trained on.
+    ("train_accuracy", "training accuracy (optimistic)"),
+    ("train_loss", "training loss (optimistic)"),
 )
 
 

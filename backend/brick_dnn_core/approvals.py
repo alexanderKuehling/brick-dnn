@@ -255,7 +255,7 @@ def _training_check(request, args: dict[str, Any]) -> dict[str, Any] | None:
         search = training.parse_tuning(args.get("tuning"))
         if search is not None and training.graph_family(graph) == "classical":
             return None
-        result = training.check(graph, dataset, config)
+        result = training.check(graph, dataset, config, search)
         if not result.ok or result.plan is None:
             return None
         data = training.budget_check(

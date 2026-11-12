@@ -639,6 +639,77 @@ def test_mcp_summary_of_a_regression_leaves_out_the_sample():
     assert len(json.dumps(found)) < 800
 
 
+def test_mcp_summary_without_validation_and_test_rows():
+    rng = np.random.default_rng(1)
+    counter = ev.ClassificationCounter(3)
+    counter.add(random_probabilities(rng, 50, 3), rng.integers(0, 3, size=50))
+    found = mcp_compact.evaluation_summary(
+        ev.evaluation(
+            "classification",
+            None,
+            None,
+            {"loss": 1.0, "accuracy": 0.5},
+            class_names=["a", "b", "c"],
+            epoch=4,
+            training=counter.result(0.9),
+        )
+    )
+    assert "validation" not in found and "test" not in found
+    assert found["training_optimistic"]["size"] == 50
+    assert len(found["training_optimistic"]["confusion_matrix"]) == 3
+
+
+@pytest.mark.django_db
+def test_run_without_validation_data_in_the_api_and_mcp(training_dir):
+    from django.contrib.auth import get_user_model
+    from rest_framework.test import APIClient
+
+    from brick_dnn_core import training_service
+    from brick_dnn_core.models import TrainingRun
+
+    from .test_mcp import call, mcp_client
+    from .test_mcp_compact import long_run
+
+    user = get_user_model().objects.create_user("eve", password="correct-horse-1")
+    client = APIClient()
+    client.force_authenticate(user)
+    run = long_run(user, training_dir, epochs=3)
+    directory = training_service.run_dir(run.pk)
+    state = st.read_state(directory)
+    for entry in state["history"]:
+        entry.update(val_loss=None, val_accuracy=None)
+    state.update(best=None, weights_epoch=3, test=None, val_size=0, test_size=None)
+    state["evaluation"] = ev.evaluation(
+        "classification",
+        None,
+        None,
+        {"loss": 0.3, "accuracy": 0.9},
+        class_names=["a", "b", "c"],
+        epoch=3,
+        training=classification_evaluation(3)["val"],
+    )
+    st.write_state(directory, state)
+    detail = client.get(f"/api/training/runs/{run.pk}/").json()
+    assert detail["state"]["evaluation"]["val"] is None
+    assert detail["state"]["evaluation"]["training"]["size"] == 400
+    # What the server keeps of the state (as when it syncs a running run).
+    training_service._apply_state(run, state)
+    run.save()
+    saved = TrainingRun.objects.get(pk=run.pk)
+    assert saved.metrics["val_loss"] is None and saved.metrics["train_accuracy"] == 0.75
+    assert saved.best is None
+    result, text = call(client := mcp_client(user), "get_training_run", id=str(run.pk))
+    assert "isError" not in result, text
+    answer = result["structuredContent"]
+    assert "val_loss" not in (answer.get("metrics") or {})
+    assert answer["metrics"]["train_accuracy"] == 0.75
+    assert answer["evaluation"]["training_optimistic"]["size"] == 400
+    assert "validation" not in answer["evaluation"]
+    result, text = call(client, "list_training_runs")
+    assert "isError" not in result, text
+    assert "training accuracy (optimistic)" in text or "train_accuracy" in text
+
+
 @pytest.mark.django_db
 def test_runs_with_and_without_an_evaluation_in_the_api_and_mcp(training_dir):
     from django.contrib.auth import get_user_model

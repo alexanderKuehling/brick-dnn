@@ -134,13 +134,13 @@ class ConsoleReporter(Reporter):
         if "train_size" not in info:
             self._print(f"Now training on {info.get('device_label')}.")
             return
+        val = f"{info['val_size']:,} validation" if info.get("val_size") else "no validation"
         if info.get("test_size"):
             samples = (
-                f"{info['train_size']:,} training, {info['val_size']:,} validation and "
-                f"{info['test_size']:,} test samples"
+                f"{info['train_size']:,} training, {val} and {info['test_size']:,} test samples"
             )
         else:
-            samples = f"{info['train_size']:,} training and {info['val_size']:,} validation samples"
+            samples = f"{info['train_size']:,} training and {val} samples"
         if info.get("tuning"):
             tuning = TuningConfig.from_dict(info["tuning"])
             self._print(
@@ -185,9 +185,13 @@ class ConsoleReporter(Reporter):
             f"{progress['samples_per_second']:,.0f} samples/s"
         )
 
-    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any]) -> None:
+    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any] | None) -> None:
         epoch = "Fitted" if self.classical else f"Epoch {entry['epoch']:3d}/{self.epochs}"
-        line = f"{epoch}  train loss {entry['train_loss']:.4f}  val loss {entry['val_loss']:.4f}"
+        line = f"{epoch}  train loss {entry['train_loss']:.4f}"
+        if entry.get("val_loss") is not None:
+            line += f"  val loss {entry['val_loss']:.4f}"
+        elif entry.get("train_accuracy") is not None:  # no validation data
+            line += f"  train acc {entry['train_accuracy']:.1%}"
         if entry.get("val_accuracy") is not None:
             line += f"  val acc {entry['val_accuracy']:.1%}"
         if entry.get("val_rmse") is not None:
@@ -282,9 +286,11 @@ class ConsoleReporter(Reporter):
         self._print(line)
 
     def evaluation_end(self, result: dict[str, Any]) -> None:
-        """A short table of the final evaluation: validation and test side by side, and for
-        up to CLI_CLASSES classes precision, recall and F1 per class (validation)."""
-        parts = [(label, result.get(key)) for label, key in (("val", "val"), ("test", "test"))]
+        """A short table of the final evaluation: validation and test side by side (without
+        either: the training rows), and for up to CLI_CLASSES classes precision, recall and
+        F1 per class (validation)."""
+        keys = (("val", "val"), ("test", "test"), ("train*", "training"))
+        parts = [(label, result.get(key)) for label, key in keys]
         parts = [(label, part) for label, part in parts if isinstance(part, dict)]
         if not parts:
             return
@@ -304,6 +310,8 @@ class ConsoleReporter(Reporter):
                 continue
             cells = [_number(value, spec).rjust(10) for value in values]
             self._print("  ".join([name.ljust(width), *cells]))
+        if result.get("training"):
+            self._print("* No validation or test data: measured on the training rows (optimistic).")
         names = [str(name) for name in result.get("class_names") or []]
         val = parts[0][1] if parts[0][0] == "val" else None
         if classification and val and names and len(names) <= CLI_CLASSES:
@@ -422,7 +430,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--optimizer", choices=OPTIMIZERS, help="default adam")
     parser.add_argument("--weight-decay", type=float, help="default 0")
     parser.add_argument(
-        "--val-split", type=float, help="share of the data used for validation (default 0.2)"
+        "--val-split",
+        type=float,
+        help="share of the data used for validation (default 0.2; 0: none, the last epoch is kept)",
     )
     parser.add_argument(
         "--test-split",
@@ -599,7 +609,7 @@ def main(argv: list[str] | None = None) -> int:
         except DatasetError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        compat = check_compatibility(analysis, info, config)
+        compat = check_compatibility(analysis, info, config, tuning=tuning is not None)
         for warning in compat.warnings:
             print(f"warning: {warning}")
         if not compat.ok or compat.plan is None:

@@ -243,7 +243,7 @@ def training_check(request: Request) -> Response:
         search = training.parse_tuning(data.get("tuning"))
     except training.TrainingInputError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    result = training.check(graph, dataset, config)
+    result = training.check(graph, dataset, config, search)
     cost = training.budget_check(Actor.of(request), graph, dataset, config, result, search)
     return Response({**result.to_dict(), **cost})
 

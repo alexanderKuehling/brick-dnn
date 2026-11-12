@@ -1,6 +1,7 @@
 """Turn a dataset into tensors the way the :class:`TrainingPlan` says.
 
-Every dataset becomes two or three *sources*: training, validation and, if the settings
+Every dataset becomes two or three *sources*: training, validation (empty with a
+validation split of 0, or a prepared split without validation rows) and, if the settings
 ask for one, a test set that is only used once after training (built-in datasets always
 have one: their official test split). A source knows its length
 and returns ready-to-use batches for a tensor of sample indices; images are kept as
@@ -76,13 +77,19 @@ class Source(Protocol):
 @dataclass
 class PreparedData:
     train: Source
-    val: Source
+    val: Source  # may be empty (no validation data): see ``has_val``
     preprocessing: dict[str, Any]
     # Regression on CSV data: standard deviation of the target, to report the
     # validation RMSE in the units of the CSV file.
     target_std: float | None = None
     # Held out until training is over (None: the settings ask for no test set).
     test: Source | None = None
+
+    @property
+    def has_val(self) -> bool:
+        """True if there is validation data (it chooses the kept epoch, early stopping and
+        the best trial of a search)."""
+        return len(self.val) > 0
 
 
 # --------------------------------------------------------------------------- #
@@ -456,7 +463,7 @@ def demo_data(
     reporter: Reporter | None = None,
 ) -> PreparedData:
     val_split, test_split = config.val_split, config.test_split
-    least = 3 if config.has_test else 2
+    least = 1 + int(val_split > 0) + int(config.has_test)
     total = min(DEMO_SAMPLES, max(least, DEMO_BYTES // _demo_sample_bytes(plan)))
     n_train, n_val, n_test = split_sizes(total, val_split, test_split)
     if config.max_samples is not None and config.max_samples < n_train:
