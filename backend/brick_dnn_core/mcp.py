@@ -185,7 +185,8 @@ STEP_SCHEMA: dict[str, Any] = {
 SPLIT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": "Train/validation/test split (defaults: val 0.15, test 0.15, seed 42, "
-    "stratify true); only the given keys change",
+    "stratify true); only the given keys change. val and test may be 0: without validation "
+    "rows training keeps its last epoch and has no early stopping or search",
     "properties": {
         "val": {"type": "number", "minimum": 0, "maximum": 0.9},
         "test": {"type": "number", "minimum": 0, "maximum": 0.9},
