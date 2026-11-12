@@ -329,3 +329,27 @@ def test_compact_prediction_answers_for_mcp():
     assert compact["warnings"][-1] == "… and 4 more" and len(compact["warnings"]) == 11
     regression = {"predictions": [{"value": 3.0, "std": 0.1}]}
     assert prediction_answer(regression)["predictions"] == [{"value": 3.0, "std": 0.1}]
+
+
+@pytest.mark.parametrize(
+    ("marks", "expected"),
+    [
+        ([0, 1, 2, 0, 1, 0], ["1", "4"]),  # the validation rows
+        ([0, 0, 2, 0, 2, 0], ["2", "4"]),  # no validation rows: the test rows
+        ([0] * 6, ["0", "1", "2", "3", "4"]),  # nothing held out: the first rows
+    ],
+)
+def test_form_samples_come_from_held_out_rows(training_dir, marks, expected):
+    from types import SimpleNamespace
+
+    from brick_dnn_core import raw_predictions, training_service
+
+    directory = training_service.dataset_dir(77)
+    directory.mkdir(parents=True)
+    rows = "".join(f"{i},{i * 2},{i % 2}\n" for i in range(len(marks)))
+    (directory / "data.csv").write_text("a,b,y\n" + rows)
+    (directory / "split.bin").write_bytes(bytes(marks))
+    run = SimpleNamespace(upload=SimpleNamespace(kind="csv", pk=77), plan={"task": "regression"})
+    preprocessing = {"columns": ["a", "b"], "target": "y", "delimiter": ","}
+    samples = raw_predictions._csv_samples(run, preprocessing)
+    assert [sample["values"]["a"] for sample in samples] == expected

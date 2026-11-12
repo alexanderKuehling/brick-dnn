@@ -175,7 +175,7 @@ class StateReporter(Reporter):
     def progress(self, progress: dict[str, Any]) -> None:
         self._update(force=False, progress=progress)
 
-    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any]) -> None:
+    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any] | None) -> None:
         line = f"Epoch {entry['epoch']}: " + ", ".join(
             f"{k} {v:.4g}" for k, v in entry.items() if k != "epoch" and v is not None
         )

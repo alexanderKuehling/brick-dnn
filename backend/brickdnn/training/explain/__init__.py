@@ -5,7 +5,8 @@ The server sends ``{"explain": {...}}`` to ``python -m brickdnn.training.predict
 
     {"method": "image",                 # see METHODS
      "plan": {...}, "preprocessing": {...},   # of the run (TrainingRun.plan, state.json)
-     "sample": {"index": 3}             # a sample of the run's validation data (pool.py),
+     "sample": {"index": 3}             # a sample of the run's validation data (data.py;
+                                        # without it: of its test or training data),
              | {"tensor": {...}}        # or a prepared input (like a prediction's)
              | null,                    # (activations of a demo run: a random input)
      "target": 2,                       # the class to explain (default: the predicted one)
@@ -298,16 +299,17 @@ class _Context:
             return {"z": z, "raw": z * std + mean, "source": "input", "index": None, "truth": None}
         index = _index(sample)
         pool = self.pool()
+        source = _pool_source(pool)
         if not 0 <= index < len(pool["val_x"]):
             raise ExplainError(
-                f"There are {len(pool['val_x'])} validation rows: 0 to {len(pool['val_x']) - 1}."
+                f"There are {len(pool['val_x'])} {source} rows: 0 to {len(pool['val_x']) - 1}."
             )
         raw = pool["val_x"][index]
         truth = pool["val_y"][index]
         return {
             "z": (raw - mean) / std,
             "raw": raw,
-            "source": "validation",
+            "source": source,
             "index": index,
             "truth": int(truth) if self.classification else float(truth),
         }
@@ -331,16 +333,17 @@ class _Context:
             return {"image": image, "unit": unit, "source": "input", "index": None, "truth": None}
         index = _index(sample)
         pool = self.pool()
+        source = _pool_source(pool)
         if not 0 <= index < len(pool["images"]):
             raise ExplainError(
-                f"There are {len(pool['images'])} validation images: 0 to {len(pool['images']) - 1}."
+                f"There are {len(pool['images'])} {source} images: 0 to {len(pool['images']) - 1}."
             )
         unit_t = torch.as_tensor(pool["images"][index]).float().div(255.0)[None]
         image = (unit_t - mean) / std
         return {
             "image": image,
             "unit": unit_t[0].numpy(),
-            "source": "validation",
+            "source": source,
             "index": index,
             "truth": int(pool["labels"][index]),
         }
@@ -475,7 +478,7 @@ class _Context:
         accuracy = float((np.argmax(probs, axis=1) == pool["labels"]).mean())
         return {
             "kind": "image",
-            "source": "validation",
+            "source": _pool_source(pool),
             "total": int(len(pool["images"])),
             "pool_accuracy": render.sig(accuracy, 3),
             "samples": samples,
@@ -515,7 +518,7 @@ class _Context:
             rows.append(row)
         answer: dict[str, Any] = {
             "kind": "tabular",
-            "source": "validation",
+            "source": _pool_source(pool),
             "total": int(len(x)),
             "columns": self.columns(),
             "target": self.preprocessing.get("target"),
@@ -859,6 +862,14 @@ class _Context:
             "filters": neural.first_conv_filters(model, analysis, attrs),
             "layers": neural.weight_histograms(model, analysis, attrs),
         }
+
+
+def _pool_source(pool: dict[str, Any]) -> str:
+    """Where the samples of the pool come from: "validation", or "test" or "training" for a
+    run without validation data (see data.py)."""
+    meta = pool.get("meta")
+    source = meta.get("source") if isinstance(meta, dict) else None
+    return source if source in ("validation", "test", "training") else "validation"
 
 
 def _index(sample: Any) -> int:

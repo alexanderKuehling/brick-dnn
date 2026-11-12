@@ -1,5 +1,7 @@
 """Samples of a run's own data for explanations: a few validation images, or validation and
-training rows of a CSV file, read again exactly as the training split them.
+training rows of a CSV file, read again exactly as the training split them. A run without
+validation data takes its test rows instead, or, without those too, its training rows (the
+pool's ``meta["source"]`` says which: "validation", "test" or "training").
 
 The training does not store its split, but it is reproducible: the same seed (the setting,
 or the one the run chose and logged), the same split functions and settings give the same
@@ -139,6 +141,16 @@ def _meta(source: str, **extra: Any) -> dict[str, Any]:
     return {"version": POOL_VERSION, "source": source, **extra}
 
 
+def _held_out(train: Any, val: Any, test: Any) -> tuple[np.ndarray, str]:
+    """The rows the samples come from and their name: the validation rows, else the test
+    rows, else (a run that holds nothing out) the training rows."""
+    if len(val):
+        return np.asarray(val), "validation"
+    if test is not None and len(test):
+        return np.asarray(test), "test"
+    return np.asarray(train), "training"
+
+
 # --------------------------------------------------------------------------- #
 # Images
 # --------------------------------------------------------------------------- #
@@ -181,8 +193,20 @@ def _builtin_images(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) 
         raise ExplainError(
             NO_DATA.format(reason=f"{spec.name} is not downloaded on this server.")
         ) from None
-    # The validation rows come from the training split (see data.builtin_data).
+    # The validation rows come from the training split (see data.builtin_data); without
+    # them the official test images (the test set) are used.
     _, val, _ = _torch_split(len(train_set.data), job.config, seed, 0.0)
+    source = "validation"
+    if len(val) == 0:
+        try:
+            train_set = open_torchvision(spec.id, root, False, download=False)
+        except TrainingError:
+            raise
+        except Exception:
+            raise ExplainError(
+                NO_DATA.format(reason=f"{spec.name} is not downloaded on this server.")
+            ) from None
+        val, source = torch.arange(len(train_set.data)), "test"
     rows = _pick(val.numpy(), POOL_IMAGES, seed)
     images = _as_nchw(train_set.data)[torch.as_tensor(rows)]
     labels = torch.as_tensor(train_set.targets, dtype=torch.long)[torch.as_tensor(rows)]
@@ -190,7 +214,7 @@ def _builtin_images(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) 
         "images": _to_network_size(images, preprocessing),
         "labels": labels.numpy(),
         "rows": rows,
-        "meta": _meta("validation", dataset=spec.name),
+        "meta": _meta(source, dataset=spec.name),
     }
 
 
@@ -210,15 +234,16 @@ def _folder_images(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) -
         raise ExplainError(NO_DATA.format(reason="the image folder has changed."))
     files = [f for names in classes.values() for f in names]
     labels = [label for label, names in enumerate(classes.values()) for _ in names]
-    _, val, _ = _torch_split(len(files), job.config, seed, job.config.test_split)
-    rows = _pick(val.numpy(), POOL_IMAGES, seed)
+    train, val, test = _torch_split(len(files), job.config, seed, job.config.test_split)
+    held, source = _held_out(train.numpy(), val.numpy(), test.numpy() if test is not None else None)
+    rows = _pick(held, POOL_IMAGES, seed)
     image = {k: preprocessing[k] for k in ("channels", "height", "width")}
     loaded = torch.stack([load_image(files[i], image, root) for i in rows.tolist()])
     return {
         "images": loaded.numpy(),
         "labels": np.asarray([labels[i] for i in rows], dtype=np.int64),
         "rows": rows,
-        "meta": _meta("validation"),
+        "meta": _meta(source),
     }
 
 
@@ -297,8 +322,10 @@ def _tabular_pool(
     target: Any,
     seed: int,
     classification: bool,
-    **meta: Any,
+    source: str = "validation",
 ) -> dict:
+    """``val_x``/``val_y``: rows of ``val`` (the held-out rows the samples come from, see
+    :func:`_held_out`), ``train_x``/``train_y``: training rows."""
     val_rows = np.sort(_pick(val, POOL_ROWS, seed))
     train_rows = np.sort(_pick(train, POOL_TRAIN_ROWS, seed + 1))
     both = np.union1d(val_rows, train_rows)
@@ -313,7 +340,7 @@ def _tabular_pool(
         "train_x": x[ti],
         "train_y": y[ti].astype(dtype),
         "rows": val_rows,
-        "meta": _meta("validation", columns=csv_columns(info)),
+        "meta": _meta(source, columns=csv_columns(info)),
     }
 
 
@@ -333,16 +360,17 @@ def _neural_rows(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) -> 
     generator = torch.Generator().manual_seed(seed)
     if info.predefined_split is not None:
         split = read_split_file(path, n, info.predefined_split)
-        train, val, _ = predefined_split_indices(split, job.config.max_samples, generator)
+        train, val, test = predefined_split_indices(split, job.config.max_samples, generator)
     else:
-        train, val, _ = _torch_split(n, job.config, seed, job.config.test_split)
+        train, val, test = _torch_split(n, job.config, seed, job.config.test_split)
     classification = plan.targets[0]["kind"] == "class"
     if classification:
         mode = "labels" if info.target_kind == "text" else "indices"
         target = _class_target(list(info.class_names or []), mode)
     else:
         target = _value_target
-    return _tabular_pool(path, info, train.numpy(), val.numpy(), target, seed, classification)
+    held, source = _held_out(train.numpy(), val.numpy(), test.numpy() if test is not None else None)
+    return _tabular_pool(path, info, train.numpy(), held, target, seed, classification, source)
 
 
 def _classical_rows(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) -> dict:
@@ -366,11 +394,12 @@ def _classical_rows(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) 
         shim.classification = classification
         shim.num_classes = plan.num_classes or 0
         x, y = _ClassicalRun._demo(shim, plan.inputs[0]["shape"][0])
-        train, val, _ = _ClassicalRun._random_split(shim, len(x), job.config.max_samples)
+        train, val, test = _ClassicalRun._random_split(shim, len(x), job.config.max_samples)
         limit = int(plan.classical["max_rows"])
         if len(train) > limit:
-            train, val, _ = _ClassicalRun._random_split(shim, len(x), limit)
-        val_rows = np.sort(_pick(val, POOL_ROWS, seed))
+            train, val, test = _ClassicalRun._random_split(shim, len(x), limit)
+        held, source = _held_out(train, val, test)
+        val_rows = np.sort(_pick(held, POOL_ROWS, seed))
         train_rows = np.sort(_pick(train, POOL_TRAIN_ROWS, seed + 1))
         n = x.shape[1]
         return {
@@ -379,7 +408,7 @@ def _classical_rows(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) 
             "train_x": x[train_rows],
             "train_y": y[train_rows],
             "rows": val_rows,
-            "meta": _meta("validation", columns=[*(f"x{i + 1}" for i in range(n)), "y"]),
+            "meta": _meta(source, columns=[*(f"x{i + 1}" for i in range(n)), "y"]),
         }
     path = _csv_path(job)
     n = info.num_samples or 0
@@ -393,18 +422,17 @@ def _classical_rows(job: TrainingJob, seed: int, preprocessing: dict[str, Any]) 
         def split(max_samples: int | None) -> Any:
             return _ClassicalRun._random_split(shim, n, max_samples)
 
-    train, val, _ = split(job.config.max_samples)
+    train, val, test = split(job.config.max_samples)
     limit = int(plan.classical["max_rows"])
     if len(train) > limit:
-        train, val, _ = split(limit)
+        train, val, test = split(limit)
+    held, source = _held_out(train, val, test)
     if classification:
         mode = str(plan.classical.get("class_targets") or "indices")
         target = _class_target(list(plan.class_names or []), mode)
     else:
         target = _value_target
-    return _tabular_pool(
-        path, info, np.asarray(train), np.asarray(val), target, seed, classification
-    )
+    return _tabular_pool(path, info, np.asarray(train), held, target, seed, classification, source)
 
 
 class _SplitShim:

@@ -53,6 +53,20 @@ def classical_max_rows(limit: str) -> int:
     return value if value >= 10 else default
 
 
+# Without validation data (a validation split of 0, or a prepared split without validation
+# rows) a training keeps the weights of its last epoch; these need validation data.
+NO_VALIDATION_PATIENCE = (
+    "Early stopping needs validation data: it stops when the validation loss no longer "
+    "improves. Set a validation split above 0 (for a dataset from the Data tab: a validation "
+    "share above 0 there), or turn early stopping off."
+)
+NO_VALIDATION_SEARCH = (
+    "A hyperparameter search needs validation data: it compares its trials by their "
+    "validation loss. Set a validation split above 0 (for a dataset from the Data tab: a "
+    "validation share above 0 there), or train without a search."
+)
+
+
 class ConfigError(ValueError):
     """Raised for invalid training settings. The message is shown to the user."""
 
@@ -122,6 +136,8 @@ class TrainingConfig:
     optimizer: str = "adam"
     weight_decay: float = 0.0
     # Share of the data held out for validation (built-in datasets: of their training split).
+    # 0: no validation data; then the weights of the last epoch are kept, and early stopping
+    # and hyperparameter searches are not possible (they compare validation losses).
     val_split: float = 0.2
     # Share of the data held out as a test set (0: none). The test set is only used
     # once, after training, to measure the kept weights. Built-in datasets do not use it:
@@ -152,7 +168,7 @@ class TrainingConfig:
             data = {}
         if not isinstance(data, dict):
             raise ConfigError("The training settings must be an object.")
-        val_split = _float(data, "val_split", "Validation split", cls.val_split, 0.05, 0.5, False)
+        val_split = _float(data, "val_split", "Validation split", cls.val_split, 0.0, 0.5, False)
         test_split = _float(data, "test_split", "Test split", cls.test_split, 0.0, 0.5, False)
         if val_split + test_split > MAX_HELD_OUT + 1e-9:
             raise ConfigError(

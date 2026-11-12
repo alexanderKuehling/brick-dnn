@@ -262,31 +262,36 @@ class _ClassicalRun:
         reporter.log(f"Fitted the {what} on {len(data.train):,} rows in {_seconds(fit_seconds)}.")
 
         reporter.status("running", "Measuring the fitted model …")
-        trained = self._metrics(data.train)
-        val_predictions = self._predictions(data.val)
-        validated = self._metrics(data.val, val_predictions)
+        train_predictions = self._predictions(data.train)
+        trained = self._metrics(data.train, train_predictions)
+        # Without validation rows (a validation split of 0) only the training and test rows
+        # are measured.
+        val_predictions = self._predictions(data.val) if len(data.val) else None
+        validated: dict[str, Any] = (
+            self._metrics(data.val, val_predictions) if val_predictions is not None else {}
+        )
         entry: dict[str, Any] = {
             "epoch": 1,
             "train_loss": trained["loss"],
-            "val_loss": validated["loss"],
+            "val_loss": validated.get("loss"),
             "train_accuracy": trained["accuracy"],
-            "val_accuracy": validated["accuracy"],
+            "val_accuracy": validated.get("accuracy"),
             "seconds": round(time.perf_counter() - started, 3),
         }
         if not self.classification:
-            entry["val_rmse"] = validated["rmse"]
-            entry["val_r2"] = validated["r2"]
+            entry["val_rmse"] = validated.get("rmse")
+            entry["val_r2"] = validated.get("r2")
         self.history = [entry]
-        self.best = {
-            "epoch": 1,
-            "val_loss": entry["val_loss"],
-            "val_accuracy": entry["val_accuracy"],
-        }
+        self.best = (
+            {"epoch": 1, "val_loss": entry["val_loss"], "val_accuracy": entry["val_accuracy"]}
+            if validated
+            else None
+        )
         self.details.update(fit_seconds=round(fit_seconds, 3), train=trained, **self._learned())
         if self.layer.scale == "gaussian_process":
             self.details["at_bounds"] = self._at_bounds(analysis)
         reporter.setup({"classical": dict(self.details), "preprocessing": self._preprocessing()})
-        reporter.epoch_end(dict(entry), dict(self.best))
+        reporter.epoch_end(dict(entry), dict(self.best) if self.best else None)
         reporter.weights_kept({"weights_epoch": 1, "stopped_early": False})
         test_predictions = None
         if data.test is not None:
@@ -294,18 +299,23 @@ class _ClassicalRun:
             test_predictions = self._predictions(data.test)
             self.test_result = self._metrics(data.test, test_predictions)
             reporter.test_end(dict(self.test_result))
-        self._report_evaluation(trained, validated, val_predictions, test_predictions)
+        self._report_evaluation(
+            trained, train_predictions, validated, val_predictions, test_predictions
+        )
         self.saved = self._save()
 
     def _report_evaluation(
         self,
         trained: dict[str, Any],
+        train_predictions: np.ndarray,
         validated: dict[str, Any],
-        val_predictions: np.ndarray,
+        val_predictions: np.ndarray | None,
         test_predictions: np.ndarray | None,
     ) -> None:
         """The final evaluation of the fitted model (state.json key ``evaluation``, see
-        evaluation.py) from the predictions that were already made. Never fails the run."""
+        evaluation.py) from the predictions that were already made: validation and test
+        rows, or the training rows (optimistic) when there are neither. Never fails the
+        run."""
         try:
             from .evaluation import (
                 ClassificationCounter,
@@ -327,15 +337,22 @@ class _ClassicalRun:
             test = None
             if data.test is not None and test_predictions is not None and self.test_result:
                 test = split(data.test, test_predictions, self.test_result["loss"])
+            val = None
+            if val_predictions is not None:
+                val = split(data.val, val_predictions, validated["loss"])
+            training = None
+            if val is None and test is None:
+                training = split(data.train, train_predictions, trained["loss"])
             result = evaluation(
                 "classification" if self.classification else "regression",
-                split(data.val, val_predictions, validated["loss"]),
+                val,
                 test,
                 {"loss": trained["loss"], "accuracy": trained["accuracy"]},
                 class_names=class_names_for(self.plan.class_names, self.num_classes)
                 if self.classification
                 else None,
                 epoch=1,
+                training=training,
             )
             self.reporter.evaluation_end(result)
         except Exception as exc:
@@ -343,9 +360,15 @@ class _ClassicalRun:
             self.reporter.log(f"The final evaluation failed: {short_error(exc)}")
 
     def _summary(self) -> str:
-        text = f"Finished: {self._metrics_text('validation', self.history[0], 'val_')}"
+        parts = []
+        if self.history[0]["val_loss"] is not None:
+            parts.append(self._metrics_text("validation", self.history[0], "val_"))
         if self.test_result is not None:
-            text += f"; {self._metrics_text('test', self.test_result)}"
+            parts.append(self._metrics_text("test", self.test_result))
+        if not parts:  # no validation and no test rows
+            training = self._metrics_text("training", self.details["train"])
+            parts.append(f"{training} (on the training rows, optimistic)")
+        text = f"Finished: {'; '.join(parts)}"
         seconds = self.details["fit_seconds"]
         return f"{text}. Fitted on {self.rows:,} rows in {_seconds(seconds)}."
 

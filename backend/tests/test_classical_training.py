@@ -360,6 +360,45 @@ def test_integer_classes_and_demo_data(tmp_path):
     assert not (tmp_path / "demo" / "model.preprocessing.json").exists()
 
 
+class EvaluationRecorder(Recorder):
+    def __init__(self):
+        super().__init__()
+        self.evaluation = None
+
+    def evaluation_end(self, result):
+        self.evaluation = result
+
+
+@pytest.mark.parametrize("test_split", [0.2, 0.0])
+def test_fit_without_validation_rows(tmp_path, test_split):
+    path = regression_csv(tmp_path / "houses.csv")
+    rec = EvaluationRecorder()
+    result, rec = run_job(
+        model_graph("SVR"),
+        inspect_csv(path),
+        tmp_path,
+        path,
+        reporter=rec,
+        val_split=0,
+        test_split=test_split,
+    )
+    assert result.status == "completed", result.message
+    assert rec.info["val_size"] == 0
+    (entry,) = rec.history
+    assert entry["val_loss"] is None and entry["val_rmse"] is None and entry["val_r2"] is None
+    assert entry["train_loss"] > 0 and rec.best is None and result.best is None
+    evaluation = rec.evaluation
+    assert evaluation["val"] is None
+    if test_split:
+        assert result.message.startswith("Finished: test RMSE ")
+        assert evaluation["test"]["size"] == 16 and evaluation["training"] is None
+    else:
+        assert result.message.startswith("Finished: training RMSE ")
+        assert "(on the training rows, optimistic)" in result.message
+        assert evaluation["test"] is None and evaluation["training"]["size"] == 80
+    assert (tmp_path / "model.joblib").exists()
+
+
 def test_prepared_dataset_uses_its_split(tmp_path):
     path = classification_csv(tmp_path / "data.csv", n=60, labels=(0, 1, 2))
     split = bytes([0] * 40 + [1] * 15 + [2] * 5)

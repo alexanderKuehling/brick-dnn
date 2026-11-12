@@ -555,6 +555,29 @@ def test_binary_training_with_one_output_channel(tmp_path):
     ) <= {0, 1}
 
 
+@pytest.mark.parametrize(
+    ("test_split", "split", "count"), [(0.25, "test", 6), (0.0, "training", 8)]
+)
+def test_training_without_validation_images(tmp_path, test_split, split, count):
+    write_files(tmp_path / "data", dataset_files(24, masks="binary", classes=2))
+    job = folder_job(
+        tmp_path / "data", flat_net(classes=1), epochs=2, val_split=0, test_split=test_split
+    )
+    reporter = Recorder()
+    result = train(job, reporter, tmp_path / "weights.pt", tmp_path / "previews")
+    assert result.status == "completed", result.message
+    assert reporter.info["val_size"] == 0
+    assert all(e["val_loss"] is None and e["val_iou"] is None for e in result.history)
+    assert result.weights_epoch == 2 and reporter.best is None
+    details = reporter.segmentation
+    assert details["validation"] is None
+    assert (details["test"] is not None) == (test_split > 0)
+    # The previews come from the test images, or without them from the training images.
+    assert details["previews"]["split"] == split and details["previews"]["count"] == count
+    index = json.loads((tmp_path / "previews" / "index.json").read_text())
+    assert index["split"] == split
+
+
 def test_multi_class_training_ignores_marked_pixels(tmp_path):
     files = dataset_files(24)
     for index in range(24):

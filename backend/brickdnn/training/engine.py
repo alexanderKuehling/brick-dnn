@@ -31,7 +31,7 @@ import torch.nn as nn
 
 from ..codegen import generate_code
 from .compat import TrainingPlan, check_compatibility, segmentation_memory_error
-from .config import TrainingConfig
+from .config import NO_VALIDATION_SEARCH, TrainingConfig
 from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT
 from .devices import available_devices, default_device, device_label, select_device
@@ -97,12 +97,16 @@ def train(
 
     Weights are saved to ``weights_path`` when the run completes or is stopped after at
     least one optimizer step: those of the epoch with the lowest validation loss (or of the
-    last epoch without ``restore_best``); a search saves those of the best trial. The test
-    set, if any, is measured with the same weights. The outcome is reported with
-    ``reporter.finish`` and returned.
+    last epoch without ``restore_best`` or without validation data); a search saves those
+    of the best trial. The test set, if any, is measured with the same weights. The outcome
+    is reported with ``reporter.finish`` and returned.
 
-    A segmentation also writes preview images of a few validation samples into
-    ``previews_dir`` (see :mod:`.previews`) once the weights are saved.
+    Without validation data the history has no validation metrics (null), early stopping
+    is off and a search is refused (both need validation losses to compare).
+
+    A segmentation also writes preview images of a few validation samples (without
+    validation data: test or training samples) into ``previews_dir`` (see
+    :mod:`.previews`) once the weights are saved.
 
     Classical models (scikit-learn) are handed to :mod:`.classical_engine`, which saves
     the fitted model with joblib instead.
@@ -291,8 +295,9 @@ class _Run:
             return "Stopped before the training started."
         text = f"Stopped after {len(self.history)} of {self.config.epochs} epochs."
         if self.weights_epoch is not None:
+            best = self.config.restore_best and self.best is not None
             text += f" Kept the weights of epoch {self.weights_epoch}"
-            text += " (lowest validation loss)." if self.config.restore_best else "."
+            text += " (lowest validation loss)." if best else "."
         return text
 
     def _explain(self, exc: Exception) -> str:
@@ -331,33 +336,50 @@ class _Run:
         return self.history[-1] if self.history else None
 
     def _result_text(self) -> str:
-        """Validation (and test) result of the kept weights."""
+        """Validation (and test) result of the kept weights; without either, the training
+        loss (and accuracy) of the kept epoch, marked as measured on the training data."""
         kept = self._kept_entry()
         assert kept is not None
-        text = _metrics_text(
-            "validation",
-            kept["val_loss"],
-            kept["val_accuracy"],
-            kept.get("val_rmse"),
-            kept.get("val_r2"),
-            kept.get("val_iou"),
-            kept.get("val_pixel_accuracy"),
-        )
+        parts = []
+        if kept.get("val_loss") is not None:
+            parts.append(
+                _metrics_text(
+                    "validation",
+                    kept["val_loss"],
+                    kept["val_accuracy"],
+                    kept.get("val_rmse"),
+                    kept.get("val_r2"),
+                    kept.get("val_iou"),
+                    kept.get("val_pixel_accuracy"),
+                )
+            )
         if self.test_result is not None:
             test = self.test_result
-            text += "; " + _metrics_text(
-                "test",
-                test["loss"],
-                test["accuracy"],
-                test["rmse"],
-                test["r2"],
-                test.get("iou"),
-                test.get("pixel_accuracy"),
+            parts.append(
+                _metrics_text(
+                    "test",
+                    test["loss"],
+                    test["accuracy"],
+                    test["rmse"],
+                    test["r2"],
+                    test.get("iou"),
+                    test.get("pixel_accuracy"),
+                )
             )
-        return text
+        if not parts:
+            training = _metrics_text(
+                "training", kept["train_loss"], kept.get("train_accuracy"), None, None
+            )
+            parts.append(f"{training} (on the training data, optimistic)")
+        return "; ".join(parts)
 
     def _summary(self) -> str:
         result = self._result_text()
+        if not self.data.has_val:
+            return (
+                f"Finished {len(self.history)} epochs: {result}. No validation data, so the "
+                "weights of the last epoch were kept."
+            )
         last = self.history[-1]["epoch"]
         kept = self.weights_epoch
         if self.stopped_early:
@@ -448,6 +470,12 @@ class _Run:
         self.accuracy = len(targets) == 1 and targets[0]["kind"] == "class"
         self.regression = self.plan.task == "regression"
         self.segmentation = self.plan.task == "segmentation"
+        if not self.data.has_val:
+            off = "; early stopping is off" if config.patience is not None else ""
+            reporter.log(
+                "No validation data: after every epoch only the training loss is known, and "
+                f"the weights of the last epoch are kept{off}."
+            )
 
     def _loss_function(self, target: dict[str, Any]) -> nn.Module:
         if target["kind"] == "mask":
@@ -618,14 +646,17 @@ class _Run:
 
     def _fit(self) -> None:
         """Train for the planned epochs, or fewer if early stopping (``patience``) ends the
-        training. With ``restore_best``, the weights of the best epoch are copied aside."""
+        training. With ``restore_best``, the weights of the best epoch are copied aside.
+        Without validation data the validation metrics are None, there is no best epoch (the
+        last one is kept) and no early stopping."""
         epochs, patience = self.config.epochs, self.config.patience
         for epoch in range(1, epochs + 1):
             self.reporter.status("running", self._epoch_message(epoch))
             started = time.perf_counter()
             train_loss, train_acc = self._train_epoch(epoch)
-            validated = self._validate(epoch)
-            val_loss, val_acc = validated["loss"], validated["accuracy"]
+            validated = self._validate(epoch) if self.data.has_val else None
+            measured = validated or {}
+            val_loss, val_acc = measured.get("loss"), measured.get("accuracy")
             entry: dict[str, Any] = {
                 "epoch": epoch,
                 "train_loss": train_loss,
@@ -635,23 +666,28 @@ class _Run:
                 "seconds": round(time.perf_counter() - started, 3),
             }
             if self.regression:
-                entry["val_rmse"] = validated["rmse"]
-                entry["val_r2"] = validated["r2"]
+                entry["val_rmse"] = measured.get("rmse")
+                entry["val_r2"] = measured.get("r2")
             if self.segmentation:
-                entry["val_iou"] = validated["iou"]
-                entry["val_dice"] = validated["dice"]
-                entry["val_pixel_accuracy"] = validated["pixel_accuracy"]
-                self.class_results[epoch] = {
-                    key: validated[key] for key in (*SEGMENTATION_KEYS, *CLASS_KEYS)
-                }
+                entry["val_iou"] = measured.get("iou")
+                entry["val_dice"] = measured.get("dice")
+                entry["val_pixel_accuracy"] = measured.get("pixel_accuracy")
+                if validated is not None:
+                    self.class_results[epoch] = {
+                        key: validated[key] for key in (*SEGMENTATION_KEYS, *CLASS_KEYS)
+                    }
             self.history.append(entry)
-            if self.best is None or val_loss < self.best["val_loss"]:
+            if validated is not None and (
+                self.best is None or validated["loss"] < self.best["val_loss"]
+            ):
                 self.best = {"epoch": epoch, "val_loss": val_loss, "val_accuracy": val_acc}
                 if self.segmentation:
                     self.best["val_iou"] = validated["iou"]
                 if self.config.restore_best:
                     self.best_weights = self._weights_copy()
-            self.reporter.epoch_end(dict(entry), dict(self.best))
+            self.reporter.epoch_end(dict(entry), dict(self.best) if self.best else None)
+            if self.best is None:
+                continue  # no validation data: no early stopping
             if patience is not None and epoch < epochs and epoch - self.best["epoch"] >= patience:
                 self.stopped_early = True
                 self.reporter.log(
@@ -807,15 +843,21 @@ class _Run:
 
     def _report_evaluation(self) -> None:
         """Evaluate the kept weights on the validation data (the test data was collected
-        while it was tested) and report it (state.json key ``evaluation``). A failure is
-        logged and does not fail the run."""
+        while it was tested) and report it (state.json key ``evaluation``). Without
+        validation and test data the training rows are evaluated instead (``training``,
+        optimistic). A failure is logged and does not fail the run."""
         collector = self._collector()
         if collector is None:
             return
         try:
             self.reporter.status("running", "Evaluating the final model …")
-            validated = self._evaluate(self.data.val, collector.add)
+            validated = None
+            if self.data.has_val:
+                validated = self._evaluate(self.data.val, collector.add)
             tested = self.test_collector if self.test_result is not None else None
+            trained = None
+            if validated is None and tested is None:
+                trained = self._evaluate(self.data.train, collector.add)
             for part in (collector, tested):
                 if part is not None and part.error is not None:
                     raise part.error
@@ -828,7 +870,7 @@ class _Run:
                 names = class_names_for(self.plan.class_names, int(target["num_classes"]))
             result = evaluation(
                 collector.task,
-                collector.result(validated["loss"]),
+                collector.result(validated["loss"]) if validated is not None else None,
                 tested.result(self.test_result["loss"])
                 if tested is not None and self.test_result is not None
                 else None,
@@ -836,6 +878,7 @@ class _Run:
                 class_names=names,
                 epoch=self.weights_epoch,
                 trial=self.best_trial["trial"] if self.best_trial else None,
+                training=collector.result(trained["loss"]) if trained is not None else None,
             )
             self.reporter.evaluation_end(result)
         except StopTraining:
@@ -880,15 +923,22 @@ class _Run:
             self.reporter.log(f"The preview images could not be written: {short_error(exc)}")
 
     def _write_previews(self, names: list[str]) -> dict[str, Any] | None:
-        """Predict the first validation samples with the kept weights and save them as
-        images (see previews.py). Returns ``{"count", "epoch", "split"}``, or None."""
+        """Predict the first validation samples (without validation data: test, else
+        training samples) with the kept weights and save them as images (see previews.py).
+        Returns ``{"count", "epoch", "split"}``, or None."""
         model = self._kept_model()
-        if self.previews_dir is None or model is None or len(self.data.val) == 0:
+        if self.data.has_val:
+            source, split = self.data.val, "validation"
+        elif self.data.test is not None and len(self.data.test) > 0:
+            source, split = self.data.test, "test"
+        else:
+            source, split = self.data.train, "training"
+        if self.previews_dir is None or model is None or len(source) == 0:
             return None
         from .previews import PREVIEW_SAMPLES, save_previews
 
-        count = min(PREVIEW_SAMPLES, len(self.data.val))
-        inputs, targets = self.data.val.batch(torch.arange(count))
+        count = min(PREVIEW_SAMPLES, len(source))
+        inputs, targets = source.batch(torch.arange(count))
         model.eval()
         with torch.no_grad():
             out = model(*[x.to(self.device) for x in inputs])
@@ -900,7 +950,7 @@ class _Run:
         std = torch.tensor(preprocessing["std"], dtype=torch.float32).view(1, -1, 1, 1)
         pixels = ((inputs[0].cpu() * std + mean) * 255.0).round().clamp(0, 255).to(torch.uint8)
         index = save_previews(
-            self.previews_dir, pixels, targets[0], predicted, names, self.weights_epoch
+            self.previews_dir, pixels, targets[0], predicted, names, self.weights_epoch, split
         )
         if index is None:
             self.reporter.log("Preview images need Pillow: pip install pillow")
@@ -939,6 +989,8 @@ class _Search(_Run):
 
     def _execute(self) -> None:
         self._prepare_data()
+        if not self.data.has_val:
+            raise TrainingError(NO_VALIDATION_SEARCH)
         trials = self.tuning.sample(self.seed)
         self.total = len(trials)
         for index, params in enumerate(trials, start=1):

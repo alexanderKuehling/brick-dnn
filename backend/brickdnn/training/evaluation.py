@@ -1,6 +1,6 @@
 """The final evaluation of a run: metrics of the kept weights (or the fitted model) on the
-validation and the test rows, computed once at the end (state.json key ``evaluation``, see
-state.py). Needs NumPy, not PyTorch or scikit-learn: both engines hand over plain arrays.
+validation and the test rows (without either: on the training rows), computed once at the
+end (state.json key ``evaluation``, see state.py). Needs NumPy, not PyTorch or scikit-learn: both engines hand over plain arrays.
 
 Classification (one class output)
     a confusion matrix (rows: true class, columns: predicted class; counts), per class the
@@ -255,17 +255,20 @@ def regression_metrics(predicted: np.ndarray, actual: np.ndarray) -> dict[str, A
 
 def evaluation(
     task: str,
-    val: dict[str, Any],
+    val: dict[str, Any] | None,
     test: dict[str, Any] | None,
     train: dict[str, Any] | None,
     *,
     class_names: list[str] | None = None,
     epoch: int | None = None,
     trial: int | None = None,
+    training: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The ``evaluation`` of state.json (see state.py): ``task`` is "classification" or
-    "regression", ``val`` and ``test`` the results of the splits, ``train`` the loss (and
-    accuracy) of the kept epoch on the training rows."""
+    "regression", ``val`` and ``test`` the results of the splits (None if a split has no
+    rows), ``train`` the loss (and accuracy) of the kept epoch on the training rows.
+    ``training``: a run without validation and test rows is measured on its training rows
+    instead, a split result like ``val`` (optimistic: the model has seen these rows)."""
     result: dict[str, Any] = {
         "task": task,
         "epoch": epoch,
@@ -273,6 +276,7 @@ def evaluation(
         "train": train,
         "val": val,
         "test": test,
+        "training": training,
     }
     if task == "classification":
         result["class_names"] = [str(name) for name in class_names or []]

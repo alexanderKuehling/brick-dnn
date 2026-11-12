@@ -523,6 +523,49 @@ def test_validation_rows_of_a_network_are_those_of_the_training(tmp_path):
 
 
 @needs_torch
+@pytest.mark.parametrize(("test_split", "source"), [(0.25, "test"), (0.0, "training")])
+def test_runs_without_validation_rows_explain_test_or_training_rows(tmp_path, test_split, source):
+    import torch
+
+    from brickdnn.training.config import TrainingConfig
+    from brickdnn.training.data import csv_data
+    from brickdnn.training.engine import build_model
+
+    csv = moons_csv(tmp_path / "moons.csv", rows=200)
+    info = inspect_csv(csv)
+    graph = chain(("Input", {"shape": [2]}), ("Linear", {"out_features": 2}))
+    config = {"val_split": 0, "test_split": test_split}
+    directory = run_dir(tmp_path, graph, info, csv, config, log=["Random seed: 77"])
+    plan = check_compatibility(graph, info).plan
+    data = csv_data(
+        plan,
+        info,
+        csv,
+        TrainingConfig.from_dict(config),
+        Reporter(),
+        torch.Generator().manual_seed(77),
+    )
+    assert len(data.val) == 0
+    job = TrainingJob.from_dict(json.loads((directory / "job.json").read_text()))
+    pool = load_pool(directory, job, data.preprocessing)
+    held = data.test if test_split else data.train
+    assert pool["meta"]["source"] == source
+    assert set(pool["rows"].tolist()) <= set(held.indices.tolist())
+    assert len(pool["val_x"]) == min(len(held), 1000)
+
+    torch.manual_seed(0)
+    torch.save(build_model(graph).state_dict(), directory / "weights.pt")
+    answer = ask(directory, plan.to_dict(), data.preprocessing, method="samples")
+    assert answer["source"] == source and answer["total"] == len(pool["val_x"])
+    answer = ask(
+        directory, plan.to_dict(), data.preprocessing, method="tabular", sample={"index": 0}
+    )
+    assert answer["sample"]["source"] == source
+    answer = ask(directory, plan.to_dict(), data.preprocessing, method="permutation")
+    assert answer["rows"] == len(pool["val_x"])
+
+
+@needs_torch
 def test_demo_runs_show_activations_of_a_random_input(tmp_path):
     import torch
 

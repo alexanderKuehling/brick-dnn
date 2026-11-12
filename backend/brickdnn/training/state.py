@@ -45,13 +45,17 @@ Every run lives in its own directory::
                                      # and "val_r2" (coefficient of determination; null if
                                      # the validation targets are all equal); segmentation
                                      # runs add "val_iou" and "val_dice" (means over the
-                                     # classes that occur) and "val_pixel_accuracy"
+                                     # classes that occur) and "val_pixel_accuracy";
+                                     # without validation data (val_size 0) every val_*
+                                     # value is null
       "progress": {"epoch": 2, "step": 120, "steps": 938, "loss": 0.21,
                    "samples_per_second": 5400.0},          # null outside of an epoch
       "best": {"epoch": 1, "val_loss": 0.15, "val_accuracy": 0.95},  # lowest val_loss
-                                     # (segmentation: also "val_iou" of that epoch)
-      "weights_epoch": 1,            # the epoch whose weights are tested and saved: the
-                                     # best one (restore_best) or the last one; null until
+                                     # (segmentation: also "val_iou" of that epoch); null
+                                     # without validation data
+      "weights_epoch": 1,           # the epoch whose weights are tested and saved: the
+                                     # best one (restore_best) or the last one (always
+                                     # without validation data); null until
                                      # the epochs are over, and if the saved weights are not
                                      # those of a finished epoch (stopped without restore_best)
       "stopped_early": false,        # true if early stopping (patience) ended the training
@@ -144,13 +148,15 @@ results of the kept weights per class and the preview images are in ``segmentati
                                        # finished epoch; a class entry is null for a class
                                        # that occurs neither in the masks nor the predictions
         "test": {...},                 # the same on the test set (without "epoch"), or null
-        "previews": {"count": 8, "epoch": 7, "split": "validation"}   # previews/, or null
+        "previews": {"count": 8, "epoch": 7, "split": "validation"}   # previews/, or null;
+                                       # split "test" or "training" without validation data
       }
 
 When a run with a single class output (classification) or a single value output
 (regression) completes, the kept weights (in a search: those of the best trial; classical
 models: the fitted model) are evaluated once more on the validation rows and, if there is a
-test set, on the test rows (see evaluation.py for the definitions). Stopped and failed runs
+test set, on the test rows (see evaluation.py for the definitions); a run with neither is
+evaluated on its training rows instead (``training``, optimistic). Stopped and failed runs
 and segmentations get none::
 
       "evaluation": {
@@ -161,8 +167,11 @@ and segmentations get none::
                                        # the mean over its batches, in training mode;
                                        # classical: the fitted model on its training rows);
                                        # accuracy null for regression
-        "val": {...},                  # the validation rows, see below
+        "val": {...},                  # the validation rows, see below (null without them)
         "test": {...},                 # the same on the test rows, null without a test set
+        "training": null,              # the same on the training rows, only without
+                                       # validation and test rows (optimistic: the model
+                                       # has seen them)
         # classification only:
         "class_names": ["cat", "dog", "bird"],      # the order of all lists and indices
         "matrix_classes_max": 50       # above this many classes no confusion matrix is kept

@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from brickdnn.training import TrainingConfig, check_compatibility, inspect_csv, torch_installed
+from brickdnn.training.config import NO_VALIDATION_PATIENCE, NO_VALIDATION_SEARCH
 from brickdnn.training.datasets import SPLIT_FILE
 from brickdnn.training.reporting import Reporter
 
@@ -86,6 +87,36 @@ def test_check_of_a_split_without_test_rows(tmp_path):
     ]
 
 
+# 40 rows without validation rows: every 5th row is test, the rest training.
+NO_VAL = [2 if i % 5 == 0 else 0 for i in range(40)]
+
+
+def test_check_of_a_split_without_validation_rows(tmp_path):
+    _, info = write_prepared(tmp_path, NO_VAL)
+    result = check_compatibility(mlp(2, 2), info)
+    assert result.ok, result.errors
+    assert result.warnings[0].startswith(
+        "Uses the split of the data preparation (32 training and 8 test rows, no validation set)"
+    )
+    assert result.warnings[1] == (
+        "The split of this dataset has no validation rows: after every epoch only the training "
+        "loss is known, the weights of the last epoch are kept (not those of the best epoch), "
+        "and the network is measured on the test data, once, after training."
+    )
+    # Early stopping and a search compare validation losses: refused with a clear message.
+    result = check_compatibility(mlp(2, 2), info, TrainingConfig.from_dict({"patience": 3}))
+    assert not result.ok and result.plan is None
+    assert result.errors == [NO_VALIDATION_PATIENCE]
+    result = check_compatibility(mlp(2, 2), info, tuning=True)
+    assert result.errors == [NO_VALIDATION_SEARCH]
+    # Neither validation nor test rows.
+    (tmp_path / "train-only").mkdir()
+    _, info = write_prepared(tmp_path / "train-only", [0] * 40)
+    result = check_compatibility(mlp(2, 2), info)
+    assert result.ok
+    assert "training data only (optimistic" in result.warnings[1]
+
+
 def test_check_of_ordinary_csv_files_is_unchanged(tmp_path):
     path, info = write_prepared(tmp_path, PATTERN)
     info = inspect_csv(path)  # an upload: no predefined split
@@ -100,25 +131,48 @@ def test_check_of_ordinary_csv_files_is_unchanged(tmp_path):
 
 
 class Recorder(Reporter):
-    """Keeps the facts the engine reports at the start and the test result."""
+    """Keeps the facts the engine reports at the start, the epochs, the test result and the
+    final evaluation."""
 
     def __init__(self):
         self.info: dict = {}
         self.test = None
+        self.history: list[dict] = []
+        self.best: list = []
+        self.logs: list[str] = []
+        self.kept = None
+        self.evaluation = None
 
     def setup(self, info):
         self.info.update(info)
 
+    def log(self, line):
+        self.logs.append(line)
+
+    def epoch_end(self, entry, best):
+        self.history.append(entry)
+        self.best.append(best)
+
+    def weights_kept(self, result):
+        self.kept = result
+
     def test_end(self, result):
         self.test = result
 
+    def evaluation_end(self, result):
+        self.evaluation = result
 
-def run_job(graph, info, path, tmp_path, **settings):
+
+def run_job(graph, info, path, tmp_path, tuning=None, **settings):
     from brickdnn.training.engine import TrainingJob, train
 
     values = {"epochs": 1, "batch_size": 8, "device": "cpu", "seed": 0, **settings}
     job = TrainingJob(
-        graph=graph, dataset=info, config=TrainingConfig.from_dict(values), path=str(path)
+        graph=graph,
+        dataset=info,
+        config=TrainingConfig.from_dict(values),
+        path=str(path),
+        tuning=tuning,
     )
     reporter = Recorder()
     result = train(job, reporter, tmp_path / "weights.pt")
@@ -197,9 +251,9 @@ def test_predefined_split_indices_stay_in_their_part():
         (bytes(PATTERN[:-1]), None, "does not match its rows"),
         (bytes([3, *PATTERN[1:]]), None, "does not match its rows"),
         (bytes(PATTERN), [30, 5, 5], "does not match its rows"),
-        (bytes([0] * 40), [40, 0, 0], "needs training and validation rows"),
+        (bytes([1] * 40), [0, 40, 0], "has no training rows"),
     ],
-    ids=["missing", "too-short", "bad-value", "other-counts", "no-validation"],
+    ids=["missing", "too-short", "bad-value", "other-counts", "no-training"],
 )
 def test_broken_split_files(tmp_path, split_bytes, counts, message):
     path, info = write_prepared(tmp_path, PATTERN, split_bytes=split_bytes or b"")
@@ -210,6 +264,82 @@ def test_broken_split_files(tmp_path, split_bytes, counts, message):
     result, _ = run_job(mlp(2, 2), info, path, tmp_path)
     assert result.status == "failed"
     assert message in result.message
+
+
+@needs_torch
+def test_training_without_validation_rows_keeps_the_last_epoch(tmp_path):
+    path, info = write_prepared(tmp_path, NO_VAL)
+    result, rec = run_job(mlp(2, 2), info, path, tmp_path, epochs=3, restore_best=True)
+    assert result.status == "completed", result.message
+    assert (rec.info["train_size"], rec.info["val_size"], rec.info["test_size"]) == (32, 0, 8)
+    # Every epoch: training loss and accuracy, no validation metrics, no best epoch.
+    assert [e["epoch"] for e in rec.history] == [1, 2, 3]
+    for entry in rec.history:
+        assert entry["val_loss"] is None and entry["val_accuracy"] is None
+        assert entry["train_loss"] > 0 and 0 <= entry["train_accuracy"] <= 1
+    assert rec.best == [None, None, None]
+    assert rec.kept == {"weights_epoch": 3, "stopped_early": False}
+    assert result.weights_epoch == 3 and result.best is None
+    assert any("No validation data" in line for line in rec.logs)
+    assert result.message.startswith("Finished 3 epochs: test accuracy ")
+    assert result.message.endswith(
+        "No validation data, so the weights of the last epoch were kept."
+    )
+    # The final evaluation: only the test rows.
+    evaluation = rec.evaluation
+    assert evaluation["val"] is None and evaluation["training"] is None
+    assert evaluation["test"]["size"] == 8 and evaluation["epoch"] == 3
+
+    # The saved weights predict like those of any other run.
+    from brickdnn.training import inference, predict
+    from brickdnn.training.state import write_job
+
+    write_job(tmp_path, {"graph": mlp(2, 2)})
+    plan = check_compatibility(mlp(2, 2), info).plan.to_dict()
+    pre = rec.info["preprocessing"]
+    prepared = inference.prepare_inputs(plan, pre, [{"a": 3, "b": 1}, {"a": 30, "b": 4}])
+    answer = predict.predict(tmp_path, {"inputs": prepared.tensors, "kind": prepared.kind})
+    predictions = inference.read_outputs(plan, pre, answer["outputs"], 2)
+    assert {p["class"] for p in predictions} <= {"no", "yes"}
+
+
+@needs_torch
+def test_training_without_validation_and_test_rows(tmp_path):
+    path, info = write_prepared(tmp_path, [0] * 40, classes=False)
+    result, rec = run_job(mlp(2, 1), info, path, tmp_path, epochs=2, patience=1)
+    assert result.status == "completed", result.message
+    assert (rec.info["val_size"], rec.info["test_size"]) == (0, None)
+    assert len(rec.history) == 2  # early stopping is off without validation data
+    assert all(e["val_loss"] is None and e["val_rmse"] is None for e in rec.history)
+    assert any("early stopping is off" in line for line in rec.logs)
+    assert rec.test is None
+    assert (
+        "training loss" in result.message and "(on the training data, optimistic)" in result.message
+    )
+    evaluation = rec.evaluation
+    assert evaluation["val"] is None and evaluation["test"] is None
+    assert evaluation["training"]["size"] == 40 and evaluation["training"]["rmse"] is not None
+
+
+@needs_torch
+def test_search_without_validation_rows_is_refused(tmp_path):
+    from brickdnn.training.tuning import TuningConfig
+
+    path, info = write_prepared(tmp_path, NO_VAL)
+    tuning = TuningConfig.from_dict({"method": "random", "trials": 2})
+    result, _ = run_job(mlp(2, 2), info, path, tmp_path, tuning=tuning)
+    assert result.status == "failed" and result.message == NO_VALIDATION_SEARCH
+
+
+@needs_torch
+def test_training_with_validation_rows_is_unchanged(tmp_path):
+    path, info = write_prepared(tmp_path, PATTERN)
+    result, rec = run_job(mlp(2, 2), info, path, tmp_path, epochs=2)
+    assert result.status == "completed", result.message
+    assert all(e["val_loss"] is not None for e in rec.history)
+    assert all(best is not None for best in rec.best)
+    assert rec.evaluation["val"]["size"] == 8 and rec.evaluation["training"] is None
+    assert not any("No validation data" in line for line in rec.logs)
 
 
 # --------------------------------------------------------------------------- #

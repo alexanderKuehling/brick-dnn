@@ -1,5 +1,6 @@
 """Preview images of a segmentation run: what the trained network predicts for a few
-validation images (needs PyTorch and Pillow).
+validation images, or test or training images when there is no validation data (needs
+PyTorch and Pillow).
 
 They are written into a folder next to the weights (``previews/`` in a run directory)::
 
@@ -51,6 +52,7 @@ def save_previews(
     predicted: torch.Tensor,
     class_names: list[str],
     epoch: int | None,
+    split: str = "validation",
 ) -> dict[str, Any] | None:
     """Write the preview images of some samples and their index; returns the index, or None
     if Pillow is missing.
@@ -66,7 +68,8 @@ def save_previews(
                       "iou": 0.81, "pixel_accuracy": 0.97, "classes": [0, 2]}]}
 
     ``iou`` is the mean IoU of the sample over the classes in its mask or prediction,
-    ``classes`` are those classes.
+    ``classes`` are those classes. ``split`` says where the images come from: "validation",
+    or "test" or "training" for a run without validation data.
     """
     try:
         from PIL import Image
@@ -121,7 +124,7 @@ def save_previews(
         )
     index = {
         "epoch": epoch,
-        "split": "validation",
+        "split": split,
         "width": size[0],
         "height": size[1],
         "input_size": [height, width],

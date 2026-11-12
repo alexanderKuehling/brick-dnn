@@ -109,7 +109,8 @@ def test_config_early_stopping_and_best_weights():
         ({"learning_rate": 0}, "Learning rate must be greater than 0 and at most 10."),
         ({"learning_rate": "nan"}, "Learning rate must be greater than 0"),
         ({"weight_decay": -0.1}, "Weight decay must be at least 0 and at most 1."),
-        ({"val_split": 0.9}, "Validation split must be at least 0.05 and at most 0.5."),
+        ({"val_split": 0.9}, "Validation split must be at least 0 and at most 0.5."),
+        ({"val_split": -0.1}, "Validation split must be at least 0 and at most 0.5."),
         ({"test_split": 0.6}, "Test split must be at least 0 and at most 0.5."),
         ({"test_split": -0.1}, "Test split must be at least 0 and at most 0.5."),
         (

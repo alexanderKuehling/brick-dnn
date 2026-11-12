@@ -526,7 +526,8 @@ def _class_split(part: dict[str, Any], names: list[str]) -> dict[str, Any]:
 
 def evaluation_summary(found: dict[str, Any]) -> dict[str, Any]:
     """The final evaluation of a run, compact: the overall numbers of the validation and the
-    test rows; for classification up to MAX_MATRIX_CLASSES classes also the confusion
+    test rows (without either: of the training rows, ``training_optimistic``); for
+    classification up to MAX_MATRIX_CLASSES classes also the confusion
     matrix and the values per class, with more classes the most confused pairs and the
     classes with the lowest F1 score; for regression without the sample of points."""
     classification = found.get("task") == "classification"
@@ -537,7 +538,9 @@ def evaluation_summary(found: dict[str, Any]) -> dict[str, Any]:
         "trial": found.get("trial"),
         "train": _no_none(_rounded(found.get("train") or {})) or None,
     }
-    for key, label in (("val", "validation"), ("test", "test")):
+    # Without validation and test rows the model is measured on its training rows.
+    parts = (("val", "validation"), ("test", "test"), ("training", "training_optimistic"))
+    for key, label in parts:
         part = found.get(key)
         if not isinstance(part, dict):
             continue

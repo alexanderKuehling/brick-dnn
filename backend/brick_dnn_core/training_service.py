@@ -181,7 +181,7 @@ STOP_TIMEOUT_SECONDS = 30
 # run is given up. Wall-clock based heartbeats look stale right after a laptop wakes up.
 STALE_GRACE_SECONDS = 15
 # val_rmse, val_r2, test_rmse and test_r2: regression only (None otherwise)
-METRIC_KEYS = ("train_loss", "val_loss", "val_accuracy", "val_rmse", "val_r2")
+METRIC_KEYS = ("train_loss", "train_accuracy", "val_loss", "val_accuracy", "val_rmse", "val_r2")
 TEST_KEYS = {
     "test_loss": "loss",
     "test_accuracy": "accuracy",
@@ -653,11 +653,15 @@ def budget_check(
 
 
 def check(
-    graph: Any, dataset: ResolvedDataset, config: TrainingConfig | None = None
+    graph: Any,
+    dataset: ResolvedDataset,
+    config: TrainingConfig | None = None,
+    search: TuningConfig | None = None,
 ) -> Compatibility:
     """check_compatibility() plus checks that depend on this server. For a graph document
-    (not an :class:`Analysis`), the result suggests fixes as well."""
-    result = check_compatibility(graph, dataset.info, config)
+    (not an :class:`Analysis`), the result suggests fixes as well. ``search``: the run is a
+    hyperparameter search (it needs validation data)."""
+    result = check_compatibility(graph, dataset.info, config, tuning=search is not None)
     family = graph.family if isinstance(graph, Analysis) else graph_family(graph)
     if family == "classical":
         reason = unavailable_reason("classical")
@@ -779,7 +783,7 @@ def start_run(
         raise TrainingInputError(NO_TUNING_MESSAGE)
     dataset = resolve_dataset(user, dataset_ref)
     analysis = analyze(graph)
-    compatibility = check(analysis, dataset, training_config)
+    compatibility = check(analysis, dataset, training_config, search)
     if not compatibility.ok:
         raise IncompatibleNetwork(compatibility)
     assert compatibility.plan is not None

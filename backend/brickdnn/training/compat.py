@@ -18,10 +18,16 @@ from typing import Any
 
 from ..graph import Analysis, analyze
 from ..layers import ClassicalModel, fmt_shape
-from .config import TrainingConfig, classical_max_rows, segmentation_memory_bytes
+from .config import (
+    NO_VALIDATION_PATIENCE,
+    NO_VALIDATION_SEARCH,
+    TrainingConfig,
+    classical_max_rows,
+    segmentation_memory_bytes,
+)
 from .datasets import BUILTIN_DATASETS, MAX_CLASSES, DatasetInfo
 from .reporting import TrainingError
-from .tabular import split_sizes
+from .tabular import has_validation, split_sizes
 
 MAX_IMAGE_SIDE = 1024
 # A flat Input takes images of an image folder only if they are at least this many pixels wide
@@ -126,20 +132,79 @@ def _count(n: int | None, word: str) -> str:
 
 
 def check_compatibility(
-    graph: Any, dataset: DatasetInfo, config: TrainingConfig | None = None
+    graph: Any,
+    dataset: DatasetInfo,
+    config: TrainingConfig | None = None,
+    *,
+    tuning: bool = False,
 ) -> Compatibility:
     """Check ``graph`` (a graph document or an :class:`Analysis`) against ``dataset``.
 
     For a graph document, ``fixes`` are suggested as well (an analysis cannot be changed).
     ``config`` (optional) adds the checks that depend on the training settings, e.g. the
-    row limit of classical models against Max. samples.
+    row limit of classical models against Max. samples. Without validation data (see
+    :func:`.tabular.has_validation`) there is a warning, and early stopping (``patience``)
+    and a hyperparameter search (``tuning``) are errors.
     """
     if isinstance(graph, Analysis):
-        return _check(graph, dataset, config)
+        result = _check(graph, dataset, config)
+        _check_validation(result, graph, dataset, config, tuning)
+        return result
     analysis = analyze(graph)
     result = _check(analysis, dataset, config)
+    _check_validation(result, analysis, dataset, config, tuning)
     result.fixes = suggest_fixes(graph, dataset, analysis, result)
     return result
+
+
+def _check_validation(
+    result: Compatibility,
+    analysis: Analysis,
+    dataset: DatasetInfo,
+    config: TrainingConfig | None,
+    tuning: bool,
+) -> None:
+    """What changes without validation data: a warning, and errors for the settings that
+    need it (early stopping, a hyperparameter search)."""
+    if not analysis.valid or result.errors:
+        return
+    config = config or TrainingConfig()
+    if has_validation(dataset, config.val_split):
+        return
+    classical = analysis.family == "classical"
+    prepared = dataset.predefined_split is not None
+    builtin = dataset.kind == "builtin"
+    test = (
+        int([*dataset.predefined_split, 0, 0, 0][2]) > 0
+        if prepared
+        else builtin or config.test_split > 0
+    )
+    where = (
+        "The split of this dataset has no validation rows"
+        if prepared
+        else "The validation split is 0"
+    )
+    if classical:
+        measured = "the test rows" if test else "its training rows (optimistic)"
+        result.warnings.append(f"{where}: the fitted model is measured on {measured} only.")
+        return
+    measured = (
+        "the test data, once, after training"
+        if test
+        else "the training data only (optimistic: you cannot judge how well the network "
+        "works on new data)"
+    )
+    result.warnings.append(
+        f"{where}: after every epoch only the training loss is known, the weights of the last "
+        f"epoch are kept (not those of the best epoch), and the network is measured on "
+        f"{measured}."
+    )
+    if config.patience is not None:
+        result.errors.append(NO_VALIDATION_PATIENCE)
+    if tuning:
+        result.errors.append(NO_VALIDATION_SEARCH)
+    if result.errors:
+        result.plan = None
 
 
 def _check(
@@ -279,10 +344,14 @@ def _shown(names: list[str], limit: int = 6) -> str:
 
 def _predefined_split_note(counts: list[int]) -> str:
     train, val, test = [*counts, 0, 0, 0][:3]
-    if test:
+    if test and val:
         parts = f"{train:,} training, {val:,} validation and {test:,} test rows"
-    else:
+    elif val:
         parts = f"{train:,} training and {val:,} validation rows, no test set"
+    elif test:
+        parts = f"{train:,} training and {test:,} test rows, no validation set"
+    else:
+        parts = f"{train:,} training rows, no validation and no test set"
     return (
         f"Uses the split of the data preparation ({parts}); the validation and test split "
         "settings are ignored."

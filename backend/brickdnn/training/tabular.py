@@ -71,8 +71,19 @@ def csv_rows(path: Path, info: DatasetInfo) -> Iterator[tuple[str, int, Iterator
 
 def held_out_size(max_samples: int, share: float, train_share: float) -> int:
     """Validation or test samples that go with ``max_samples`` training samples, so that
-    they keep the proportion ``share : train_share``."""
+    they keep the proportion ``share : train_share`` (none for a share of 0)."""
+    if share <= 0:
+        return 0
     return max(1, round(max_samples * share / train_share))
+
+
+def has_validation(info: DatasetInfo, val_split: float) -> bool:
+    """Whether a training on ``info`` gets validation data: the validation rows of the split
+    of a prepared dataset (or of the folders of a segmentation), otherwise ``val_split``."""
+    if info.predefined_split is not None:
+        counts = [*info.predefined_split, 0, 0][:3]
+        return int(counts[1]) > 0
+    return val_split > 0
 
 
 def val_size_for(max_samples: int, val_split: float) -> int:
@@ -81,20 +92,26 @@ def val_size_for(max_samples: int, val_split: float) -> int:
 
 
 def split_sizes(n: int, val_split: float, test_split: float) -> tuple[int, int, int]:
-    """Numbers of training, validation and test samples (each part gets at least one)."""
-    need = 3 if test_split > 0 else 2
-    if n < need:
-        parts = "training + validation + test" if test_split > 0 else "training + validation"
-        raise TrainingError(f"The dataset needs at least {need} samples ({parts}).")
-    n_test = min(max(1, round(n * test_split)), n - 2) if test_split > 0 else 0
-    n_val = min(max(1, round(n * val_split)), n - n_test - 1)
+    """Numbers of training, validation and test samples: every part with a share above 0
+    gets at least one (a share of 0 leaves its part empty)."""
+    parts = ["training"]
+    parts += ["validation"] if val_split > 0 else []
+    parts += ["test"] if test_split > 0 else []
+    if n < len(parts):
+        raise TrainingError(
+            f"The dataset needs at least {len(parts)} samples ({' + '.join(parts)})."
+        )
+    with_val = int(val_split > 0)
+    n_test = min(max(1, round(n * test_split)), n - 1 - with_val) if test_split > 0 else 0
+    n_val = min(max(1, round(n * val_split)), n - n_test - 1) if with_val else 0
     return n - n_val - n_test, n_val, n_test
 
 
 def read_split(path: Path, n: int, expected: list[int] | None = None) -> bytes:
     """The split stored with a prepared CSV file (``split.bin`` next to it): one byte per
     data row, 0 training, 1 validation, 2 test. ``expected`` are the [train, val, test]
-    counts from the dataset info."""
+    counts from the dataset info. Validation and test rows are optional, training rows are
+    not."""
     changed = TrainingError(
         "The split of this dataset (split.bin) does not match its rows. "
         "Create the dataset again in the Data tab."
@@ -113,9 +130,9 @@ def read_split(path: Path, n: int, expected: list[int] | None = None) -> bytes:
         raise changed
     if expected is not None and [int(c) for c in expected] != counts:
         raise changed
-    if counts[0] == 0 or counts[1] == 0:
+    if counts[0] == 0:
         raise TrainingError(
-            "The split of this dataset needs training and validation rows. "
+            "The split of this dataset has no training rows. "
             "Change the split in the Data tab and create the dataset again."
         )
     return raw

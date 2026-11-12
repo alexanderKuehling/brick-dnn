@@ -62,8 +62,9 @@ class Reporter:
     def progress(self, progress: dict[str, Any]) -> None:
         """``{"epoch", "step", "steps", "loss", "samples_per_second"}`` during an epoch."""
 
-    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any]) -> None:
-        """One history entry (see state.py) and the best epoch so far (of this trial)."""
+    def epoch_end(self, entry: dict[str, Any], best: dict[str, Any] | None) -> None:
+        """One history entry (see state.py) and the best epoch so far (of this trial; None
+        without validation data)."""
 
     def trial_start(self, trial: dict[str, Any]) -> None:
         """Hyperparameter search: ``{"trial", "trials", "params", "steps_per_epoch"}``
