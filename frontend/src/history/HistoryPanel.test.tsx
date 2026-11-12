@@ -1,11 +1,19 @@
 import { act, render, screen, userEvent, waitFor, within } from '@test-utils';
-import { beforeEach, vi } from 'vitest';
+import { afterAll, beforeEach, vi } from 'vitest';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type Project, type ProjectRole, type ProjectVersion } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import type { ProjectEvent } from '@/collab/events';
 import { minutesAgo, version } from '@/collab/fixtures';
 import { HistoryPanel } from './HistoryPanel';
+
+// A fixed noon: versions from "2 minutes ago" are on the same day (just after midnight they
+// were yesterday). Only Date is faked; timers run normally.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 vi.mock('@/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api')>();
