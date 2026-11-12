@@ -403,10 +403,23 @@ describe('PipelineEditor', () => {
   it('validates the split shares and updates the row counts', async () => {
     render(<Harness />);
     const val = screen.getByLabelText('Validation');
+    expect(screen.queryByTestId('held-out-hint')).not.toBeInTheDocument();
+    // 0 % is allowed: no validation rows, with a note on what that means for training.
     await userEvent.clear(val);
     await userEvent.type(val, '0');
-    expect(screen.getByText('Use more than 0 % for validation.')).toBeInTheDocument();
-    expect(settings.split.val).toBe(0.15);
+    expect(settings.split.val).toBe(0);
+    expect(screen.getByTestId('held-out-hint')).toHaveTextContent(
+      /No validation rows: training keeps the weights of the last epoch/
+    );
+    expect(screen.getByText('Validation: none')).toBeInTheDocument();
+    const test = screen.getByLabelText('Test');
+    await userEvent.clear(test);
+    await userEvent.type(test, '0');
+    expect(settings.split.test).toBe(0);
+    expect(screen.getByTestId('held-out-hint')).toHaveTextContent(/Nothing is held out/);
+    expect(screen.getByText(/Train 100 %/)).toBeInTheDocument();
+    await userEvent.clear(test);
+    await userEvent.type(test, '15');
 
     await userEvent.clear(val);
     await userEvent.type(val, '80');
