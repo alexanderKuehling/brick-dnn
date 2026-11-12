@@ -150,3 +150,18 @@
   height: auto;
   display: block;
 }
+
+/* The decision boundary as a preview in the run view. */
+.plotSmall {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  display: block;
+}
+
+/* Feature names in narrow tables: cut off with an ellipsis (the full name in the label). */
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
