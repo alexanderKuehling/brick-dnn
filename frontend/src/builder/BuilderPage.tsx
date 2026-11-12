@@ -67,6 +67,7 @@ import {
 } from './flow';
 import {
   autoLayout,
+  copySelection,
   createNode,
   freePosition,
   fromDocument,
@@ -74,10 +75,12 @@ import {
   LAYER_SPACING_Y,
   newId,
   parseGraphFile,
+  pasteClipboard,
   semanticKey,
   slugify,
   toDocument,
   wouldCreateCycle,
+  type Clipboard,
   type LayerFlowNode,
   type LayerNodeData,
 } from './graph';
@@ -621,6 +624,60 @@ function Builder() {
     [nodes, setNodes]
   );
 
+  // Ctrl+C / Ctrl+X / Ctrl+V: copy, cut and paste the selected bricks with the connections
+  // between them. The clipboard lives in this tab; each paste lands a bit further down.
+  const clipboard = useRef<{ clip: Clipboard; pastes: number } | null>(null);
+  const textSelected = () => Boolean(window.getSelection()?.toString());
+  const copyBricks = useCallback(
+    (event?: KeyboardEvent) => {
+      if (textSelected()) {
+        return false; // the browser copies the selected text
+      }
+      const clip = copySelection(nodes, edges);
+      if (!clip) {
+        return false;
+      }
+      event?.preventDefault();
+      clipboard.current = { clip, pastes: 0 };
+      return true;
+    },
+    [nodes, edges]
+  );
+  const cutBricks = useCallback(
+    (event?: KeyboardEvent) => {
+      if (readOnly || !copyBricks(event)) {
+        return;
+      }
+      const cut = new Set(clipboard.current!.clip.nodes.map((node) => node.id));
+      setNodes((current) => current.filter((node) => !cut.has(node.id)));
+      setEdges((current) =>
+        current.filter((edge) => !cut.has(edge.source) && !cut.has(edge.target))
+      );
+    },
+    [readOnly, copyBricks, setNodes, setEdges]
+  );
+  const pasteBricks = useCallback(
+    (event?: KeyboardEvent) => {
+      const stored = clipboard.current;
+      if (readOnly || !stored) {
+        return;
+      }
+      event?.preventDefault();
+      stored.pastes += 1;
+      const step = 40 * stored.pastes;
+      const pasted = pasteClipboard(stored.clip, { x: step, y: step });
+      setNodes((current) => [
+        ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+        ...pasted.nodes,
+      ]);
+      setEdges((current) => [
+        ...current.map((edge) => (edge.selected ? { ...edge, selected: false } : edge)),
+        ...pasted.edges,
+      ]);
+    },
+    [readOnly, setNodes, setEdges]
+  );
+
   /** Put a network on the (empty) canvas without leaving the open project. */
   const startNetwork = useCallback(
     (graph: GraphDocument) => {
@@ -993,6 +1050,10 @@ function Builder() {
     ['mod+S', () => (DEMO ? exportJson() : void save())],
     ['mod+E', () => void exportPython()],
     ['mod+Enter', () => !readOnly && training.open()],
+    // Not inside text fields (Mantine skips them), and Ctrl+C copies selected text as usual.
+    ['mod+C', (event) => void copyBricks(event), { preventDefault: false }],
+    ['mod+X', (event) => cutBricks(event), { preventDefault: false }],
+    ['mod+V', (event) => pasteBricks(event), { preventDefault: false }],
   ]);
 
   // ---------------------------------------------------------------- render
