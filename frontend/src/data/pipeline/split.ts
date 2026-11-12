@@ -15,16 +15,35 @@ export function percentToShare(percent: number): number {
   return Math.round(percent * 10) / 1000;
 }
 
-/** Plain-language problem with the shares, or null if they are fine. */
+/**
+ * Plain-language problem with the shares, or null if they are fine. Either share may be 0:
+ * that part stays empty.
+ */
 export function splitError(val: number, test: number): { val?: string; test?: string } | null {
-  if (!(val > 0)) {
-    return { val: 'Use more than 0 % for validation.' };
+  if (!(val >= 0)) {
+    return { val: 'Use 0 % or more.' };
   }
   if (test < 0) {
     return { test: 'Use 0 % or more.' };
   }
   if (val + test > MAX_HELD_OUT + 1e-9) {
     return { test: 'Validation and test together can be at most 90 %.' };
+  }
+  return null;
+}
+
+/**
+ * What an empty validation or test part means for training, or null when both have rows.
+ */
+export function heldOutHint(val: number, test: number): string | null {
+  if (val <= 0 && test <= 0) {
+    return 'Nothing is held out: every row is a training row, so you cannot judge how well the model works on new data. Training keeps the weights of the last epoch, without early stopping or hyperparameter search, and its scores come from the training rows (optimistic).';
+  }
+  if (val <= 0) {
+    return 'No validation rows: training keeps the weights of the last epoch, cannot stop early or search hyperparameters, and the model is measured only on the test rows.';
+  }
+  if (test <= 0) {
+    return 'No test rows: the final scores come from the validation rows, which also chose the kept epoch, so they are a little optimistic.';
   }
   return null;
 }

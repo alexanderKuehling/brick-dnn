@@ -20,7 +20,14 @@ import {
 import type { ColumnInfo, PrepSettings, PrepTask, SplitInfo } from '@/api/types';
 import { formatCount } from '../table/format';
 import { KIND_LABELS, KindIcon } from '../table/kinds';
-import { displayedSplit, MAX_SEED, percentToShare, shareToPercent, splitError } from './split';
+import {
+  displayedSplit,
+  heldOutHint,
+  MAX_SEED,
+  percentToShare,
+  shareToPercent,
+  splitError,
+} from './split';
 import classes from './PipelineEditor.module.css';
 
 interface TargetSplitCardProps {
@@ -122,6 +129,7 @@ export function TargetSplitCard({
   const shownVal = errors ? split.val : draftVal;
   const shownTest = errors ? split.test : draftTest;
   const shown = displayedSplit(splitCounts, shownVal, shownTest);
+  const hint = heldOutHint(shownVal, shownTest);
 
   const renderOption = ({ option, checked }: ComboboxLikeRenderOptionInput<ComboboxItem>) => {
     const kind = kinds.get(option.value);
@@ -255,6 +263,11 @@ export function TargetSplitCard({
         </SimpleGrid>
 
         <SplitBar val={shownVal} test={shownTest} shown={shown} />
+        {hint && (
+          <Text size="xs" c="dimmed" data-testid="held-out-hint">
+            {hint}
+          </Text>
+        )}
 
         <SimpleGrid cols={2} spacing="sm">
           <NumberInput
@@ -415,8 +428,14 @@ function SplitBar({ val, test, shown }: SplitBarProps) {
         {parts.map((part, index) => (
           <Text key={part.key} size="xs" c="dimmed">
             <span className={classes.splitDot} data-part={part.key} aria-hidden />
-            {part.label} {shareToPercent(part.share)}&nbsp;%
-            {counts ? ` · ${prefix}${formatCount(counts[index])} rows` : ''}
+            {part.key !== 'train' && part.share <= 0 ? (
+              `${part.label}: none`
+            ) : (
+              <>
+                {part.label} {shareToPercent(part.share)}&nbsp;%
+                {counts ? ` · ${prefix}${formatCount(counts[index])} rows` : ''}
+              </>
+            )}
           </Text>
         ))}
       </Group>

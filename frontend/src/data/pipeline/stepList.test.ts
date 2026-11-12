@@ -92,7 +92,10 @@ describe('split', () => {
   it('validates the shares', () => {
     expect(splitError(0.15, 0.15)).toBeNull();
     expect(splitError(0.5, 0.4)).toBeNull();
-    expect(splitError(0, 0.15)).toEqual({ val: 'Use more than 0 % for validation.' });
+    expect(splitError(0, 0.15)).toBeNull();
+    expect(splitError(0, 0)).toBeNull();
+    expect(splitError(0.2, 0)).toBeNull();
+    expect(splitError(-0.1, 0.15)).toEqual({ val: 'Use 0 % or more.' });
     expect(splitError(0.5, 0.5)).toEqual({
       test: 'Validation and test together can be at most 90 %.',
     });
