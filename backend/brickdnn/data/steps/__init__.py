@@ -10,6 +10,7 @@ from . import (  # noqa: F401  (imported to register the steps)
     combine,
     dates,
     encode,
+    features,
     missing,
     outliers,
     row_structure,

@@ -205,6 +205,8 @@ def test_step_catalog_is_public(client):
     assert groups[0] == "combine" and "encode" in groups
     types = {s["type"] for s in response.data["steps"]}
     assert {"join", "append", "impute", "encode", "drop_columns"} <= types
+    assert {"combine_columns", "interactions", "group_features"} <= types
+    assert {"id": "features", "label": "Feature engineering"} in response.data["groups"]
 
 
 def test_api_root_lists_data_endpoints(client):

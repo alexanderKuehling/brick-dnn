@@ -445,6 +445,30 @@ def test_pandas_script_with_advanced_steps(tmp_path):
     check_script_reproduces(tmp_path, main, items, {"target": "Kündigung"})
 
 
+def test_pandas_script_with_feature_steps(tmp_path):
+    features = (
+        (
+            "combine_columns",
+            {"columns": ["age", "income", "Mitglied"], "operations": ["sum", "std", "nonzero"]},
+        ),
+        ("interactions", {"columns": ["age", "income"], "operations": ["divide", "multiply"]}),
+        (
+            "group_features",
+            {
+                "group_by": ["Stadt", "Mitglied"],
+                "value": "income",
+                "stats": ["mean", "rows", "ratio_mean"],
+                "unseen": "missing",
+            },
+        ),
+    )
+    main = customers_table()
+    items = (*BASIC_STEPS[:10], *features, *BASIC_STEPS[10:])
+    script = check_script_reproduces(tmp_path, main, items, {"target": "Kündigung"})
+    assert script.count("def combine_rows(") == 1 and script.count("def group_lookup(") == 1
+    assert "# 13. Group statistics (values learned from the training rows)" in script
+
+
 def test_prepare_works_on_new_data(tmp_path):
     main = customers_table()
     items = (  # without the join
