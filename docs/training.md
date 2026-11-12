@@ -55,6 +55,11 @@ stored per user.
 6. When the run is finished (or stopped), download the **weights** (`.pt`) and the matching
    **script** (`.py`).
 
+The panel can be widened to the full width of the window with the button next to its close
+button (and back); the browser remembers the choice. At full width the run view shows its
+results on the left and the [explanations](explain.md) on the right. On phones the panel
+always fills the screen.
+
 All runs are kept in the **History** tab together with the exact network that was trained.
 With Docker Compose, trainings wait in a [queue](#the-training-queue) and a worker trains
 them one after the other; without it, the web server trains itself, one training at a time
@@ -531,11 +536,14 @@ use the weights* shows the same in Python: `output.argmax(dim=1)` is the class o
 
 ### Explaining the trained model
 
-**Explain** in a finished run opens explanations of the trained model and views inside it:
+**Explain the model** under the name of a finished run opens explanations of the trained
+model and views inside it:
 saliency maps, Grad-CAM and occlusion for images, Shapley values, integrated gradients and
 permutation importance for CSV data, decision boundaries for models with two input features,
-the output of every brick for one sample, the learned filters and weight histograms. They run
-like predictions (and count as such); see [explain.md](explain.md).
+the output of every brick for one sample, the learned filters and weight histograms. The run
+view previews the most telling of them in *Why the model decides* (feature importance,
+decision boundary, Grad-CAM of a few validation images). They run like predictions (and count
+as such); see [explain.md](explain.md).
 
 ## Classical models
 
