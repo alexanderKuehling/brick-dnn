@@ -1,6 +1,6 @@
 import { act, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -23,6 +23,15 @@ vi.mock('@/api', async (importOriginal) => {
       projects: { get: vi.fn() },
     },
   };
+});
+
+// A fixed noon: entries from "2 minutes ago" are on the same day (just after midnight they
+// were yesterday, and the page then rightly said "Yesterday"). Only Date is faked; timers
+// (polling, waitFor) run normally.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
