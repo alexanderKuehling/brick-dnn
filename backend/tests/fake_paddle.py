@@ -31,6 +31,8 @@ class FakePaddle:
         # Method name -> the exception its next calls raise (until removed).
         self.failing: dict[str, Exception] = {}
         self.portal_sessions = 0
+        # The difference of an upgrade is below Paddle's minimum charge (e.g. after credits).
+        self.below_charge_limit = False
         self._ids = itertools.count(1)
         # Paddle's clock: every change moves it on a second, so that later is later.
         self.now = timezone.now().replace(microsecond=0) - timedelta(minutes=5)
@@ -117,6 +119,9 @@ class FakePaddle:
     ) -> dict[str, Any]:
         self._call("change_price", subscription_id, price_id, proration, preview)
         subscription = self.subscriptions[subscription_id]
+        if self.below_charge_limit and proration == "prorated_immediately":
+            code = "subscription_update_transaction_balance_less_than_charge_limit"
+            raise PaddleError(f"Paddle answered HTTP 400 {code}", 400, code)
         if preview:
             entity = self.entity(subscription_id)
             entity["items"] = [{"status": "active", "quantity": 1, "price": {"id": price_id}}]

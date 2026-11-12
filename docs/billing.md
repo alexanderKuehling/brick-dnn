@@ -47,7 +47,8 @@ without it: no prices, no pricing page, no request to Paddle, and every billing 
    apply (uploads are refused while more is stored than the free plan allows).
 4. **The account page** ("Plan & billing") shows the plan and when it renews or ends, changes
    the plan (an upgrade is charged pro rata at once, a downgrade is credited to the next
-   invoice; the dialog shows the amount Paddle previews), cancels to the end of the paid
+   invoice; an upgrade whose charge would be below Paddle's minimum of about 70 US cents, e.g.
+   after a credit, is added to the next invoice instead; the dialog shows the amount Paddle previews), cancels to the end of the paid
    period, takes a cancellation back, and opens Paddle's customer portal for the payment
    method and the invoices.
 5. **Once a day** the `cleanup` service runs `manage.py billing_sync`: it asks Paddle for

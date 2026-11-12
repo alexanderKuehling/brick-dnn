@@ -34,7 +34,7 @@ from brick_dnn_core.models import (
     UsageRecord,
     UserProfile,
 )
-from brick_dnn_core.paddle import signature_header
+from brick_dnn_core.paddle import PaddleError, signature_header
 from brick_dnn_site.settings import SITE_ENV_SECRETS, load_site_settings
 
 from .fake_paddle import FakePaddle, iso
@@ -750,6 +750,33 @@ def test_upgrade_preview_says_what_is_charged_now(paddle, ada, web):
     assert answer["upgrade"] is True
     assert answer["now"] == {"action": "charge", "amount": 4.5, "currency": "EUR"}
     assert answer["plan"]["price"] == 14
+
+
+def test_upgrade_below_paddles_minimum_charge_is_billed_with_the_next_invoice(paddle, ada, web):
+    # E.g. a credit from an earlier downgrade leaves less than 70 cents to charge now: Paddle
+    # refuses an immediate charge, so the rest goes onto the next invoice.
+    subscription = subscribe(paddle, web, ada, "plus")
+    paddle.below_charge_limit = True
+    preview = web.post("/api/billing/change-plan/", {"plan": "pro", "preview": True}, format="json")
+    assert preview.status_code == 200, preview.content
+    assert plan_of(ada) == "plus"
+    done = web.post("/api/billing/change-plan/", {"plan": "pro"}, format="json")
+    assert done.status_code == 200, done.content
+    assert plan_of(ada) == "pro"
+    assert [call[2:] for call in paddle.called("change_price")[-2:]] == [
+        ("prorated_immediately", False),
+        ("prorated_next_billing_period", False),
+    ]
+    assert paddle.called("change_price")[-1][:2] == (subscription, "pri_pro")
+
+
+def test_other_paddle_refusals_of_a_plan_change_are_not_retried(paddle, ada, web):
+    subscribe(paddle, web, ada, "plus")
+    paddle.failing["change_price"] = PaddleError("Paddle answered HTTP 400 bad", 400, "bad")
+    refused = web.post("/api/billing/change-plan/", {"plan": "pro"}, format="json")
+    assert refused.status_code >= 400
+    assert len(paddle.called("change_price")) == 1
+    assert plan_of(ada) == "plus"
 
 
 def test_change_plan_refusals(paddle, ada, web):
