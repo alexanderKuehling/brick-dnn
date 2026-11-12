@@ -39,6 +39,7 @@ export const CATALOG: StepCatalog = {
     { id: 'missing', label: 'Missing values' },
     { id: 'outliers', label: 'Outliers & clipping' },
     { id: 'transform', label: 'Transform numbers' },
+    { id: 'features', label: 'Feature engineering' },
     { id: 'encode', label: 'Encode categories' },
     { id: 'datetime', label: 'Dates & times' },
     { id: 'target', label: 'Target & balance' },
