@@ -61,6 +61,20 @@
   the charts and metrics.
 
 ### Changed
+- **Validation and test data are optional.** In the Data tab (*Target & split*) the validation
+  and the test share may each be 0 % (both 0: every row is a training row); the split bar shows
+  an empty part as *none*, a note explains the consequences, and the readiness check no longer
+  refuses a split without validation rows (a note, or a warning when nothing is held out or a
+  step removed the validation rows that were asked for). The training settings accept a
+  validation split of 0 (`val_split` 0–0.5, also over the API, MCP and `--val-split 0`).
+  Without validation data a training keeps the weights of its last epoch (*Keep the best
+  weights* has no effect), its history has only training values (validation values are null),
+  and early stopping and hyperparameter searches are refused with a clear message, in the
+  settings form and by `check_training` / `start_training`. The final evaluation uses the test
+  rows; with neither validation nor test rows it measures the training rows, stored as
+  `evaluation.training` (MCP: `training_optimistic`) and labelled optimistic in the run view.
+  Classical models, segmentation previews, explanations and the sample rows of the prediction
+  form fall back to test or training data. Run metrics include `train_accuracy`.
 - The *Explain* button of a run is now **Explain the model** and sits under the run's name.
 - Analysis overview: warnings of one kind about many columns are grouped into one entry with
   one fix for all of them (1,062 warnings of a table with 833 columns become 4 entries).

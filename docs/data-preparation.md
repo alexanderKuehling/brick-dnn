@@ -104,6 +104,22 @@ optionally *stratified*, which keeps the class proportions in every part). From 
   split (the validation and test shares in the training settings are then fixed), so the test
   rows are never seen before the final test.
 
+The validation and the test share may each be **0**; that part then stays empty (both 0: every
+row is a training row). Training works without them, but:
+
+- **No validation rows**: after every epoch only the training loss is known, the weights of
+  the **last epoch** are kept (not those of the best epoch), and early stopping and a
+  hyperparameter search are not possible (they compare validation losses). The model is
+  measured on the test rows only. The readiness check notes this (a warning if you asked for
+  validation rows and a step removed them all).
+- **No validation and no test rows**: nothing is held out, so you cannot judge how well the
+  model works on new data; its scores come from the training rows it learned from and are
+  optimistic. The readiness check warns about it.
+- **No test rows** (validation only): the final scores come from the validation rows, which
+  also chose the kept epoch, so they are slightly optimistic.
+
+*Target & split* says this under the shares, and the bar shows an empty part as *none*.
+
 ### Keep rows of a group together (split by group)
 
 When several rows belong to the same person, patient, customer or object (repeated
@@ -382,7 +398,7 @@ them; duplicates compare all rows (up to a million).
 | Check | Fix |
 | ----- | --- |
 | No target, missing target values, a date target, a non-numeric target for regression, fewer than 2 or more than 1,000 classes | *Drop rows with missing values* in the target · *Change type* to numbers |
-| No feature columns, fewer than 4 rows, no training or validation rows, infinite values | – |
+| No feature columns, fewer than 4 rows, no training rows, infinite values | – |
 | Only numbers as column names | *Rename columns* |
 | Missing values in features | *Fill missing values* (median) |
 | Categorical features | *One-hot encode* |
@@ -410,6 +426,8 @@ them; duplicates compare all rows (up to a million).
 | Constant features | One value in all rows | *Drop columns* |
 | Features without a strong partner | At least 20 number features, of which ≥ 10 (and ≥ 10 %) correlate with no other feature at the suggested threshold (0.15, or the 99.9 % chance level if higher), ≥ 10 (and ≥ 10 %) have a partner at twice that, and at most 10 % lie in between (a clear gap). Tables with a few independent features stay quiet. The message says whether these columns are related to a numeric target | *Select features*: no strong partner |
 | More than 1,000 features | | – |
+| Nothing held out | No validation and no test rows: the scores come from the training rows | Give validation or test a share above 0 |
+| Validation rows lost | A validation share above 0, but a step removed every validation row | Increase the share or keep more rows |
 
 **Suggestions** – worth considering:
 
@@ -418,6 +436,7 @@ them; duplicates compare all rows (up to a million).
 | Conflicting labels | ≥ 1 % of the rows have the same features as another row but a different class | – |
 | Near-constant features | One value in ≥ 99 % of at least 100 training rows | *Drop columns* |
 | Redundant features | Two numeric features with \|r\| ≥ 0.98; the one less associated with the target is dropped | *Drop columns* |
+| No validation rows | A validation share of 0 (with test rows): the last epoch is kept, no early stopping or search | – |
 | Skewed features or a skewed numeric target | \|skewness\| > 2 with at least 10 different values, if log(1 + x) halves it (values ≥ 0) or for negative values | *Transform* log1p or Yeo-Johnson |
 | Very different scales | The largest standard deviation of the numeric features is ≥ 1,000 times the smallest. Training in Brick DNN standardises the features anyway; this matters for the exported files | *Scale* (standard) |
 
