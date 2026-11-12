@@ -105,7 +105,9 @@ Wait until the dashboard shows the domain as verified (minutes to hours).
 | `BRICKDNN_SITE_NAME` | optional, `Brick DNN` | the name in e-mails and in authenticator apps |
 
 "Site settings" is `deploy/sites/<domain>/settings.env` in the repository (public!), `.env`
-is `/opt/brick-dnn/.env` on the server. For brickdnn.com the public lines are prepared
+is `/opt/brick-dnn/.env` on the server. Instead of editing `.env`, all of them (the secrets
+included) can be GitHub repository variables and secrets, which every deploy writes into
+`.env` ([Settings from GitHub](../deploy/server/README.md#settings-from-github)). For brickdnn.com the public lines are prepared
 (commented out) in its site settings: remove the `#` and deploy. Before that, update
 `deploy/sites/brickdnn.com/legal/privacy.md`: it still says the app sends no e-mails. Take the
 e-mail paragraphs from `deploy/legal/privacy.example.md` (section 5, the error reports in

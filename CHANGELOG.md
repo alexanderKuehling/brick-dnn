@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- **Server settings from GitHub.** The *Deploy server* workflow sends the Paddle and e-mail
+  settings that are set as repository variables and secrets (API key, webhook secret, SMTP
+  login and password, admin address) to the server, which writes them into `.env` before it
+  starts the containers. Unset ones leave `.env` as it is; the server only accepts these names
+  and refuses values with `'` or line breaks. Servers set up earlier need the new
+  `brickdnn-deploy` copied once (deploy/server/README.md, "Settings from GitHub").
 - **Data tab: feature engineering steps** in a new step group *Feature engineering*, also in
   the pandas script, for predictions from raw rows and over MCP (`list_prep_steps`):
   - *Combine columns (row-wise)*: sum, mean, minimum, maximum, standard deviation, product,

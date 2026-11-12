@@ -77,7 +77,9 @@ exists. Accounts with a subscription are never deleted for inactivity.
 | `BRICKDNN_BILLING_RATE`, `BRICKDNN_BILLING_WEBHOOK_RATE` | optional | Rate limits: `60/hour` per account for checkout and changes, `600/minute` per IP address for notifications |
 
 "Site settings" is `deploy/sites/<domain>/settings.env` in the repository (public!), `.env`
-is the file on the server. The two secrets are ignored if they appear in the site settings.
+is the file on the server. With the *Deploy server* workflow all of them, the secrets
+included, can also be set as GitHub repository variables and secrets, which every deploy
+writes into `.env` ([Settings from GitHub](../deploy/server/README.md#settings-from-github)). The two secrets are ignored if they appear in the site settings.
 Billing is on only if the first three and the two secrets are set, every price belongs to an
 existing plan and the token fits the environment; otherwise it stays off and
 `manage.py check` (every start) and `manage.py billing_sync --check` say what is missing.

@@ -85,6 +85,58 @@ The same by hand, on your machine, in the repository:
   on `main` of the GitHub repository. It cannot open a shell.
 - `/opt/brick-dnn/.env` (database password) is readable by `root` and `deploy` only and never
   leaves the server.
+- Besides the commit, a deploy may set the [settings from GitHub](#settings-from-github) in
+  `.env`, and only those (Paddle, e-mail): whoever has the deploy key could, for example, point
+  e-mails to another SMTP server or set the Paddle webhook secret. Keep the key in GitHub's
+  secrets only, as for the deploys themselves.
+
+## Settings from GitHub
+
+The settings of paid plans and e-mail can be kept in GitHub instead of editing `.env` on the
+server: *Settings → Secrets and variables → Actions* of the repository. Every deploy sends the
+ones that are set to the server, which writes them into `/opt/brick-dnn/.env` (replacing the
+same lines) before it starts the containers. Change one, then start a deploy (*Actions →
+Deploy server → Run workflow*) or push to `main`.
+
+| Variable (tab *Variables*) | Example | Docs |
+| --- | --- | --- |
+| `BRICKDNN_PADDLE_ENV` | `sandbox`, later `live` | [billing](../../docs/billing.md#settings) |
+| `BRICKDNN_PADDLE_CLIENT_TOKEN` | `test_…` / `live_…` | |
+| `BRICKDNN_PADDLE_PRICES` | `starter=pri_…,plus=pri_…,pro=pri_…` | |
+| `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | `pro_…` | |
+| `BRICKDNN_EMAIL_HOST` | `smtp-relay.brevo.com` | [e-mail](../../docs/email.md#2-settings) |
+| `BRICKDNN_EMAIL_PORT` | `587` | |
+| `BRICKDNN_EMAIL_FROM` | `Brick DNN <no-reply@brickdnn.com>` | |
+| `BRICKDNN_EMAIL_REPLY_TO` | `support@brickdnn.com` | |
+| `BRICKDNN_PUBLIC_URL` | `https://brickdnn.com` | |
+| `BRICKDNN_REQUIRE_2FA_FOR_STAFF` | `true` (only once your account has two-factor login) | |
+
+| Secret (tab *Secrets*) | Is |
+| --- | --- |
+| `BRICKDNN_PADDLE_API_KEY` | Paddle API key |
+| `BRICKDNN_PADDLE_WEBHOOK_SECRET` | secret of the Paddle notification destination |
+| `BRICKDNN_EMAIL_USER` | SMTP login |
+| `BRICKDNN_EMAIL_PASSWORD` | SMTP password or key |
+| `BRICKDNN_ADMIN_EMAIL` | your address for server errors |
+
+- A variable or secret that is **not set leaves `.env` as it is**; deleting one in GitHub does
+  not delete it on the server (do that in `.env`). A value set in GitHub wins over the same
+  line in `.env` and over the site settings (`deploy/sites/<domain>/settings.env`).
+- Values may contain any character except `'` and line breaks (they are written in single
+  quotes, which Docker Compose takes literally, `$` included); with one of those the deploy
+  stops and nothing changes.
+- Other names cannot be set this way: the server only accepts the ones above.
+- The settings travel on stdin of the SSH connection, base64-encoded, and never appear on a
+  command line or in the log of the workflow.
+
+**Servers set up before this existed** need the new deploy script once (their copy ignores
+the settings):
+
+```bash
+ssh root@SERVER install -m 755 /opt/brick-dnn/deploy/server/deploy.sh /usr/local/bin/brickdnn-deploy
+```
+
+Run it after a deploy that contains this change, then deploy again.
 
 ## CPU and memory: the site comes first
 
