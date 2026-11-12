@@ -109,9 +109,20 @@ const PARTS = [
   { key: 'overlay', label: 'Overlay' },
 ] as const;
 
+/**
+ * Where the preview images come from: "validation", or "test" or "training" for a run without
+ * validation data.
+ */
+function splitName(split: string | null | undefined): string {
+  return split === 'test' || split === 'training' ? split : 'validation';
+}
+
 /** "8 validation images · weights of epoch 7". */
 function galleryNote(previews: RunPreviews): string {
-  const images = `${previews.samples.length} validation images`;
+  const split = splitName(previews.split);
+  const images = `${previews.samples.length} ${split} images${
+    split === 'training' ? ' (seen in training)' : ''
+  }`;
   return typeof previews.epoch === 'number'
     ? `${images} · weights of epoch ${previews.epoch}`
     : images;
@@ -144,13 +155,18 @@ function usePreviews(runId: string, enabled: boolean) {
   return { previews, error };
 }
 
-/** Validation images with their mask, the predicted mask and the prediction over the image. */
+/**
+ * Validation images (without validation data: test or training images) with their mask, the
+ * predicted mask and the prediction over the image.
+ */
 export function PreviewGallery({ run }: { run: RunDetail }) {
   const count = run.state?.segmentation?.previews?.count ?? 0;
   const { previews, error } = usePreviews(run.id, run.has_weights && count > 0);
   if (count === 0 || !run.has_weights) {
     return null;
   }
+  const split = splitName(previews?.split ?? run.state?.segmentation?.previews?.split);
+  const kind = `${split[0].toUpperCase()}${split.slice(1)}`;
   const ignored = run.state?.segmentation?.ignore_index != null;
   return (
     <Stack gap="xs" component="section" aria-label="Predictions">
@@ -159,7 +175,7 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
           Predictions
         </Text>
         <Text size="xs" c="dimmed">
-          {previews ? galleryNote(previews) : `${count} validation images`}
+          {previews ? galleryNote(previews) : `${count} ${split} images`}
         </Text>
       </Group>
       {error && (
@@ -198,7 +214,7 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
                 radius="sm"
                 component="figure"
                 m={0}
-                aria-label={`Validation image ${sample.index + 1}`}
+                aria-label={`${kind} image ${sample.index + 1}`}
               >
                 <div className={classes.previewRow}>
                   {PARTS.map((part) => (
@@ -207,7 +223,7 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
                       component="img"
                       className={classes.previewImage}
                       src={sample[part.key].url}
-                      alt={`${part.label} of validation image ${sample.index + 1}`}
+                      alt={`${part.label} of ${split} image ${sample.index + 1}`}
                       width={previews.width}
                       height={previews.height}
                       loading="lazy"

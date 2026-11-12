@@ -163,8 +163,10 @@ export function ImageSamplePicker({
             ))}
           </div>
           <Text size="xs" c="dimmed">
-            Validation images the model did not train on, with its guess (✓ right, ✗ wrong). The
-            last ones are mistakes: interesting to explain.
+            {samples.source === 'training'
+              ? 'Training images (the model learned from them: the run held out no others)'
+              : `${samples.source === 'test' ? 'Test' : 'Validation'} images the model did not train on`}
+            , with its guess (✓ right, ✗ wrong). The last ones are mistakes: interesting to explain.
           </Text>
         </>
       )}
@@ -272,7 +274,13 @@ export function DrawPad({
   );
 }
 
-/** Validation rows (click one), or a row of your own values. */
+const SOURCE_LABELS: Record<string, string> = {
+  validation: 'Validation',
+  test: 'Test',
+  training: 'Training',
+};
+
+/** Validation rows (test or training rows of a run without them; click one), or own values. */
 export function TabularSamplePicker({ samples, loading, error, picked, onPick }: PickerProps) {
   const [editing, setEditing] = useState(false);
   const columns = samples?.columns ?? [];
@@ -347,7 +355,7 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
       {samples && (
         <ScrollArea.Autosize mah={260} type="auto">
           <Table
-            aria-label="Validation rows"
+            aria-label={`${SOURCE_LABELS[samples.source] ?? 'Validation'} rows`}
             striped
             highlightOnHover
             withTableBorder

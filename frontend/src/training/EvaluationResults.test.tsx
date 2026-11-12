@@ -147,7 +147,7 @@ describe('The metrics of a classification run', () => {
       class_names: names,
       test: null,
       val: {
-        ...base.val,
+        ...base.val!,
         size: 600,
         top_k_accuracy: { '3': 0.81, '5': 0.9 },
         per_class: perClass,
@@ -193,6 +193,80 @@ describe('The metrics of a regression run', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Test' }));
     expect(screen.getByText('All 3 rows.')).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: /^Confusion matrix/ })).toBeNull();
+  });
+});
+
+/** A finished run trained without validation data (a validation split of 0). */
+function withoutValidation(evaluation: RunEvaluation, testSize: number | null): RunDetail {
+  const base = finished(evaluation);
+  const history = base.state!.history.map((entry) => ({
+    ...entry,
+    val_loss: null,
+    val_accuracy: null,
+  }));
+  return {
+    ...base,
+    metrics: {
+      train_loss: 0.2,
+      train_accuracy: 0.94,
+      val_loss: null,
+      val_accuracy: null,
+      val_rmse: null,
+    },
+    best: null,
+    state: {
+      ...base.state!,
+      val_size: 0,
+      test_size: testSize,
+      history,
+      best: null,
+      weights_epoch: 3,
+    },
+  };
+}
+
+describe('Runs without validation data', () => {
+  it('show the test rows only', () => {
+    const base = classificationEvaluation();
+    show(withoutValidation({ ...base, val: null }, 20));
+    expect(tile('Accuracy')).toHaveTextContent('Accuracy75.0%Test');
+    expect(tile('Log loss (cross-entropy)')).toHaveTextContent('0.2Train0.35Test');
+    expect(screen.getByText(/20 test rows · 3 classes/)).toBeInTheDocument();
+    // One split: nothing to pick.
+    expect(screen.queryByRole('radio', { name: 'Validation' })).toBeNull();
+    expect(screen.queryByTestId('optimistic-metrics')).toBeNull();
+    // The tiles of the epochs: training values and the kept (last) epoch.
+    expect(screen.getByText('Training accuracy')).toBeInTheDocument();
+    expect(screen.getByText('no validation data')).toBeInTheDocument();
+    expect(screen.getByText('Kept epoch')).toBeInTheDocument();
+    expect(screen.queryByText('Best epoch')).toBeNull();
+    expect(screen.queryByText('Validation loss')).toBeNull();
+  });
+
+  it('mark numbers from the training rows as optimistic', async () => {
+    const base = classificationEvaluation();
+    show(withoutValidation({ ...base, val: null, test: null, training: base.val }, null));
+    expect(tile('Accuracy')).toHaveTextContent('Accuracy80.0%Training (optimistic)');
+    expect(screen.getByTestId('optimistic-metrics')).toHaveTextContent(
+      /No validation or test rows: these numbers come from the training rows/
+    );
+    expect(screen.getByText(/training rows · 3 classes/)).toBeInTheDocument();
+    // The values per epoch have only training columns.
+    await userEvent.click(screen.getByRole('button', { name: /Values per epoch/ }));
+    expect(await screen.findByRole('columnheader', { name: 'Train acc.' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Val. loss' })).toBeNull();
+  });
+
+  it('show a regression measured on its training rows', () => {
+    const base = regressionEvaluation();
+    show(
+      finished(
+        { ...base, val: null, test: null, training: base.val },
+        regressionDetail({ status: 'completed' })
+      )
+    );
+    expect(tile('RMSE')).toHaveTextContent('41.27Training (optimistic)');
+    expect(screen.getByText(/Residuals \(predicted − actual\), training rows/)).toBeInTheDocument();
   });
 });
 

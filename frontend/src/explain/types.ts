@@ -60,8 +60,14 @@ export interface Prediction {
   std?: number | null;
 }
 
+/**
+ * Where a run's own samples come from: its validation data, or for a run without it its test
+ * data, or (nothing held out) its training data.
+ */
+export type SampleSource = 'validation' | 'test' | 'training';
+
 export interface SampleInfo {
-  source: 'validation' | 'input' | 'random';
+  source: SampleSource | 'input' | 'random';
   index: number | null;
   label?: string;
   label_index?: number;
@@ -97,7 +103,7 @@ export interface ListedSample {
 
 export interface SamplesAnswer extends Answer {
   kind: 'image' | 'tabular';
-  source: 'validation';
+  source: SampleSource;
   total: number;
   pool_accuracy?: number;
   columns?: string[];

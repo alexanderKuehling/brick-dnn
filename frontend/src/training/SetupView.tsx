@@ -158,16 +158,17 @@ export function SetupView({
     () => (segmentationSource ? { maxBatch } : null),
     [segmentationSource, maxBatch]
   );
+  // Datasets made in the Data tab bring their own split; the share fields are not used.
+  const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
   const errors = validateSettings(settings, {
     classical: classical && { maxRows },
     segmentation,
+    validationRows: predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit[1] : null,
   });
   if (builtinSource) {
     // Built-in datasets always test on their official test images: the test share is not used.
     delete errors.test_split;
   }
-  // Datasets made in the Data tab bring their own split; the share fields are not used.
-  const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
   if (predefinedSplit) {
     delete errors.val_split;
     delete errors.test_split;

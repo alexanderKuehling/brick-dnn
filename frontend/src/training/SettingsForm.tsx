@@ -22,6 +22,7 @@ import type { Optimizer, SegmentationLoss, TrainingDevice, TuningMethod } from '
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
   BATCH_SIZE_PRESETS,
+  hasValidation,
   LIMITS,
   LOSSES,
   LR_PRESETS,
@@ -114,6 +115,10 @@ export function SettingsForm({
   const fixed = predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit : null;
   const fixedPercents = fixed ? splitPercents(fixed) : null;
   const testEnabled = fixed ? fixed[2] > 0 : builtin || values.test_enabled;
+  const validates = hasValidation(values, fixed ? fixed[1] : null);
+  // Without validation data an early stopping setting is an error: show it even when the
+  // advanced settings are folded.
+  const advancedOpen = advanced || Boolean(errors.patience);
 
   const nameField = (
     <TextInput
@@ -127,6 +132,13 @@ export function SettingsForm({
   const validationField = (
     <NumberInput
       label="Validation split"
+      description={
+        validates
+          ? undefined
+          : classical
+            ? 'No validation data: the model is measured on the test rows only (without them, on its training rows).'
+            : 'No validation data: the last epoch is kept, no early stopping or search; scores only on test (or training) data.'
+      }
       value={fixedPercents ? fixedPercents[1] : values.val_split}
       disabled={fixed !== null}
       onChange={setNumber('val_split')}
@@ -340,12 +352,12 @@ export function SettingsForm({
         size="compact-sm"
         leftSection={advanced ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
         onClick={toggle}
-        aria-expanded={advanced}
+        aria-expanded={advancedOpen}
         style={{ alignSelf: 'flex-start' }}
       >
         Advanced settings
       </Button>
-      <Collapse expanded={advanced}>
+      <Collapse expanded={advancedOpen}>
         <Stack gap="sm">
           <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
             <NumberInput
@@ -378,8 +390,13 @@ export function SettingsForm({
           />
           <Checkbox
             label="Keep the weights of the best epoch"
-            description="Test and save the weights with the lowest validation loss, not those of the last epoch."
-            checked={values.restore_best}
+            description={
+              validates
+                ? 'Test and save the weights with the lowest validation loss, not those of the last epoch.'
+                : 'Not used without validation data: the weights of the last epoch are kept.'
+            }
+            disabled={!validates}
+            checked={values.restore_best && validates}
             onChange={(event) => set('restore_best')(event.currentTarget.checked)}
           />
         </Stack>

@@ -87,6 +87,16 @@ describe('training format', () => {
     expect(
       headlineMetric({ train_loss: 1, val_loss: 0.5, val_accuracy: null, val_rmse: null })
     ).toEqual(['0.5', 'validation loss']);
+    // Nothing held out: the training result, marked as optimistic.
+    const training = { val_loss: null, val_accuracy: null, val_rmse: null };
+    expect(headlineMetric({ ...training, train_loss: 0.2, train_accuracy: 0.97 })).toEqual([
+      '97.0%',
+      'training accuracy (optimistic)',
+    ]);
+    expect(headlineMetric({ ...training, train_loss: 0.25 })).toEqual([
+      '0.25',
+      'training loss (optimistic)',
+    ]);
     expect(headlineMetric(null)).toBeNull();
     expect(resultText(summary({ status: 'completed', metrics }))).toBe('test accuracy 95.1%');
   });

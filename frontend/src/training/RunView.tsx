@@ -257,6 +257,9 @@ export function RunView({
 
   const charts = useMemo(() => chartSeries(history, classification), [history, classification]);
   const keptEpoch = state?.weights_epoch ?? null;
+  // Trained without validation data: only training values per epoch, the last epoch is kept.
+  const noValidation = state?.val_size === 0;
+  const trainAccuracy = metrics?.train_accuracy ?? history.at(-1)?.train_accuracy ?? null;
   const keptNote = run.has_weights ? weightsNote(run) : null;
   const preprocessing = run.has_weights ? preprocessingJson(run) : null;
 
@@ -363,8 +366,20 @@ export function RunView({
         <>
           <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
             <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
-            <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
-            {segmentation ? (
+            {noValidation ? (
+              <Tile label="Validation" value="None" hint="no validation data" />
+            ) : (
+              <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
+            )}
+            {noValidation ? (
+              classification ? (
+                <Tile
+                  label="Training accuracy"
+                  value={formatPercent(trainAccuracy)}
+                  hint="on the training data, optimistic"
+                />
+              ) : null
+            ) : segmentation ? (
               <>
                 <Tile
                   label="Validation IoU"
@@ -404,6 +419,12 @@ export function RunView({
                         : `loss ${formatMetric(bestTrial.val_loss)}`
                     : undefined
                 }
+              />
+            ) : noValidation ? (
+              <Tile
+                label="Kept epoch"
+                value={keptEpoch !== null ? String(keptEpoch) : '–'}
+                hint="the last one (no validation data)"
               />
             ) : (
               <Tile
@@ -514,6 +535,7 @@ export function RunView({
                     segmentation={segmentation}
                     r2={r2}
                     kept={keptEpoch}
+                    validation={!noValidation}
                   />
                 </Collapse>
               </div>
@@ -946,8 +968,11 @@ function ClassicalResults({
 
   const splits: { label: string; metrics: ClassicalMetrics | null; size: number | null }[] = [
     { label: 'Training', metrics: fit?.train ?? null, size: rows },
-    { label: 'Validation', metrics: validation, size: state?.val_size ?? null },
   ];
+  // A validation split of 0: no validation rows to show.
+  if (state?.val_size !== 0) {
+    splits.push({ label: 'Validation', metrics: validation, size: state?.val_size ?? null });
+  }
   if (test || testSize !== null) {
     splits.push({ label: 'Test', metrics: test, size: testSize });
   }
@@ -1172,6 +1197,7 @@ function HistoryTable({
   segmentation = false,
   r2,
   kept,
+  validation = true,
 }: {
   history: HistoryEntry[];
   classification: boolean;
@@ -1181,7 +1207,35 @@ function HistoryTable({
   r2: boolean;
   /** The epoch whose weights are kept (shown in bold). */
   kept: number | null;
+  /** False for a run without validation data: only the training columns. */
+  validation?: boolean;
 }) {
+  if (!validation) {
+    return (
+      <ScrollArea.Autosize mah={260} type="auto">
+        <Table striped stickyHeader fz="xs" ff="monospace" style={{ whiteSpace: 'nowrap' }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Epoch</Table.Th>
+              <Table.Th>Train loss</Table.Th>
+              {classification && <Table.Th>Train acc.</Table.Th>}
+              <Table.Th>Time</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {history.map((entry) => (
+              <Table.Tr key={entry.epoch} fw={entry.epoch === kept ? 700 : undefined}>
+                <Table.Td>{entry.epoch}</Table.Td>
+                <Table.Td>{formatMetric(entry.train_loss)}</Table.Td>
+                {classification && <Table.Td>{formatPercent(entry.train_accuracy)}</Table.Td>}
+                <Table.Td>{formatDuration(entry.seconds)}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ScrollArea.Autosize>
+    );
+  }
   return (
     <ScrollArea.Autosize mah={260} type="auto">
       <Table striped stickyHeader fz="xs" ff="monospace" style={{ whiteSpace: 'nowrap' }}>

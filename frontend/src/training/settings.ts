@@ -26,7 +26,10 @@ export interface SettingsValues {
   learning_rate: NumberField;
   optimizer: Optimizer;
   device: string;
-  /** Percent (5–50), sent as a fraction. */
+  /**
+   * Percent (0–50), sent as a fraction. 0: no validation data, so the weights of the last
+   * epoch are kept and early stopping and a search are not possible.
+   */
   val_split: NumberField;
   /** Hold out a test set (built-in datasets always test on their official test images). */
   test_enabled: boolean;
@@ -136,7 +139,7 @@ export const LIMITS = {
   batch_size: { min: 1, max: 8192 },
   learning_rate: { min: 0, max: 10 },
   weight_decay: { min: 0, max: 1 },
-  val_split: { min: 5, max: 50 },
+  val_split: { min: 0, max: 50 },
   test_split: { min: 5, max: 50 },
   /** Validation and test split together, percent. */
   held_out: { max: 80 },
@@ -286,16 +289,42 @@ export interface ClassicalScope {
   maxRows: number | null;
 }
 
+/** Shown when a setting needs validation data that the run will not have. */
+export const NO_VALIDATION_PATIENCE =
+  'Early stopping needs validation data: set a validation split above 0, or leave this empty.';
+export const NO_VALIDATION_SEARCH =
+  'A hyperparameter search needs validation data to compare its trials: set a validation split above 0.';
+const PREPARED_PATIENCE =
+  'Early stopping needs validation data, and this dataset has no validation rows: leave this empty, or give it a validation share in the Data tab.';
+const PREPARED_SEARCH =
+  'A hyperparameter search needs validation data to compare its trials, and this dataset has no validation rows: give it a validation share in the Data tab.';
+
+/**
+ * Whether the run gets validation data: the validation rows of a dataset that brings its own
+ * split (`validationRows`), otherwise a validation split above 0.
+ */
+export function hasValidation(
+  values: SettingsValues,
+  validationRows: number | null = null
+): boolean {
+  if (validationRows !== null) {
+    return validationRows > 0;
+  }
+  const value = parseField(values.val_split);
+  return !(typeof value === 'number' && value === 0);
+}
+
 function validateSplits(values: SettingsValues, errors: SettingsErrors) {
-  const split = (value: number) => value >= 5 && value <= 50;
+  const split = (value: number) => value >= 0 && value <= 50;
+  const testShare = (value: number) => value >= 5 && value <= 50;
   const set = (key: keyof SettingsValues, message: string | null) => {
     if (message) {
       errors[key] = message;
     }
   };
-  set('val_split', decimal(values.val_split, split, 'Between 5% and 50%', true));
+  set('val_split', decimal(values.val_split, split, 'Between 0% and 50%', true));
   if (values.test_enabled) {
-    set('test_split', decimal(values.test_split, split, 'Between 5% and 50%', true));
+    set('test_split', decimal(values.test_split, testShare, 'Between 5% and 50%', true));
     const val = parseField(values.val_split);
     const test = parseField(values.test_split);
     if (
@@ -329,12 +358,22 @@ function validateClassical(values: SettingsValues, { maxRows }: ClassicalScope):
   return errors;
 }
 
+/**
+ * Problems with the settings, by field. `validationRows`: the validation rows of a dataset that
+ * brings its own split (null: the validation split decides); without validation data early
+ * stopping and a search are errors.
+ */
 export function validateSettings(
   values: SettingsValues,
   {
     classical = null,
     segmentation = null,
-  }: { classical?: ClassicalScope | null; segmentation?: SegmentationScope | null } = {}
+    validationRows = null,
+  }: {
+    classical?: ClassicalScope | null;
+    segmentation?: SegmentationScope | null;
+    validationRows?: number | null;
+  } = {}
 ): SettingsErrors {
   if (classical) {
     return validateClassical(values, classical);
@@ -381,6 +420,11 @@ export function validateSettings(
   set('max_samples', wholeNumber(values.max_samples, LIMITS.max_samples, false));
   set('seed', wholeNumber(values.seed, LIMITS.seed, false));
   set('patience', wholeNumber(values.patience, LIMITS.patience, false));
+  const validates = hasValidation(values, validationRows);
+  const prepared = validationRows !== null;
+  if (!validates && !errors.patience && parseField(values.patience) !== '') {
+    errors.patience = prepared ? PREPARED_PATIENCE : NO_VALIDATION_PATIENCE;
+  }
 
   if (values.search) {
     const grid = values.search_method === 'grid';
@@ -415,7 +459,9 @@ export function validateSettings(
       errors.weight_decays = 'Choose at least one';
     }
     const combos = combinations(values);
-    if (!Object.values(tuned).some(Boolean)) {
+    if (!validates) {
+      errors.search = prepared ? PREPARED_SEARCH : NO_VALIDATION_SEARCH;
+    } else if (!Object.values(tuned).some(Boolean)) {
       errors.search = 'Choose at least one setting to search.';
     } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
       errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;

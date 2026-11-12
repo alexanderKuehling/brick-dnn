@@ -344,7 +344,9 @@ export function isClassification(run: RunSummary, history: HistoryEntry[] = []):
   }
   return (
     typeof run.metrics?.val_accuracy === 'number' ||
-    history.some((entry) => typeof entry.val_accuracy === 'number')
+    history.some((entry) => typeof entry.val_accuracy === 'number') ||
+    // Runs without validation data only have training accuracies.
+    history.some((entry) => typeof entry.train_accuracy === 'number')
   );
 }
 
@@ -376,7 +378,8 @@ export function hasTestResult(metrics: RunMetrics | null | undefined): boolean {
 
 /**
  * The most telling number of a run and what it is, e.g. ["98.1%", "test accuracy"]: the test
- * result if there is one, otherwise the validation result.
+ * result if there is one, otherwise the validation result, and for a run without either the
+ * training result (marked as optimistic).
  */
 export function headlineMetric(metrics: RunMetrics | null | undefined): [string, string] | null {
   if (!metrics) {
@@ -413,6 +416,12 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
   }
   if (typeof metrics.val_loss === 'number') {
     return [formatMetric(metrics.val_loss), 'validation loss'];
+  }
+  if (typeof metrics.train_accuracy === 'number') {
+    return [formatPercent(metrics.train_accuracy), 'training accuracy (optimistic)'];
+  }
+  if (typeof metrics.train_loss === 'number') {
+    return [formatMetric(metrics.train_loss), 'training loss (optimistic)'];
   }
   return null;
 }

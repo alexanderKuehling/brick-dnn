@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { render, screen, userEvent, waitFor } from '@test-utils';
 import {
   DEFAULT_SETTINGS,
+  NO_VALIDATION_PATIENCE,
+  NO_VALIDATION_SEARCH,
   toConfig,
   toTuning,
   validateSettings,
@@ -14,9 +16,11 @@ let latest: SettingsValues = DEFAULT_SETTINGS;
 function Harness({
   initial = DEFAULT_SETTINGS,
   builtin = false,
+  predefinedSplit = null,
 }: {
   initial?: SettingsValues;
   builtin?: boolean;
+  predefinedSplit?: number[] | null;
 }) {
   const [values, setValues] = useState<SettingsValues>(initial);
   latest = values;
@@ -24,7 +28,10 @@ function Harness({
     <SettingsForm
       values={values}
       onChange={setValues}
-      errors={validateSettings(values)}
+      errors={validateSettings(values, {
+        validationRows: predefinedSplit ? predefinedSplit[1] : null,
+      })}
+      predefinedSplit={predefinedSplit}
       name=""
       namePlaceholder="Tiny MLP"
       onNameChange={() => {}}
@@ -65,6 +72,50 @@ describe('SettingsForm', () => {
     await userEvent.clear(input);
     await userEvent.type(input, '12.5');
     expect(toConfig(latest).val_split).toBe(0.125);
+  });
+
+  it('trains without validation data, but not with early stopping or a search', async () => {
+    render(<Harness />);
+    const input = screen.getByLabelText('Validation split');
+    await userEvent.clear(input);
+    await userEvent.type(input, '0');
+    expect(toConfig(latest).val_split).toBe(0);
+    expect(validateSettings(latest)).toEqual({});
+    expect(input).toHaveAccessibleDescription(/No validation data: the last epoch is kept/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
+    await waitFor(() => expect(screen.getByLabelText('Early stopping')).toBeVisible());
+    const keepBest = screen.getByRole('checkbox', { name: 'Keep the weights of the best epoch' });
+    expect(keepBest).toBeDisabled();
+    expect(keepBest).not.toBeChecked();
+    expect(keepBest).toHaveAccessibleDescription(/weights of the last epoch are kept/);
+    await userEvent.type(screen.getByLabelText('Early stopping'), '3');
+    expect(await screen.findByText(NO_VALIDATION_PATIENCE)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('Early stopping'));
+
+    await userEvent.click(screen.getByRole('switch', { name: /Hyperparameter search/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent(NO_VALIDATION_SEARCH);
+    expect(validateSettings(latest).search).toBe(NO_VALIDATION_SEARCH);
+
+    // A validation split above 0 lifts both.
+    await userEvent.clear(input);
+    await userEvent.type(input, '10');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(validateSettings(latest)).toEqual({});
+  });
+
+  it('explains settings that need validation rows a prepared dataset lacks', () => {
+    render(
+      <Harness initial={{ ...DEFAULT_SETTINGS, patience: 3 }} predefinedSplit={[80, 0, 20]} />
+    );
+    // The folded advanced settings open to show the error.
+    const patience = screen.getByLabelText('Early stopping');
+    expect(patience).toBeVisible();
+    expect(screen.getByText(/this dataset has no validation rows/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Validation split')).toHaveAccessibleDescription(
+      /No validation data/
+    );
+    expect(validateSettings(latest, { validationRows: 20 })).toEqual({});
   });
 
   it('holds out a test set on request', async () => {
