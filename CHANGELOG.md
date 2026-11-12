@@ -3,6 +3,21 @@
 ## Unreleased
 
 ### Added
+- **Data tab: feature engineering steps** in a new step group *Feature engineering*, also in
+  the pandas script, for predictions from raw rows and over MCP (`list_prep_steps`):
+  - *Combine columns (row-wise)*: sum, mean, minimum, maximum, standard deviation, product,
+    count of values or of non-zero values (e.g. the number of risk flags set) of several
+    number or yes/no columns per row; missing values left out or making the result missing.
+  - *Pairwise interactions*: a × b, a / b, a − b and a + b for every pair of chosen columns (or
+    of two lists), optionally in both directions; division by 0 gives a missing value; a limit
+    on the new columns (200 by default) stops the step with an error instead of flooding the
+    table.
+  - *Group statistics*: mean, median, standard deviation, minimum, maximum, count and rows per
+    group of one or more category columns, plus the difference and ratio to the group mean
+    (e.g. the amount relative to the usual amount of the merchant category), learned from the
+    training rows only; unseen groups get the overall training value or a missing value, and
+    small groups can be treated as unseen. The target is refused as an input of all three
+    steps (target leakage).
 - **Metrics of the finished model.** A completed classification or regression run (neural
   networks and classical models; in a search the best trial) measures its kept weights once
   more on the validation and test rows. The run view shows a *Metrics* section: tiles with
