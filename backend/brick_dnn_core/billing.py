@@ -69,6 +69,8 @@ logger = logging.getLogger(__name__)
 ENVIRONMENTS = ("sandbox", "live")
 # Statuses of a subscription that gives its plan, and of one that still exists at Paddle.
 ENTITLED = ("active", "trialing")
+# Paddle's error for an update whose immediate charge is below its minimum charge.
+BELOW_CHARGE_LIMIT = "subscription_update_transaction_balance_less_than_charge_limit"
 LIVE = (*ENTITLED, "past_due", "paused")
 PRICING_PATH = "/pricing"
 # Paddle's error when a customer with the e-mail address exists already.
@@ -750,10 +752,22 @@ def change_plan(user, plan_key: str, preview: bool) -> dict[str, Any]:
     new, old = plans[plan_key], plans.get(customer.plan)
     upgrade = old is None or (new.price or 0) >= (old.price or 0)
     proration = "prorated_immediately" if upgrade else "prorated_next_billing_period"
+    api = client(cfg)
     try:
-        data = client(cfg).change_price(
-            customer.subscription_id, price_id, proration, preview=preview
-        )
+        try:
+            data = api.change_price(customer.subscription_id, price_id, proration, preview=preview)
+        except PaddleError as exc:
+            # Paddle charges nothing below its minimum (70 US cents), e.g. when a credit from
+            # an earlier downgrade covers almost all of the difference. The upgrade still
+            # starts at once; the small rest is added to the next invoice instead.
+            if exc.code != BELOW_CHARGE_LIMIT or proration != "prorated_immediately":
+                raise
+            data = api.change_price(
+                customer.subscription_id,
+                price_id,
+                "prorated_next_billing_period",
+                preview=preview,
+            )
     except PaddleError as exc:
         raise _unavailable(exc, "changing the plan") from None
     if not preview:

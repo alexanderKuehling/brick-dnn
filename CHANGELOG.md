@@ -588,6 +588,10 @@
   without one keep working.
 
 ### Fixed
+- **Plan upgrades below Paddle's minimum charge.** When a credit (e.g. from an earlier
+  downgrade) left less than about 70 US cents to charge for an upgrade, Paddle refused it
+  (`subscription_update_transaction_balance_less_than_charge_limit`) and the plan stayed. The
+  upgrade now starts at once and the small rest is added to the next invoice.
 - **Large imports no longer take the web server down.** Files from 20 MB on
   (`BRICKDNN_DATA_IMPORT_PROCESS_MB`) are read in a process of their own. Reading needs several
   times the file's size in memory for a moment; when that is more than the server has, that
