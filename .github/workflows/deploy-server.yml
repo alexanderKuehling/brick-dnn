@@ -2,7 +2,9 @@ name: Deploy server
 
 # Deploys backend and frontend to the server after CI passed on main, see
 # deploy/server/README.md. Needs the repository secret DEPLOY_SSH_KEY and the variables
-# DEPLOY_HOST, DEPLOY_URL and DEPLOY_KNOWN_HOSTS; without DEPLOY_HOST it does nothing.
+# DEPLOY_HOST, DEPLOY_URL and DEPLOY_KNOWN_HOSTS; without DEPLOY_HOST it does nothing. Paddle
+# and e-mail settings set as repository variables and secrets go to the server's .env with
+# every deploy (deploy/server/README.md, "Settings from GitHub").
 on:
   workflow_run:
     workflows: [CI]
@@ -29,14 +31,46 @@ jobs:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
           HOST: ${{ vars.DEPLOY_HOST }}
+          # Server settings (deploy/server/README.md, "Settings from GitHub"): those that are
+          # set replace the same lines in the server's .env; unset ones leave .env as it is.
+          BRICKDNN_PADDLE_ENV: ${{ vars.BRICKDNN_PADDLE_ENV }}
+          BRICKDNN_PADDLE_CLIENT_TOKEN: ${{ vars.BRICKDNN_PADDLE_CLIENT_TOKEN }}
+          BRICKDNN_PADDLE_PRICES: ${{ vars.BRICKDNN_PADDLE_PRICES }}
+          BRICKDNN_PADDLE_OVERAGE_PRODUCT: ${{ vars.BRICKDNN_PADDLE_OVERAGE_PRODUCT }}
+          BRICKDNN_PADDLE_API_KEY: ${{ secrets.BRICKDNN_PADDLE_API_KEY }}
+          BRICKDNN_PADDLE_WEBHOOK_SECRET: ${{ secrets.BRICKDNN_PADDLE_WEBHOOK_SECRET }}
+          BRICKDNN_EMAIL_HOST: ${{ vars.BRICKDNN_EMAIL_HOST }}
+          BRICKDNN_EMAIL_PORT: ${{ vars.BRICKDNN_EMAIL_PORT }}
+          BRICKDNN_EMAIL_FROM: ${{ vars.BRICKDNN_EMAIL_FROM }}
+          BRICKDNN_EMAIL_REPLY_TO: ${{ vars.BRICKDNN_EMAIL_REPLY_TO }}
+          BRICKDNN_PUBLIC_URL: ${{ vars.BRICKDNN_PUBLIC_URL }}
+          BRICKDNN_REQUIRE_2FA_FOR_STAFF: ${{ vars.BRICKDNN_REQUIRE_2FA_FOR_STAFF }}
+          BRICKDNN_EMAIL_USER: ${{ secrets.BRICKDNN_EMAIL_USER }}
+          BRICKDNN_EMAIL_PASSWORD: ${{ secrets.BRICKDNN_EMAIL_PASSWORD }}
+          BRICKDNN_ADMIN_EMAIL: ${{ secrets.BRICKDNN_ADMIN_EMAIL }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          # The key may only run deploy.sh on the server, which deploys commits of main only.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
-            "deploy@$HOST" "$SHA"
+          names="BRICKDNN_PADDLE_ENV BRICKDNN_PADDLE_CLIENT_TOKEN BRICKDNN_PADDLE_PRICES
+            BRICKDNN_PADDLE_OVERAGE_PRODUCT BRICKDNN_PADDLE_API_KEY BRICKDNN_PADDLE_WEBHOOK_SECRET
+            BRICKDNN_EMAIL_HOST BRICKDNN_EMAIL_PORT BRICKDNN_EMAIL_USER BRICKDNN_EMAIL_PASSWORD
+            BRICKDNN_EMAIL_FROM BRICKDNN_EMAIL_REPLY_TO BRICKDNN_ADMIN_EMAIL BRICKDNN_PUBLIC_URL
+            BRICKDNN_REQUIRE_2FA_FOR_STAFF"
+          # The settings go on stdin (never on the command line or into the log), base64 so
+          # that any character arrives unchanged; deploy.sh checks the names and the values.
+          {
+            echo "brickdnn-settings 1"
+            for name in $names; do
+              if [ -n "${!name}" ]; then
+                printf '%s=%s\n' "$name" "$(printf '%s' "${!name}" | base64 -w0)"
+              fi
+            done
+          } |
+            # The key may only run deploy.sh on the server, which deploys commits of main only.
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+              "deploy@$HOST" "$SHA"
       - name: Check that the site answers
         env:
           URL: ${{ vars.DEPLOY_URL }}
