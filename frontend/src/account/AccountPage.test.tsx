@@ -148,7 +148,7 @@ beforeEach(() => {
   });
   vi.mocked(api.logout).mockResolvedValue(undefined);
   vi.mocked(api.legal.info).mockResolvedValue({
-    pages: { imprint: true, privacy: true, terms: false },
+    pages: { imprint: true, privacy: true, terms: false, refund: false },
     terms_version: null,
     privacy_version: 'def',
     accept_terms_required: false,

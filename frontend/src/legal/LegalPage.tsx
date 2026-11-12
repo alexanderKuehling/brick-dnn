@@ -13,7 +13,7 @@ type State =
   | { status: 'missing' }
   | { status: 'error'; message: string };
 
-/** /imprint, /privacy and /terms: Markdown files the operator put on the server. */
+/** /imprint, /privacy, /terms and /refund: Markdown files the operator put on the server. */
 export function LegalPage({ page }: { page: LegalPageName }) {
   const [state, setState] = useState<State>({ status: 'loading' });
 

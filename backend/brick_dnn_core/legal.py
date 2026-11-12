@@ -28,7 +28,12 @@ from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
 
-PAGES = {"imprint": "Imprint", "privacy": "Privacy policy", "terms": "Terms of use"}
+PAGES = {
+    "imprint": "Imprint",
+    "privacy": "Privacy policy",
+    "terms": "Terms of use",
+    "refund": "Refund policy",
+}
 # Larger files are ignored (and logged): legal texts are a few dozen kilobytes.
 MAX_BYTES = 512 * 1024
 

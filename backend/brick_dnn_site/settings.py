@@ -472,7 +472,8 @@ PASSWORD_RESET_TIMEOUT = 3600
 REQUIRE_2FA_FOR_STAFF = env_bool("BRICKDNN_REQUIRE_2FA_FOR_STAFF", False)
 
 # Privacy and legal pages (see docs/privacy.md). The imprint, privacy policy and terms of use
-# are Markdown files in LEGAL_DIR (imprint.md, privacy.md, terms.md), read on every request:
+# (and refund policy) are Markdown files in LEGAL_DIR (imprint.md, privacy.md, terms.md,
+# refund.md), read on every request:
 # a page whose file is missing is not offered. With terms.md, sign-up asks to accept them.
 LEGAL_DIR = Path(os.environ.get("BRICKDNN_LEGAL_DIR", DATA_DIR / "legal"))
 # Automatic deletion by `manage.py purge_old_data` (the cleanup service of Docker Compose runs

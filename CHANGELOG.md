@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **Refund policy page.** `refund.md` in the legal folder is shown at `/refund` and linked
+  with the other legal pages (header menu, page footers). The links now also offer *Contact*
+  (the imprint), and the empty builder canvas says in one sentence what Brick DNN is and links
+  the legal pages, so visitors and payment reviewers find them from the start page.
 - **Server settings from GitHub.** The *Deploy server* workflow sends the Paddle and e-mail
   settings that are set as repository variables and secrets (API key, webhook secret, SMTP
   login and password, admin address) to the server, which writes them into `.env` before it

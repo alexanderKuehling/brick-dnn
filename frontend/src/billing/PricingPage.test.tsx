@@ -88,7 +88,7 @@ beforeEach(() => {
   resetBillingInfo();
   setTokens(null);
   vi.mocked(api.legal.info).mockResolvedValue({
-    pages: { imprint: true, privacy: true, terms: true },
+    pages: { imprint: true, privacy: true, terms: true, refund: false },
     terms_version: 'a',
     privacy_version: 'b',
     accept_terms_required: true,

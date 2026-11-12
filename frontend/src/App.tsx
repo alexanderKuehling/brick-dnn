@@ -91,6 +91,7 @@ export default function App() {
                       <Route path="/imprint" element={<LegalPage page="imprint" />} />
                       <Route path="/privacy" element={<LegalPage page="privacy" />} />
                       <Route path="/terms" element={<LegalPage page="terms" />} />
+                      <Route path="/refund" element={<LegalPage page="refund" />} />
                       {/* Apps (e.g. Claude) send the browser here to connect to the MCP server. */}
                       <Route
                         path="/oauth/authorize"

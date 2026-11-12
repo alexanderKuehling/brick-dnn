@@ -238,7 +238,7 @@ export interface Account extends User {
   };
 }
 
-export type LegalPageName = 'imprint' | 'privacy' | 'terms';
+export type LegalPageName = 'imprint' | 'privacy' | 'terms' | 'refund';
 
 /** Which legal pages the server has (Markdown files the operator puts on it). */
 export interface LegalInfo {

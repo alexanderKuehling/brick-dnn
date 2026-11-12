@@ -38,7 +38,7 @@ describe('the approvals badge in the header', () => {
     resetLegalInfo();
     resetBillingInfo();
     vi.mocked(api.legal.info).mockResolvedValue({
-      pages: { imprint: false, privacy: false, terms: false },
+      pages: { imprint: false, privacy: false, terms: false, refund: false },
     } as never);
     vi.mocked(api.billing.info).mockResolvedValue({ enabled: false } as never);
     vi.mocked(api.agentActivity.summary).mockResolvedValue({
