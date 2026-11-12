@@ -273,6 +273,14 @@ describe('Segmentation runs', () => {
     expect(second).toHaveTextContent('IoU 45.1% · pixel accuracy 90.1% · background, circle');
   });
 
+  it('name the images of a run without validation data', async () => {
+    loadPreviews.mockResolvedValue(previews({ split: 'training' }));
+    show(segmentationDetail());
+    const gallery = await screen.findByRole('region', { name: 'Predictions' });
+    await within(gallery).findByText('2 training images (seen in training) · weights of epoch 3');
+    expect(within(gallery).getByRole('figure', { name: 'Training image 1' })).toBeInTheDocument();
+  });
+
   it('say so when the predictions cannot be loaded, and show none without previews', async () => {
     loadPreviews.mockRejectedValue(new ApiError(404, null, 'This run has no preview images.'));
     const { unmount } = show(segmentationDetail());

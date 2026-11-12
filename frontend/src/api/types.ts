@@ -1261,6 +1261,9 @@ export interface TestResult {
  */
 export interface RunMetrics {
   train_loss: number | null;
+  /** The kept epoch on the training rows (classification; missing in older runs). */
+  train_accuracy?: number | null;
+  /** The validation values are null for a run without validation data. */
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;
@@ -1489,14 +1492,23 @@ export interface ClassificationEvaluation extends EvaluationBase {
   task: 'classification';
   class_names: string[];
   matrix_classes_max: number;
-  val: ClassificationSplit;
+  /** Null for a run without validation rows. */
+  val: ClassificationSplit | null;
   test: ClassificationSplit | null;
+  /**
+   * Only for a run without validation and test rows: the model on its training rows
+   * (optimistic: it has seen them). Missing in older runs.
+   */
+  training?: ClassificationSplit | null;
 }
 
 export interface RegressionEvaluation extends EvaluationBase {
   task: 'regression';
-  val: RegressionSplit;
+  /** Null for a run without validation rows. */
+  val: RegressionSplit | null;
   test: RegressionSplit | null;
+  /** Only for a run without validation and test rows, see ClassificationEvaluation. */
+  training?: RegressionSplit | null;
 }
 
 export type RunEvaluation = ClassificationEvaluation | RegressionEvaluation;
@@ -1523,7 +1535,10 @@ export interface SegmentationRunState {
   /** Null if the kept weights are not those of a finished epoch. */
   validation: SegmentationSplit | null;
   test: SegmentationSplit | null;
-  /** How many preview images there are (GET …/runs/<id>/previews/), or null. */
+  /**
+   * How many preview images there are (GET …/runs/<id>/previews/), or null. `split`:
+   * "validation", or "test" / "training" for a run without validation data.
+   */
   previews: { count: number; epoch: number | null; split: string } | null;
 }
 

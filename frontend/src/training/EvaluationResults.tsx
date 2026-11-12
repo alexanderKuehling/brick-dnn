@@ -1,8 +1,9 @@
 /**
  * The final evaluation of a finished run (state.json `evaluation`): the kept weights measured
- * once more on the validation and the test rows. Tiles with the main numbers (validation and
- * test side by side); for classification a confusion matrix and the values per class, for
- * regression predicted against actual values. Runs without an evaluation show nothing.
+ * once more on the validation and the test rows (a run without either: on its training rows,
+ * marked as optimistic). Tiles with the main numbers (the splits side by side); for
+ * classification a confusion matrix and the values per class, for regression predicted
+ * against actual values. Runs without an evaluation show nothing.
  */
 import { useMemo, useState } from 'react';
 import { IconArrowDown, IconArrowUp, IconSelector } from '@tabler/icons-react';
@@ -31,9 +32,19 @@ import { ScatterPlot } from '@/components/charts/ScatterPlot';
 import { formatMetric, formatPercent } from './format';
 import classes from './Training.module.css';
 
-type SplitKey = 'val' | 'test';
+type SplitKey = 'val' | 'test' | 'training';
 
-const SPLIT_LABELS: Record<SplitKey, string> = { val: 'Validation', test: 'Test' };
+const SPLIT_LABELS: Record<SplitKey, string> = {
+  val: 'Validation',
+  test: 'Test',
+  training: 'Training (optimistic)',
+};
+/** "120 validation rows". */
+const ROW_LABELS: Record<SplitKey, string> = {
+  val: 'validation',
+  test: 'test',
+  training: 'training',
+};
 
 /** F1 scores: 0.91234 → "0.912". */
 export function formatScore(value: number | null | undefined): string {
@@ -84,13 +95,31 @@ function SplitTile({ label, values, hint }: { label: string; values: TileValue[]
 
 type SplitParts<T> = { key: SplitKey; split: T }[];
 
-function splitsOf<T>(val: T, test: T | null): SplitParts<T> {
-  return test
-    ? [
-        { key: 'val', split: val },
-        { key: 'test', split: test },
-      ]
-    : [{ key: 'val', split: val }];
+/**
+ * The splits that were measured, in order: validation and test, or (a run without either) the
+ * training rows.
+ */
+function splitsOf<T>(evaluation: {
+  val: T | null;
+  test: T | null;
+  training?: T | null;
+}): SplitParts<T> {
+  const parts: SplitParts<T> = [];
+  if (evaluation.val) {
+    parts.push({ key: 'val', split: evaluation.val });
+  }
+  if (evaluation.test) {
+    parts.push({ key: 'test', split: evaluation.test });
+  }
+  if (parts.length === 0 && evaluation.training) {
+    parts.push({ key: 'training', split: evaluation.training });
+  }
+  return parts;
+}
+
+/** The split picked in the picker, or the first one. */
+function pickSplit<T>(parts: SplitParts<T>, key: SplitKey): { key: SplitKey; split: T } {
+  return parts.find((part) => part.key === key) ?? parts[0];
 }
 
 function tile<T>(
@@ -110,14 +139,19 @@ function tile<T>(
   return <SplitTile key={label} label={label} values={values} hint={hint} />;
 }
 
-function lossTile(evaluation: RunEvaluation, label: string, hint: string) {
+function lossTile<T extends { loss: number | null }>(
+  evaluation: RunEvaluation,
+  parts: SplitParts<T>,
+  label: string,
+  hint: string
+) {
   const values = [
     { label: 'Train', value: formatMetric(evaluation.train?.loss) },
-    { label: 'Validation', value: formatMetric(evaluation.val.loss) },
+    ...parts.map(({ key, split }) => ({
+      label: SPLIT_LABELS[key],
+      value: formatMetric(split.loss),
+    })),
   ];
-  if (evaluation.test) {
-    values.push({ label: 'Test', value: formatMetric(evaluation.test.loss) });
-  }
   return <SplitTile key="loss" label={label} values={values} hint={hint} />;
 }
 
@@ -420,13 +454,13 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
 function SplitPicker({
   value,
   onChange,
-  hasTest,
+  options,
 }: {
   value: SplitKey;
   onChange: (value: SplitKey) => void;
-  hasTest: boolean;
+  options: SplitKey[];
 }) {
-  if (!hasTest) {
+  if (options.length < 2) {
     return null;
   }
   return (
@@ -434,10 +468,7 @@ function SplitPicker({
       size="xs"
       value={value}
       onChange={(next) => onChange(next as SplitKey)}
-      data={[
-        { value: 'val', label: 'Validation' },
-        { value: 'test', label: 'Test' },
-      ]}
+      data={options.map((key) => ({ value: key, label: SPLIT_LABELS[key] }))}
       aria-label="Rows of the matrix and the table"
     />
   );
@@ -451,9 +482,9 @@ function ClassificationResults({
   trainHint: string;
 }) {
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
-  const parts = splitsOf(evaluation.val, evaluation.test);
-  const split = (splitKey === 'test' && evaluation.test) || evaluation.val;
-  const shown = split === evaluation.val ? 'val' : 'test';
+  const parts = splitsOf(evaluation);
+  const { key: shown, split } = pickSplit(parts, splitKey);
+  const options = parts.map((part) => part.key);
   const names = evaluation.class_names;
   const tiles = [
     tile(parts, 'Accuracy', (s) => s.accuracy, formatPercent),
@@ -473,14 +504,13 @@ function ClassificationResults({
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(evaluation, 'Log loss (cross-entropy)', trainHint)}
+        {lossTile(evaluation, parts, 'Log loss (cross-entropy)', trainHint)}
       </SimpleGrid>
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed">
-          {split.size.toLocaleString('en-US')} {SPLIT_LABELS[shown].toLowerCase()} rows ·{' '}
-          {names.length} classes
+          {split.size.toLocaleString('en-US')} {ROW_LABELS[shown]} rows · {names.length} classes
         </Text>
-        <SplitPicker value={shown} onChange={setSplitKey} hasTest={!!evaluation.test} />
+        <SplitPicker value={shown} onChange={setSplitKey} options={options} />
       </Group>
       {split.confusion_matrix ? (
         <ConfusionMatrix
@@ -521,9 +551,9 @@ function RegressionResults({
   trainHint: string;
 }) {
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
-  const parts = splitsOf(evaluation.val, evaluation.test);
-  const split = (splitKey === 'test' && evaluation.test) || evaluation.val;
-  const shown = split === evaluation.val ? 'val' : 'test';
+  const parts = splitsOf(evaluation);
+  const { key: shown, split } = pickSplit(parts, splitKey);
+  const options = parts.map((part) => part.key);
   const points = useMemo(() => samplePoints(split), [split]);
   const tiles = [
     tile(parts, 'RMSE', (s) => s.rmse, formatMetric, 'root mean squared error'),
@@ -543,11 +573,11 @@ function RegressionResults({
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(evaluation, 'Loss (MSE, standardised)', trainHint)}
+        {lossTile(evaluation, parts, 'Loss (MSE, standardised)', trainHint)}
       </SimpleGrid>
       {residuals && (
         <Text size="xs" c="dimmed">
-          Residuals (predicted − actual), {SPLIT_LABELS[shown].toLowerCase()}: 5% below{' '}
+          Residuals (predicted − actual), {ROW_LABELS[shown]} rows: 5% below{' '}
           {formatMetric(residuals.q05)}, half between {formatMetric(residuals.q25)} and{' '}
           {formatMetric(residuals.q75)} (median {formatMetric(residuals.median)}), 5% above{' '}
           {formatMetric(residuals.q95)}.
@@ -557,9 +587,7 @@ function RegressionResults({
         <ScatterPlot
           title="Predicted vs. actual"
           subtitle={`${SPLIT_LABELS[shown]} rows, in the units of the target`}
-          controls={
-            <SplitPicker value={shown} onChange={setSplitKey} hasTest={!!evaluation.test} />
-          }
+          controls={<SplitPicker value={shown} onChange={setSplitKey} options={options} />}
           x={points.actual}
           y={points.predicted}
           xLabel="Actual"
@@ -585,9 +613,11 @@ export function EvaluationResults({
   evaluation: RunEvaluation | null | undefined;
   classical?: boolean;
 }) {
-  if (!evaluation || !evaluation.val) {
+  if (!evaluation || splitsOf<unknown>(evaluation).length === 0) {
     return null;
   }
+  // Without validation and test rows the model can only be measured on what it learned from.
+  const optimistic = !evaluation.val && !evaluation.test;
   const trainHint = classical
     ? 'train: the fitted model on its training rows'
     : 'train: mean over the batches of the epoch';
@@ -611,6 +641,12 @@ export function EvaluationResults({
           {kept}
         </Text>
       </Group>
+      {optimistic && (
+        <Text size="xs" c="orange" data-testid="optimistic-metrics">
+          No validation or test rows: these numbers come from the training rows, which the model has
+          learned from, so they are optimistic. They do not say how well it works on new data.
+        </Text>
+      )}
       {evaluation.task === 'classification' ? (
         <ClassificationResults evaluation={evaluation} trainHint={trainHint} />
       ) : (
