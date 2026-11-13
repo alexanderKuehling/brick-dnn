@@ -16,7 +16,7 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
-from . import approvals, downloads, notices, raw_predictions, recovery, shared_data
+from . import approvals, downloads, ensembles, notices, raw_predictions, recovery, shared_data
 from . import health as health_checks
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
@@ -248,6 +248,48 @@ def training_check(request: Request) -> Response:
     return Response({**result.to_dict(), **cost})
 
 
+class EnsembleView(APIView):
+    """``POST /api/training/ensembles/``: combine finished runs into an ensemble (see
+    ensembles.py). Counts against the rate limit of starting trainings."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "training"
+
+    def get_throttles(self):
+        return [*super().get_throttles(), ScopedRateThrottle()]
+
+    def post(self, request: Request) -> Response:
+        """``{"members": [run ids], "method"?: "average" | "stacking", "weights"?: [one
+        number per member], "name"?, "project"?}``. The ensemble is a run: it measures its
+        members like a training (queued with a training worker) and is then read, predicted
+        with and deleted like any run."""
+        if (response := _disabled_response()) is not None:
+            return response
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            run = ensembles.create_ensemble(
+                request.user,
+                data.get("name"),
+                data.get("members"),
+                data.get("method"),
+                data.get("weights"),
+                data.get("project"),
+                actor=Actor.of(request),
+            )
+        except BudgetError as exc:
+            return Response(exc.body(), status=exc.status_code)
+        except training.TrainingUnavailable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except training.TrainingInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except training.TrainingBusy as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        body = RunDetailSerializer(run, context={"request": request}).data
+        return Response(
+            {**body, "budget_warning": run.budget_warning}, status=status.HTTP_201_CREATED
+        )
+
+
 class DatasetViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -418,7 +460,10 @@ class TrainingRunViewSet(
     def perform_destroy(self, instance: TrainingRun) -> None:
         if not shared_data.can_delete_run(self.request.user, instance):
             raise PermissionDenied("Only who started it and the project's owner can delete it.")
-        training.delete_run(instance)
+        try:
+            training.delete_run(instance, self.request.user)
+        except training.RunInUse as exc:
+            raise Conflict(str(exc)) from None
 
     @action(detail=True, methods=["post"])
     def stop(self, request: Request, pk=None) -> Response:
@@ -428,7 +473,7 @@ class TrainingRunViewSet(
         if not shared_data.can_stop_run(request.user, run):
             raise PermissionDenied("Only who started it and the project's editors can stop it.")
         run = training.stop_run(run)
-        return Response(RunDetailSerializer(run).data)
+        return Response(RunDetailSerializer(run, context={"request": request}).data)
 
     @action(detail=True, methods=["post"], throttle_scope="predict")
     def predict(self, request: Request, pk=None) -> Response:
@@ -437,7 +482,8 @@ class TrainingRunViewSet(
         of a data preparation, see raw_predictions.py). Image networks also take ``{"image"}``
         instead of ``inputs``: an image file (PNG, JPEG …) as base64 text, or a list of them.
         A segmentation answers with a class map per image; ``mask`` ("png", "rle" or "none")
-        says how it is returned. Everyone who can see the run may."""
+        says how it is returned. An ensemble also returns what each member predicts with
+        ``"members": true``. Everyone who can see the run may."""
         run = self.get_object()
         data = request.data if isinstance(request.data, dict) else {}
         try:
@@ -449,6 +495,7 @@ class TrainingRunViewSet(
                 data.get("image"),
                 data.get("mask"),
                 input_format=data.get("input_format"),
+                members=data.get("members", False),
             )
         except training.TrainingUnavailable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -490,6 +537,22 @@ class TrainingRunViewSet(
         except training.TrainingInputError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"id": str(run.pk), "decision_threshold": run.decision_threshold})
+
+    @action(detail=True, methods=["patch"])
+    def ensemble(self, request: Request, pk=None) -> Response:
+        """An ensemble's weights for the weighted average, ``{"weights": [one number per
+        member]}`` (scaled to add up to 1): measured again on the members' saved
+        predictions. Only who created the ensemble may; 400 for other runs, stacking and
+        unfinished ensembles. (The decision threshold: ``decision-threshold``.)"""
+        run = self.get_object()
+        if run.owner_id != request.user.pk:
+            raise PermissionDenied("Only who created this ensemble can change its weights.")
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            run = ensembles.set_weights(run, data.get("weights"))
+        except training.TrainingInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(RunDetailSerializer(run, context={"request": request}).data)
 
     @action(detail=True, methods=["get"], url_path="predict-form")
     def predict_form(self, request: Request, pk=None) -> Response:
@@ -587,6 +650,7 @@ class ApiRoot(APIView):
                     "training_check": f"{base}training/check/",
                     "training_datasets": f"{base}training/datasets/",
                     "training_runs": f"{base}training/runs/",
+                    "training_ensembles": f"{base}training/ensembles/",
                     "data": f"{base}data/",
                     "data_steps": f"{base}data/steps/",
                     "data_sources": f"{base}data/sources/",

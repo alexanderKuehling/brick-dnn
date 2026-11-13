@@ -5,7 +5,8 @@ PyTorch. You start and watch the training in the editor; nothing is computed in 
 The same engine is available on the command line as `brickdnn train`. Networks that give
 every pixel a class are covered in [Image segmentation](#image-segmentation). Classical models
 (Gaussian processes, support vector machines and gradient boosting) are fitted with
-scikit-learn instead, see [Classical models](#classical-models).
+scikit-learn instead, see [Classical models](#classical-models). Finished runs of one dataset
+can be combined into an [ensemble](#ensembles).
 
 ![Finished training of a small CNN on MNIST with loss and accuracy curves](images/training.png)
 
@@ -452,6 +453,78 @@ predicts:
 
 Raw rows count against the same limits as other predictions (64 rows per request, the rate
 limit and compute; preparing them in the web server counts as prediction compute too).
+
+## Ensembles
+
+Finished runs can be combined into one model, an *ensemble*. A neural network and a gradient
+boosting model trained on the same table often make different mistakes; together they can do
+better than either. An ensemble is used like a run: it has metrics, the threshold analysis and
+its own decision threshold, and it predicts in the web app, over the REST API and over MCP.
+
+**Members.** 2 to 10 finished runs (completed, or stopped with weights) that you can see: your
+own and those of your shared networks. They must
+
+- solve the same task: classifications with the same classes (a network with more outputs
+  than the dataset has classes has other classes), or regressions;
+- be trained on the **same dataset made in the Data tab**. Its stored split gives every
+  member the same validation and test rows, so their predictions line up row by row. CSV
+  files uploaded without a preparation split their rows anew for every run and cannot be
+  used; nor can image and segmentation runs or runs on demo data.
+
+Neural networks and classical models can be mixed; that is the point. The server checks all
+of this and says which run does not fit and why.
+
+**Methods.**
+
+- **Weighted average** (the default): the members' class probabilities (or predicted values)
+  averaged with weights. The weights start equal; they are scaled to add up to 1. Who created
+  the ensemble can change them later in its run view (or with `PATCH …/ensemble/`): the
+  ensemble is measured again on the members' saved predictions, without predicting again.
+- **Stacking**: a small model learns how to combine the members, from their predictions of the
+  **validation rows**: a logistic regression for a classification (on each member's
+  probability of the second class with two classes, on all its probabilities otherwise) and a
+  ridge regression for a regression (on the predicted values), both with scikit-learn's
+  defaults. It is measured on the **test rows**. Its numbers on the validation rows come from
+  the rows it was fitted on, so they are optimistic; if the dataset has no test rows, all its
+  numbers are, and the run view and `get_training_run` say so. Stacking needs validation rows.
+
+**Combining.** In the list of runs, **Combine runs** lets you select finished runs and
+**Combine into an ensemble** opens a dialog for the name, the method and the weights. With an
+open network you own or edit, the ensemble belongs to it like a training started there. The
+REST API (`POST /api/training/ensembles/`) and the MCP tool `create_ensemble` do the same.
+
+**What happens.** The ensemble runs like a short training (in the queue when the server has a
+training worker; it can be stopped while it runs): every member predicts the validation and
+test rows of the dataset (without either: its training rows, optimistic like any run without
+them), the predictions are kept in the run directory (`ensemble.npz`), combined and measured
+with the same final evaluation as a run, including the threshold analysis of two classes.
+Every member is measured on the same rows too, even if it was trained with *Max. samples*
+(which shrinks its own validation and test rows), so the comparison is fair. This is cheap,
+but its CPU time counts like a training's against the budgets.
+
+**The run view** of an ensemble shows its members (with links to their runs), the method and
+the weights, a table that compares every member with the ensemble on the validation, test (or
+training) rows (accuracy, balanced accuracy, macro F1, ROC AUC with two classes and log loss;
+RMSE, MAE and R² for a regression; the best value of each column is green), the ensemble's
+metrics with the decision threshold, and **Try the ensemble: predict**.
+
+**Predictions.** Raw rows are prepared once, with the preparation of the dataset (the members
+share it). Every member then predicts them in a prediction process of its own, one after the
+other; the ensemble combines their probabilities (or values) and applies its own decision
+threshold. With `members: true` (the switch *Show what each member predicts* in the web app)
+the answer also has what each member predicted, each with its own threshold. Ensembles take
+rows as in the CSV file or raw rows, not images, and not `input_scale` `normalized` (their
+members standardise the columns each in their own way). The CPU time of all members counts for
+the ensemble.
+
+**Deleting.** A run cannot be deleted while an ensemble you can see uses it: delete the
+ensemble first (which keeps its members). If a member goes another way (its owner deletes a
+run of a shared network that is part of someone else's ensemble, or deletes their account),
+the ensemble keeps its results but cannot predict any more and names the member that is gone.
+The automatic clean-up of old runs keeps the members of an ensemble as long as the ensemble
+exists.
+
+An ensemble has no weights, code or explanations of its own: its members have them.
 
 ## Image segmentation
 

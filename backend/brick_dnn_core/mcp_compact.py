@@ -178,8 +178,9 @@ def segmentation_details(info: dict[str, Any]) -> dict[str, Any]:
 
 
 def _family(run: TrainingRun) -> str:
-    plan = run.plan if isinstance(run.plan, dict) else {}
-    return "classical" if isinstance(plan.get("classical"), dict) else "neural"
+    from .training_service import run_family
+
+    return run_family(run)
 
 
 def _dataset_name(run: TrainingRun) -> Any:
@@ -188,7 +189,7 @@ def _dataset_name(run: TrainingRun) -> Any:
 
 
 def _epochs(run: TrainingRun) -> int | None:
-    if _family(run) == "classical":
+    if _family(run) in ("classical", "ensemble"):
         return 1
     return run.config.get("epochs") if isinstance(run.config, dict) else None
 
@@ -276,12 +277,73 @@ def run_summary(run: TrainingRun, context: dict[str, Any] | None = None) -> dict
         "metrics": _metrics(run.metrics),
         "trials": run.trials_done or None,
         "has_weights": run.has_weights,
+        "ensemble": _ensemble_line(run),
         "started_by": run.owner.get_username(),
         "project": run.project_id,
         "created_at": run.created_at.isoformat(),
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
     }
     return _no_none(summary)
+
+
+def _ensemble_line(run: TrainingRun) -> str | None:
+    """'stacking of 2 runs: MLP, Boosting' for an ensemble in list_training_runs."""
+    if run.kind != "ensemble":
+        return None
+    names = [m.name for m in run.ensemble_members.order_by("position")]
+    method = (run.config or {}).get("method", "average")
+    return f"{method} of {len(names)} runs: {', '.join(names)}"
+
+
+def ensemble_details(run: TrainingRun, state: dict[str, Any], user=None) -> dict[str, Any]:
+    """An ensemble in get_training_run: method, members (weights, model), why it cannot
+    predict if a member is gone, and the comparison of the members with the ensemble per
+    split."""
+    from .ensembles import describe
+
+    described = describe(run, user) or {}
+    found = state.get("ensemble") if isinstance(state.get("ensemble"), dict) else {}
+    members = [
+        _no_none(
+            {
+                "id": m.get("id"),
+                "name": m.get("name"),
+                "model": m.get("model"),
+                "weight": _rounded(m.get("weight")),
+                "deleted": m.get("deleted") or None,
+            }
+        )
+        for m in described.get("members") or []
+    ]
+    comparison = []
+    for row in found.get("comparison") or []:
+        if not isinstance(row, dict):
+            continue
+        entry: dict[str, Any] = {"name": row.get("name")}
+        for key, label in (("val", "validation"), ("test", "test"), ("training", "training")):
+            if isinstance(row.get(key), dict):
+                entry[label] = _no_none(_rounded(row[key]))
+        comparison.append(entry)
+    details: dict[str, Any] = {
+        "method": described.get("method"),
+        "members": members,
+        "broken": described.get("broken"),
+        "comparison": comparison or None,
+        "stacking_model": _rounded(found.get("meta")) if found.get("meta") else None,
+    }
+    if found.get("optimistic"):
+        details["note"] = (
+            "Optimistic: the stacking model is measured on the validation rows it was fitted on "
+            "(the dataset has no test rows)."
+            if found.get("method") == "stacking"
+            else "Optimistic: measured on the training rows (no validation or test rows)."
+        )
+    elif found.get("method") == "stacking":
+        details["note"] = (
+            "The stacking model was fitted on the validation rows: its validation metrics are "
+            "optimistic, the test metrics are not."
+        )
+    return _no_none(details)
 
 
 def run_includes(value: Any) -> set[str]:
@@ -312,8 +374,10 @@ def run_detail(
     state: dict[str, Any] | None,
     includes: set[str],
     log_lines: Any = None,
+    user=None,
 ) -> dict[str, Any]:
-    """A training run as a summary, with the parts in ``includes`` in full (capped)."""
+    """A training run as a summary, with the parts in ``includes`` in full (capped).
+    ``user``: who asks (which members of an ensemble they can open)."""
     log_lines = _whole(log_lines, "log_lines", DEFAULT_LOG_LINES, 1, MAX_LOG_LINES)
     state = state or {}
     plan = run.plan if isinstance(run.plan, dict) else {}
@@ -376,6 +440,8 @@ def run_detail(
         detail["segmentation"] = segmentation_results(state["segmentation"])
     if isinstance(state.get("evaluation"), dict):
         detail["evaluation"] = evaluation_summary(state["evaluation"], threshold)
+    if run.kind == "ensemble":
+        detail["ensemble"] = ensemble_details(run, state, user)
     if run.tuning or state.get("trials"):
         detail["tuning"] = _no_none(
             {

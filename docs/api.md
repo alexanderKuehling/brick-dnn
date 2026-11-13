@@ -413,6 +413,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_format?, input_scale?, top_k?}` or image files `{image, mask?}` |
 | GET    | `/api/training/runs/<id>/predict-form/` | What the prediction panel needs: input columns (prepared and raw) with sample rows, or the image size; `available`/`reason` |
 | POST   | `/api/training/runs/<id>/decision-threshold/` | Binary classification: the threshold its predictions use `{threshold}` (0–1; only who started the run) |
+| POST   | `/api/training/ensembles/`             | Combine finished runs into an ensemble `{members, method?, weights?, name?, project?}` |
+| PATCH  | `/api/training/runs/<id>/ensemble/`    | An ensemble's weights `{weights}` (weighted average only; only who created it) |
 | GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
 | GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
 | GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
@@ -557,6 +559,48 @@ threshold its predictions use (default `0.5`, the more probable class), `null` f
 run. Who started the run changes it with `POST /api/training/runs/<id>/decision-threshold/`
 `{"threshold": 0.12}` (a number from 0 to 1) and gets `{"id": "…", "decision_threshold":
 0.12}`; others get `403` (also read-only tokens), other runs and values `400`.
+
+**Ensembles** ([training.md](training.md#ensembles)). `POST /api/training/ensembles/` combines
+2 to 10 finished runs you can see into one model:
+
+```json
+{"members": ["<run id>", "<run id>"], "method": "average", "weights": [3, 1],
+ "name": "MLP + boosting", "project": 12}
+```
+
+`method` is `average` (default; `weights`: one number of at least 0 per member, scaled to add up
+to 1, default equal) or `stacking` (no `weights`; needs validation rows). `project`: a network
+you own or edit. The members must solve the same task (the same classes) and be trained on the
+same dataset made in the Data tab; otherwise `400` says why. The answer (`201`) is the
+ensemble: a run with `kind: "ensemble"`, `family: "ensemble"` and
+
+```json
+"ensemble": {"method": "average", "method_label": "Weighted average", "broken": null,
+             "members": [{"id": "…", "name": "MLP", "weight": 0.75, "family": "neural",
+                          "model": "Neural network", "status": "completed",
+                          "visible": true, "deleted": false}, …]}
+```
+
+(`visible`: you can open the member's run; `broken`: why it cannot predict any more, once a
+member was deleted; `null` on other runs, which have `kind: "training"`). It is `queued` or
+`starting` at first, like a training (`409` when the server or the plan allows no more
+trainings at a time), and is then read, stopped, predicted with and deleted with the
+endpoints of runs. Once completed, `state.evaluation` is the evaluation of the combined
+predictions and `state.ensemble` holds `method`, `weights`, `meta` (stacking: the fitted model as
+numbers), `fitted_on` (`val` for stacking), `optimistic` (stacking without test rows, or a
+dataset without validation and test rows), `splits`, `rows` (per split) and `comparison`: one
+entry per member and one for the ensemble (`member: null`) with the headline numbers of every
+split (`size`, `accuracy`, `balanced_accuracy`, `macro_f1`, `log_loss`, with two classes
+`roc_auc` and `pr_auc`; `rmse`, `mae`, `r2` for a regression), all on the same rows.
+
+`PATCH /api/training/runs/<id>/ensemble/` `{"weights": [1, 1]}` sets new weights of a weighted
+average and answers with the run, measured again (only who created it: `403` for others,
+`400` for stacking, other runs and unfinished ensembles). `decision-threshold` works as for
+runs. `predict` takes `"members": true` to add `members: [{id, name, predictions}]`, what
+each member predicted (with its own decision threshold); the answer has `ensemble: {method,
+members: [{id, name, weight}]}`. Ensembles take rows (prepared or raw), not images, and no
+`input_scale` `normalized`. `weights` answers `404`: an ensemble has no weights of its own.
+Deleting a run that an ensemble you can see uses answers `409`; delete the ensemble first.
 
 Runs of a segmentation have `val_iou`, `val_dice` and `val_pixel_accuracy` in every entry of
 `state.history` and in `metrics` (there also `test_iou`, `test_dice`, `test_pixel_accuracy`);

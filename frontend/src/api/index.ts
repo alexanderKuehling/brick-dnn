@@ -22,6 +22,7 @@ import type {
   DatasetRef,
   DataSource,
   DataStatus,
+  EnsembleInput,
   Example,
   GenerateOptions,
   GenerateResult,
@@ -600,6 +601,24 @@ const serverApi = {
       /** Segmentation runs: a few validation images with the masks the network predicts. */
       previews: (id: string, signal?: AbortSignal) =>
         request<RunPreviews>(`/api/training/runs/${id}/previews/`, { auth: true, signal }),
+      /**
+       * An ensemble's weights for the weighted average (one per member, scaled to add up to
+       * 1), measured again. Only who created it; others get HTTP 403, stacking HTTP 400.
+       */
+      setEnsembleWeights: (id: string, weights: number[]) =>
+        request<RunDetail>(`/api/training/runs/${id}/ensemble/`, {
+          method: 'PATCH',
+          body: { weights },
+          auth: true,
+        }),
+    },
+    ensembles: {
+      /**
+       * Combine finished runs of one dataset into an ensemble (a run of its own); HTTP 400
+       * says why runs cannot be combined.
+       */
+      create: (data: EnsembleInput) =>
+        request<RunDetail>('/api/training/ensembles/', { method: 'POST', body: data, auth: true }),
     },
   },
 

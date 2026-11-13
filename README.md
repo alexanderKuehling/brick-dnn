@@ -86,6 +86,12 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   the boosting iterations, predict with uncertainty (Gaussian processes) or class
   probabilities, and export as a scikit-learn script. See
   [docs/training.md](docs/training.md#classical-models).
+- **Ensembles of finished runs**: combine, say, an MLP and a gradient boosting model trained
+  on the same prepared dataset into one model, by a weighted average of their predictions or
+  by stacking (a logistic or ridge regression fitted on the validation rows). The ensemble is
+  measured like a run, next to each of its members on the same rows, has its own decision
+  threshold and predicts raw rows in the web app, over the REST API and over MCP. See
+  [docs/training.md](docs/training.md#ensembles).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
   maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
   importance (tables), compare decision boundaries of an MLP, an SVM and a Gaussian process,

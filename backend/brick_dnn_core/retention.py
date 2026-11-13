@@ -91,10 +91,12 @@ def unused_datasets(cutoff: datetime) -> QuerySet[Dataset]:
 
 
 def unused_runs(cutoff: datetime) -> QuerySet[TrainingRun]:
-    """Finished training runs not looked at since ``cutoff`` (nor finished after it)."""
+    """Finished training runs not looked at since ``cutoff`` (nor finished after it). The
+    members of an ensemble stay as long as the ensemble does: it predicts with them."""
     return (
         TrainingRun.objects.filter(status__in=TERMINAL_STATUSES, last_used_at__lt=cutoff)
         .exclude(finished_at__gte=cutoff)
+        .exclude(ensemble_memberships__isnull=False)
         .select_related("owner")
         .order_by("created_at")
     )
