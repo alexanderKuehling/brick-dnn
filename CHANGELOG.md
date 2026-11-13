@@ -640,6 +640,10 @@
   without one keep working.
 
 ### Fixed
+- **Worker errors during a deploy.** The training worker started with the new code while the
+  web server was still migrating the database and failed on columns that did not exist yet
+  (e.g. `column ... does not exist`, reported to Sentry). It now waits until the database has
+  every migration (at most 10 minutes) before it takes trainings.
 - **Plan upgrades below Paddle's minimum charge.** When a credit (e.g. from an earlier
   downgrade) left less than about 70 US cents to charge for an upgrade, Paddle refused it
   (`subscription_update_transaction_balance_less_than_charge_limit`) and the plan stayed. The
