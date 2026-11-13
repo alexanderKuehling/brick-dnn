@@ -14,6 +14,19 @@ Classification (one class output)
     :data:`MAX_MATRIX_CLASSES` classes the matrix is not stored (``confusion_matrix`` is null);
     the most confused pairs are stored for every run.
 
+Binary classification (two classes) additionally
+    a threshold curve per split from the probability of the positive class (the second
+    class, index 1): ROC AUC, PR AUC (average precision, as scikit-learn computes it) and at
+    most :data:`MAX_CURVE_POINTS` operating points "predicted positive when p(positive) >=
+    threshold" with their precision, recall, false-positive rate and confusion counts. The
+    thresholds are chosen from one split, the validation rows (without them the test rows,
+    without either the training rows; ``binary.source`` says which): a grid 0.00, 0.01 …
+    1.00, the probabilities of evenly spaced positive and negative rows of that split, and
+    the suggestions. The other splits get their curve at the same thresholds, so a threshold
+    picked on validation can be checked on test. The suggestions come from the chosen split
+    only: the threshold with the best F1 score and the highest threshold that still finds
+    :data:`RECALL_TARGET` of the positives. See :func:`threshold_analysis`.
+
 Regression (one value output)
     MAE, MSE, RMSE, R², MAPE (only if no target is close to 0, see :func:`mape`), the median
     and the largest absolute error, quantiles of the residuals (predicted − actual) and a
@@ -24,6 +37,7 @@ Regression (one value output)
 from __future__ import annotations
 
 import math
+import traceback
 from typing import Any
 
 import numpy as np
@@ -43,6 +57,18 @@ MAPE_MIN_SHARE = 0.01
 # Probabilities are clipped to this before their logarithm is taken (log loss).
 EPSILON = 1e-15
 RESIDUAL_QUANTILES = {"q05": 0.05, "q25": 0.25, "median": 0.5, "q75": 0.75, "q95": 0.95}
+# Binary classification, the threshold curve: a grid of thresholds 0.00, 0.01 … 1.00, plus
+# the probabilities of this many evenly spaced positive and negative rows each (of the split
+# the thresholds are chosen from; where the curve changes), plus the two suggestions.
+THRESHOLD_GRID = 101
+CURVE_QUANTILES = 48
+MAX_CURVE_POINTS = THRESHOLD_GRID + 2 * CURVE_QUANTILES + 2
+# The second suggestion: the highest threshold that still finds this share of the positives.
+RECALL_TARGET = 0.8
+# The class whose probability is compared with the threshold (the second one).
+POSITIVE_CLASS = 1
+# The splits the thresholds may be chosen from, in this order.
+THRESHOLD_SOURCES = ("val", "test", "training")
 
 
 def _float(value: Any) -> float | None:
@@ -62,9 +88,18 @@ def _short(value: float | None, digits: int = 6) -> float | None:
 # --------------------------------------------------------------------------- #
 
 
+class SplitResult(dict):
+    """The metrics of a split (a plain dict in state.json). A binary classification also
+    carries the probabilities of the positive class and the true classes of its rows
+    (``binary_scores``), from which :func:`evaluation` makes the threshold curves."""
+
+    binary_scores: tuple[np.ndarray, np.ndarray] | None = None
+
+
 class ClassificationCounter:
     """The confusion matrix, the log loss and the top-k hits of one split, added batch by
-    batch (so no probabilities need to be kept)."""
+    batch (so no probabilities need to be kept; with two classes the probability of the
+    positive class of every row is kept, for the threshold curve)."""
 
     def __init__(self, num_classes: int):
         self.num_classes = num_classes
@@ -72,6 +107,9 @@ class ClassificationCounter:
         self.log_loss_sum = 0.0
         self.top_k = {k: 0 for k in TOP_K if num_classes > k}
         self.count = 0
+        self.binary = num_classes == 2
+        self.scores: list[np.ndarray] = []
+        self.labels: list[np.ndarray] = []
 
     def add(self, probabilities: np.ndarray, targets: np.ndarray) -> None:
         """One batch: the predicted probabilities (rows × classes) and the true classes."""
@@ -89,11 +127,16 @@ class ClassificationCounter:
             rank = (proba > p_true[:, None]).sum(axis=1)
             for top in self.top_k:
                 self.top_k[top] += int((rank < top).sum())
+        if self.binary:
+            self.scores.append(proba[:, POSITIVE_CLASS].copy())
+            self.labels.append(true.copy())
         self.count += len(true)
 
-    def result(self, loss: float | None = None) -> dict[str, Any]:
+    def result(self, loss: float | None = None) -> SplitResult:
         """The metrics of the split (see :func:`classification_metrics`)."""
-        result = classification_metrics(self.matrix)
+        result = SplitResult(classification_metrics(self.matrix))
+        if self.binary and self.scores:
+            result.binary_scores = (np.concatenate(self.scores), np.concatenate(self.labels))
         result["loss"] = _float(loss) if loss is not None else None
         result["log_loss"] = _float(self.log_loss_sum / self.count) if self.count else None
         result["top_k_accuracy"] = (
@@ -163,6 +206,189 @@ def classification_metrics(matrix: np.ndarray) -> dict[str, Any]:
             {"true": t, "predicted": p, "count": count} for count, t, p in pairs[:MAX_CONFUSED]
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Binary classification: decision thresholds
+# --------------------------------------------------------------------------- #
+
+
+def _floor_short(value: float, digits: int = 6) -> float:
+    """``value`` (0 to 1) with ``digits`` significant digits, rounded down: a threshold
+    rounded like this still includes the row whose probability it was taken from."""
+    value = float(value)
+    if not value > 0:
+        return 0.0
+    short = float(f"{value:.{digits}g}")
+    if short > value:
+        step = 10 ** (math.floor(math.log10(value)) - digits + 1)
+        short = float(f"{short - step:.{digits}g}")
+    return max(short, 0.0)
+
+
+class _Ranked:
+    """The positive-class probabilities of one split, sorted per true class, to count the
+    rows at or above any threshold. Rows without a probability (NaN from a diverged network)
+    are left out."""
+
+    def __init__(self, scores: np.ndarray, labels: np.ndarray):
+        scores = np.asarray(scores, dtype=np.float64).reshape(-1)
+        known = np.isfinite(scores)
+        self.scores = scores[known]
+        self.positive = (np.asarray(labels).reshape(-1) == POSITIVE_CLASS)[known]
+        self.pos = np.sort(self.scores[self.positive])
+        self.neg = np.sort(self.scores[~self.positive])
+        self.P = len(self.pos)
+        self.N = len(self.neg)
+
+    def counts(self, thresholds: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """True and false positives per threshold, with the rule ``p >= threshold``."""
+        tp = self.P - np.searchsorted(self.pos, thresholds, side="left")
+        fp = self.N - np.searchsorted(self.neg, thresholds, side="left")
+        return tp.astype(np.int64), fp.astype(np.int64)
+
+    def steps(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Every distinct probability (highest first) with the true and false positives
+        when it is the threshold, like scikit-learn's ``precision_recall_curve``."""
+        order = np.argsort(-self.scores, kind="mergesort")
+        scores = self.scores[order]
+        hits = self.positive[order].astype(np.int64)
+        last = np.r_[np.flatnonzero(np.diff(scores)), len(scores) - 1]
+        tp = np.cumsum(hits)[last]
+        return scores[last], tp, (last + 1) - tp
+
+    def roc_auc(self) -> float | None:
+        """The area under the ROC curve (ties count half); None without both classes."""
+        if not self.P or not self.N:
+            return None
+        order = np.argsort(self.scores, kind="mergesort")
+        ordered = self.scores[order]
+        starts = np.r_[0, np.flatnonzero(np.diff(ordered)) + 1]
+        ends = np.r_[starts[1:], len(ordered)]
+        ranks = np.empty(len(ordered), dtype=np.float64)
+        ranks[order] = np.repeat((starts + ends + 1) / 2.0, ends - starts)
+        total = float(ranks[self.positive].sum())
+        return _float((total - self.P * (self.P + 1) / 2.0) / (self.P * self.N))
+
+    def average_precision(self) -> float | None:
+        """The area under the precision-recall curve as scikit-learn's
+        ``average_precision_score`` computes it; None without positive rows."""
+        if not self.P:
+            return None
+        _, tp, fp = self.steps()
+        recall = tp / self.P
+        return _float(np.sum(np.diff(np.r_[0.0, recall]) * tp / (tp + fp)))
+
+    def point(self, threshold: float) -> dict[str, Any]:
+        """Precision, recall, F1, the false-positive rate and the counts at ``threshold``."""
+        found = self.counts(np.array([threshold], dtype=np.float64))
+        tp, fp = int(found[0][0]), int(found[1][0])
+        fn, tn = self.P - tp, self.N - fp
+        return {
+            "threshold": threshold,
+            "precision": _short(tp / (tp + fp), 4) if tp + fp else None,
+            "recall": _short(tp / self.P, 4) if self.P else None,
+            "f1": _short(2 * tp / (2 * tp + fp + fn), 4) if tp + fp + fn else None,
+            "fpr": _short(fp / self.N, 4) if self.N else None,
+            "tp": tp,
+            "fp": fp,
+            "tn": tn,
+            "fn": fn,
+        }
+
+
+def suggested_thresholds(ranked: _Ranked) -> dict[str, float | None]:
+    """``best_f1``: the threshold with the best F1 score (the highest of equally good ones);
+    ``recall``: the highest threshold that still finds RECALL_TARGET of the positive rows.
+    None without positive rows."""
+    if not ranked.P:
+        return {"best_f1": None, "recall": None}
+    scores, tp, fp = ranked.steps()
+    f1 = 2 * tp / (tp + fp + ranked.P)
+    best = int(np.argmax(f1))  # the first maximum: the highest threshold
+    enough = np.flatnonzero(tp >= math.ceil(RECALL_TARGET * ranked.P - 1e-9))
+    return {
+        "best_f1": _floor_short(scores[best]),
+        "recall": _floor_short(scores[int(enough[0])]) if len(enough) else None,
+    }
+
+
+def curve_thresholds(ranked: _Ranked, extra: list[float | None]) -> np.ndarray:
+    """The thresholds of the curves (see the module docstring), ascending and distinct."""
+    picked = np.round(np.linspace(0.0, 1.0, THRESHOLD_GRID), 2).tolist()
+    picked += [t for t in extra if t is not None]
+    for values in (ranked.pos, ranked.neg):
+        if len(values):
+            rows = np.unique(np.linspace(0, len(values) - 1, CURVE_QUANTILES).round())
+            picked += [_floor_short(values[int(i)]) for i in rows]
+    return np.unique(np.clip(np.array(picked, dtype=np.float64), 0.0, 1.0))
+
+
+def threshold_curve(ranked: _Ranked, thresholds: np.ndarray) -> dict[str, Any]:
+    """The ``threshold_curve`` of a split::
+
+        {"positive_class": 1, "positives": 20, "negatives": 1180,
+         "roc_auc": 0.95, "pr_auc": 0.71,        # pr_auc: the average precision
+         "points": {"threshold": [0.0, 0.01, ...],   # ascending; predicted positive:
+                    "precision": [...],              #   p(positive) >= threshold
+                    "recall": [...], "fpr": [...],   # null where undefined
+                    "tp": [...], "fp": [...], "tn": [...], "fn": [...]}}
+
+    The AUCs are null without rows of both classes (PR AUC: without positive rows).
+    """
+    tp, fp = ranked.counts(thresholds)
+    P, N = ranked.P, ranked.N
+    return {
+        "positive_class": POSITIVE_CLASS,
+        "positives": P,
+        "negatives": N,
+        "roc_auc": ranked.roc_auc(),
+        "pr_auc": ranked.average_precision(),
+        "points": {
+            "threshold": [float(t) for t in thresholds],
+            "precision": [
+                _short(int(t) / int(t + f), 4) if t + f else None
+                for t, f in zip(tp, fp, strict=True)
+            ],
+            "recall": [_short(int(t) / P, 4) if P else None for t in tp],
+            "fpr": [_short(int(f) / N, 4) if N else None for f in fp],
+            "tp": tp.tolist(),
+            "fp": fp.tolist(),
+            "tn": (N - fp).tolist(),
+            "fn": (P - tp).tolist(),
+        },
+    }
+
+
+def threshold_analysis(
+    splits: dict[str, tuple[np.ndarray, np.ndarray]],
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The ``binary`` part of the evaluation and the threshold curve of every split in
+    ``splits`` (``{"val": (probabilities of the positive class, true classes), ...}``). The
+    thresholds and the suggestions come from the first split of THRESHOLD_SOURCES that is
+    there (``source``)::
+
+        {"positive_class": 1, "recall_target": 0.8, "source": "val",
+         "best_f1": {"threshold": 0.31, "precision": 0.8, "recall": 0.7, "f1": 0.75,
+                     "fpr": 0.003, "tp": 14, "fp": 4, "tn": 1176, "fn": 6},
+         "recall": {...}}         # the highest threshold with recall >= recall_target
+
+    Both suggestions are measured on the source split (null without positive rows in it).
+    """
+    source = next(key for key in THRESHOLD_SOURCES if key in splits)
+    ranked = {key: _Ranked(*found) for key, found in splits.items()}
+    chosen = ranked[source]
+    suggested = suggested_thresholds(chosen)
+    thresholds = curve_thresholds(chosen, list(suggested.values()))
+    binary: dict[str, Any] = {
+        "positive_class": POSITIVE_CLASS,
+        "recall_target": RECALL_TARGET,
+        "source": source,
+    }
+    for key, value in suggested.items():
+        binary[key] = chosen.point(value) if value is not None else None
+    curves = {key: threshold_curve(found, thresholds) for key, found in ranked.items()}
+    return binary, curves
 
 
 # --------------------------------------------------------------------------- #
@@ -281,6 +507,20 @@ def evaluation(
     if task == "classification":
         result["class_names"] = [str(name) for name in class_names or []]
         result["matrix_classes_max"] = MAX_MATRIX_CLASSES
+        scores = {
+            key: found
+            for key in THRESHOLD_SOURCES
+            if (found := getattr(result[key], "binary_scores", None)) is not None
+        }
+        if scores:
+            try:
+                binary, curves = threshold_analysis(scores)
+            except Exception:  # never lose the rest of the evaluation over the curves
+                traceback.print_exc()
+            else:
+                result["binary"] = binary
+                for key, curve in curves.items():
+                    result[key] = {**result[key], "threshold_curve": curve}
     return result
 
 

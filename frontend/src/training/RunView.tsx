@@ -59,6 +59,7 @@ import { AccountLink } from '@/usage/CostEstimate';
 import { formatCpu } from '@/usage/format';
 import {
   canDeleteRun,
+  canSetThreshold,
   canStopRun,
   canTrain,
   NO_SCOPE,
@@ -66,7 +67,7 @@ import {
   type TrainingScope,
 } from './access';
 import { isClassicalRun } from './classical';
-import { EvaluationResults } from './EvaluationResults';
+import { EvaluationResults, type ThresholdProps } from './EvaluationResults';
 import {
   describeParams,
   formatCompact,
@@ -165,6 +166,14 @@ function Tile({
   );
 }
 
+/** Binary classification: the class its decision threshold decides for (the second one). */
+function positiveClass(run: RunDetail): string | undefined {
+  const evaluation = run.state?.evaluation;
+  const names =
+    evaluation?.task === 'classification' ? evaluation.class_names : run.state?.class_names;
+  return names?.[1];
+}
+
 /** Module name for the downloaded script (must be a valid Python identifier). */
 function scriptBase(name: string): string {
   const slug = slugify(name);
@@ -203,6 +212,16 @@ export function RunView({
   const classicalRun = isClassicalRun(run);
   const modelFile = `${base}.${classicalRun ? 'joblib' : 'pt'}`;
   const by = otherStarter(run, scope);
+  // Binary classification: the threshold its predictions use; only who started it saves another.
+  const threshold: ThresholdProps = {
+    decisionThreshold: run.decision_threshold,
+    onSaveThreshold: canSetThreshold(run, scope)
+      ? async (value) => {
+          const saved = await api.training.runs.setDecisionThreshold(run.id, value);
+          onUpdate({ ...run, decision_threshold: saved.decision_threshold });
+        }
+      : undefined,
+  };
   const sameNetwork = useMemo(() => semanticKey(run.graph) === semanticKey(doc), [run.graph, doc]);
 
   const logLines = state?.log ?? [];
@@ -361,7 +380,12 @@ export function RunView({
       />
 
       {queued ? null : classicalRun ? (
-        <ClassicalResults run={run} classification={classification} active={active} />
+        <ClassicalResults
+          run={run}
+          classification={classification}
+          active={active}
+          threshold={threshold}
+        />
       ) : (
         <>
           <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
@@ -548,7 +572,7 @@ export function RunView({
             )
           )}
 
-          {!active && <EvaluationResults evaluation={state?.evaluation} />}
+          {!active && <EvaluationResults evaluation={state?.evaluation} threshold={threshold} />}
           {state?.segmentation && <ClassTable results={state.segmentation} />}
           <PreviewGallery run={run} />
         </>
@@ -642,7 +666,14 @@ export function RunView({
             Try the model: predict
           </ToggleButton>
           <Collapse expanded={predictOpened}>
-            {predictOpened && <PredictionPanel runId={run.id} runName={run.name} />}
+            {predictOpened && (
+              <PredictionPanel
+                runId={run.id}
+                runName={run.name}
+                decisionThreshold={run.decision_threshold}
+                positiveClass={positiveClass(run)}
+              />
+            )}
           </Collapse>
         </div>
       )}
@@ -917,10 +948,12 @@ function ClassicalResults({
   run,
   classification,
   active,
+  threshold,
 }: {
   run: RunDetail;
   classification: boolean;
   active: boolean;
+  threshold: ThresholdProps;
 }) {
   const state = run.state;
   const fit = state?.classical ?? null;
@@ -1085,7 +1118,9 @@ function ClassicalResults({
         </Text>
       )}
 
-      {!active && <EvaluationResults evaluation={state?.evaluation} classical />}
+      {!active && (
+        <EvaluationResults evaluation={state?.evaluation} classical threshold={threshold} />
+      )}
 
       {gaussianProcess && fit?.at_bounds?.length ? (
         <KernelBoundsHint bounds={fit.at_bounds} />

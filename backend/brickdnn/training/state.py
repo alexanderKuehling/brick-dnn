@@ -176,7 +176,18 @@ and segmentations get none::
                                        # has seen them)
         # classification only:
         "class_names": ["cat", "dog", "bird"],      # the order of all lists and indices
-        "matrix_classes_max": 50       # above this many classes no confusion matrix is kept
+        "matrix_classes_max": 50,      # above this many classes no confusion matrix is kept
+        # two classes only (runs from before it have none):
+        "binary": {
+          "positive_class": 1,         # the class whose probability meets the threshold
+          "recall_target": 0.8,
+          "source": "val",             # the split the thresholds and suggestions come
+                                       # from: "val", else "test", else "training"
+          "best_f1": {"threshold": 0.31, "precision": 0.8, "recall": 0.7, "f1": 0.75,
+                      "fpr": 0.003, "tp": 14, "fp": 4, "tn": 1176, "fn": 6},
+          "recall": {...}              # the highest threshold with recall >= recall_target
+        }                              # both measured on the source split; null
+                                       # without positive rows in it
       }
 
 A classification split::
@@ -191,7 +202,14 @@ A classification split::
                                        # the class / no rows of it / neither)
        "confusion_matrix": [[380, 15, 5], ...],      # counts; rows: true class, columns:
                                        # predicted class; null above matrix_classes_max
-       "most_confused": [{"true": 1, "predicted": 0, "count": 15}, ...]}  # up to 10 pairs
+       "most_confused": [{"true": 1, "predicted": 0, "count": 15}, ...],  # up to 10 pairs
+       # two classes only: predicted positive when p(class 1) >= threshold
+       "threshold_curve": {"positive_class": 1, "positives": 20, "negatives": 1180,
+                           "roc_auc": 0.95, "pr_auc": 0.71,  # pr_auc: average precision
+                           "points": {"threshold": [0.0, 0.01, ...],  # ascending, at
+                                      "precision": [...], "recall": [...],  # most 199,
+                                      "fpr": [...], "tp": [...], "fp": [...],  # the same
+                                      "tn": [...], "fn": [...]}}}  # for every split
 
 A regression split (in the units of the target column)::
 

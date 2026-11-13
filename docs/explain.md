@@ -85,7 +85,10 @@ class: the predicted one, or another one you pick ("why not a 7?").
   (2^10 = 1,024 predictions); with more they are estimated from random orders of the features
   (at most 20,000 predictions; the sum stays exact). For classification they explain the
   probability of the predicted class (or of the one you pick), for regression the value in the
-  units of the target. *Limits:* the mean row may be an impossible one (e.g. a mean of 0/1
+  units of the target. The predicted class here is the most probable one, also for a binary
+  classification with another [decision threshold](training.md#metrics-of-the-finished-model);
+  pick the positive class to explain its probability, which the threshold is compared with.
+  *Limits:* the mean row may be an impossible one (e.g. a mean of 0/1
   features); correlated features share their credit in ways that can surprise; it is a
   local explanation of this one row.
 - **Integrated gradients** (networks only; Sundararajan et al., 2017): the gradient of the

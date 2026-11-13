@@ -476,6 +476,21 @@ class TrainingRunViewSet(
         except training.PredictionFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=True, methods=["post"], url_path="decision-threshold")
+    def decision_threshold(self, request: Request, pk=None) -> Response:
+        """Binary classification: the threshold its predictions use, ``{"threshold": 0.3}``
+        (0 to 1; the second class when its probability is at least this). Only who
+        started the run may; 400 for other runs and values."""
+        run = self.get_object()
+        if run.owner_id != request.user.pk:
+            raise PermissionDenied("Only who started this run can change its decision threshold.")
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            run = training.set_decision_threshold(run, data.get("threshold"))
+        except training.TrainingInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"id": str(run.pk), "decision_threshold": run.decision_threshold})
+
     @action(detail=True, methods=["get"], url_path="predict-form")
     def predict_form(self, request: Request, pk=None) -> Response:
         """What the prediction panel needs: the input columns (prepared or raw) with example

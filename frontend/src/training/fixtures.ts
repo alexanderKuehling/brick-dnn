@@ -9,6 +9,7 @@ import type {
   RunPreviews,
   RunQueue,
   RunSummary,
+  ThresholdCurve,
   TrainingConfig,
   TrainingStatus,
   TrialEntry,
@@ -1014,6 +1015,114 @@ export function classificationEvaluation(
         [0, 2, 0],
       ],
       most_confused: [{ true: 0, predicted: 1, count: 2 }],
+    },
+    ...overrides,
+  };
+}
+
+/** A threshold curve from true and false positives per threshold (thresholds ascending). */
+export function thresholdCurve(
+  positives: number,
+  negatives: number,
+  thresholds: number[],
+  tp: number[],
+  fp: number[],
+  aucs: { roc: number; pr: number }
+): ThresholdCurve {
+  const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
+  return {
+    positive_class: 1,
+    positives,
+    negatives,
+    roc_auc: aucs.roc,
+    pr_auc: aucs.pr,
+    points: {
+      threshold: thresholds,
+      precision: tp.map((t, i) => ratio(t, t + fp[i])),
+      recall: tp.map((t) => ratio(t, positives)),
+      fpr: fp.map((f) => ratio(f, negatives)),
+      tp,
+      fp,
+      tn: fp.map((f) => negatives - f),
+      fn: tp.map((t) => positives - t),
+    },
+  };
+}
+
+const THRESHOLDS = [0, 0.1, 0.2, 0.3, 0.5, 0.7, 1];
+
+/**
+ * Two classes (ok, fraud): validation 10 fraud and 90 ok rows, test 5 and 45. At 0.5 the
+ * validation rows find 4 of 10 frauds; the best F1 is at 0.3, 80% recall at 0.2.
+ */
+export function binaryEvaluation(
+  overrides: Partial<ClassificationEvaluation> = {}
+): ClassificationEvaluation {
+  const base = classificationEvaluation();
+  const split = (size: number, matrix: number[][], curve: ThresholdCurve) => ({
+    ...base.val!,
+    size,
+    per_class: {
+      precision: [0.9, 0.67],
+      recall: [0.98, 0.4],
+      f1: [0.94, 0.5],
+      support: [matrix[0][0] + matrix[0][1], matrix[1][0] + matrix[1][1]],
+    },
+    confusion_matrix: matrix,
+    most_confused: [],
+    threshold_curve: curve,
+  });
+  return {
+    ...base,
+    class_names: ['ok', 'fraud'],
+    val: split(
+      100,
+      [
+        [88, 2],
+        [6, 4],
+      ],
+      thresholdCurve(10, 90, THRESHOLDS, [10, 10, 9, 7, 4, 3, 0], [90, 40, 20, 6, 2, 0, 0], {
+        roc: 0.912,
+        pr: 0.634,
+      })
+    ),
+    test: split(
+      50,
+      [
+        [44, 1],
+        [3, 2],
+      ],
+      thresholdCurve(5, 45, THRESHOLDS, [5, 5, 5, 4, 2, 1, 0], [45, 20, 10, 6, 1, 0, 0], {
+        roc: 0.871,
+        pr: 0.552,
+      })
+    ),
+    binary: {
+      positive_class: 1,
+      recall_target: 0.8,
+      source: 'val',
+      best_f1: {
+        threshold: 0.3,
+        precision: 0.5385,
+        recall: 0.7,
+        f1: 0.6087,
+        fpr: 0.0667,
+        tp: 7,
+        fp: 6,
+        tn: 84,
+        fn: 3,
+      },
+      recall: {
+        threshold: 0.2,
+        precision: 0.3103,
+        recall: 0.9,
+        f1: 0.4615,
+        fpr: 0.2222,
+        tp: 9,
+        fp: 20,
+        tn: 70,
+        fn: 1,
+      },
     },
     ...overrides,
   };

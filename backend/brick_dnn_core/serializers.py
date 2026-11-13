@@ -244,10 +244,20 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "started_via",
             "usage",
             "queue",
+            "decision_threshold",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
+    decision_threshold = serializers.SerializerMethodField()
+
+    def get_decision_threshold(self, obj: TrainingRun) -> float | None:
+        """Binary classification: predictions are the second class when its probability is
+        at least this (default 0.5); null for every other run."""
+        from .training_service import decision_threshold
+
+        return decision_threshold(obj)
+
     started_via = serializers.SerializerMethodField()
     usage = serializers.SerializerMethodField()
     queue = serializers.SerializerMethodField()

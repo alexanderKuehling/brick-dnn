@@ -65,6 +65,8 @@ CLI_CLASSIFICATION = (
     ("weighted F1", "weighted_f1", ".3f"),
     ("top-3 accuracy", "top3", ".1%"),
     ("top-5 accuracy", "top5", ".1%"),
+    ("ROC AUC", "roc_auc", ".3f"),  # two classes only (threshold_curve)
+    ("PR AUC", "pr_auc", ".3f"),
 )
 CLI_REGRESSION = (
     ("loss", "loss", ".4g"),
@@ -311,6 +313,8 @@ class ConsoleReporter(Reporter):
             values = [part.get(key) for _, part in parts]
             if key.startswith("top"):
                 values = [(part.get("top_k_accuracy") or {}).get(key[3:]) for _, part in parts]
+            if key in ("roc_auc", "pr_auc"):
+                values = [(part.get("threshold_curve") or {}).get(key) for _, part in parts]
             if all(value is None for value in values):
                 continue
             cells = [_number(value, spec).rjust(10) for value in values]
