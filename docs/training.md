@@ -256,6 +256,44 @@ get none, and runs of older versions show nothing new.
 - **Top-3 / top-5 accuracy**: the share of rows whose true class is among the 3 (5) most
   probable ones; only with more than 3 (5) classes.
 
+**Binary classification** (two classes: a neural network with two outputs, or a classical
+classifier of two classes; a network with one output is trained as a regression) adds a
+threshold analysis. The second class is the *positive* one (the one whose probability is
+compared with the threshold: in alphabetical order of text labels, index 1 for class indices,
+so `fraud` before `ok` makes `ok` positive; name the classes so the rare one comes second, or
+use 0/1). The model gives every row a probability of the positive class, and a row is
+predicted positive when that probability is **at least the decision threshold**. 0.5 is the
+same as the most probable class, but on imbalanced data (2 % fraud, say) it often finds few
+of the rare class: a lower threshold finds more of it (higher recall) and raises more false
+alarms (lower precision).
+
+- **ROC AUC**: the area under the ROC curve (recall against the false-positive rate over all
+  thresholds); 0.5 is guessing, 1 is perfect. It does not depend on how rare the positive
+  class is.
+- **PR AUC**: the area under the precision-recall curve, as average precision (scikit-learn's
+  `average_precision_score`). On imbalanced data it says more than ROC AUC; a model that
+  guesses gets the share of positives.
+- **The decision threshold** under *Metrics*: a slider over the measured thresholds shows
+  precision, recall, F1, the false-positive rate and the counts (true and false positives
+  and negatives) on the validation and the test rows, and the precision-recall and ROC curves
+  mark the chosen point. Two buttons jump to the suggestions: the threshold with the **best
+  F1** and the **highest threshold with a recall of at least 80 %**. *Use this threshold for
+  predictions* saves it on the run: from then on its predictions (the prediction panel, the
+  [REST API](api.md) and the MCP tool `predict`) use it. Only who started the run can change
+  it; everyone who sees it sees which threshold the predictions use.
+- The thresholds and the suggestions come from the **validation rows**, and the test rows are
+  measured at the same thresholds, so a threshold picked on validation can be checked on
+  test. Without validation rows they come from the test rows (then the test numbers of the
+  threshold you pick are optimistic), without either from the training rows (optimistic, as
+  all numbers of such a run). `evaluation.binary.source` says which.
+- Per split at most 199 thresholds are kept: 0, 0.01 … 1, the probabilities of 48 evenly
+  spaced positive and negative rows (where the curve changes on rare classes) and the two
+  suggestions; the AUCs are computed from all rows.
+
+Runs of older versions have no threshold analysis; their predictions take the most probable
+class (threshold 0.5) as before. Explanations (*Explain*) explain the most probable class,
+not the thresholded decision.
+
 **Regression** (in the units of the target column; a neural network's standardised target is
 turned back first):
 

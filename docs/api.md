@@ -412,6 +412,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_format?, input_scale?, top_k?}` or image files `{image, mask?}` |
 | GET    | `/api/training/runs/<id>/predict-form/` | What the prediction panel needs: input columns (prepared and raw) with sample rows, or the image size; `available`/`reason` |
+| POST   | `/api/training/runs/<id>/decision-threshold/` | Binary classification: the threshold its predictions use `{threshold}` (0–1; only who started the run) |
 | GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
 | GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
 | GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
@@ -526,6 +527,36 @@ regression split has `size`, `loss`, `mae`, `mse`, `rmse`, `r2`, `mape` (a share
 target is near 0), `median_absolute_error`, `max_error`, `residuals` (`q05`, `q25`, `median`,
 `q75`, `q95` of predicted − actual) and `sample` (`actual` and `predicted`, at most 500 rows),
 in the units of the target.
+
+A **binary classification** (two classes) also has a `threshold_curve` in every split and
+`binary` in the evaluation ([training.md](training.md#metrics-of-the-finished-model) explains
+them). A row is predicted as the positive class (`positive_class`, the second one) when its
+probability of that class is at least the threshold. The curves have the same thresholds in
+every split (at most 199, ascending), chosen from the split named in `binary.source` (`val`,
+else `test`, else `training`), which the suggestions are measured on too:
+
+```json
+"val": {…,
+  "threshold_curve": {"positive_class": 1, "positives": 20, "negatives": 1180,
+                      "roc_auc": 0.95, "pr_auc": 0.71,
+                      "points": {"threshold": [0.0, 0.01, …], "precision": […], "recall": […],
+                                 "fpr": […], "tp": […], "fp": […], "tn": […], "fn": […]}}},
+"binary": {"positive_class": 1, "recall_target": 0.8, "source": "val",
+           "best_f1": {"threshold": 0.31, "precision": 0.8, "recall": 0.7, "f1": 0.75,
+                       "fpr": 0.003, "tp": 14, "fp": 4, "tn": 1176, "fn": 6},
+           "recall": {…}}
+```
+
+`pr_auc` is the average precision; `roc_auc` is `null` without rows of both classes, `pr_auc`
+and the suggestions without positive rows, a precision where nothing is predicted positive.
+`best_f1` is the threshold with the best F1 score, `recall` the highest threshold whose recall
+is at least `recall_target`.
+
+**The decision threshold.** Runs have `decision_threshold`: for a binary classification the
+threshold its predictions use (default `0.5`, the more probable class), `null` for every other
+run. Who started the run changes it with `POST /api/training/runs/<id>/decision-threshold/`
+`{"threshold": 0.12}` (a number from 0 to 1) and gets `{"id": "…", "decision_threshold":
+0.12}`; others get `403` (also read-only tokens), other runs and values `400`.
 
 Runs of a segmentation have `val_iou`, `val_dice` and `val_pixel_accuracy` in every entry of
 `state.history` and in `metrics` (there also `test_iou`, `test_dice`, `test_pixel_accuracy`);
@@ -750,6 +781,17 @@ also height × width) or in the shape of the Input layer, and need `input_scale`
 `state.preprocessing`). Runs on demo data take
 arrays of the Input shape as they are (and add a `note`: their predictions mean nothing).
 `top_k` (1–10, default 3) is the number of classes in `top`.
+
+A **binary classification** predicts with the run's `decision_threshold`: the second class
+when its probability is at least the threshold, else the first. Every prediction adds
+`positive_probability` (the probability of the second class; `probability` stays that of the
+predicted class, `top` stays ordered by probability), and the answer adds `decision_threshold`,
+`positive_class` and a `threshold_note`:
+
+```json
+{ "class": "fraud", "index": 1, "probability": 0.18, "positive_probability": 0.18,
+  "top": [{ "class": "ok", "index": 0, "probability": 0.82 }, { "class": "fraud", "index": 1, "probability": 0.18 }] }
+```
 
 Image networks also take image files instead of arrays: `{"image": "<base64>"}` or a list of
 at most 8 (PNG, JPEG, BMP, GIF or WebP, as base64 text or a `data:` URL, together at most

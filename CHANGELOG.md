@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+- **Decision threshold for binary classification.** The final evaluation of a run with two
+  classes (neural networks with two outputs, classical classifiers) adds ROC AUC, PR AUC
+  (average precision) and a threshold curve per split: precision, recall, false-positive rate
+  and confusion counts at up to 199 thresholds, the same for validation and test, chosen from
+  the validation rows (without them from the test, else the training rows). Two thresholds are
+  suggested: the best F1 and the highest one with 80 % recall. Under *Metrics* the run view
+  shows the precision-recall and ROC curves and a threshold slider with the results of every
+  split; *Use this threshold for predictions* saves it on the run (only who started it), and
+  predictions in the web app, the REST API and over MCP then predict the second class when
+  its probability is at least the threshold, and return that probability
+  (`positive_probability`). New: `decision_threshold` on runs (default 0.5, the previous
+  behaviour), `POST /api/training/runs/<id>/decision-threshold/`, the MCP tool
+  `set_decision_threshold`, and the suggestions and the metrics at the threshold in
+  `get_training_run`. `brickdnn train` prints ROC AUC and PR AUC. See docs/training.md.
 - **Error monitoring with Sentry** (off unless `BRICKDNN_SENTRY_DSN` /
   `BRICKDNN_SENTRY_FRONTEND_DSN` are set): errors of the web backend, the realtime server, the
   training worker, the clean-up and the browser app, with a sample of traces (10 % in

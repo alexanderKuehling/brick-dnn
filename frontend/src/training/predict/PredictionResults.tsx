@@ -48,6 +48,12 @@ export function ResultCard({
               {formatProbability(prediction.probability)}
             </Text>
           </Text>
+          {typeof prediction.positive_probability === 'number' && (
+            <Text size="xs" c="dimmed">
+              Decided by the threshold on the probability of the positive class:{' '}
+              {formatProbability(prediction.positive_probability)}
+            </Text>
+          )}
           {(prediction.top ?? []).map((item) => (
             <div key={item.class}>
               <Group justify="space-between" gap="xs" wrap="nowrap">

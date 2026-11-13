@@ -39,6 +39,9 @@ MAX_SAMPLES = 64
 MAX_VALUES = 250_000  # input numbers of all samples together
 MAX_TOP_K = 10
 DEFAULT_TOP_K = 3
+# Binary classification: the class whose probability is compared with the run's decision
+# threshold (the second one, as in the evaluation's threshold curve).
+BINARY_POSITIVE = 1
 # How input values are given: "raw" as in the CSV file or image file (pixels 0-255), "unit"
 # for pixels scaled to 0-1, "normalized" for values that are already prepared.
 INPUT_SCALES = ("raw", "unit", "normalized")
@@ -83,6 +86,19 @@ def is_classical(plan: Any) -> bool:
 def is_segmentation(plan: Any) -> bool:
     """True for a run that predicts a class for every pixel, see compat.TrainingPlan."""
     return isinstance(plan, dict) and plan.get("task") == "segmentation"
+
+
+def is_binary(plan: Any) -> bool:
+    """True for a binary classification: one class output with two classes (a neural
+    network with two outputs, or a classical classifier of two classes). Its predictions
+    use the run's decision threshold on the probability of the second class."""
+    if not isinstance(plan, dict) or plan.get("task") != "classification":
+        return False
+    targets = plan.get("targets")
+    if not isinstance(targets, list) or len(targets) != 1 or not isinstance(targets[0], dict):
+        return False
+    target = targets[0]
+    return target.get("kind") == "class" and target.get("num_classes") == 2
 
 
 def input_specs(plan: Any) -> list[dict[str, Any]]:
@@ -745,11 +761,21 @@ def _flat_numbers(value: Any) -> list[float | None]:
 
 
 def _classes(
-    scores: list[float | None], names: list[str], top_k: int, probabilities: bool = False
+    scores: list[float | None],
+    names: list[str],
+    top_k: int,
+    probabilities: bool = False,
+    threshold: float | None = None,
 ) -> dict[str, Any]:
-    """The top classes; ``scores`` are raw scores (softmax) or already ``probabilities``."""
+    """The top classes; ``scores`` are raw scores (softmax) or already ``probabilities``.
+    With a ``threshold`` (two classes) the predicted class is the second one when its
+    probability is at least the threshold (``positive_probability``), else the first; the
+    top classes stay in the order of their probabilities."""
     if any(s is None for s in scores):
-        return {"class": None, "index": None, "probability": None, "top": []}
+        empty: dict[str, Any] = {"class": None, "index": None, "probability": None, "top": []}
+        if threshold is not None:
+            empty["positive_probability"] = None
+        return empty
     numbers = [float(s) for s in scores if s is not None]
     if probabilities:
         total = sum(numbers) or 1.0
@@ -763,7 +789,18 @@ def _classes(
     top = [
         {"class": names[i], "index": i, "probability": round(probs[i], 4)} for i in order[:top_k]
     ]
-    return {**top[0], "top": top}
+    if threshold is None or len(probs) != 2:
+        return {**top[0], "top": top}
+    positive = probs[BINARY_POSITIVE]
+    chosen = BINARY_POSITIVE if positive >= threshold else 1 - BINARY_POSITIVE
+    return {
+        "class": names[chosen],
+        "index": chosen,
+        "probability": round(probs[chosen], 4),
+        # Unrounded enough to compare with the threshold (0.29996 is not 0.3).
+        "positive_probability": float(f"{positive:.6g}"),
+        "top": top,
+    }
 
 
 def read_outputs(
@@ -774,15 +811,20 @@ def read_outputs(
     top_k: int = DEFAULT_TOP_K,
     probabilities: bool = False,
     std: Any = None,
+    threshold: float | None = None,
 ) -> list[dict[str, Any]]:
     """Turn the raw outputs of the network (one nested list per output, ``count`` samples
     each) into one prediction per sample: the classes with their probabilities (softmax,
     as the training's cross-entropy loss reads them; classical classifiers already give
     ``probabilities``) or the predicted value (with ``std``, a Gaussian process's
-    predictive standard deviation per sample, as "std"). Raises ``ValueError`` for outputs
-    that do not fit the training plan."""
+    predictive standard deviation per sample, as "std"). ``threshold``: the decision
+    threshold of a binary classification (see :func:`is_binary` and :func:`_classes`),
+    ignored for other runs. Raises ``ValueError`` for outputs that do not fit the training
+    plan."""
     kind = kind_of(plan, preprocessing)
     targets = plan["targets"]
+    if not is_binary(plan):
+        threshold = None
     if not isinstance(outputs, list) or len(outputs) != len(targets):
         raise ValueError("The network returned an unexpected number of outputs.")
     per_output = []
@@ -796,7 +838,7 @@ def read_outputs(
                 scores = _flat_numbers(sample)
                 if len(scores) != len(names):
                     raise ValueError("The network returned an unexpected number of classes.")
-                results.append(_classes(scores, names, top_k, probabilities))
+                results.append(_classes(scores, names, top_k, probabilities, threshold))
             elif kind == "tabular":
                 scores = _flat_numbers(sample)
                 if len(scores) != 1:

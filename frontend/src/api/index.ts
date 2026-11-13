@@ -590,6 +590,15 @@ const serverApi = {
           auth: true,
           signal,
         }),
+      /**
+       * Binary classification: the threshold its predictions use (0 to 1). Only who started
+       * the run; others get HTTP 403, other runs and values HTTP 400.
+       */
+      setDecisionThreshold: (id: string, threshold: number) =>
+        request<{ id: string; decision_threshold: number }>(
+          `/api/training/runs/${id}/decision-threshold/`,
+          { method: 'POST', body: { threshold }, auth: true }
+        ),
       /** Segmentation runs: a few validation images with the masks the network predicts. */
       previews: (id: string, signal?: AbortSignal) =>
         request<RunPreviews>(`/api/training/runs/${id}/previews/`, { auth: true, signal }),

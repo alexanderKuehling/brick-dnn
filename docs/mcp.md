@@ -126,6 +126,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
 | `predict`               | read   |             | Run a trained network on up to 64 samples, or on image files (base64) |
+| `set_decision_threshold` | full  |             | Binary classification: the threshold `predict` uses (0–1; who started the run) |
 | `explain_prediction`    | read   |             | Explain a trained model: saliency/Grad-CAM/occlusion, Shapley values, permutation importance, decision boundary |
 | `get_layer_activations` | read   |             | The output of every brick of a trained network for one sample (shape, statistics, values) |
 
@@ -145,8 +146,10 @@ default, and every capped list says how long it is and how to see more:
   the validation and test rows with 4 significant digits, or on the training rows as
   `training_optimistic` for a run that held nothing out; up to 10 classes also the confusion
   matrix and precision/recall/F1/support per class, with more classes the 5 most confused
-  pairs and the 5 classes with the lowest F1; regressions without the sample of points), and
-  the end of the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
+  pairs and the 5 classes with the lowest F1; two classes also `roc_auc` and `pr_auc` per
+  split and `binary`: the suggested thresholds and the precision, recall, F1, false-positive
+  rate and counts at the run's `decision_threshold`, not the curves; regressions without the
+  sample of points), and the end of the log of a failed run. `include: ["history", "graph", "plan", "log", "trials",
   "preprocessing"]` adds those parts; `history` has at most 50 evenly spaced epochs plus the
   best and the last, `log` the last `log_lines` lines (default 20, at most 200).
   `list_training_runs {limit?, status?, project_id?}` shows the newest 20 runs, one line each,
@@ -365,6 +368,23 @@ classification the `class` with its `probability` and the `top` classes (`top_k`
 at most 10); for regression the `value` in the units of the target column. Classical models
 take the same rows; a Gaussian process regressor adds `std`, the uncertainty of each value.
 (The REST API also returns the class indices; the MCP answer leaves them out.)
+
+A **binary classification** (two classes) predicts the second class when its probability is at
+least the run's decision threshold (default 0.5), else the first; each prediction adds
+`positive_probability` and the answer `decision_threshold`, `positive_class` and a
+`threshold_note`. On imbalanced data (2 % fraud, say) a lower threshold finds more of the rare
+class at the cost of more false alarms. `get_training_run` shows the suggestions of the final
+evaluation (`evaluation.binary`: the best F1, and the highest threshold with 80 % recall,
+measured on the validation rows, else the test or the training rows: `suggestions_from`) and
+the metrics at the current threshold; `set_decision_threshold {id, threshold}` (only who
+started the run, not with read-only access) saves another one and answers with the metrics at
+it, measured at the closest threshold of the evaluation's curve:
+
+```text
+get_training_run {id}                       → evaluation.binary.recall_80: {threshold: 0.083, precision: 0.41, recall: 0.81, …}
+set_decision_threshold {id, threshold: 0.083} → at_decision_threshold: {validation: {…}, test: {…}}
+predict {run_id, inputs: [...]}             → class "fraud" from positive_probability 0.083
+```
 
 | Trained on | `inputs` (at most 64 samples)                                       | `input_scale` |
 | ---------- | ------------------------------------------------------------------- | ------------- |

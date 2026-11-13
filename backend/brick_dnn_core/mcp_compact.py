@@ -319,6 +319,9 @@ def run_detail(
     plan = run.plan if isinstance(run.plan, dict) else {}
     config = run.config if isinstance(run.config, dict) else {}
     started, finished = state.get("started_at"), state.get("finished_at")
+    from .training_service import decision_threshold
+
+    threshold = decision_threshold(run)
     detail: dict[str, Any] = {
         "id": str(run.pk),
         "name": run.name,
@@ -351,6 +354,7 @@ def run_detail(
         "queue": queue_info(run, {}, full=True),
         "started_via": _started_via(run),
         "has_weights": run.has_weights,
+        "decision_threshold": threshold,
         "started_by": run.owner.get_username(),
         "project": run.project_id,
         "created_at": run.created_at.isoformat(),
@@ -371,7 +375,7 @@ def run_detail(
     if isinstance(state.get("segmentation"), dict):
         detail["segmentation"] = segmentation_results(state["segmentation"])
     if isinstance(state.get("evaluation"), dict):
-        detail["evaluation"] = evaluation_summary(state["evaluation"])
+        detail["evaluation"] = evaluation_summary(state["evaluation"], threshold)
     if run.tuning or state.get("trials"):
         detail["tuning"] = _no_none(
             {
@@ -524,12 +528,88 @@ def _class_split(part: dict[str, Any], names: list[str]) -> dict[str, Any]:
     return _no_none(entry)
 
 
-def evaluation_summary(found: dict[str, Any]) -> dict[str, Any]:
+def _ratio(part: int, whole: int) -> float | None:
+    return round(part / whole, 4) if whole else None
+
+
+def threshold_point(curve: Any, threshold: float) -> dict[str, Any] | None:
+    """Precision, recall, F1, the false-positive rate and the confusion counts of a split at
+    the point of its ``threshold_curve`` (see evaluation.py) closest to ``threshold``
+    (``threshold`` in the answer is that point's). None without a curve."""
+    points = curve.get("points") if isinstance(curve, dict) else None
+    thresholds = points.get("threshold") if isinstance(points, dict) else None
+    if not isinstance(thresholds, list) or not thresholds:
+        return None
+    try:
+        i = min(range(len(thresholds)), key=lambda j: abs(float(thresholds[j]) - threshold))
+        tp, fp, tn, fn = (int(points[key][i]) for key in ("tp", "fp", "tn", "fn"))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    return {
+        "threshold": thresholds[i],
+        "precision": _ratio(tp, tp + fp),
+        "recall": _ratio(tp, tp + fn),
+        "f1": _ratio(2 * tp, 2 * tp + fp + fn),
+        "fpr": _ratio(fp, fp + tn),
+        "tp": tp,
+        "fp": fp,
+        "tn": tn,
+        "fn": fn,
+    }
+
+
+SPLIT_LABELS = {"val": "validation", "test": "test", "training": "training_optimistic"}
+
+
+def _suggestion(point: Any) -> Any:
+    """A suggested operating point, rounded, except the threshold: rounded up it could
+    leave out the row it was taken from."""
+    if not isinstance(point, dict):
+        return None
+    return {**_rounded(point), "threshold": point.get("threshold")}
+
+
+def _binary_summary(found: dict[str, Any], threshold: float | None) -> dict[str, Any] | None:
+    """Binary classification: where the thresholds come from, the two suggestions and,
+    with the run's ``threshold``, its precision, recall … on every split."""
+    binary = found.get("binary")
+    if not isinstance(binary, dict):
+        return None
+    names = [str(name) for name in found.get("class_names") or []]
+    positive = binary.get("positive_class")
+    summary: dict[str, Any] = {
+        "positive_class": names[positive]
+        if isinstance(positive, int) and positive < len(names)
+        else positive,
+        "rule": "predicted positive when p(positive_class) >= threshold",
+        "suggestions_from": SPLIT_LABELS.get(str(binary.get("source")), binary.get("source")),
+        "best_f1": _suggestion(binary.get("best_f1")),
+        f"recall_{round(100 * float(binary.get('recall_target') or 0))}": _suggestion(
+            binary.get("recall")
+        ),
+    }
+    if threshold is not None:
+        at = {}
+        for key, label in SPLIT_LABELS.items():
+            part = found.get(key)
+            if isinstance(part, dict):
+                point = threshold_point(part.get("threshold_curve"), threshold)
+                if point is not None:
+                    at[label] = point
+        summary["decision_threshold"] = threshold
+        summary["at_decision_threshold"] = at or None
+    return _no_none(summary)
+
+
+def evaluation_summary(found: dict[str, Any], threshold: float | None = None) -> dict[str, Any]:
     """The final evaluation of a run, compact: the overall numbers of the validation and the
     test rows (without either: of the training rows, ``training_optimistic``); for
     classification up to MAX_MATRIX_CLASSES classes also the confusion
     matrix and the values per class, with more classes the most confused pairs and the
-    classes with the lowest F1 score; for regression without the sample of points."""
+    classes with the lowest F1 score; for regression without the sample of points. A
+    binary classification adds ROC AUC and PR AUC per split and ``binary`` (the threshold
+    suggestions and, with the run's decision ``threshold``, the metrics at it), not the
+    curves themselves."""
     classification = found.get("task") == "classification"
     names = [str(name) for name in found.get("class_names") or []]
     result: dict[str, Any] = {
@@ -546,11 +626,17 @@ def evaluation_summary(found: dict[str, Any]) -> dict[str, Any]:
             continue
         if classification:
             result[label] = _class_split(part, names)
+            curve = part.get("threshold_curve")
+            if isinstance(curve, dict):
+                result[label]["roc_auc"] = _rounded(curve.get("roc_auc"))
+                result[label]["pr_auc"] = _rounded(curve.get("pr_auc"))
         else:
             result[label] = _no_none({k: _rounded(part.get(k)) for k in REGRESSION_KEYS})
     if classification and len(names) <= MAX_MATRIX_CLASSES:
         result["classes"] = names
         result["matrix"] = "confusion_matrix: rows true class, columns predicted (counts)"
+    if classification:
+        result["binary"] = _binary_summary(found, threshold)
     return _no_none(result)
 
 

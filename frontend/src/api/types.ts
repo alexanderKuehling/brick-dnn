@@ -1333,6 +1333,11 @@ export interface RunSummary {
   usage?: RunUsage;
   /** While the run is `queued`: its position and estimated start. Null otherwise. */
   queue?: RunQueue | null;
+  /**
+   * Binary classification: predictions are the second class when its probability is at least
+   * this (default 0.5). Null for other runs; missing on older servers.
+   */
+  decision_threshold?: number | null;
 }
 
 /** Why a stopped run stopped: the user, a used-up budget or the limit per training. */
@@ -1459,6 +1464,60 @@ export interface ClassificationSplit {
   confusion_matrix: number[][] | null;
   /** The largest off-diagonal cells (class indices). */
   most_confused: { true: number; predicted: number; count: number }[];
+  /** Two classes only (missing in older runs): see ThresholdCurve. */
+  threshold_curve?: ThresholdCurve;
+}
+
+/**
+ * Binary classification: the split at a few hundred thresholds, ascending; a row is predicted
+ * positive (class `positive_class`) when its probability of that class is at least the
+ * threshold. The thresholds are the same for every split of a run.
+ */
+export interface ThresholdCurve {
+  positive_class: number;
+  positives: number;
+  negatives: number;
+  /** Null without rows of both classes. */
+  roc_auc: number | null;
+  /** Average precision; null without positive rows. */
+  pr_auc: number | null;
+  points: {
+    threshold: number[];
+    /** Null where nothing is predicted positive. */
+    precision: (number | null)[];
+    recall: (number | null)[];
+    /** False-positive rate. */
+    fpr: (number | null)[];
+    tp: number[];
+    fp: number[];
+    tn: number[];
+    fn: number[];
+  };
+}
+
+/** One threshold with what it gives on a split. */
+export interface ThresholdPoint {
+  threshold: number;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  fpr: number | null;
+  tp: number;
+  fp: number;
+  tn: number;
+  fn: number;
+}
+
+/** Binary classification: where the thresholds come from and the two suggestions. */
+export interface BinaryAnalysis {
+  positive_class: number;
+  recall_target: number;
+  /** The split the thresholds and suggestions come from (validation, else test, else training). */
+  source: 'val' | 'test' | 'training';
+  /** The threshold with the best F1 score; null without positive rows. */
+  best_f1: ThresholdPoint | null;
+  /** The highest threshold whose recall is at least recall_target. */
+  recall: ThresholdPoint | null;
 }
 
 export interface RegressionSplit {
@@ -1500,6 +1559,8 @@ export interface ClassificationEvaluation extends EvaluationBase {
    * (optimistic: it has seen them). Missing in older runs.
    */
   training?: ClassificationSplit | null;
+  /** Two classes only (missing in older runs). */
+  binary?: BinaryAnalysis;
 }
 
 export interface RegressionEvaluation extends EvaluationBase {
@@ -1726,6 +1787,8 @@ export interface Prediction {
   value?: number | number[] | null;
   /** Gaussian processes: the predictive standard deviation. */
   std?: number | null;
+  /** Binary classification: the probability of the positive class, compared with the threshold. */
+  positive_probability?: number | null;
 }
 
 export interface PredictionRequest {
@@ -1745,6 +1808,10 @@ export interface PredictionResult {
   std_note?: string;
   /** Raw rows: unknown categories, rows unlike the training rows … */
   warnings?: string[];
+  /** Binary classification: the run's decision threshold and the class it decides for. */
+  decision_threshold?: number;
+  positive_class?: string;
+  threshold_note?: string;
 }
 
 /** The answer when inputs are invalid (HTTP 400). */

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   IconAdjustments,
+  IconAdjustmentsHorizontal,
   IconAlertTriangle,
   IconApi,
   IconBooks,
@@ -63,6 +64,7 @@ const TOOL_ICONS: Record<string, Icon> = {
   stop_training: IconPlayerStop,
   get_weights_download: IconDownload,
   predict: IconWand,
+  set_decision_threshold: IconAdjustmentsHorizontal,
   delete_training_run: IconTrash,
   delete_dataset: IconTrash,
 };

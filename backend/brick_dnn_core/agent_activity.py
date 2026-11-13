@@ -736,6 +736,21 @@ def _predict(user, args, result) -> Described:
     )
 
 
+def _set_threshold(user, args, result) -> Described:
+    ref, project = _run_targets(user, args.get("id"), None)
+    value = args.get("threshold")
+    number = (
+        f" to {value:g}"
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        else ""
+    )
+    return Described(
+        f"set the decision threshold of {phrase_of(ref, 'run')}{number}",
+        targets=[ref] if ref else [],
+        project_id=project,
+    )
+
+
 def _delete_run(user, args, result) -> Described:
     data = result if isinstance(result, Mapping) else {}
     ref = run_ref(user, data.get("id", args.get("id")), data.get("name"))
@@ -780,6 +795,7 @@ TOOL_DESCRIPTIONS: dict[str, Callable[[Any, Mapping, Any], Described]] = {
     "stop_training": _stop_training,
     "get_weights_download": _weights_download,
     "predict": _predict,
+    "set_decision_threshold": _set_threshold,
     "delete_training_run": _delete_run,
     "delete_dataset": _delete_dataset,
     "get_approval": _get_approval,
@@ -832,6 +848,10 @@ REST_AS_TOOL: dict[tuple[str, str], tuple[str, Callable[[Mapping, Mapping], dict
             "inputs": body.get("inputs"),
             "image": body.get("image"),
         },
+    ),
+    ("training-run-decision-threshold", "POST"): (
+        "set_decision_threshold",
+        lambda kw, body: {"id": kw.get("pk"), "threshold": body.get("threshold")},
     ),
     ("training-dataset-detail", "DELETE"): (
         "delete_dataset",

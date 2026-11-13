@@ -131,4 +131,13 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
             f"{module}.py next to the weights; generate_pytorch_code gives the full script "
             + ("with a demo main and a CSV training loop." if tabular else "with a demo main.")
         )
+    threshold = training.decision_threshold(run)
+    names = info.get("class_names")
+    if threshold is not None and isinstance(names, list) and len(names) == 2:
+        info["decision_threshold"] = threshold
+        info["notes"].append(
+            f"The server predicts '{names[1]}' when its probability is at least the run's "
+            f"decision threshold {threshold:g} (else '{names[0]}'); the snippet takes the most "
+            f"probable class. To match the server: probabilities[:, 1] >= {threshold:g}."
+        )
     return info

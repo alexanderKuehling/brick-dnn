@@ -1550,6 +1550,40 @@ def no_weights_reason(run: TrainingRun) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# The decision threshold of a binary classification
+# --------------------------------------------------------------------------- #
+
+
+def decision_threshold(run: TrainingRun) -> float | None:
+    """The threshold the predictions of a binary classification use (the second class when
+    its probability is at least this); None for every other run."""
+    return float(run.decision_threshold) if inference.is_binary(run.plan) else None
+
+
+def set_decision_threshold(run: TrainingRun, value: Any) -> TrainingRun:
+    """Save the decision threshold of a binary classification run: a number from 0 to 1.
+    Raises :class:`TrainingInputError` for other runs and other values."""
+    if not inference.is_binary(run.plan):
+        raise TrainingInputError(
+            "Only binary classifications (two classes) have a decision threshold."
+        )
+    if isinstance(value, str):
+        with contextlib.suppress(ValueError):
+            value = float(value)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0 <= value <= 1
+    ):
+        raise TrainingInputError("The decision threshold must be a number from 0 to 1.")
+    run.decision_threshold = float(value)
+    # Only this column: a training that reports at the same time keeps its other fields.
+    TrainingRun.objects.filter(pk=run.pk).update(decision_threshold=run.decision_threshold)
+    return run
+
+
+# --------------------------------------------------------------------------- #
 # Predictions with the trained weights
 # --------------------------------------------------------------------------- #
 
@@ -1678,6 +1712,7 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
                 prepared.top_k,
                 probabilities=bool(result.get("probabilities")),
                 std=result.get("std"),
+                threshold=decision_threshold(run),
             )
     except ValueError as exc:
         raise PredictionFailed(str(exc)) from None
@@ -1686,6 +1721,15 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
         "task": run.plan.get("task"),
         "predictions": predictions,
     }
+    threshold = decision_threshold(run)
+    if threshold is not None and names:
+        answer["decision_threshold"] = threshold
+        answer["positive_class"] = names[inference.BINARY_POSITIVE]
+        answer["threshold_note"] = (
+            f"The prediction is '{names[inference.BINARY_POSITIVE]}' when its probability "
+            f"(positive_probability) is at least the run's decision threshold {threshold:g}, "
+            f"else '{names[1 - inference.BINARY_POSITIVE]}'."
+        )
     if segmentation:
         answer["class_names"] = names
         answer["colors"] = class_colors(len(names or []))
