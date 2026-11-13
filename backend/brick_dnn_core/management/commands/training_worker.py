@@ -16,9 +16,22 @@ import signal
 import time
 
 from django.core.management.base import BaseCommand
+from django.db import DEFAULT_DB_ALIAS, connections
+from django.db.migrations.executor import MigrationExecutor
 
 from brick_dnn_core import training_queue as queue
 from brick_dnn_core.training_worker import Worker, touch_alive_file
+
+# How long the worker waits for the web server to migrate the database, and how often it looks.
+MIGRATION_TIMEOUT = 600.0
+MIGRATION_POLL = 2.0
+
+
+def pending_migrations() -> list:
+    """The migrations of this code that the database does not have yet."""
+    connection = connections[DEFAULT_DB_ALIAS]
+    executor = MigrationExecutor(connection)
+    return executor.migration_plan(executor.loader.graph.leaf_nodes())
 
 
 class Command(BaseCommand):
@@ -56,6 +69,8 @@ class Command(BaseCommand):
             if not options["once"]:
                 self._idle()
             return
+        if not self._wait_for_migrations():
+            return
         worker = Worker(
             name=options["name"],
             slots=options["slots"],
@@ -65,6 +80,40 @@ class Command(BaseCommand):
             log=self._log,
         )
         worker.run()
+
+    def _wait_for_migrations(self, timeout: float = MIGRATION_TIMEOUT) -> bool:
+        """Wait until the database has every migration of this code. On a deploy the web
+        backend migrates while it starts, and the worker (new code, old tables) would
+        otherwise fail on columns that do not exist yet. False if the time ran out or the
+        worker was stopped meanwhile."""
+        stop: list[bool] = []
+        previous = {
+            sig: signal.signal(sig, lambda *_: stop.append(True))
+            for sig in (signal.SIGTERM, signal.SIGINT)
+        }
+        try:
+            deadline = time.monotonic() + timeout
+            told = False
+            while not stop:
+                if not pending_migrations():
+                    if told:
+                        self._log("The database is up to date, starting.")
+                    return True
+                if not told:
+                    self._log("Waiting for the web server to migrate the database …")
+                    told = True
+                if time.monotonic() >= deadline:
+                    self._log(
+                        f"The database still misses migrations after {timeout:.0f} seconds: "
+                        "run `manage.py migrate`. The worker ends."
+                    )
+                    return False
+                touch_alive_file()  # for the health check of the container
+                time.sleep(MIGRATION_POLL)
+            return False
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
 
     def _log(self, line: str) -> None:
         self.stdout.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {line}")
