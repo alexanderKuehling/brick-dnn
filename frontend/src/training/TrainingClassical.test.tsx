@@ -11,11 +11,11 @@ import {
   boostingDetail,
   CLASSICAL_STATUS,
   DOC,
-  ensembleDetail,
   GP_DOC,
   gpDetail,
   summary,
   svcDetail,
+  votingDetail,
 } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
 import TrainingDrawer, { type TrainingDrawerProps } from './TrainingDrawer';
@@ -318,7 +318,7 @@ describe('A run of a classical model', () => {
   });
 
   it('shows the models of an ensemble with their own scores', () => {
-    show(ensembleDetail());
+    show(votingDetail());
     expect(screen.getByText('Ensemble').nextSibling).toHaveTextContent('2 models');
     expect(screen.queryByText('Support vectors')).not.toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Models of the ensemble' });

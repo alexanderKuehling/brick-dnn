@@ -712,7 +712,7 @@ export function boostingDetail(overrides: Partial<RunDetail> = {}): RunDetail {
 }
 
 /** A finished voting ensemble of gradient boosting and an SVM, each also measured alone. */
-export function ensembleDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+export function votingDetail(overrides: Partial<RunDetail> = {}): RunDetail {
   const base = svcDetail();
   const member = (node: string, type: string, label: string, accuracy: number) => ({
     node,

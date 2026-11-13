@@ -104,11 +104,11 @@ export interface NodeAnalysis {
   /** Classical models: what they predict. */
   task?: ClassicalTask | null;
   /** Ensembles: the models they combine, in the order of their connections (and weights). */
-  members?: EnsembleMember[];
+  members?: ModelMember[];
 }
 
-/** A classical model of an ensemble. */
-export interface EnsembleMember {
+/** A classical model of an ensemble brick. */
+export interface ModelMember {
   node: string;
   /** Its name in the ensemble and the generated code (from the brick's name or id). */
   name: string;
@@ -129,7 +129,7 @@ export interface ClassicalModelInfo {
   /** Gaussian processes: the kernel they start from (the default one without kernel bricks). */
   kernel: string | null;
   /** Ensembles: their models (null otherwise; missing from older servers). */
-  members?: EnsembleMember[] | null;
+  members?: ModelMember[] | null;
 }
 
 export interface Analysis {
@@ -1093,7 +1093,7 @@ export interface ClassicalPlan {
   scale: string;
   max_rows: number;
   /** Ensembles: their models (with the kernel each Gaussian process starts from). */
-  members?: (EnsembleMember & { kernel: string | null })[];
+  members?: (ModelMember & { kernel: string | null })[];
   /** VotingClassifier: soft or hard voting. */
   voting?: 'soft' | 'hard';
 }
@@ -1788,7 +1788,7 @@ export interface ClassicalRunState {
   /** Ensembles: how they combine their models. */
   ensemble?: 'voting' | 'stacking';
   /** Ensembles: their models, after the fit each with its own metrics (on the validation rows, or the training rows without them). */
-  members?: (EnsembleMember & { metrics: ClassicalMetrics | null })[];
+  members?: (ModelMember & { metrics: ClassicalMetrics | null })[];
 }
 
 /** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */

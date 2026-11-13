@@ -26,7 +26,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import type { Analysis, EnsembleMember, LayerSpec, NodeAnalysis } from '@/api/types';
+import type { Analysis, LayerSpec, ModelMember, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
 import { LayerLearning } from '@/explain/LayerLearning';
 import { categoryColor } from '@/theme';
@@ -105,7 +105,7 @@ function EnsembleMembers({
   weights,
   onSelect,
 }: {
-  members: EnsembleMember[];
+  members: ModelMember[];
   weights: unknown;
   onSelect: (node: string) => void;
 }) {
