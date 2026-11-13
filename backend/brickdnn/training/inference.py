@@ -79,8 +79,16 @@ def _numbers(value: Any, length: int | None = None) -> bool:
 
 
 def is_classical(plan: Any) -> bool:
-    """True for a run of a classical model (scikit-learn), see compat.TrainingPlan."""
+    """True for a run of a classical model (scikit-learn), see compat.TrainingPlan; also for
+    a hybrid network, which predicts with one (see :func:`is_hybrid`)."""
     return isinstance(plan, dict) and isinstance(plan.get("classical"), dict)
+
+
+def is_hybrid(plan: Any) -> bool:
+    """True for a run of a hybrid network: neural layers compute the features of a
+    classical model. It takes inputs like a neural network and answers like a classical
+    model (probabilities, values in the units of the target)."""
+    return isinstance(plan, dict) and isinstance(plan.get("hybrid"), dict)
 
 
 def is_segmentation(plan: Any) -> bool:
@@ -191,7 +199,7 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
             f"in this order: {', '.join(columns)}. They are standardised with the mean and "
             "standard deviation of the training data (x - mean) / std."
         )
-    if is_classical(plan):
+    if is_classical(plan) and not is_hybrid(plan):
         n = input_specs(plan)[0]["shape"][0]
         return (
             f"Trained on random demo data, so its predictions mean nothing. One row of {n} "
@@ -258,6 +266,8 @@ def usage_snippet(
 ) -> str:
     """Python code that loads the weights and predicts one sample like the training saw it."""
     kind = kind_of(plan, preprocessing)
+    if is_hybrid(plan):
+        return _hybrid_snippet(plan, preprocessing, module, weights_file)
     if is_classical(plan):
         return _classical_snippet(plan, preprocessing, weights_file)
     lines = [
@@ -387,6 +397,59 @@ def _classical_snippet(plan: dict[str, Any], preprocessing: dict[str, Any], path
         ]
     else:
         lines.append(f"print(model.predict(rows).tolist())  # predicted {target}")
+    return "\n".join(lines) + "\n"
+
+
+def _hybrid_snippet(
+    plan: dict[str, Any], preprocessing: dict[str, Any], module: str, archive: str
+) -> str:
+    """Code that loads both parts of a hybrid network (from its ZIP file) and predicts one
+    row: the neural layers compute the features, the classical model predicts."""
+    stem = archive.removesuffix(".zip")
+    classical = plan["classical"]
+    lines = [
+        "import joblib",
+        "import torch",
+        f"from {module} import FeatureExtractor  # {module}.py from the ZIP file",
+        "",
+        "extractor = FeatureExtractor()",
+        f'checkpoint = torch.load("{stem}.features.pt", map_location="cpu", weights_only=True)',
+        'extractor.load_state_dict(checkpoint["state_dict"])',
+        "extractor.eval()",
+        f'bundle = joblib.load("{stem}.joblib")  # a pickle: only load files you trust',
+        'model = bundle["model"]  # fitted on the learned features',
+        "",
+    ]
+    if preprocessing.get("kind") == "tabular":
+        columns = preprocessing["columns"]
+        example = _list(preprocessing["mean"], 4)  # the average row: a valid example
+        lines += [
+            f"# Input columns in this order: {', '.join(columns)}",
+            f"MEAN = torch.tensor({_list(preprocessing['mean'])})",
+            f"STD = torch.tensor({_list(preprocessing['std'])})",
+            f"rows = [{example}]  # one list of {len(columns)} values per sample",
+            "x = (torch.tensor(rows, dtype=torch.float32) - MEAN) / STD",
+        ]
+    else:
+        dims = ", ".join(str(d) for d in (1, *input_specs(plan)[0]["shape"]))
+        lines.append(f"x = torch.randn({dims})  # prepared like the training inputs")
+    lines += [
+        "with torch.no_grad():",
+        "    features = extractor(x).double().numpy()  # the learned features",
+    ]
+    target = preprocessing.get("target") or "target"
+    if classical.get("voting") == "hard":
+        lines += [
+            'names = dict(zip(model.classes_, bundle["class_names"]))',
+            "print([names[label] for label in model.predict(features)])",
+        ]
+    elif class_names(plan, preprocessing) is not None:
+        lines += [
+            "probabilities = model.predict_proba(features)  # one column per class_names",
+            'print([bundle["class_names"][i] for i in probabilities.argmax(axis=1)])',
+        ]
+    else:
+        lines.append(f"print(model.predict(features).tolist())  # predicted {target}")
     return "\n".join(lines) + "\n"
 
 

@@ -12,7 +12,10 @@ Every run lives in its own directory::
                   another reason than the user's request
     weights.pt    model.state_dict() after training or stopping   (written by the runner)
     model.joblib  instead of weights.pt for classical models (scikit-learn): the fitted
-                  pipeline saved with joblib, see brickdnn.classical for its format
+                  pipeline saved with joblib, see brickdnn.classical for its format. Hybrid
+                  networks have both: weights.pt holds their neural layers (with the
+                  preprocessing, see hybrid_engine.py), model.joblib the classical model
+                  fitted on the features they compute
     weights.preprocessing.json   ``preprocessing`` of the state, saved with the weights
                   (not for demo data): what new inputs need to be prepared the same way
                   (classical models: model.preprocessing.json)
@@ -31,7 +34,8 @@ Every run lives in its own directory::
       "started_at": 1730000000.0,
       "finished_at": null,
       "device": "mps", "device_label": "Apple GPU (MPS)",
-      "family": "neural",            # neural (PyTorch) | classical (scikit-learn) | ensemble
+      "family": "neural",            # neural (PyTorch) | classical (scikit-learn) | hybrid
+                                     # (both, see hybrid_engine.py) | ensemble
       "task": "classification",      # classification | regression | segmentation | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
       "train_size": 48000, "val_size": 12000,
@@ -289,11 +293,21 @@ MAX_LOG_LINES = 200
 
 def weights_file(family: str | None) -> str:
     """Name of the weights file of a run: ``model.joblib`` for classical models (the fitted
-    scikit-learn pipeline), ``weights.pt`` for neural networks, ``ensemble.npz`` for an
-    ensemble (its members' predictions; it predicts with the members' own files)."""
+    scikit-learn pipeline) and hybrid networks (their classical model; the neural layers are
+    in ``weights.pt``, see :func:`weights_files`), ``weights.pt`` for neural networks,
+    ``ensemble.npz`` for an ensemble (its members' predictions; it predicts with the
+    members' own files)."""
     if family == "ensemble":
         return ENSEMBLE_FILE
-    return CLASSICAL_WEIGHTS_FILE if family == "classical" else WEIGHTS_FILE
+    return CLASSICAL_WEIGHTS_FILE if family in ("classical", "hybrid") else WEIGHTS_FILE
+
+
+def weights_files(family: str | None) -> list[str]:
+    """Every file with the trained model of a run (a hybrid network: the classical model
+    and the neural layers that compute its features)."""
+    if family == "hybrid":
+        return [CLASSICAL_WEIGHTS_FILE, WEIGHTS_FILE]
+    return [weights_file(family)]
 
 
 def preprocessing_path(weights_path: str | Path) -> Path:

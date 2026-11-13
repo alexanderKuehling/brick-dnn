@@ -126,8 +126,10 @@ class GeneratorOptions:
 
 
 def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None = None) -> str:
-    """Generate PyTorch code for ``graph``, or a scikit-learn script for a classical
-    network (a Gaussian process, SVM or gradient boosting, see :mod:`brickdnn.classical`).
+    """Generate PyTorch code for ``graph``, a scikit-learn script for a classical network
+    (a Gaussian process, SVM or gradient boosting, see :mod:`brickdnn.classical`), or both
+    for a hybrid network (neural layers that learn the features of a classical model, see
+    :mod:`brickdnn.hybrid`).
 
     Raises :class:`GraphValidationError` if the graph contains errors.
     """
@@ -138,6 +140,10 @@ def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None 
         raise GraphValidationError(analysis)
     if analysis.family == "classical":
         return generate_classical(analysis, options)
+    if analysis.family == "hybrid":
+        from .hybrid import generate_hybrid
+
+        return generate_hybrid(analysis, options)
     return _Generator(analysis, options).render()
 
 

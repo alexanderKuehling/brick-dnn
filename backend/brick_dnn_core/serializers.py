@@ -317,8 +317,9 @@ class RunSummarySerializer(serializers.ModelSerializer):
         return obj.plan.get("task") if isinstance(obj.plan, dict) else None
 
     def get_family(self, obj: TrainingRun) -> str:
-        """``neural`` (PyTorch), ``classical`` (a scikit-learn model, fitted once) or
-        ``ensemble`` (finished runs combined)."""
+        """``neural`` (PyTorch), ``classical`` (a scikit-learn model, fitted once), ``hybrid``
+        (neural layers learn the features of a classical model) or ``ensemble`` (finished
+        runs combined)."""
         from .training_service import run_family
 
         return run_family(obj)

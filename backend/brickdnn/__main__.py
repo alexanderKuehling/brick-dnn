@@ -47,6 +47,15 @@ def _print_analysis(graph: dict) -> int:
         )
     if not result.valid:
         return 1
+    hybrid = result.hybrid_dict()
+    if hybrid is not None:
+        model = result.model.layer.estimator if result.model else "a classical model"  # type: ignore[union-attr]
+        params = hybrid["neural_params"]
+        print(
+            f"OK - hybrid: neural layers ({params:,} trainable parameters) learn "
+            f"{hybrid['features']} features, {model} (scikit-learn) is fitted on them"
+        )
+        return 0
     if result.family == "classical":
         total = result.total_params
         layer = result.model.layer if result.model else None

@@ -26,7 +26,9 @@ colour per class) or as run-lengths (class, pixels, class, pixels … row by row
     {"masks": [{"width": 64, "height": 64, "counts": [3900, 196], "png": "iVBOR…"}]}
 
 Classical models (scikit-learn) load ``RUN_DIR/model.joblib`` instead and need NumPy and
-scikit-learn, not PyTorch. Their request also says how the inputs were prepared
+scikit-learn, not PyTorch. A hybrid network loads both: its neural layers
+(``RUN_DIR/weights.pt``) compute the features of the inputs (tensors or image files, like a
+neural network), its classical model predicts from them and answers like below. Their request also says how the inputs were prepared
 (``"kind": "tabular"``: standardised like the training data, so the pipeline's scaler is
 skipped; otherwise they are used as they are). Classifiers answer with class
 probabilities (one column per class of the training plan), a Gaussian process regressor
@@ -92,8 +94,11 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
     job = read_job(run_dir)
     if job is None or not isinstance(job.get("graph"), dict):
         raise PredictionError("The network of this run is missing.")
-    if graph_family(job["graph"]) == "classical":
+    family = graph_family(job["graph"])
+    if family == "classical":
         return _predict_classical(run_dir, request)
+    if family == "hybrid":
+        return _predict_hybrid(run_dir, job["graph"], request)
     try:
         import torch
 
@@ -280,6 +285,15 @@ def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
     x = np.asarray(values, dtype=np.float64).reshape(shape)
     # Standardised inputs skip the pipeline's StandardScaler, which would do the same.
     model = pipeline[1:] if request.get("kind") == "tabular" else pipeline
+    return _classical_outputs(bundle, pipeline, model, x)
+
+
+def _classical_outputs(bundle: dict[str, Any], pipeline: Any, model: Any, x: Any) -> dict:
+    """The answer of a fitted classical ``model`` (``pipeline`` or its part after the
+    scaler) for the rows ``x``: class probabilities, or values (with the standard deviation
+    of a Gaussian process regressor)."""
+    import numpy as np
+
     try:
         with _thread_limit():
             if bundle.get("task") == "classification":
@@ -302,6 +316,52 @@ def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
             f"The model could not process the inputs: {short_error(exc)}"
         ) from exc
     return {"outputs": [finite(np.asarray(predicted).reshape(-1, 1).tolist())]}
+
+
+def _predict_hybrid(run_dir: Path, graph: dict[str, Any], request: Any) -> dict[str, Any]:
+    """A hybrid network: the neural layers (``weights.pt``) compute the features of the
+    prepared inputs, the classical model (``model.joblib``) predicts from them. Takes
+    tensors or image files like a neural network, answers like a classical model."""
+    try:
+        import joblib
+        import torch
+
+        from .hybrid_engine import features_of, load_extractor
+    except ImportError as exc:
+        raise PredictionError(
+            "A hybrid network needs PyTorch and scikit-learn on the server. Install them "
+            "with: pip install torch scikit-learn"
+        ) from exc
+    torch.set_num_threads(max(1, min(THREADS, os.cpu_count() or 1)))
+    path = run_dir / CLASSICAL_WEIGHTS_FILE
+    if not path.is_file() or not (run_dir / WEIGHTS_FILE).is_file():
+        raise PredictionError("This run has no fitted model.")
+    try:
+        extractor, _ = load_extractor(run_dir, graph)
+    except Exception as exc:
+        raise PredictionError(
+            f"The trained neural layers do not fit the network of this run: {short_error(exc)}"
+        ) from exc
+    try:
+        bundle = joblib.load(path)  # written by the training of this run
+        pipeline = bundle["model"]
+    except Exception as exc:
+        raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
+    if isinstance(request, dict) and request.get("images") is not None:
+        inputs = [_image_tensor(request["images"], request.get("image"), torch)]
+    else:
+        specs = request.get("inputs") if isinstance(request, dict) else None
+        if not isinstance(specs, list) or len(specs) != 1:
+            raise PredictionError("A hybrid network takes exactly one input.")
+        inputs = [_tensor(specs[0], torch)]
+    try:
+        features = features_of(extractor, inputs)
+    except Exception as exc:
+        raise PredictionError(
+            f"The network could not process the inputs: {short_error(exc)}"
+        ) from exc
+    # The features are not standardised yet: the whole pipeline predicts.
+    return _classical_outputs(bundle, pipeline, pipeline, features)
 
 
 @contextlib.contextmanager

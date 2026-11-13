@@ -2,6 +2,7 @@
 import { render, screen, userEvent } from '@test-utils';
 import { vi } from 'vitest';
 import type { Analysis, LayerSpec, Params } from '@/api/types';
+import { HYBRID_ANALYSIS } from '@/training/hybridFixtures';
 import { BuilderContext, type BuilderContextValue, type InputFit } from './BuilderContext';
 import { GP_ANALYSIS, SPECS, VOTING_ANALYSIS } from './classicalFixtures';
 import type { LayerFlowNode } from './graph';
@@ -336,9 +337,18 @@ describe('Inspector of classical bricks', () => {
     expect(screen.getByText(/the dotted connections carry the models/)).toBeInTheDocument();
   });
 
-  it('shows why neural layers and classical models cannot be mixed', () => {
+  it('summarises a hybrid network: the learned features and the classical model', () => {
+    renderBrick(null, HYBRID_ANALYSIS);
+    expect(screen.getByText('Neural layers (PyTorch): learned features')).toBeInTheDocument();
+    expect(
+      screen.getByText('3 features from Linear, 131 trainable parameters')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Classical model (scikit-learn)')).toBeInTheDocument();
+  });
+
+  it('shows why a neural layer does not fit before a classical model', () => {
     const message =
-      "Classical models and neural layers can't be mixed yet, but this network also contains Linear.";
+      'Gaussian process regression needs a flat feature vector, but Conv2d outputs (32, 8, 8). Add Flatten (or a Linear layer) before Gaussian process regression: its output, shape [n], is the feature vector.';
     renderBrick(null, {
       ...GP_ANALYSIS,
       valid: false,

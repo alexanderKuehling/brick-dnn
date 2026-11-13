@@ -259,11 +259,11 @@ def test_kernel_lines_break_long_kernels():
         ),
         (
             graph(
-                [("in", "Input", {"shape": [4]}), ("fc", "Linear", {}), ("m", "SVC", {})],
-                [("in", "fc"), ("fc", "m")],
+                [("in", "Input", {"shape": [1, 8, 8]}), ("c", "Conv2d", {}), ("m", "SVC", {})],
+                [("in", "c"), ("c", "m")],
             ),
             "m",
-            "can't be mixed yet",
+            "but Conv2d outputs (32, 8, 8). Add Flatten (or a Linear layer) before",
         ),
         (
             graph(
@@ -278,8 +278,9 @@ def test_kernel_lines_break_long_kernels():
                 [("in", "Input", {"shape": [4]}), ("m", "SVC", {}), ("fc", "Linear", {})],
                 [("in", "m"), ("in", "fc")],
             ),
-            "m",
-            "this network also contains Linear",
+            "fc",
+            "Linear does not lead to Support vector classification, which takes its features "
+            "straight from the Input layer",
         ),
         (
             graph(

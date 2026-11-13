@@ -239,9 +239,16 @@ class _ClassicalRun:
 
     # -- the run ----------------------------------------------------------- #
 
-    def _execute(self) -> None:
+    @property
+    def model_graph(self) -> dict[str, Any]:
+        """The graph whose classical model is fitted (a hybrid network: its classical part,
+        see hybrid_engine.py)."""
+        return self.job.graph
+
+    def _check(self) -> Any:
+        """Check the model against the data: sets the plan, the model and the seed, and
+        returns the analysis of the job's graph."""
         job, reporter = self.job, self.reporter
-        reporter.status("preparing", "Preparing the data …")
         analysis = analyze(job.graph)
         compat = check_compatibility(analysis, job.dataset, self.config)
         if not compat.ok or compat.plan is None or compat.plan.classical is None:
@@ -262,6 +269,12 @@ class _ClassicalRun:
             seed = random.SystemRandom().randrange(2**31)
             reporter.log(f"Random seed: {seed}")
         self.seed = seed
+        return analysis
+
+    def _execute(self) -> None:
+        reporter = self.reporter
+        reporter.status("preparing", "Preparing the data …")
+        analysis = self._check()
         self._check_stop()
         data = self.data = self._load()
         self.rows = len(data.train)
@@ -271,7 +284,7 @@ class _ClassicalRun:
             spread = float(np.var(data.y[data.train]))
             self.target_variance = spread if spread > 1e-12 else 1.0
 
-        self.pipeline = build_pipeline(job.graph)
+        self.pipeline = build_pipeline(self.model_graph)
         self.details: dict[str, Any] = {
             "estimator": self.layer.estimator,
             "label": self.layer.label,

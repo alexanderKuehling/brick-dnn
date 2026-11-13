@@ -12,7 +12,7 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
-import { isClassicalRun } from './classical';
+import { isClassicalRun, isHybridRun } from './classical';
 import { PARAM_LABELS } from './search';
 
 /** Not finished yet: waiting in the queue or training. */
@@ -369,6 +369,11 @@ export function progressLabel(run: RunSummary): string {
   if (run.status === 'running' && isClassicalRun(run)) {
     return 'Fitting';
   }
+  if (run.status === 'running' && isHybridRun(run)) {
+    // The epochs learn the features, then the classical model is fitted (or searched).
+    const learning = run.epochs_done < run.epochs && run.config.feature_training !== 'frozen';
+    return learning ? `Epoch ${run.epochs_done + 1}/${run.epochs}` : 'Fitting';
+  }
   if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
     const total = run.tuning.trials;
     return `Trial ${Math.min(run.trials_done + 1, total)}/${total}`;
@@ -564,6 +569,9 @@ export function weightsSnippet(run: RunDetail, scriptName: string, weightsName: 
   if (isClassicalRun(run)) {
     return classicalSnippet(run, weightsName);
   }
+  if (isHybridRun(run)) {
+    return hybridSnippet(run, scriptName, weightsName);
+  }
   const pre = run.state?.preprocessing ?? {};
   const plan: Partial<TrainingPlan> = run.plan ?? {};
   const module = scriptName.replace(/\.py$/, '');
@@ -674,6 +682,58 @@ export function weightsSnippet(run: RunDetail, scriptName: string, weightsName: 
  * joblib) and predicts one row, like `inference.usage_snippet` on the server. The pipeline
  * standardises the features itself; `state.preprocessing` gives their order.
  */
+/**
+ * A hybrid network from its ZIP file (`archiveName`): the neural layers compute the features
+ * of the rows, the classical model predicts from them.
+ */
+export function hybridSnippet(run: RunDetail, scriptName: string, archiveName: string): string {
+  const pre = run.state?.preprocessing ?? {};
+  const stem = archiveName.replace(/\.zip$/, '');
+  const module = scriptName.replace(/\.py$/, '');
+  const columns = stringList(pre.columns);
+  const mean = numberList(pre.mean);
+  const std = numberList(pre.std);
+  const lines = [
+    'import joblib',
+    'import torch',
+    `from ${module} import FeatureExtractor  # ${module}.py from the ZIP file`,
+    '',
+    'extractor = FeatureExtractor()',
+    `checkpoint = torch.load("${stem}.features.pt", map_location="cpu", weights_only=True)`,
+    'extractor.load_state_dict(checkpoint["state_dict"])',
+    'extractor.eval()',
+    `bundle = joblib.load("${stem}.joblib")  # a pickle: only load files you trust`,
+    'model = bundle["model"]  # fitted on the learned features',
+    '',
+  ];
+  if (pre.kind === 'tabular' && columns && mean && std) {
+    lines.push(
+      `# Input columns in this order: ${columns.join(', ')}`,
+      `MEAN = torch.tensor(${pyList(mean)})`,
+      `STD = torch.tensor(${pyList(std)})`,
+      `rows = [${pyList(mean)}]  # one list of ${columns.length} values per sample`,
+      'x = (torch.tensor(rows, dtype=torch.float32) - MEAN) / STD'
+    );
+  } else {
+    const shape = run.plan?.inputs?.[0]?.shape ?? [];
+    lines.push(`x = torch.randn(1, ${shape.join(', ')})  # prepared like the training inputs`);
+  }
+  lines.push(
+    'with torch.no_grad():',
+    '    features = extractor(x).double().numpy()  # the learned features'
+  );
+  const target = typeof pre.target === 'string' ? pre.target : 'target';
+  if (run.task === 'classification' || run.plan?.classical?.task === 'classification') {
+    lines.push(
+      "probabilities = model.predict_proba(features)  # one column per bundle['class_names']",
+      'print([bundle["class_names"][i] for i in probabilities.argmax(axis=1)])'
+    );
+  } else {
+    lines.push(`print(model.predict(features).tolist())  # predicted ${target}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 export function classicalSnippet(run: RunDetail, modelName: string): string {
   const pre = run.state?.preprocessing ?? {};
   const classical = run.plan?.classical ?? null;

@@ -63,7 +63,7 @@ import {
   otherStarter,
   type TrainingScope,
 } from './access';
-import { isClassicalRun } from './classical';
+import { isClassicalRun, isHybridRun, MODEL_KINDS } from './classical';
 import { isEnsemble } from './ensemble';
 import { EnsembleRunView } from './EnsembleRunView';
 import { EvaluationResults, type ThresholdProps } from './EvaluationResults';
@@ -215,9 +215,16 @@ function NetworkRunView({
   const logViewport = useRef<HTMLDivElement>(null);
 
   const base = scriptBase(run.name);
-  // A classical model (scikit-learn) is fitted once and saved as a joblib file.
+  // A classical model (scikit-learn) is fitted once and saved as a joblib file; a hybrid
+  // network downloads as a ZIP file with its neural layers and its classical model.
   const classicalRun = isClassicalRun(run);
-  const modelFile = `${base}.${classicalRun ? 'joblib' : 'pt'}`;
+  const hybridRun = isHybridRun(run);
+  const modelFile = `${base}.${classicalRun ? 'joblib' : hybridRun ? 'zip' : 'pt'}`;
+  const hybridFit = hybridRun ? (state?.classical ?? null) : null;
+  const frozenFeatures = hybridRun && run.config.feature_training === 'frozen';
+  const hybridModel =
+    MODEL_KINDS[run.plan?.classical?.type ?? ''] ?? run.plan?.classical?.estimator ?? 'the model';
+  const learnedFeatures = run.plan?.hybrid?.features ?? hybridFit?.hybrid?.features ?? null;
   const by = otherStarter(run, scope);
   // Binary classification: the threshold its predictions use; only who started it saves another.
   const threshold: ThresholdProps = {
@@ -395,106 +402,123 @@ function NetworkRunView({
         />
       ) : (
         <>
-          <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
-            <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
-            {noValidation ? (
-              <Tile label="Validation" value="None" hint="no validation data" />
-            ) : (
-              <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
-            )}
-            {noValidation ? (
-              classification ? (
+          {hybridRun && (
+            <div>
+              <Title order={5}>Phase 1 · The neural layers learn the features</Title>
+              <Text size="xs" c="dimmed">
+                {frozenFeatures
+                  ? `Frozen random features: the neural layers keep their random initial weights and compute ${learnedFeatures ?? 'the'} features without training.`
+                  : `They learn ${learnedFeatures ?? 'the'} features with a temporary linear head on the target; the curves are those of that head. Then the head is dropped.`}
+              </Text>
+            </div>
+          )}
+          {!hybridRun && (
+            <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
+              <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
+              {noValidation ? (
+                <Tile label="Validation" value="None" hint="no validation data" />
+              ) : (
+                <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
+              )}
+              {noValidation ? (
+                classification ? (
+                  <Tile
+                    label="Training accuracy"
+                    value={formatPercent(trainAccuracy)}
+                    hint="on the training data, optimistic"
+                  />
+                ) : null
+              ) : segmentation ? (
+                <>
+                  <Tile
+                    label="Validation IoU"
+                    value={formatPercent(metrics?.val_iou)}
+                    hint="mean over the classes"
+                  />
+                  <Tile
+                    label="Validation Dice"
+                    value={formatPercent(metrics?.val_dice)}
+                    hint="mean over the classes"
+                  />
+                  <Tile
+                    label="Pixel accuracy"
+                    value={formatPercent(metrics?.val_pixel_accuracy)}
+                    hint="validation"
+                  />
+                </>
+              ) : classification ? (
+                <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
+              ) : (
                 <Tile
-                  label="Training accuracy"
-                  value={formatPercent(trainAccuracy)}
-                  hint="on the training data, optimistic"
+                  label="Validation RMSE"
+                  value={formatMetric(metrics?.val_rmse)}
+                  next={r2 ? { label: 'R²', value: formatR2(metrics?.val_r2) } : undefined}
                 />
-              ) : null
-            ) : segmentation ? (
-              <>
+              )}
+              {tuning ? (
                 <Tile
-                  label="Validation IoU"
-                  value={formatPercent(metrics?.val_iou)}
-                  hint="mean over the classes"
+                  label={active ? 'Best trial so far' : 'Best trial'}
+                  value={bestTrial ? String(bestTrial.trial) : '–'}
+                  hint={
+                    bestTrial
+                      ? tuning.metric && tuning.metric !== 'loss'
+                        ? `${metricInfo(tuning.metric).label} ${formatMetricValue(tuning.metric, bestTrial.score)}`
+                        : typeof bestTrial.val_iou === 'number'
+                          ? `IoU ${formatPercent(bestTrial.val_iou)}`
+                          : typeof bestTrial.val_accuracy === 'number'
+                            ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
+                            : `loss ${formatMetric(bestTrial.val_loss)}`
+                      : undefined
+                  }
                 />
+              ) : noValidation ? (
                 <Tile
-                  label="Validation Dice"
-                  value={formatPercent(metrics?.val_dice)}
-                  hint="mean over the classes"
+                  label="Kept epoch"
+                  value={keptEpoch !== null ? String(keptEpoch) : '–'}
+                  hint="the last one (no validation data)"
                 />
+              ) : (
                 <Tile
-                  label="Pixel accuracy"
-                  value={formatPercent(metrics?.val_pixel_accuracy)}
-                  hint="validation"
+                  label="Best epoch"
+                  value={best ? String(best.epoch) : '–'}
+                  hint={
+                    best
+                      ? typeof best.val_iou === 'number'
+                        ? `IoU ${formatPercent(best.val_iou)}`
+                        : typeof best.val_accuracy === 'number'
+                          ? `accuracy ${formatPercent(best.val_accuracy)}`
+                          : `loss ${formatMetric(best.val_loss)}`
+                      : undefined
+                  }
                 />
-              </>
-            ) : classification ? (
-              <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
-            ) : (
+              )}
+              {active && progress?.samples_per_second ? (
+                <Tile
+                  label="Speed"
+                  value={`${formatCompact(progress.samples_per_second)}/s`}
+                  hint="samples"
+                />
+              ) : (
+                <Tile label="Time per epoch" value={formatDuration(meanEpoch)} />
+              )}
               <Tile
-                label="Validation RMSE"
-                value={formatMetric(metrics?.val_rmse)}
-                next={r2 ? { label: 'R²', value: formatR2(metrics?.val_r2) } : undefined}
+                label="Parameters"
+                value={formatCount(run.total_params ?? state?.total_params)}
               />
-            )}
-            {tuning ? (
-              <Tile
-                label={active ? 'Best trial so far' : 'Best trial'}
-                value={bestTrial ? String(bestTrial.trial) : '–'}
-                hint={
-                  bestTrial
-                    ? tuning.metric && tuning.metric !== 'loss'
-                      ? `${metricInfo(tuning.metric).label} ${formatMetricValue(tuning.metric, bestTrial.score)}`
-                      : typeof bestTrial.val_iou === 'number'
-                        ? `IoU ${formatPercent(bestTrial.val_iou)}`
-                        : typeof bestTrial.val_accuracy === 'number'
-                          ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
-                          : `loss ${formatMetric(bestTrial.val_loss)}`
-                    : undefined
-                }
-              />
-            ) : noValidation ? (
-              <Tile
-                label="Kept epoch"
-                value={keptEpoch !== null ? String(keptEpoch) : '–'}
-                hint="the last one (no validation data)"
-              />
-            ) : (
-              <Tile
-                label="Best epoch"
-                value={best ? String(best.epoch) : '–'}
-                hint={
-                  best
-                    ? typeof best.val_iou === 'number'
-                      ? `IoU ${formatPercent(best.val_iou)}`
-                      : typeof best.val_accuracy === 'number'
-                        ? `accuracy ${formatPercent(best.val_accuracy)}`
-                        : `loss ${formatMetric(best.val_loss)}`
-                    : undefined
-                }
-              />
-            )}
-            {active && progress?.samples_per_second ? (
-              <Tile
-                label="Speed"
-                value={`${formatCompact(progress.samples_per_second)}/s`}
-                hint="samples"
-              />
-            ) : (
-              <Tile label="Time per epoch" value={formatDuration(meanEpoch)} />
-            )}
-            <Tile label="Parameters" value={formatCount(run.total_params ?? state?.total_params)} />
-          </SimpleGrid>
+            </SimpleGrid>
+          )}
 
-          <TestResultCard
-            run={run}
-            classification={classification}
-            segmentation={segmentation}
-            r2={r2}
-            active={active}
-          />
+          {!hybridRun && (
+            <TestResultCard
+              run={run}
+              classification={classification}
+              segmentation={segmentation}
+              r2={r2}
+              active={active}
+            />
+          )}
 
-          {tuning && (
+          {tuning && !hybridRun && (
             <TrialsTable
               tuning={tuning}
               trials={trials}
@@ -574,14 +598,36 @@ function NetworkRunView({
               </div>
             </Stack>
           ) : (
-            active && (
+            active &&
+            !frozenFeatures && (
               <Text size="sm" c="dimmed">
                 The charts appear when the first epoch is done.
               </Text>
             )
           )}
 
-          {!active && <EvaluationResults evaluation={state?.evaluation} threshold={threshold} />}
+          {hybridRun && (
+            <>
+              <div>
+                <Title order={5}>Phase 2 · {hybridModel} on the learned features</Title>
+                <Text size="xs" c="dimmed">
+                  Fitted once on the features of the training rows and measured on the validation
+                  and test rows, like a classical model.
+                </Text>
+              </div>
+              <ClassicalResults
+                run={run}
+                classification={classification}
+                active={active}
+                threshold={threshold}
+                hybrid
+              />
+            </>
+          )}
+
+          {!active && !hybridRun && (
+            <EvaluationResults evaluation={state?.evaluation} threshold={threshold} />
+          )}
           {state?.segmentation && <ClassTable results={state.segmentation} />}
           <PreviewGallery run={run} />
         </>
@@ -621,7 +667,7 @@ function NetworkRunView({
             loading={downloading === 'weights'}
             onClick={() => void downloadWeights()}
           >
-            {classicalRun ? 'Model (.joblib)' : 'Weights (.pt)'}
+            {classicalRun ? 'Model (.joblib)' : hybridRun ? 'Model (.zip)' : 'Weights (.pt)'}
           </Button>
         )}
         {preprocessing && (
@@ -693,7 +739,14 @@ function NetworkRunView({
             {classicalRun ? 'How to use the model' : 'How to use the weights'}
           </ToggleButton>
           <Collapse expanded={usageOpened}>
-            {classicalRun ? (
+            {hybridRun ? (
+              <Text size="sm" c="dimmed" mb="xs">
+                {`The ZIP file holds the neural layers (${base}.features.pt), the classical model (${base}.joblib), the preprocessing and the script. Unzip it; the script predicts the rows of a CSV file with both parts: `}
+                <Code>
+                  {`python ${base}.py --predict new.csv --weights ${base}.features.pt --save ${base}.joblib`}
+                </Code>
+              </Text>
+            ) : classicalRun ? (
               <Text size="sm" c="dimmed" mb="xs">
                 Download the model and load it in Python with joblib (it needs scikit-learn). It is
                 the whole pipeline: it standardises the features itself. The script predicts with it
@@ -929,15 +982,29 @@ function ClassicalResults({
   classification,
   active,
   threshold,
+  hybrid = false,
 }: {
   run: RunDetail;
   classification: boolean;
   active: boolean;
   threshold: ThresholdProps;
+  /** The classical model of a hybrid network: the history is that of its features. */
+  hybrid?: boolean;
 }) {
   const state = run.state;
   const fit = state?.classical ?? null;
-  const entry = state?.history[0] ?? null;
+  // Once fitted: the model on the validation rows (a hybrid network keeps them apart from
+  // the history, which has the curves of its features).
+  const entry = hybrid
+    ? fit?.train
+      ? {
+          val_loss: fit.validation?.loss ?? null,
+          val_accuracy: fit.validation?.accuracy ?? null,
+          val_rmse: fit.validation?.rmse ?? null,
+          val_r2: fit.validation?.r2 ?? null,
+        }
+      : null
+    : (state?.history[0] ?? null);
   const tuning = run.tuning ?? state?.tuning ?? null;
   const metrics = run.metrics;
   const validation: ClassicalMetrics | null = entry

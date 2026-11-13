@@ -361,7 +361,9 @@ function DatasetFit({ fit }: { fit: InputFit }) {
 
 function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.ReactNode[] }) {
   const { analysis, specs, readOnly, focusNode } = useBuilder();
-  const classical = networkFamily(analysis) === 'classical' ? (analysis?.classical ?? null) : null;
+  const family = networkFamily(analysis);
+  const classical = family !== 'neural' ? (analysis?.classical ?? null) : null;
+  const hybrid = family === 'hybrid' ? (analysis?.hybrid ?? null) : null;
   const labelOf = (id: string | null) => {
     const node = nodes.find((n) => n.id === id);
     if (!node) {
@@ -395,6 +397,14 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
 
           {analysis.valid && (
             <SimpleGrid cols={1} spacing="xs">
+              {hybrid && (
+                <Stat
+                  label="Neural layers (PyTorch): learned features"
+                  value={`${hybrid.features ?? '–'} features from ${labelOf(hybrid.boundary)}, ${
+                    hybrid.neural_params?.toLocaleString('en-US') ?? '–'
+                  } trainable parameters`}
+                />
+              )}
               {classical ? (
                 <>
                   <Stat

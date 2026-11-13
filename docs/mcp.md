@@ -240,6 +240,24 @@ model."* `get_training_run` shows every model's own metrics in `state.classical.
 list_examples {id: "voting_ensemble_classifier"} → graph · analyze_network {graph} → valid, classical.members
 start_training {graph, dataset, config: {test_split: 0.2}} · get_training_run {id} → val_accuracy, members with their own accuracy
 ```
+
+**Hybrid networks.** Neural layers before a classical model learn its features (see
+[graph-format.md](graph-format.md#hybrid-networks)): `analyze_network` reports `family`
+`hybrid` and `hybrid` (`boundary`, `features`, `neural_params`) and explains a boundary that
+is not flat (*"… needs a flat feature vector, but Conv2d outputs (32, 8, 8). Add Flatten (or
+a Linear layer) before …"*). `list_examples` has `hybrid_mlp_gradient_boosting` for tables.
+`check_training` and `start_training` take the settings of a network for the features,
+`config.feature_training` (`pretrain` or `frozen`) and a `tuning` of the classical model's
+parameters; the estimate adds both phases. `get_training_run` shows the curves of the
+features in `history` and the classical model in `classical` (with `hybrid` and
+`validation`); its `metrics` are those of the classical model. `predict` (also raw rows),
+`get_weights_download` (a ZIP file), `create_ensemble` and `explain_prediction` (permutation
+importance, Shapley values, activations of the neural layers) work as for other runs.
+
+```text
+list_examples {id: "hybrid_mlp_gradient_boosting"} → graph · analyze_network {graph} → family hybrid
+start_training {graph, dataset, config: {epochs: 20}} · get_training_run {id} → history (features), classical.validation
+```
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and
 validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login-required)).
@@ -402,6 +420,11 @@ password while it is valid. Along with it come `model_code` (the `NeuralNetwork`
 weights belong to), `preprocessing` as recorded by the training (feature order and
 standardisation, or image size, channels and normalisation, and the class names), `inputs`
 (the same in words) and `how_to_use`, a Python snippet that loads the weights and predicts.
+For a hybrid network (neural layers that learn the features of a classical model) the
+file is a ZIP file with both parts (`<name>.features.pt`, `<name>.joblib`), the
+preprocessing and the script, whose `--predict` uses both; `how_to_use` loads them in
+Python.
+
 For a classical model the file is the fitted scikit-learn pipeline (`.joblib`, see
 [training.md](training.md#classical-models)), `model_code` is its `make_model()` and the
 snippet loads the file with joblib.
