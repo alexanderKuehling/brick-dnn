@@ -100,11 +100,13 @@ def test_state_reporter_keeps_the_score(tmp_path):
     assert st.read_state(tmp_path)["trials"][0]["score"] == 0.8
 
 
-def test_cli_metric(capsys):
+def test_cli_metric(capsys, tmp_path):
+    # Saved into tmp_path: the weights are written next to the target first, which /dev
+    # does not allow for a normal user.
     code = cli.main(
         ["--example", "mlp_mnist", "--epochs", "1", "--device", "cpu", "--max-samples", "64"]
         + ["--seed", "0", "--search", "grid", "--tune-lr", "0.01,0.001"]
-        + ["--metric", "macro_f1", "--save", "/dev/null"]
+        + ["--metric", "macro_f1", "--save", str(tmp_path / "w.pt")]
     )
     out = capsys.readouterr().out
     assert code == 0, out
