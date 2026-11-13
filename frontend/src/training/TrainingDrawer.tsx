@@ -280,6 +280,8 @@ function DrawerContent({
             scope={scope}
             filter={filter}
             onFilterChange={onFilterChange}
+            onCombined={trainable ? training.applyRun : undefined}
+            combineProject={trainingProject(scope)?.id ?? null}
           />
         )}
       </Tabs.Panel>
@@ -328,6 +330,7 @@ function SelectedRun({
         onUpdate={training.applyRun}
         onDeleted={training.forgetRun}
         onLoadNetwork={onLoadNetwork}
+        onOpenRun={training.openRun}
       />
     </Stack>
   );

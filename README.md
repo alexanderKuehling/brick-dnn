@@ -11,8 +11,6 @@
 <p align="center">
   <a href="https://brickdnn.com"><b>▶LIVE VERSION</b></a>
   &nbsp;·&nbsp;
-  <a href="https://huggingface.co/spaces/alexKlg/brick-dnn"><b>▶ Try the online demo</b></a>
-  &nbsp;·&nbsp;
   <a href="#quick-start">Run it locally</a>
 </p>
 
@@ -90,13 +88,19 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   in the graph: voting (soft or hard, optionally weighted) and stacking, with each model's
   own score next to the ensemble's. See
   [docs/training.md](docs/training.md#classical-models).
+- **Ensembles of finished runs**: combine, say, an MLP and a gradient boosting model trained
+  on the same prepared dataset into one model, by a weighted average of their predictions or
+  by stacking (a logistic or ridge regression fitted on the validation rows). The ensemble is
+  measured like a run, next to each of its members on the same rows, has its own decision
+  threshold and predicts raw rows in the web app, over the REST API and over MCP. See
+  [docs/training.md](docs/training.md#ensembles).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
   maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
   importance (tables), compare decision boundaries of an MLP, an SVM and a Gaussian process,
   and look inside a network: the output of every layer for one sample, learned filters and
   weight histograms. In the builder, **How data flows** steps a sample through the network,
-  and the inspector shows how a layer's parameters add up and its receptive field (also in
-  the online demo). See [docs/explain.md](docs/explain.md).
+  and the inspector shows how a layer's parameters add up and its receptive field. See
+  [docs/explain.md](docs/explain.md).
 - **Readable PyTorch output**: an `nn.Module` with named layers, a sanity check with a random
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
@@ -189,16 +193,6 @@ A `Makefile` wraps these steps (`make install`, `make install-training`, `make b
 `make frontend`, `make test`). In development the API trains itself, one training at a time.
 To try the training queue, start the API and, in another terminal, the worker
 (`python manage.py training_worker`), both with `BRICKDNN_TRAINING_WORKER=true`.
-
-### Online demo
-
-The [online demo](https://huggingface.co/spaces/alexKlg/brick-dnn) needs no server: the
-`brickdnn` code generator runs in the browser with [Pyodide](https://pyodide.org). Accounts
-and training are switched off. `npm run build:demo` (in `frontend/`) builds it into
-`frontend/dist-demo/`, which can be hosted as static files anywhere;
-`npm run dev:demo` runs it locally. `deploy/huggingface/deploy.sh` builds it and uploads it
-to the Hugging Face Space. On GitHub, the *Deploy demo* workflow does this after every
-successful CI run on `main` (it needs the repository secret `HF_TOKEN`).
 
 ## How to use it
 
@@ -354,7 +348,7 @@ brick-dnn/
 │       ├── account/         account page: e-mail, password, data export, deletion
 │       ├── legal/           imprint, privacy policy, terms of use (safe Markdown)
 │       └── pages/           login, sign-up, saved networks
-├── deploy/                  server setup (Docker Compose, Caddy), legal templates, demo
+├── deploy/                  server setup (Docker Compose, Caddy), legal templates
 ├── docs/                    graph format, REST API, training, data, database, privacy, scaling
 └── docker-compose.yml
 ```

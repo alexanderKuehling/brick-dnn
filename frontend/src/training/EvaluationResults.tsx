@@ -642,11 +642,14 @@ export function EvaluationResults({
   evaluation,
   classical = false,
   threshold,
+  subject,
 }: {
   evaluation: RunEvaluation | null | undefined;
   classical?: boolean;
   /** Binary classification: the decision threshold (see ThresholdAnalysis). */
   threshold?: ThresholdProps;
+  /** What was measured, if not the kept weights or the fitted model (e.g. an ensemble). */
+  subject?: string;
 }) {
   if (!evaluation || splitsOf<unknown>(evaluation).length === 0) {
     return null;
@@ -656,16 +659,18 @@ export function EvaluationResults({
   const trainHint = classical
     ? 'train: the fitted model on its training rows'
     : 'train: mean over the batches of the epoch';
-  const kept = classical
-    ? 'The fitted model'
-    : [
-        typeof evaluation.epoch === 'number'
-          ? `Weights of epoch ${evaluation.epoch}`
-          : 'The kept weights',
-        typeof evaluation.trial === 'number' ? `trial ${evaluation.trial}` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ');
+  const kept = subject
+    ? subject
+    : classical
+      ? 'The fitted model'
+      : [
+          typeof evaluation.epoch === 'number'
+            ? `Weights of epoch ${evaluation.epoch}`
+            : 'The kept weights',
+          typeof evaluation.trial === 'number' ? `trial ${evaluation.trial}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
   return (
     <Stack gap="sm" component="section" aria-label="Metrics">
       <Group justify="space-between" gap="xs" align="baseline">

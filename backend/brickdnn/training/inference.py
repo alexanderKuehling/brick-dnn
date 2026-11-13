@@ -808,6 +808,17 @@ def _classes(
     }
 
 
+def classes_from_probabilities(
+    probabilities: list[float | None],
+    names: list[str],
+    top_k: int = DEFAULT_TOP_K,
+    threshold: float | None = None,
+) -> dict[str, Any]:
+    """One prediction from class probabilities (e.g. an ensemble's combined ones), with
+    the top classes and, for two classes, the decision ``threshold`` (see :func:`_classes`)."""
+    return _classes(probabilities, names, top_k, probabilities=True, threshold=threshold)
+
+
 def read_outputs(
     plan: Any,
     preprocessing: Any,

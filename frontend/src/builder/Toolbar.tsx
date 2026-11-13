@@ -30,7 +30,6 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
-import { DEMO } from '@/demo';
 import { LiveBadge } from '@/live/LiveBadge';
 import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
@@ -66,7 +65,7 @@ interface ToolbarProps {
   onExportJson: () => void;
   onTidy: () => void;
   onSave: () => void;
-  /** Opens the share dialog; not available in the online demo. */
+  /** Opens the share dialog. */
   onShare?: () => void;
   /** Viewers: copy the network into the own account. */
   onDuplicate?: () => void;
@@ -147,7 +146,7 @@ export function Toolbar(props: ToolbarProps) {
   const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
   const library = networkFamily(props.analysis) === 'classical' ? 'scikit-learn' : 'PyTorch';
   const { onShare, onDuplicate, here = null, live = null } = props;
-  const canSave = !DEMO && !readOnly && !live;
+  const canSave = !readOnly && !live;
 
   return (
     <Group

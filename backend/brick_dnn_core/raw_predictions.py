@@ -259,7 +259,11 @@ def prediction_form(run: TrainingRun, actor: budgets.Actor) -> dict[str, Any]:
     }
     family = training.run_family(run)
     reason = training.unavailable_reason(family)
-    if reason is None and training.weights_path(run) is None:
+    if family == "ensemble":
+        from .ensembles import prediction_reason
+
+        reason = reason or prediction_reason(run)
+    elif reason is None and training.weights_path(run) is None:
         reason = training.no_weights_reason(run)
     preprocessing = (training.state_of(run) or {}).get("preprocessing")
     try:

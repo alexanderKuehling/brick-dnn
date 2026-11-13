@@ -12,7 +12,7 @@ export function liveUrl(projectId: number): string {
 }
 
 export interface LiveState {
-  /** 'off': no connection (no saved project open, logged out or the online demo). */
+  /** 'off': no connection (no saved project open or logged out). */
   status: LiveStatus | 'off';
   endReason: EndReason | null;
   /** Number of change batches the server has not confirmed yet. */
@@ -44,7 +44,7 @@ export interface PendingSeed {
 }
 
 /**
- * Keeps a live connection to the project while `enabled` (logged in, not the online demo).
+ * Keeps a live connection to the project while `enabled` (logged in).
  * Status, role and pending changes are React state; peers go to the presence store.
  */
 export function useLiveProject(

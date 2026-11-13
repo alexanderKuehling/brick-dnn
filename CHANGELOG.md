@@ -19,6 +19,23 @@
   ensemble with the models named after their bricks. New examples *Voting ensemble
   classifier* and *Stacking ensemble regression*; the MCP tools describe the bricks. See
   docs/training.md and docs/graph-format.md.
+- **Ensembles of finished runs.** 2 to 10 finished runs of one dataset made in the Data tab
+  (the same task and classes; neural networks and classical models mixed) combine into one
+  model: the **weighted average** of their class probabilities or values (equal weights by
+  default, changeable later without predicting again) or **stacking** (a logistic or ridge
+  regression fitted on the members' predictions of the validation rows and measured on the
+  test rows; labelled optimistic without test rows). An ensemble is a run of its own
+  (`kind: "ensemble"`, migration 0020 with a member table): it measures its members like a
+  short training (queue, budgets, CPU time), and has the evaluation of a run with the threshold
+  analysis, its own decision threshold, a comparison of every member with the ensemble per
+  split, and predictions that prepare raw rows once and can return what each member
+  predicted. A run cannot be deleted while an ensemble uses it; a member deleted another way
+  (with its owner's account) leaves the ensemble's results but stops its predictions. Web app:
+  *Combine runs* in the list of runs and an ensemble view with links to the members. API:
+  `POST /api/training/ensembles/`, `PATCH /api/training/runs/<id>/ensemble/` and `members` for
+  `predict`; MCP: `create_ensemble`, and ensembles in `list_training_runs`,
+  `get_training_run` and `predict`. The account export lists the members. See
+  docs/training.md.
 - **Gradient boosting** as classical model bricks: `HistGradientBoostingRegressor` and
   `HistGradientBoostingClassifier` (scikit-learn, no extra dependency), the usual strong
   baseline for tabular data and fast on large tables. Settings: learning rate, iterations,
@@ -653,6 +670,12 @@
 - The analysis (`POST /api/analyze/`, MCP `analyze_network`) leaves out parameters that have
   no effect with the other settings, such as `padding_size` when `padding` is `same` or
   `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
+
+### Removed
+- **The online demo is gone.** The static demo build on Hugging Face (code generator in the
+  browser with Pyodide, no accounts) is no longer needed now that brickdnn.com is live: the
+  *Deploy demo* workflow, `deploy/huggingface/`, `npm run build:demo` / `dev:demo`, the
+  in-browser engine and every demo branch in the app are removed.
 
 ## 1.1.0 (2026-11-09)
 

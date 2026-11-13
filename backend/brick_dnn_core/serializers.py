@@ -245,10 +245,23 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "usage",
             "queue",
             "decision_threshold",
+            "kind",
+            "ensemble",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
+    ensemble = serializers.SerializerMethodField()
+
+    def get_ensemble(self, obj: TrainingRun) -> dict | None:
+        """An ensemble (``kind`` "ensemble"): its method and members with their weights, and
+        why it cannot predict if a member is gone (see ensembles.describe); null for other
+        runs."""
+        from .ensembles import describe
+
+        request = self.context.get("request")
+        return describe(obj, getattr(request, "user", None) or self.context.get("user"))
+
     decision_threshold = serializers.SerializerMethodField()
 
     def get_decision_threshold(self, obj: TrainingRun) -> float | None:
@@ -304,13 +317,15 @@ class RunSummarySerializer(serializers.ModelSerializer):
         return obj.plan.get("task") if isinstance(obj.plan, dict) else None
 
     def get_family(self, obj: TrainingRun) -> str:
-        """``neural`` (PyTorch) or ``classical`` (a scikit-learn model, fitted once)."""
-        plan = obj.plan if isinstance(obj.plan, dict) else {}
-        return "classical" if isinstance(plan.get("classical"), dict) else "neural"
+        """``neural`` (PyTorch), ``classical`` (a scikit-learn model, fitted once) or
+        ``ensemble`` (finished runs combined)."""
+        from .training_service import run_family
+
+        return run_family(obj)
 
     def get_epochs(self, obj: TrainingRun) -> int | None:
-        if self.get_family(obj) == "classical":
-            return 1  # fitted once
+        if self.get_family(obj) in ("classical", "ensemble"):
+            return 1  # fitted once, or combined once
         return obj.config.get("epochs") if isinstance(obj.config, dict) else None
 
     def get_stop_requested(self, obj: TrainingRun) -> bool:

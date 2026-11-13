@@ -2,12 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconAlertTriangle,
   IconArrowLeft,
-  IconChevronDown,
-  IconChevronRight,
   IconCircleCheck,
   IconDownload,
   IconFileCode,
-  IconHourglassHigh,
   IconInfoCircle,
   IconPlayerPlay,
   IconPlayerStop,
@@ -57,7 +54,6 @@ import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChar
 import { ExplainHeadline } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
 import { AccountLink } from '@/usage/CostEstimate';
-import { formatCpu } from '@/usage/format';
 import {
   canDeleteRun,
   canSetThreshold,
@@ -68,6 +64,8 @@ import {
   type TrainingScope,
 } from './access';
 import { isClassicalRun } from './classical';
+import { isEnsemble } from './ensemble';
+import { EnsembleRunView } from './EnsembleRunView';
 import { EvaluationResults, type ThresholdProps } from './EvaluationResults';
 import {
   describeParams,
@@ -83,7 +81,6 @@ import {
   isClassification,
   isSegmentation,
   preprocessingJson,
-  queueText,
   reportsR2,
   searchedSettings,
   searchLabel,
@@ -94,6 +91,7 @@ import {
 import { KernelBoundsHint } from './KernelBounds';
 import { PredictionPanel } from './predict/PredictionPanel';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
+import { cpuUsage, QueueNotice, ToggleButton } from './runParts';
 import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
 
@@ -107,6 +105,8 @@ interface RunViewProps {
   onUpdate: (run: RunDetail) => void;
   onDeleted: (id: string) => void;
   onLoadNetwork: (graph: GraphDocument, name: string) => void;
+  /** Opens another run (the members of an ensemble). */
+  onOpenRun?: (id: string) => void;
 }
 
 /** Re-renders every second while `running` so elapsed times stay current. */
@@ -181,7 +181,12 @@ function scriptBase(name: string): string {
   return /^[a-z_]/.test(slug) ? slug : `model_${slug}`;
 }
 
-export function RunView({
+/** A run: a training of a network or a classical model, or an ensemble of runs. */
+export function RunView(props: RunViewProps) {
+  return isEnsemble(props.run) ? <EnsembleRunView {...props} /> : <NetworkRunView {...props} />;
+}
+
+function NetworkRunView({
   run,
   doc,
   scope = NO_SCOPE,
@@ -712,45 +717,10 @@ export function RunView({
   );
 }
 
-function ToggleButton({
-  opened,
-  onClick,
-  children,
-}: {
-  opened: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button
-      variant="subtle"
-      color="gray"
-      size="compact-sm"
-      leftSection={opened ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-      onClick={onClick}
-      aria-expanded={opened}
-      mb={4}
-    >
-      {children}
-    </Button>
-  );
-}
-
 const STOP_TITLES = {
   budget: 'Stopped by the compute budget',
   run_limit: 'Stopped at the limit per training',
 };
-
-/** "2.3 CPU min" used (of its limit while it runs); null before anything was counted. */
-function cpuUsage(run: RunDetail): string | null {
-  const usage = run.usage;
-  if (!usage || (usage.cpu_minutes <= 0 && usage.limit_cpu_minutes === null)) {
-    return null;
-  }
-  return isActive(run.status) && usage.limit_cpu_minutes !== null
-    ? `${formatCpu(usage.cpu_minutes, '')} of ${formatCpu(usage.limit_cpu_minutes)}`
-    : formatCpu(usage.cpu_minutes);
-}
 
 function RunProgress({
   run,
@@ -879,66 +849,6 @@ function RunProgress({
 }
 
 /** What the server says about a run by default while it waits. */
-const QUEUED_MESSAGE = 'Waiting for a free training slot.';
-
-/**
- * A run that waits for a training worker: its position, when it probably starts (the
- * server's rough estimate, updated with every poll) and what holds it up.
- */
-function QueueNotice({ run }: { run: RunDetail }) {
-  const queue = run.queue ?? null;
-  const notes: string[] = [];
-  if (run.message && run.message !== QUEUED_MESSAGE) {
-    notes.push(run.message); // e.g. it starts again after the worker was restarted
-  }
-  if (queue?.blocked_by === 'account') {
-    notes.push(
-      'Your plan limits how many trainings run at the same time: this one starts when your running training has ended.'
-    );
-  } else if (queue?.worker_online && queue.estimated_wait_seconds !== null) {
-    notes.push('The start time is a rough estimate.');
-  }
-  if (queue && queue.waiting > 1) {
-    notes.push(`${queue.waiting} trainings are waiting.`);
-  }
-  if (queue?.hint) {
-    notes.push(queue.hint);
-  }
-  notes.push('You can close this panel: the training starts by itself.');
-  return (
-    <Stack gap="xs">
-      <Paper component="section" withBorder p="sm" radius="md" aria-label="Queue">
-        <Group gap="xs" wrap="nowrap" align="flex-start">
-          <IconHourglassHigh
-            size={18}
-            color="var(--mantine-color-grape-6)"
-            style={{ flexShrink: 0, marginTop: 2 }}
-            aria-hidden
-          />
-          <div style={{ minWidth: 0 }}>
-            <Text size="sm" fw={600}>
-              {queueText(queue)}
-            </Text>
-            <Text size="xs" c="dimmed" mt={4}>
-              {notes.join(' ')}
-            </Text>
-          </div>
-        </Group>
-      </Paper>
-      {queue && !queue.worker_online && (
-        <Alert
-          color="yellow"
-          icon={<IconAlertTriangle size={18} />}
-          title="No training worker is running"
-        >
-          This server cannot train right now. Your training keeps its place and starts as soon as a
-          worker is back.
-        </Alert>
-      )}
-    </Stack>
-  );
-}
-
 /**
  * The models of an ensemble, each measured on its own (on the validation rows, or the
  * training rows without them), to compare them with the ensemble.

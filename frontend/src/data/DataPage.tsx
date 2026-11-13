@@ -49,7 +49,6 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { downloadBlob } from '@/builder/download';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
-import { DEMO } from '@/demo';
 import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
@@ -248,7 +247,7 @@ function LoggedOut() {
 }
 
 function Unavailable({ status, onRetry }: { status: DataStatus; onRetry: () => void }) {
-  const missingPackages = status.enabled && !DEMO;
+  const missingPackages = status.enabled;
   return (
     <Center h={PAGE_HEIGHT} px="md">
       <Message
@@ -259,10 +258,6 @@ function Unavailable({ status, onRetry }: { status: DataStatus; onRetry: () => v
           missingPackages ? (
             <Button variant="light" onClick={onRetry}>
               Check again
-            </Button>
-          ) : DEMO ? (
-            <Button component={Link} to="/" variant="light">
-              Back to the builder
             </Button>
           ) : undefined
         }

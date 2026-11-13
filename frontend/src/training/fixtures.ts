@@ -1209,3 +1209,141 @@ export function regressionEvaluation(
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Ensembles
+// ---------------------------------------------------------------------------
+
+/** A finished run on the uploaded fraud dataset (7) that can be a member of an ensemble. */
+export function fraudRun(overrides: Partial<RunSummary> = {}): RunSummary {
+  return summary({
+    status: 'completed',
+    message: 'Finished.',
+    has_weights: true,
+    dataset: { kind: 'upload', id: 7, name: 'Fraud' },
+    finished_at: '2026-10-28T10:05:00Z',
+    ...overrides,
+  });
+}
+
+function splitMetrics(
+  size: number,
+  accuracy: number,
+  rocAuc: number
+): {
+  size: number;
+  accuracy: number;
+  balanced_accuracy: number;
+  macro_f1: number;
+  log_loss: number;
+  roc_auc: number;
+  pr_auc: number;
+} {
+  return {
+    size,
+    accuracy,
+    balanced_accuracy: accuracy - 0.2,
+    macro_f1: accuracy - 0.18,
+    log_loss: 1 - accuracy,
+    roc_auc: rocAuc,
+    pr_auc: rocAuc - 0.3,
+  };
+}
+
+/** An ensemble of an MLP (visible) and gradient boosting, average 0.75 / 0.25, two classes. */
+export function ensembleDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = detail({
+    id: 'e1',
+    name: 'Fraud ensemble',
+    status: 'completed',
+    message: 'Combined 2 runs (weighted average): validation accuracy 92.0%; test accuracy 94.0%.',
+    dataset: { kind: 'upload', id: 7, name: 'Fraud' },
+    has_weights: true,
+    kind: 'ensemble',
+    family: 'ensemble',
+    epochs: 1,
+    epochs_done: 1,
+    decision_threshold: 0.5,
+    finished_at: '2026-10-28T10:01:00Z',
+  });
+  return {
+    ...base,
+    ensemble: {
+      method: 'average',
+      method_label: 'Weighted average',
+      broken: null,
+      members: [
+        {
+          id: 'm1',
+          name: 'MLP',
+          weight: 0.75,
+          family: 'neural',
+          model: 'Neural network',
+          status: 'completed',
+          visible: true,
+          deleted: false,
+        },
+        {
+          id: 'm2',
+          name: 'Trees',
+          weight: 0.25,
+          family: 'classical',
+          model: 'Gradient boosting classification',
+          status: 'completed',
+          visible: false,
+          deleted: false,
+        },
+      ],
+    },
+    plan: {
+      task: 'classification',
+      summary: "Ensemble of 2 runs (weighted average): 'MLP', 'Trees'.",
+      image: null,
+      inputs: [{ shape: [4], dtype: 'float', vocab: null }],
+      targets: [{ kind: 'class', num_classes: 2 }],
+      num_classes: 2,
+      class_names: ['ok', 'fraud'],
+      notes: [],
+      classical: null,
+    },
+    state: {
+      ...base.state!,
+      status: 'completed',
+      family: 'ensemble',
+      progress: null,
+      class_names: ['ok', 'fraud'],
+      num_classes: 2,
+      evaluation: binaryEvaluation(),
+      ensemble: {
+        method: 'average',
+        weights: [0.75, 0.25],
+        meta: null,
+        fitted_on: null,
+        optimistic: false,
+        splits: ['val', 'test'],
+        rows: { val: 100, test: 50 },
+        comparison: [
+          {
+            name: 'MLP',
+            member: 0,
+            val: splitMetrics(100, 0.9, 0.85),
+            test: splitMetrics(50, 0.92, 0.84),
+          },
+          {
+            name: 'Trees',
+            member: 1,
+            val: splitMetrics(100, 0.91, 0.88),
+            test: splitMetrics(50, 0.9, 0.86),
+          },
+          {
+            name: 'Ensemble',
+            member: null,
+            val: splitMetrics(100, 0.92, 0.912),
+            test: splitMetrics(50, 0.94, 0.871),
+          },
+        ],
+      },
+    },
+    ...overrides,
+  };
+}

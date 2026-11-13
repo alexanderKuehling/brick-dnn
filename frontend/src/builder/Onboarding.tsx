@@ -8,7 +8,6 @@ import { useEffect, useState } from 'react';
 import { IconSchool } from '@tabler/icons-react';
 import { Paper, SimpleGrid, Text, Title, Tour, UnstyledButton } from '@mantine/core';
 import type { Example } from '@/api/types';
-import { DEMO } from '@/demo';
 import { LegalLinks } from '@/legal/LegalLinks';
 
 /** Set once the guide was finished or skipped in this browser. */
@@ -89,12 +88,10 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     targets: [tour('train'), tour('train-icon')],
     title: 'Train it',
-    body: DEMO
-      ? 'In the full app at brickdnn.com, press Train, pick a built-in dataset such as MNIST ' +
-        'or Fashion-MNIST, and watch loss and accuracy live. The ? button shows this guide again.'
-      : 'Press Train, pick a built-in dataset such as MNIST or Fashion-MNIST (or your own CSV ' +
-        'file), and watch loss and accuracy live; it needs an account. The ? button shows ' +
-        'this guide again.',
+    body:
+      'Press Train, pick a built-in dataset such as MNIST or Fashion-MNIST (or your own CSV ' +
+      'file), and watch loss and accuracy live; it needs an account. The ? button shows ' +
+      'this guide again.',
   },
 ];
 
@@ -191,10 +188,8 @@ export function EmptyCanvas({
     >
       <Text size="sm" mb="sm">
         <b>Brick DNN</b> builds neural networks from bricks: drag layers together, see the shapes as
-        you go and get clean PyTorch code.
-        {DEMO
-          ? ' This online demo runs in your browser.'
-          : ' Prepare your data and train the network on this server, free to start.'}
+        you go and get clean PyTorch code. Prepare your data and train the network on this server,
+        free to start.
       </Text>
       <Title order={4}>Start building</Title>
       <Text size="sm" c="dimmed" mt={6}>

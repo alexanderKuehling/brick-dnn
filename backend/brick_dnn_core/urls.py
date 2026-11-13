@@ -170,6 +170,7 @@ urlpatterns = [
         name="training-run-preview-file",
     ),
     path("training/check/", views.training_check, name="training-check"),
+    path("training/ensembles/", views.EnsembleView.as_view(), name="training-ensembles"),
     path("data/", data_views.data_status, name="data"),
     path("data/steps/", data_views.data_steps, name="data-steps"),
     # Explanations of a trained model (explain_views.py).

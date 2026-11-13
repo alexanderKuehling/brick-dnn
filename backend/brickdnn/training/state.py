@@ -18,6 +18,8 @@ Every run lives in its own directory::
                   (classical models: model.preprocessing.json)
     previews/     segmentation only: index.json and small PNG files that show what the
                   kept weights predict for a few validation images (see previews.py)
+    ensemble.npz  ensembles only: the members' predictions of the validation and test rows
+                  (see ensemble.py); job.json then has ``ensemble`` instead of a network
     output.log    stdout/stderr of the runner process             (for debugging)
 
 ``state.json`` looks like this::
@@ -29,7 +31,7 @@ Every run lives in its own directory::
       "started_at": 1730000000.0,
       "finished_at": null,
       "device": "mps", "device_label": "Apple GPU (MPS)",
-      "family": "neural",            # neural (PyTorch) | classical (scikit-learn)
+      "family": "neural",            # neural (PyTorch) | classical (scikit-learn) | ensemble
       "task": "classification",      # classification | regression | segmentation | demo
       "num_classes": 10, "class_names": ["0", "1", ...],
       "train_size": 48000, "val_size": 12000,
@@ -220,6 +222,19 @@ A regression split (in the units of the target column)::
        "residuals": {"q05": -2.4, "q25": -0.8, "median": 0.1, "q75": 0.9, "q95": 2.6},
                                        # quantiles of predicted − actual
        "sample": {"actual": [...], "predicted": [...]}}   # at most 500 evenly spaced rows
+
+An ensemble (family "ensemble", see ensemble.py) adds what it combines::
+
+      "ensemble": {"method": "average",          # or "stacking"
+                   "weights": [0.5, 0.5],        # average only (they add up to 1)
+                   "meta": null,                 # stacking: the fitted model's numbers
+                   "fitted_on": null,            # stacking: "val"
+                   "optimistic": false,          # measured on rows it was fitted on
+                   "splits": ["val", "test"], "rows": {"val": 120, "test": 118},
+                   "comparison": [{"name": "MLP", "member": 0,
+                                   "val": {"size": 120, "accuracy": 0.9, ...},
+                                   "test": {...}}, ...,
+                                  {"name": "Ensemble", "member": null, ...}]}
 """
 
 from __future__ import annotations
@@ -238,6 +253,8 @@ STATE_FILE = "state.json"
 STOP_FILE = "STOP"
 WEIGHTS_FILE = "weights.pt"
 CLASSICAL_WEIGHTS_FILE = "model.joblib"
+# Ensembles (ensemble_engine.py): the members' predictions of the validation and test rows.
+ENSEMBLE_FILE = "ensemble.npz"
 LOG_FILE = "output.log"
 PREVIEW_DIR = "previews"
 PREVIEW_INDEX_FILE = "index.json"
@@ -260,7 +277,10 @@ MAX_LOG_LINES = 200
 
 def weights_file(family: str | None) -> str:
     """Name of the weights file of a run: ``model.joblib`` for classical models (the fitted
-    scikit-learn pipeline), ``weights.pt`` for neural networks."""
+    scikit-learn pipeline), ``weights.pt`` for neural networks, ``ensemble.npz`` for an
+    ensemble (its members' predictions; it predicts with the members' own files)."""
+    if family == "ensemble":
+        return ENSEMBLE_FILE
     return CLASSICAL_WEIGHTS_FILE if family == "classical" else WEIGHTS_FILE
 
 
@@ -333,6 +353,7 @@ def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
         "classical": None,
         "segmentation": None,
         "evaluation": None,
+        "ensemble": None,
         "usage": {"cpu_seconds": 0.0, "wall_seconds": 0.0, "limit_cpu_seconds": None},
         "stop_reason": None,
     }

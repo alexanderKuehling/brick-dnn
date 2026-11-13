@@ -303,12 +303,15 @@ def run(run_dir: str | Path) -> dict[str, Any]:
     """Run the job in ``run_dir`` and return the final state.
 
     Neural networks are trained with PyTorch (:mod:`.engine`, saved as ``weights.pt``),
-    classical models with scikit-learn (:mod:`.classical_engine`, ``model.joblib``).
+    classical models with scikit-learn (:mod:`.classical_engine`, ``model.joblib``). An
+    ensemble combines finished runs (:mod:`.ensemble_engine`, ``ensemble.npz``).
     """
     run_dir = Path(run_dir)
     job_data = read_job(run_dir)
     family = graph_family(job_data.get("graph")) if job_data else "neural"
-    epochs = 1 if family == "classical" else 0
+    if job_data and isinstance(job_data.get("ensemble"), dict):
+        family = "ensemble"
+    epochs = 1 if family in ("classical", "ensemble") else 0
     if family == "neural" and job_data and isinstance(job_data.get("config"), dict):
         value = job_data["config"].get("epochs")
         epochs = value if isinstance(value, int) else 0
@@ -316,6 +319,11 @@ def run(run_dir: str | Path) -> dict[str, Any]:
     reporter = StateReporter(run_dir, epochs, family=family, limits=limits)
     _install_signal_handlers(reporter)
     try:
+        if family == "ensemble":
+            from . import ensemble_engine  # NumPy; PyTorch only for neural members
+
+            ensemble_engine.run(job_data, reporter, run_dir)
+            return reporter.snapshot()
         if family == "classical":
             _run_classical(run_dir, job_data, reporter)
             return reporter.snapshot()
