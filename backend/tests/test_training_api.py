@@ -291,8 +291,17 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
             "method": "random",
             "trials": 10,
             "space": {"learning_rate": {"min": 1e-4, "max": 1e-2}, "batch_size": [32, 64, 128]},
+            "metric": "loss",
         },
+        "default_metric": "loss",
+        "metrics": data["tuning"]["metrics"],
     }
+    metrics = {
+        m["name"]: (m["direction"], m["task"], m["binary"]) for m in data["tuning"]["metrics"]
+    }
+    assert metrics["loss"] == ("minimize", None, False)
+    assert metrics["pr_auc"] == ("maximize", "classification", True)
+    assert metrics["mae"] == ("minimize", "regression", False)
     builtin = data["builtin_datasets"]
     assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes"]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]
@@ -807,6 +816,7 @@ def test_hyperparameter_search_run(auth_client, training_dir, settings):
         "method": "random",
         "trials": 3,
         "space": {"learning_rate": {"min": 1e-4, "max": 10.0}, "optimizer": ["sgd", "adam"]},
+        "metric": "loss",
     }
     assert response.data["tuning"] == normalised
     assert response.data["config"]["test_split"] == 0.2
@@ -825,6 +835,7 @@ def test_hyperparameter_search_run(auth_client, training_dir, settings):
         "val_rmse": None,
         "val_r2": None,
         "weights_epoch": 1,
+        "score": None,  # the fake runner reports none
     }
     assert data["metrics"]["val_accuracy"] == 0.95
     assert data["metrics"]["test_loss"] == 0.35

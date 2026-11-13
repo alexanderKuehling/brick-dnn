@@ -240,7 +240,7 @@ def training_check(request: Request) -> Response:
         training.validate_graph(graph)
         dataset = training.resolve_dataset(request.user, data.get("dataset"))
         config = training.parse_config(data.get("config")) if "config" in data else None
-        search = training.parse_tuning(data.get("tuning"))
+        search = training.parse_tuning(data.get("tuning"), graph)
     except training.TrainingInputError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     result = training.check(graph, dataset, config, search)

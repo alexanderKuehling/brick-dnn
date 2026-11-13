@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from brickdnn.training import objectives
+
 from .models import Dataset, TrainingRun
 
 DEFAULT_COLUMNS = 50
@@ -261,6 +263,74 @@ def queue_info(run: TrainingRun, context: dict[str, Any], full: bool = False) ->
     return _no_none(brief)
 
 
+def tuning_options(tuning: dict[str, Any]) -> dict[str, Any]:
+    """The search options of get_training_options, with the metrics in one line:
+    ``"loss (min), accuracy (max; classification), roc_auc (max; two classes), …"``."""
+    found = dict(tuning)
+    parts = []
+    for metric in found.pop("metrics", None) or []:
+        text = "max" if metric.get("direction") == "maximize" else "min"
+        if metric.get("binary"):
+            text += "; two classes"
+        elif metric.get("task"):
+            text += f"; {metric['task']}"
+        parts.append(f"{metric.get('name')} ({text})")
+    found["metrics"] = ", ".join(parts)
+    return found
+
+
+def _example(value: Any) -> str:
+    if isinstance(value, dict):
+        return f"{value.get('min'):g}:{value.get('max'):g}"
+    if isinstance(value, list):
+        return ", ".join("null" if v is None else str(v).lower() for v in value)
+    return str(value)
+
+
+def _tunable_line(tunable: dict[str, Any]) -> str:
+    """``"number > 0, log; e.g. 0.1:100"`` or ``"linear|poly|rbf|sigmoid"``."""
+    kind = tunable.get("kind")
+    options = "|".join(str(o).lower() for o in tunable.get("options") or [])
+    if kind in ("choice", "bool"):
+        return options
+    word = "whole number" if kind == "int" else "number"
+    sign = ">" if tunable.get("min_exclusive") else ">="
+    text = f"{word} {sign} {tunable.get('min'):g}, {tunable.get('scale')}"
+    if kind == "gamma":
+        text += f", or {options}"
+    if tunable.get("none"):
+        text += ", null: no limit"
+    return f"{text}; e.g. {_example(tunable.get('default'))}"
+
+
+def classical_options(classical: dict[str, Any]) -> dict[str, Any]:
+    """The classical models of get_training_options: what each one's search can vary (the
+    parameters searched by default first, marked with *), and each parameter in one line."""
+    found = dict(classical)
+    tuning = found.get("tuning")
+    if isinstance(tuning, dict):
+        models: dict[str, str] = {}
+        params: dict[str, str] = {}
+        for model, info in (tuning.get("models") or {}).items():
+            defaults = list(info.get("default") or {})
+            names = [t["name"] for t in info.get("tunable") or []]
+            models[model] = ", ".join(
+                [f"{name}*" for name in defaults] + [n for n in names if n not in defaults]
+            )
+            if info.get("note"):  # Gaussian processes
+                models[model] += " (the fit optimises the kernel itself)"
+            for item in info.get("tunable") or []:
+                params.setdefault(item["name"], _tunable_line(item))
+        folds = tuning.get("cv_folds") or {}
+        found["tuning"] = {
+            "cv_folds": f"{folds.get('min')}-{folds.get('max')}; without validation rows "
+            f"always, default {folds.get('default')}",
+            "models": models,
+            "params": params,
+        }
+    return found
+
+
 def run_summary(run: TrainingRun, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """One line of list_training_runs."""
     plan = run.plan if isinstance(run.plan, dict) else {}
@@ -377,8 +447,19 @@ def run_detail(
     if isinstance(state.get("evaluation"), dict):
         detail["evaluation"] = evaluation_summary(state["evaluation"], threshold)
     if run.tuning or state.get("trials"):
+        tuning = run.tuning if isinstance(run.tuning, dict) else {}
+        live = state.get("tuning") if isinstance(state.get("tuning"), dict) else {}
+        metric = objectives.METRICS.get(tuning.get("metric") or objectives.DEFAULT_METRIC)
         detail["tuning"] = _no_none(
             {
+                "method": tuning.get("method"),
+                # What ranks the trials; "score" of a trial is its value (the best is the
+                # highest for "maximize", the lowest for "minimize").
+                "metric": metric.name if metric else None,
+                "direction": ("maximize" if metric.maximize else "minimize") if metric else None,
+                # Classical models: the folds of the cross-validation (null: the validation
+                # rows compare the trials).
+                "cv_folds": live.get("cv_folds", tuning.get("cv_folds")),
                 "trials_total": state.get("trials_total"),
                 "trials_done": run.trials_done,
                 "best_trial": run.best_trial,

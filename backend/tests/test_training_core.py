@@ -150,6 +150,7 @@ def test_tuning_defaults():
         "method": "random",
         "trials": 10,
         "space": {"learning_rate": {"min": 1e-4, "max": 1e-2}, "batch_size": [32, 64, 128]},
+        "metric": "loss",
     }
     assert TuningConfig.from_dict(tuning.to_dict()) == tuning
     assert tuning.describe() == "random search, 10 trials"

@@ -36,6 +36,16 @@ from .data import PreparedData, Source, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT
 from .devices import available_devices, default_device, device_label, select_device
 from .job import TrainingJob, TrainingResult
+from .objectives import (
+    DEFAULT_METRIC,
+    HISTORY_KEYS,
+    better,
+    history_value,
+    label,
+    metric_error,
+    split_value,
+)
+from .objectives import format_value as format_metric
 from .reporting import (
     DivergedError,
     MemoryLimitError,
@@ -991,6 +1001,9 @@ class _Search(_Run):
         self._prepare_data()
         if not self.data.has_val:
             raise TrainingError(NO_VALIDATION_SEARCH)
+        error = metric_error(self.tuning.metric, self.plan)
+        if error is not None:
+            raise TrainingError(error)
         trials = self.tuning.sample(self.seed)
         self.total = len(trials)
         for index, params in enumerate(trials, start=1):
@@ -1038,12 +1051,14 @@ class _Search(_Run):
             "weights_epoch": None,
             "stopped_early": False,
             "seconds": None,
+            "score": None,
         }
         if self.segmentation:
             entry.update(dict.fromkeys(TRIAL_SEGMENTATION_KEYS))
         self.trials.append(entry)
         started = time.perf_counter()
         failure: str | None = None
+        score: float | None = None
         try:
             self._check_memory(self.config)
             self._to_device(check=not self.device_checked)
@@ -1051,6 +1066,7 @@ class _Search(_Run):
             self.optimizer = self._optimizer()
             self._fit()
             self._keep_best()
+            score = self._trial_score()
         except StopTraining:
             self._trial_done(entry, "stopped", "Stopped.", started)
             raise
@@ -1071,14 +1087,36 @@ class _Search(_Run):
             return
 
         best = self.best_trial
-        if best is None or entry_score(self.history, self.weights_epoch) < best["val_loss"]:
+        if best is None or better(score, best["score"], self.tuning.metric):
             self.best_state = self._weights_copy()
             self.best_history = list(self.history)
             self.best_epoch = dict(self.best) if self.best else None
             self.best_class_results = dict(self.class_results)
-            self._trial_done(entry, "completed", "", started, new_best=True)
+            self._trial_done(entry, "completed", "", started, new_best=True, score=score)
         else:
-            self._trial_done(entry, "completed", "", started)
+            self._trial_done(entry, "completed", "", started, score=score)
+
+    def _trial_score(self) -> float | None:
+        """The objective metric of the trial's kept weights on the validation data (see
+        objectives.py): from the history where it is there (loss, accuracy, RMSE, R²),
+        otherwise from one more pass over the validation data."""
+        metric = self.tuning.metric
+        if metric == DEFAULT_METRIC:
+            score = entry_score(self.history, self.weights_epoch)
+            return score if math.isfinite(score) else None
+        if metric in HISTORY_KEYS:
+            return history_value(metric, self._kept_entry() or {})
+        collector = self._collector()
+        if collector is None:
+            return None
+        validated = self._evaluate(self.data.val, collector.add)
+        if collector.error is not None:
+            self.reporter.log(
+                f"Trial {self.trial}: the {label(metric)} could not be computed: "
+                f"{short_error(collector.error)}"
+            )
+            return None
+        return split_value(metric, collector.result(validated["loss"]))
 
     def _trial_done(
         self,
@@ -1087,11 +1125,13 @@ class _Search(_Run):
         message: str,
         started: float,
         new_best: bool = False,
+        score: float | None = None,
     ) -> None:
         kept = self._kept_entry() or {}  # completed: the kept epoch, otherwise the last
         entry.update(
             status=status,
             message=message,
+            score=score,
             epochs_done=len(self.history),
             train_loss=kept.get("train_loss"),
             val_loss=kept.get("val_loss"),
@@ -1179,9 +1219,13 @@ class _Search(_Run):
             kept = f"stopped early, weights of epoch {self.weights_epoch}: "
         elif self.history and self.weights_epoch != self.history[-1]["epoch"]:
             kept = f"weights of epoch {self.weights_epoch}: "
+        by = ""
+        if self.tuning.metric != DEFAULT_METRIC:
+            metric = self.tuning.metric
+            by = f"validation {label(metric)} {format_metric(metric, best.get('score'))}; "
         return (
             f"{head}. Best: trial {best['trial']} ({describe_params(best['params'])}), "
-            f"{kept}{self._result_text()}"
+            f"{by}{kept}{self._result_text()}"
         )
 
     def _save_weights(self) -> bool:

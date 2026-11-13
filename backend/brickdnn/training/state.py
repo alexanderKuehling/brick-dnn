@@ -89,21 +89,32 @@ Every run lives in its own directory::
       # Hyperparameter search only (null / empty for normal runs):
 
       "tuning": {"method": "random", "trials": 10,        # see tuning.py
-                 "space": {"learning_rate": {"min": 0.0001, "max": 0.01}}},
+                 "space": {"learning_rate": {"min": 0.0001, "max": 0.01}},
+                 "metric": "loss"},  # what ranks the trials (objectives.py); classical
+                                     # models add "cv_folds": the folds of the
+                                     # cross-validation, null: the validation rows
       "trials_total": 10,
       "trial": 2,                    # the trial that is running, null outside of trials
       "trials": [                    # one entry per started trial
         {"trial": 1, "params": {"learning_rate": 0.00312}, "status": "completed",
          "message": "", "epochs_done": 10, "train_loss": 0.2, "val_loss": 0.15,
          "val_accuracy": 0.95, "val_rmse": null, "val_r2": null, "weights_epoch": 8,
-         "stopped_early": false, "seconds": 120.5}
+         "stopped_early": false, "seconds": 120.5,
+         "score": 0.15}              # the metric of tuning.metric (null: undefined, or
+                                     # runs of older versions)
       ],                             # status: running | completed | failed | stopped;
                                      # segmentation adds "val_iou", "val_dice" and
                                      # "val_pixel_accuracy";
                                      # the metrics are those of the epoch whose weights the
                                      # trial keeps (weights_epoch); while it runs and for
-                                     # failed or stopped trials, those of its last epoch
-      "best_trial": 1                # lowest val_loss of the kept weights so far
+                                     # failed or stopped trials, those of its last epoch.
+                                     # Classical models: "params" are values of the model
+                                     # brick, epochs_done is 1, "folds" the folds of the
+                                     # cross-validation (null: the validation rows), and
+                                     # with folds the val_* values and the score come from
+                                     # the out-of-fold predictions of the training rows
+      "best_trial": 1                # the best score so far (the lowest for loss, RMSE and
+                                     # MAE, the highest for the other metrics)
     }
 
 In a search, ``history``, ``best`` and ``progress`` belong to the running trial. When the
@@ -113,7 +124,8 @@ are saved; ``weights_epoch`` and ``stopped_early`` then describe the best trial.
 Classical models (``family`` "classical") are fitted once: ``epochs`` and
 ``steps_per_epoch`` are 1, ``progress`` stays null, and when the fit is done ``history``
 gets a single entry (epoch 1, the metrics of the fitted model), ``weights_epoch`` is 1
-and ``device`` is "cpu".
+and ``device`` is "cpu". In a search of a classical model (see classical_search.py) the
+trials fill ``trials`` as above; ``history`` stays empty until the kept model is measured.
 ``train_size`` counts the rows the model is fitted on (after the row limit). The losses
 are the cross-entropy of the predicted class probabilities and, for regression, the mean
 squared error of the standardised target (like those of a neural network), so runs of

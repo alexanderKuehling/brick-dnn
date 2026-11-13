@@ -188,7 +188,8 @@ SPLIT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": "Train/validation/test split (defaults: val 0.15, test 0.15, seed 42, "
     "stratify true); only the given keys change. val and test may be 0: without validation "
-    "rows training keeps its last epoch and has no early stopping or search",
+    "rows training keeps its last epoch and has no early stopping or search (a classical "
+    "model's search cross-validates instead)",
     "properties": {
         "val": {"type": "number", "minimum": 0, "maximum": 0.9},
         "test": {"type": "number", "minimum": 0, "maximum": 0.9},
@@ -413,8 +414,8 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         ],
         "dataset_reference": DATASET_SCHEMA["description"],
         "config_defaults": TrainingConfig().to_dict(),
-        "tuning": capabilities["tuning"],
-        "classical": capabilities["classical"],
+        "tuning": compact.tuning_options(capabilities["tuning"]),
+        "classical": compact.classical_options(capabilities["classical"]),
         # Segmentation (a class for every pixel): its limits. The ZIP layout of a dataset is
         # in the description of create_upload_link.
         "segmentation": capabilities["segmentation"],
@@ -966,7 +967,7 @@ def check_training(request: Request, args: dict[str, Any]) -> Any:
         training.validate_graph(args["graph"])
         dataset = training.resolve_dataset(request.user, args["dataset"])
         config = training.parse_config(args.get("config"))
-        search = training.parse_tuning(args.get("tuning"))
+        search = training.parse_tuning(args.get("tuning"), args["graph"])
     except training.TrainingInputError as exc:
         raise ToolError(str(exc)) from None
     result = training.check(args["graph"], dataset, config, search)
@@ -1298,7 +1299,9 @@ TOOLS: dict[str, Tool] = {
             "scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "
-            "the hyperparameter search options (tuning, neural networks only). Datasets are "
+            "the hyperparameter search options (tuning: methods, limits and the objective "
+            "metrics with their direction; classical.tuning.models: the brick parameters "
+            "each classical model can tune, with defaults). Datasets are "
             "summaries (rows, features, target, task, classes, reference); get_dataset shows "
             "the columns of one.",
             get_training_options,
@@ -1755,7 +1758,9 @@ TOOLS: dict[str, Tool] = {
             "returns estimate (the rough CPU time the training would use, in CPU minutes, "
             "with a low-high range) and budget: whether the compute budgets allow it "
             "(allowed, reason, warning, run_limit_cpu_minutes: the most it may use). Pass "
-            "config and tuning as for start_training for a precise estimate. On a server "
+            "config and tuning as for start_training for a precise estimate (it counts the "
+            "trials, and the folds of a cross-validation); the check refuses an objective "
+            "metric the task does not have (e.g. roc_auc with three classes). On a server "
             "with a training queue, queue says where the run would wait (position) and "
             "roughly how long (estimated_wait_seconds, an estimate; null if unknown).",
             check_training,
@@ -1776,8 +1781,15 @@ TOOLS: dict[str, Tool] = {
             "free; stop_training cancels it. config overrides the defaults from "
             "get_training_options "
             "(epochs, batch_size, learning_rate, …); tuning turns the run into a "
-            "hyperparameter search. A classical model is fitted once (no epochs): only "
-            "val_split, test_split, max_samples and seed apply, and tuning is not available. "
+            "hyperparameter search: {method: random|grid, trials, metric (default loss; "
+            "accuracy, balanced_accuracy, macro_f1, roc_auc and pr_auc for two classes, rmse, "
+            "mae, r2), space}. A neural network's space holds training settings "
+            "({learning_rate: {min, max}, batch_size: [32, 64]}). A classical model is fitted "
+            "once (no epochs): only val_split, test_split, max_samples and seed apply, and its "
+            "space holds parameters of the model brick ({C: {min: 0.1, max: 100}, kernel: "
+            "[rbf, linear]}; ranges are log-scaled unless scale: linear) plus cv_folds "
+            "(2-10) to compare the trials by cross-validation on the training rows (always "
+            "without validation rows). "
             "Refused when a compute budget is used up (get_usage); the run stops by itself, "
             "keeping its weights, when it has used what is left (budget_warning says if that "
             "is likely).",
@@ -1845,7 +1857,8 @@ TOOLS: dict[str, Tool] = {
             "pairs; two classes also ROC AUC and PR AUC, and binary: threshold suggestions "
             "and the metrics at the run's decision_threshold; MAE, RMSE, R², MAPE, median "
             "and max error, residual quantiles), "
-            "the rows per split, tuning (trials and the best one), classical (the fitted "
+            "the rows per split, tuning (method, the objective metric and its direction, "
+            "cv_folds, the trials and the best one with its score), classical (the fitted "
             "kernel, log marginal likelihood, support vectors or boosting iterations) and "
             "the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "

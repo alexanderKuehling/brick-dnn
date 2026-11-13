@@ -144,8 +144,14 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
         "reference": {"kind": "upload", "id": dataset.pk},
     }
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
-    # Four built-in datasets with their class names, the limits and the defaults.
-    assert sizes["get_training_options"] < 4500 < full
+    # Four built-in datasets with their class names, the limits and the defaults, and what
+    # a hyperparameter search can rank by and vary (about 1,800 bytes of it).
+    assert sizes["get_training_options"] < 6500 < full
+    tuning = options["classical"]["tuning"]
+    assert tuning["models"]["SVC"] == "C*, gamma*, kernel, class_weight"
+    assert tuning["params"]["C"] == "number > 0, log; e.g. 0.1:100"
+    assert tuning["params"]["kernel"] == "linear|poly|rbf|sigmoid"
+    assert "roc_auc (max; two classes)" in options["tuning"]["metrics"]
 
     # A run with 200 epochs and a long log.
     run = long_run(user, training_dir)

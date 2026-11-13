@@ -70,10 +70,6 @@ EARLY_STOPPING_SHARE = 0.1
 # stall when the CPUs are busy.
 SINGLE_THREAD_CELLS = 200_000
 
-NO_TUNING = (
-    "Hyperparameter search is not available for classical models yet. Switch it off: a "
-    "Gaussian process optimises its kernel hyperparameters while it is fitted."
-)
 STOPPED = "Stopped before the model was fitted: nothing was saved."
 WHAT = {
     "gaussian_process": "Gaussian process",
@@ -115,7 +111,12 @@ def train(
     """Fit the classical model of ``job`` and save it to ``weights_path`` (joblib). Never
     raises (except ``KeyboardInterrupt``); the outcome is reported with ``reporter.finish``
     and returned. ``hard_stop``: end the process when a stop is requested during the fit
-    (for the runner, which has a process of its own)."""
+    (for the runner, which has a process of its own). A job with ``tuning`` runs a
+    hyperparameter search over the parameters of the model brick (classical_search.py)."""
+    if job.tuning is not None:
+        from .classical_search import ClassicalSearch
+
+        return ClassicalSearch(job, reporter, weights_path, hard_stop).run()
     return _ClassicalRun(job, reporter, weights_path, hard_stop).run()
 
 
@@ -204,8 +205,6 @@ class _ClassicalRun:
     def _execute(self) -> None:
         job, reporter = self.job, self.reporter
         reporter.status("preparing", "Preparing the data …")
-        if job.tuning is not None:
-            raise TrainingError(NO_TUNING)
         analysis = analyze(job.graph)
         compat = check_compatibility(analysis, job.dataset, self.config)
         if not compat.ok or compat.plan is None or compat.plan.classical is None:
@@ -272,8 +271,7 @@ class _ClassicalRun:
         what = WHAT[self.layer.scale]
         reporter.status("running", f"Fitting the {what} on {len(data.train):,} rows …")
         started = time.perf_counter()
-        self._fit(data.x[data.train], data.y[data.train])
-        fit_seconds = time.perf_counter() - started
+        fit_seconds = self._fit_model(data.x[data.train], data.y[data.train])
         reporter.log(f"Fitted the {what} on {len(data.train):,} rows in {_seconds(fit_seconds)}.")
 
         reporter.status("running", "Measuring the fitted model …")
@@ -584,6 +582,13 @@ class _ClassicalRun:
         return setting == "on" or (setting == "auto" and rows > AUTO_EARLY_STOPPING_ROWS)
 
     # -- fitting ------------------------------------------------------------- #
+
+    def _fit_model(self, x: np.ndarray, y: np.ndarray) -> float:
+        """Fit the pipeline on the training rows and return the seconds of the fit (a
+        search, see classical_search.py, runs its trials here)."""
+        started = time.perf_counter()
+        self._fit(x, y)
+        return time.perf_counter() - started
 
     def _fit(self, x: np.ndarray, y: np.ndarray) -> None:
         """Fit the pipeline in a thread and check the stop request meanwhile."""

@@ -182,7 +182,8 @@ whose split has no validation rows, trains on everything that is not test data. 
   last epoch were kept."*).
 - **Early stopping** and a **hyperparameter search** need validation losses to compare. The
   training settings, `check_training` and `start_training` refuse them with *"Early stopping
-  needs validation data …"* or *"A hyperparameter search needs validation data …"*.
+  needs validation data …"* or *"A hyperparameter search needs validation data …"*. (A
+  [classical model](#classical-models)'s search cross-validates on the training rows instead.)
 - The final model is measured on the **test** data, if there is some. With neither validation
   nor test data, the final evaluation measures the training rows instead (`evaluation.training`;
   the run view labels it *Training (optimistic)*): the model has learned from these rows, so the
@@ -348,8 +349,9 @@ settings and otherwise the normal settings (every trial runs the full number of 
   weights with the same order of batches, so only the settings make the difference.
 - Every trial keeps the weights of its best epoch (see
   [above](#early-stopping-and-the-kept-weights)) and may stop early; the trial whose kept
-  weights have the **lowest validation loss** wins. Its weights are saved, its curves are
-  shown, and it is the model that is measured on the test set.
+  weights have the best **objective metric** wins, by default the **lowest validation loss**
+  (see [below](#the-objective-metric)). Its weights are saved, its curves are shown, and it is
+  the model that is measured on the test set.
 - A trial whose loss becomes NaN or that runs out of memory (for example with a large batch
   size) is marked as failed; the search continues with the next one.
 - Stopping a search keeps the best trial finished so far (during the first trial: its best
@@ -359,7 +361,90 @@ In the editor, switch on **Hyperparameter search** in the settings and tick the 
 tune; the normal fields of those settings are then filled in by the search. The run view lists
 every trial with its settings and result, the best one highlighted. A search
 takes as long as all its trials together: start with few epochs or *Max. samples* to find the
-region of good values, then train once with them.
+region of good values, then train once with them. The compute estimate counts every trial.
+
+#### The objective metric
+
+What ranks the trials can be chosen (*Objective metric* in the search settings, `metric` in
+the API, `--metric` on the command line). Its direction follows from the metric:
+
+| Metric | `metric` | Better | For |
+| ------ | -------- | ------ | --- |
+| Loss (log loss / cross-entropy, or the MSE of the standardised target) | `loss` (default) | lower | every task |
+| Accuracy | `accuracy` | higher | classification |
+| Balanced accuracy | `balanced_accuracy` | higher | classification |
+| Macro F1 | `macro_f1` | higher | classification |
+| ROC AUC | `roc_auc` | higher | two classes |
+| PR AUC (average precision) | `pr_auc` | higher | two classes |
+| RMSE | `rmse` | lower | regression |
+| MAE | `mae` | lower | regression |
+| R² | `r2` | higher | regression |
+
+The metrics other than the loss need a single class output or a single value output (the
+networks that get a [final evaluation](#metrics-of-the-finished-model); not segmentations) and
+are computed like there. The check refuses a metric the data does not have, e.g. *"The
+objective metric ROC AUC needs two classes, this data has 3. Possible: loss, accuracy, …"*. On
+imbalanced data, balanced accuracy, macro F1 or PR AUC rank the trials better than the
+accuracy. Within a trial of a neural network the kept epoch is still the one with the lowest
+validation loss (early stopping and *Keep the best weights* are unchanged); the metric only
+ranks the trials. Metrics that are not in the history (balanced accuracy, macro F1, the AUCs,
+MAE) cost one more pass over the validation data per trial. Every trial stores its value as
+`score` (see the [REST API](api.md)); the run view shows it in a column of the trial table and
+names the metric and its direction above it. Runs of older versions have no `score`: their
+trials were ranked by the loss.
+
+Tuning parameters of the layers of a network (e.g. the size of a `Linear` layer) is not
+possible: the weights and the exported code of a run belong to the network it was started
+with.
+
+#### Searching a classical model
+
+A [classical model](#classical-models) searches over the parameters of its brick instead of
+training settings. Tick them under **Hyperparameter search** in its training settings and give
+a range or a list of values; each model starts with sensible defaults:
+
+| Model | Parameters (searched by default in bold) |
+| ----- | ---------------------------------------- |
+| Gradient boosting | **`learning_rate`** (0.01 to 0.3), `max_iter`, **`max_leaf_nodes`** (15 to 127), `max_depth` (`null`: no limit), **`min_samples_leaf`** (5 to 100), `l2_regularization`, and for the classifier `class_weight` (`none`, `balanced`) |
+| SVC, SVR | **`C`** (0.1 to 100), **`gamma`** (0.001 to 1; also `scale` and `auto` in a list), `kernel` (`linear`, `poly`, `rbf`, `sigmoid`), SVR `epsilon`, SVC `class_weight` |
+| Gaussian process regression | **`alpha`**, `normalize_y`, `n_restarts_optimizer` |
+| Gaussian process classification | **`n_restarts_optimizer`** |
+
+A Gaussian process has little to tune: its fit optimises the kernel hyperparameters itself
+(see [Classical models](#classical-models)), so a search only varies what the fit does not.
+
+- A **range** `{"min": 0.01, "max": 0.3}` is drawn on a log scale (`"scale": "linear"`:
+  evenly); a log range needs a minimum above 0, so a range that starts at 0 (e.g. `epsilon`,
+  `l2_regularization`) needs `"scale": "linear"`, or use a list such as `[0, 0.1, 1]`.
+  Parameters that are whole numbers (`max_iter`, `max_leaf_nodes`, …) are drawn as whole
+  numbers. **Lists** give the values to try. **Grid search** needs lists (at most 100
+  combinations).
+- The trials are compared on the **validation rows**: each trial is fitted on the training
+  rows and measured on the validation rows, and the best trial's model is the one that is
+  kept (it already is fitted on all training rows).
+- With **cross-validation** (*Cross-validate on the training rows*, `cv_folds`: 2 to 10) the
+  training rows are split into k folds, stratified by class for a classifier, and every trial
+  is fitted k times, each time without one fold; its metric comes from the predictions of
+  every training row by the model that did not see it. The best trial is then fitted once more
+  on all training rows. The validation rows are not used by the search at all, so their result
+  is not optimistic. **Without validation rows** (a validation split of 0, or a prepared split
+  without them) the search always cross-validates, with 5 folds unless `cv_folds` says
+  otherwise; the check says so as a warning.
+- The kept model is measured, evaluated (with the threshold analysis of two classes),
+  saved and used for predictions and downloads like the model of a single fit; the evaluation
+  says which trial it is (`evaluation.trial`). The trial table shows the parameters of every
+  trial and, with cross-validation, the cross-validated results (*CV loss*, …).
+- The **compute estimate** counts every fit: trials × folds plus the final fit with
+  cross-validation, trials without.
+- A trial that fails (for example an SVC whose calibration needs more rows of a class than a
+  fold has, or a combination the brick refuses) is marked as failed and the search goes on.
+- **Stopping** keeps the best trial so far: its model is saved (with cross-validation it is
+  fitted on all training rows first, which cannot be stopped), but, like a stopped network, not
+  tested or evaluated. A fit that is running when the stop comes cannot be interrupted: the
+  server leaves it and ends the training process once the best trial is saved. Before the
+  first trial has finished, nothing is saved.
+- The parameters of the brick in the editor do not change: apply the best values from the
+  trial table to the brick to fit it again without a search.
 
 ### Using the trained weights
 
@@ -669,11 +754,11 @@ history and API, but **fitted once instead of epoch by epoch**:
   generator, so the rows differ from a neural run with the same seed. The model is a
   `Pipeline` of a `StandardScaler` and the estimator, and the scaler learns from the
   training rows only.
-- **Settings**: only validation split, test split, max. samples and seed apply. Epochs,
-  batch size, learning rate, optimizer, weight decay, device, early stopping and the kept
-  weights do not, and the hyperparameter search is not available (a Gaussian process
-  optimises its kernel hyperparameters itself). Gradient boosting has an early stopping of
-  its own, set on the brick.
+- **Settings**: only validation split, test split, max. samples and seed apply, and a
+  [hyperparameter search](#searching-a-classical-model) over the parameters of the brick.
+  Epochs, batch size, learning rate, optimizer, weight decay, device, early stopping and the
+  kept weights do not (a Gaussian process optimises its kernel hyperparameters itself).
+  Gradient boosting has an early stopping of its own, set on the brick.
 - **Size limits**: fitting a Gaussian process takes O(n³) time and O(n²) memory, an SVM
   between O(n²) and O(n³), gradient boosting about O(n) per tree. A Gaussian process
   classifier is much slower than a regression (its Laplace approximation is iterative, and it
@@ -779,6 +864,16 @@ brickdnn train net.json --data houses.csv --search grid --tune-lr 0.01,0.001 --t
 | `--tune-batch-size VALUES` | Batch sizes to try (list) |
 | `--tune-optimizer VALUES` | Optimizers to try, e.g. `adam,adamw,sgd` |
 | `--tune-weight-decay VALUES` | Weight decays to try |
+| `--metric NAME` | What ranks the trials (default `loss`; see [the objective metric](#the-objective-metric)) |
+| `--tune-param NAME=VALUES` | Classical models: a parameter of the model brick, a list or a range `MIN:MAX` (`MIN:MAX:linear` drawn evenly); repeat it for several |
+| `--cv-folds K` | Classical models: compare the trials by K-fold cross-validation on the training rows |
+
+```bash
+brickdnn train svm.json --data mail.csv --tune-param C=0.1:100 --tune-param kernel=rbf,linear
+brickdnn train trees.json --data fraud.csv --tune --metric pr_auc --cv-folds 5
+```
+
+A classical model without `--tune-param` searches its default parameters.
 
 The command prints every trial, a table of all trials (best first) and the test result, and
 saves the weights of the best trial. Regressions add the RMSE and R² everywhere, for example

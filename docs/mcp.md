@@ -141,7 +141,8 @@ default, and every capped list says how long it is and how to see more:
   columns_limit?, columns_offset?}` pages through the columns (50 at a time) and shows the
   class names (at most 50).
 - `get_training_run` is a summary: status, settings, epochs done, the best epoch, final and
-  test metrics, rows per split, tuning (trials, best trial), the classical fit (with
+  test metrics, rows per split, tuning (method, the objective `metric` and its `direction`,
+  `cv_folds`, trials done and the best trial with its `score`), the classical fit (with
   `at_bounds`: the kernel hyperparameters that ended at a bound, as messages), `evaluation`
   (completed classification and regression runs: the overall metrics of the kept weights on
   the validation and test rows with 4 significant digits, or on the training rows as
@@ -194,10 +195,34 @@ gradient boosting
 expression; `generate_pytorch_code` returns a scikit-learn script; `get_training_options`
 says under `classical` whether they can be trained and on how many rows at most;
 `start_training` fits them once (only `val_split`, `test_split`, `max_samples` and `seed`
-apply, no `tuning`; without validation rows the fit is measured on the test rows, or on its
-training rows); `get_training_run` shows the fitted kernel, the support vectors or the
-boosting iterations in
+apply; without validation rows the fit is measured on the test rows, or on its training rows);
+`get_training_run` shows the fitted kernel, the support vectors or the boosting iterations in
 `state.classical` (see [training.md](training.md#classical-models)).
+
+**Hyperparameter search.** `tuning` of `check_training` and `start_training` turns a training
+into a search ([training.md](training.md#hyperparameter-search)). A neural network searches
+its training settings, a classical model the parameters of its brick; both take a `metric`
+that ranks the trials (`loss` by default; `accuracy`, `balanced_accuracy`, `macro_f1`,
+`roc_auc` and `pr_auc` for classification, the AUCs with two classes only; `rmse`, `mae` and
+`r2` for regression), and a classical model `cv_folds` (2–10) to compare its trials by
+cross-validation on the training rows (always, with 5 folds, without validation rows).
+`get_training_options` lists the metrics in one line under `tuning.metrics` and, under
+`classical.tuning`, what each model can tune (`models`: its parameters, those searched by
+default marked with `*`; `params`: one line per parameter with its kind, scale and an
+example). For example:
+
+```text
+check_training {graph, dataset, tuning: {trials: 20, metric: "pr_auc", cv_folds: 5,
+  space: {learning_rate: {min: 0.01, max: 0.3}, class_weight: ["none", "balanced"]}}}
+  → ok, estimate (20 trials × 5 folds + the final fit)
+start_training {…same…} · get_training_run {id, include: ["trials"]}
+  → tuning {metric: "pr_auc", direction: "maximize", cv_folds: 5, best_trial: {score, params}}
+```
+
+An unknown parameter, a bad range, a grid of more than 100 combinations or a metric the data
+does not have are tool errors (`check_training`: `ok: false` for the metric) with a message
+that names the problem and what is possible. The activity log summarises a started search
+as "…, hyperparameter search with 20 trials by PR AUC".
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and
 validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login-required)).

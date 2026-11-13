@@ -75,24 +75,25 @@ import {
   formatDuration,
   formatFitTime,
   formatMetric,
+  formatParam,
   formatPercent,
   formatR2,
-  formatSetting,
   isActive,
   isClassification,
   isSegmentation,
+  paramLabel,
   preprocessingJson,
   queueText,
   reportsR2,
-  searchedSettings,
+  searchedParams,
   searchLabel,
-  SETTING_LABELS,
   weightsNote,
   weightsSnippet,
 } from './format';
 import { KernelBoundsHint } from './KernelBounds';
 import { PredictionPanel } from './predict/PredictionPanel';
 import { confirmDeleteRun, confirmStopRun, StatusBadge } from './runActions';
+import { formatMetricValue, metricDirection, metricInfo, metricInSentence } from './search';
 import { ClassTable, PreviewGallery } from './SegmentationResults';
 import classes from './Training.module.css';
 
@@ -436,11 +437,13 @@ export function RunView({
                 value={bestTrial ? String(bestTrial.trial) : '–'}
                 hint={
                   bestTrial
-                    ? typeof bestTrial.val_iou === 'number'
-                      ? `IoU ${formatPercent(bestTrial.val_iou)}`
-                      : typeof bestTrial.val_accuracy === 'number'
-                        ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
-                        : `loss ${formatMetric(bestTrial.val_loss)}`
+                    ? tuning.metric && tuning.metric !== 'loss'
+                      ? `${metricInfo(tuning.metric).label} ${formatMetricValue(tuning.metric, bestTrial.score)}`
+                      : typeof bestTrial.val_iou === 'number'
+                        ? `IoU ${formatPercent(bestTrial.val_iou)}`
+                        : typeof bestTrial.val_accuracy === 'number'
+                          ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
+                          : `loss ${formatMetric(bestTrial.val_loss)}`
                     : undefined
                 }
               />
@@ -958,6 +961,7 @@ function ClassicalResults({
   const state = run.state;
   const fit = state?.classical ?? null;
   const entry = state?.history[0] ?? null;
+  const tuning = run.tuning ?? state?.tuning ?? null;
   const metrics = run.metrics;
   const validation: ClassicalMetrics | null = entry
     ? {
@@ -1116,6 +1120,19 @@ function ClassicalResults({
             : 'RMSE in the units of the target; R² = 1 is a perfect fit, 0 is no better than the mean.'}
           {test ? ' The test rows were measured once, after the fit.' : ''}
         </Text>
+      )}
+
+      {tuning && (
+        <TrialsTable
+          tuning={tuning}
+          trials={state?.trials ?? []}
+          total={state?.trials_total ?? tuning.trials}
+          epochs={1}
+          best={state?.best_trial ?? run.best_trial?.trial ?? null}
+          active={active}
+          classification={classification}
+          classical
+        />
       )}
 
       {!active && (
@@ -1429,7 +1446,7 @@ function TestResultCard({
 
 const STATUS_TEXT = { completed: 'Done', running: 'Running', stopped: 'Stopped', failed: 'Failed' };
 
-function TrialsTable({
+export function TrialsTable({
   tuning,
   trials,
   total,
@@ -1438,6 +1455,7 @@ function TrialsTable({
   active,
   classification,
   segmentation = false,
+  classical = false,
 }: {
   tuning: TuningConfig;
   trials: TrialEntry[];
@@ -1448,12 +1466,20 @@ function TrialsTable({
   classification: boolean;
   /** Show the mean IoU of every trial. */
   segmentation?: boolean;
+  /** A classical model: brick parameters, fitted once per trial (and fold). */
+  classical?: boolean;
 }) {
-  const settings = searchedSettings(tuning);
+  const settings = searchedParams(tuning);
+  const metric = tuning.metric ?? 'loss';
+  // The loss, accuracy, RMSE and R² have columns of their own; other metrics get one.
+  const scoreColumn = !['loss', 'accuracy', 'rmse', 'r2'].includes(metric);
   const showRmse = !classification && trials.some((t) => typeof t.val_rmse === 'number');
   const showR2 = !classification && trials.some((t) => typeof t.val_r2 === 'number');
   const winner = trials.find((t) => t.trial === best) ?? null;
   const finished = trials.filter((t) => t.status === 'completed' || t.status === 'failed').length;
+  const folds = tuning.cv_folds ?? trials.find((t) => t.folds)?.folds ?? null;
+  const where = folds ? `${folds}-fold cross-validation` : 'the validation data';
+  const prefix = folds ? 'CV' : 'Val.';
 
   return (
     <div>
@@ -1466,10 +1492,13 @@ function TrialsTable({
           finished
         </Text>
       </Group>
+      <Text size="xs" c="dimmed" mb={4}>
+        Ranked by {metricInSentence(metric)} on {where} ({metricDirection(metric)}).
+      </Text>
       {winner && (
         <Text size="sm" mb="xs">
           {active ? 'Best so far' : 'Best'}: trial {winner.trial} ({describeParams(winner.params)})
-          {active ? '' : '. Its weights are kept.'}
+          {active ? '' : classical ? '. Its model is kept.' : '. Its weights are kept.'}
         </Text>
       )}
       {trials.length === 0 ? (
@@ -1483,13 +1512,18 @@ function TrialsTable({
               <Table.Tr>
                 <Table.Th>Trial</Table.Th>
                 {settings.map((name) => (
-                  <Table.Th key={name}>{SETTING_LABELS[name]}</Table.Th>
+                  <Table.Th key={name}>{paramLabel(name)}</Table.Th>
                 ))}
-                <Table.Th>Val. loss</Table.Th>
-                {classification && <Table.Th>Val. acc.</Table.Th>}
-                {showRmse && <Table.Th>Val. RMSE</Table.Th>}
-                {showR2 && <Table.Th>Val. R²</Table.Th>}
-                {segmentation && <Table.Th>Val. IoU</Table.Th>}
+                <Table.Th>{prefix} loss</Table.Th>
+                {classification && <Table.Th>{prefix} acc.</Table.Th>}
+                {showRmse && <Table.Th>{prefix} RMSE</Table.Th>}
+                {showR2 && <Table.Th>{prefix} R²</Table.Th>}
+                {segmentation && <Table.Th>{prefix} IoU</Table.Th>}
+                {scoreColumn && (
+                  <Table.Th>
+                    {prefix} {metricInfo(metric).label}
+                  </Table.Th>
+                )}
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -1504,15 +1538,22 @@ function TrialsTable({
                   >
                     <Table.Td>{entry.trial}</Table.Td>
                     {settings.map((name) => (
-                      <Table.Td key={name}>{formatSetting(name, entry.params[name])}</Table.Td>
+                      <Table.Td key={name}>{formatParam(name, entry.params[name])}</Table.Td>
                     ))}
                     <Table.Td>{formatMetric(entry.val_loss)}</Table.Td>
                     {classification && <Table.Td>{formatPercent(entry.val_accuracy)}</Table.Td>}
                     {showRmse && <Table.Td>{formatMetric(entry.val_rmse)}</Table.Td>}
                     {showR2 && <Table.Td>{formatR2(entry.val_r2)}</Table.Td>}
                     {segmentation && <Table.Td>{formatPercent(entry.val_iou)}</Table.Td>}
+                    {scoreColumn && <Table.Td>{formatMetricValue(metric, entry.score)}</Table.Td>}
                     <Table.Td>
-                      <TrialStatus entry={entry} best={isBest} epochs={epochs} active={active} />
+                      <TrialStatus
+                        entry={entry}
+                        best={isBest}
+                        epochs={epochs}
+                        active={active}
+                        classical={classical}
+                      />
                     </Table.Td>
                   </Table.Tr>
                 );
@@ -1530,12 +1571,15 @@ function TrialStatus({
   best,
   epochs,
   active,
+  classical = false,
 }: {
   entry: TrialEntry;
   best: boolean;
   epochs: number;
   /** False when the run has ended: a trial still marked as running was interrupted. */
   active: boolean;
+  /** Fitted once, without epochs. */
+  classical?: boolean;
 }) {
   if (entry.status === 'failed') {
     return (
@@ -1556,7 +1600,7 @@ function TrialStatus({
   if (entry.status === 'running') {
     return (
       <Text span size="xs" c="blue">
-        Epoch {Math.min(entry.epochs_done + 1, epochs)}/{epochs}
+        {classical ? 'Fitting' : `Epoch ${Math.min(entry.epochs_done + 1, epochs)}/${epochs}`}
       </Text>
     );
   }

@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **Hyperparameter search for classical models.** Gradient boosting, SVMs and Gaussian
+  processes search over the parameters of their brick: e.g. learning rate, iterations, leaves,
+  depth, rows per leaf, L2 regularisation and class weights of gradient boosting; C, gamma,
+  kernel, epsilon and class weights of an SVM; alpha, target normalisation and optimizer
+  restarts of a Gaussian process (whose fit optimises its kernel itself). Random search over
+  ranges (log or linear scale, whole numbers where the parameter is one) and lists, or a grid
+  of at most 100 combinations. The trials are compared on the validation rows or by k-fold
+  cross-validation on the training rows (`cv_folds`, stratified for classifiers; always, with
+  5 folds, without validation rows). The best trial is kept (with cross-validation fitted once
+  more on all training rows) and measured, evaluated, saved and used like a single fit;
+  failed trials do not end the search, stopping keeps the best trial so far, and the compute
+  estimate counts trials × folds. In the training settings of a classical model,
+  *Hyperparameter search* ticks the parameters with a range or a list (defaults per model);
+  the run view shows the trial table. Also `--tune-param NAME=VALUES` and `--cv-folds K` in
+  `brickdnn train`. See docs/training.md.
+- **Objective metric of a hyperparameter search** (networks and classical models): rank the
+  trials by the loss (default), accuracy, balanced accuracy, macro F1, ROC AUC or PR AUC (two
+  classes), RMSE, MAE or R²; the direction follows from the metric, and the check refuses a
+  metric the task does not have. Every trial stores its value as `score`; the run view, the
+  MCP summaries and `brickdnn train --metric` name the metric and show it per trial. The
+  options are in `GET /api/training/` and `get_training_options`.
 - **Gradient boosting** as classical model bricks: `HistGradientBoostingRegressor` and
   `HistGradientBoostingClassifier` (scikit-learn, no extra dependency), the usual strong
   baseline for tabular data and fast on large tables. Settings: learning rate, iterations,

@@ -528,6 +528,18 @@ def test_trainings_name_their_run_dataset_and_network(ada, training_dir):
     assert [e["id"] for e in found] == [stop.pk, status.pk, start.pk]
 
 
+def test_searches_name_their_metric(ada):
+    def started(tuning):
+        result = {"name": "S", "family": "classical", "dataset": RANDOM, "tuning": tuning}
+        return agent_activity._start_training(ada, {}, result).result
+
+    assert started({"trials": 4, "metric": "roc_auc"}) == (
+        ", hyperparameter search with 4 trials by ROC AUC"
+    )
+    assert started({"trials": 4, "metric": "loss"}) == ", hyperparameter search with 4 trials"
+    assert started({"trials": 4}) == ", hyperparameter search with 4 trials"  # older runs
+
+
 def test_checks_of_a_run_say_how_far_it_is():
     progress = agent_activity._run_progress
     running = {"status": "running", "epochs": 20, "epochs_done": 3}

@@ -2,7 +2,7 @@
 import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
-import { api, type Compatibility } from '@/api';
+import { api, type ClassicalTuningLimits, type Compatibility } from '@/api';
 import { GP_ANALYSIS } from '@/builder/classicalFixtures';
 import { downloadBlob } from '@/builder/download';
 import { NO_SCOPE } from './access';
@@ -128,6 +128,12 @@ const READY: Compatibility = {
 
 const startButton = () => screen.getByRole('button', { name: 'Start training' });
 
+/** What the server says a classical search can vary (only what the form needs is checked). */
+const CLASSICAL_TUNING: ClassicalTuningLimits = {
+  models: {},
+  cv_folds: { min: 2, max: 10, default: 5 },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -161,6 +167,42 @@ describe('Setting up a classical model', () => {
       dataset: { kind: 'random' },
       config: { val_split: 0.2, test_split: 0, max_samples: null, seed: 7 },
     });
+  });
+
+  it('searches the parameters of the model brick on servers that offer it', async () => {
+    const status = {
+      ...CLASSICAL_STATUS,
+      classical: { ...CLASSICAL_STATUS.classical!, tuning: CLASSICAL_TUNING },
+    };
+    vi.mocked(api.training.check).mockResolvedValue({
+      ...READY,
+      plan: { ...READY.plan!, targets: [{ kind: 'value', shape: [1] }] },
+    });
+    vi.mocked(api.training.runs.create).mockResolvedValue(gpDetail({ status: 'starting' }));
+    renderDrawer({ training: controller({ status }) });
+    expect(await screen.findByText(/Demo data: random features/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: /Hyperparameter search/ }));
+    expect(
+      screen.getByText(/The fit optimises the kernel hyperparameters itself/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Search alpha' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Search normalize targets' })).not.toBeChecked();
+    await userEvent.click(screen.getByRole('combobox', { name: 'Objective metric' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'R²' }));
+
+    const start = screen.getByRole('button', { name: 'Start search' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.click(start);
+    expect(api.training.runs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tuning: {
+          method: 'random',
+          trials: 10,
+          metric: 'r2',
+          space: { alpha: { min: 1e-10, max: 0.01 } },
+        },
+      })
+    );
   });
 
   it('caps Max. samples at the row limit of the model', async () => {

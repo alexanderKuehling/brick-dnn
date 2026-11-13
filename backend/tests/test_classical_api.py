@@ -60,7 +60,15 @@ def test_capabilities_list_classical_models(auth_client, training_dir, monkeypat
     assert data["available"] is False  # PyTorch
     classical = data["classical"]
     assert classical["available"] is True and classical["reason"] is None
-    assert classical["sklearn_version"] and classical["tuning"] is False
+    assert classical["sklearn_version"]
+    tuning = classical["tuning"]
+    assert tuning["cv_folds"] == {"min": 2, "max": 10, "default": 5}
+    assert sorted(tuning["models"]) == sorted(classical["max_rows"])
+    svc = tuning["models"]["SVC"]
+    assert [t["name"] for t in svc["tunable"]] == ["C", "gamma", "kernel", "class_weight"]
+    assert svc["default"] == {"C": {"min": 0.1, "max": 100}, "gamma": {"min": 0.001, "max": 1}}
+    assert "kernel hyperparameters" in tuning["models"]["GaussianProcessRegressor"]["note"]
+    assert {m["name"]: m["direction"] for m in data["tuning"]["metrics"]}["roc_auc"] == "maximize"
     assert classical["max_rows"] == {
         "GaussianProcessRegressor": 1234,
         "GaussianProcessClassifier": 2_000,
@@ -97,12 +105,21 @@ def test_check_and_start_refusals(auth_client, real_processes, tmp_path, monkeyp
     )
     assert response.status_code == 400 and "Epochs" in response.data["detail"]
 
+    # A search of the network settings is not one of the brick parameters.
     response = auth_client.post(
         "/api/training/runs/",
-        {"graph": graph, "dataset": dataset, "config": {}, "tuning": {"method": "random"}},
+        {
+            "graph": graph,
+            "dataset": dataset,
+            "config": {},
+            "tuning": {"space": {"batch_size": [32]}},
+        },
         format="json",
     )
-    assert response.status_code == 400 and "not available for classical" in response.data["detail"]
+    assert response.status_code == 400
+    assert "'batch_size' cannot be tuned for Gaussian process regression" in str(
+        response.data["detail"]
+    )
     response = auth_client.post(
         "/api/training/runs/",
         {"graph": graph, "dataset": {"kind": "builtin", "id": "mnist"}, "config": {}},
@@ -286,3 +303,126 @@ def test_mcp_flow_with_a_gaussian_process(user, real_processes, tmp_path):
         timeout=120,
     )
     assert script.returncode == 0, script.stderr
+
+
+# --------------------------------------------------------------------------- #
+# Hyperparameter search
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.django_db
+def test_check_a_classical_search(auth_client, real_processes, tmp_path):
+    dataset = upload_csv(auth_client, classification_csv(tmp_path / "mail.csv"))
+    graph = model_graph("SVC")
+
+    def check(tuning, config=None):
+        body = {"graph": graph, "dataset": dataset, "config": config or {}, "tuning": tuning}
+        return auth_client.post("/api/training/check/", body, format="json")
+
+    single = check(None).data["estimate"]
+    data = check({"trials": 4, "space": {"C": {"min": 0.1, "max": 10}}}).data
+    assert data["ok"] is True and data["estimate"]["details"]["fits"] == 4
+    assert "fits" not in single["details"] and data["estimate"]["basis"].endswith("4 trials")
+    data = check({"trials": 4, "cv_folds": 3}).data
+    assert data["estimate"]["details"]["fits"] == 13 and "3 folds" in data["estimate"]["basis"]
+    # Without validation rows the search cross-validates (5 folds).
+    data = check({"trials": 2}, {"val_split": 0}).data
+    assert data["ok"] is True and data["estimate"]["details"]["fits"] == 11
+    assert any("5-fold cross-validation" in warning for warning in data["warnings"])
+    # A metric the data does not have (three classes): an error of the check.
+    data = check({"metric": "roc_auc"}).data
+    assert data["ok"] is False
+    assert "ROC AUC needs two classes, this data has 3" in data["errors"][0]
+    for tuning, message in [
+        ({"space": {"degree": [2]}}, "'degree' cannot be tuned for support vector classification"),
+        ({"space": {"C": {"min": 5, "max": 1}}}, "smallest C must not be larger"),
+        (
+            {"method": "grid", "space": {"C": list(range(1, 12)), "gamma": list(range(1, 11))}},
+            "The grid has 110 combinations",
+        ),
+        ({"metric": "speed"}, "the metric 'speed' is unknown"),
+    ]:
+        response = check(tuning)
+        assert response.status_code == 400 and message in response.data["detail"], tuning
+
+
+@pytest.mark.django_db
+def test_classical_search_end_to_end(auth_client, user, real_processes, tmp_path):
+    dataset = upload_csv(auth_client, classification_csv(tmp_path / "mail.csv", n=150))
+    tuning = {
+        "method": "grid",
+        "metric": "balanced_accuracy",
+        "cv_folds": 3,
+        "space": {"C": [0.3, 3], "kernel": ["rbf", "linear"]},
+    }
+    response = auth_client.post(
+        "/api/training/runs/",
+        {
+            "name": "SVC search",
+            "graph": model_graph("SVC"),
+            "dataset": dataset,
+            "config": {"seed": 1, "test_split": 0.2},
+            "tuning": tuning,
+        },
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    assert response.data["tuning"] == {**tuning, "trials": 4}
+    run_id = response.data["id"]
+    data = wait_for(auth_client, run_id, timeout=120, interval=0.25)
+    assert data["status"] == "completed", data["message"]
+    assert data["trials_done"] == 4 and data["has_weights"] is True
+    best = data["best_trial"]
+    trials = data["state"]["trials"]
+    assert best["score"] == max(t["score"] for t in trials)
+    assert best["params"] == trials[best["trial"] - 1]["params"]
+    assert data["state"]["evaluation"]["trial"] == best["trial"]
+    assert data["metrics"]["test_accuracy"] is not None
+
+    mcp = mcp_client(user)
+    result, text = call(mcp, "get_training_run", id=run_id, include=["trials"])
+    run = result["structuredContent"]
+    assert run["tuning"]["metric"] == "balanced_accuracy", text
+    assert run["tuning"]["direction"] == "maximize" and run["tuning"]["cv_folds"] == 3
+    assert run["tuning"]["best_trial"]["score"] == best["score"]
+    assert len(run["trials"]) == 4 and all(t["folds"] == 3 for t in run["trials"])
+
+
+@pytest.mark.django_db
+def test_mcp_classical_search(user, real_processes, tmp_path):
+    mcp = mcp_client(user)
+    options, _ = call(mcp, "get_training_options")
+    options = options["structuredContent"]
+    assert options["classical"]["tuning"]["models"]["SVR"] == "C*, gamma*, kernel, epsilon"
+    assert "r2 (max; regression)" in options["tuning"]["metrics"]
+    csv = regression_csv(tmp_path / "houses.csv", n=100).read_text()
+    uploaded, _ = call(mcp, "upload_dataset", name="Houses", csv=csv)
+    dataset = uploaded["structuredContent"]["reference"]
+    graph = model_graph("SVR")
+    tuning = {"trials": 3, "metric": "r2", "space": {"C": {"min": 0.1, "max": 10}}}
+    checked, text = call(mcp, "check_training", graph=graph, dataset=dataset, tuning=tuning)
+    assert checked["structuredContent"]["ok"] is True, text
+    assert checked["structuredContent"]["estimate"]["details"]["trials"] == 3
+    bad, text = call(
+        mcp, "check_training", graph=graph, dataset=dataset, tuning={"metric": "accuracy"}
+    )
+    assert bad["structuredContent"]["ok"] is False and "is for classification" in text
+    refused, text = call(
+        mcp, "start_training", graph=graph, dataset=dataset, tuning={"space": {"gamma": [-1]}}
+    )
+    assert refused["isError"] is True and "gamma must be greater than 0" in text
+    started, text = call(mcp, "start_training", graph=graph, dataset=dataset, tuning=tuning)
+    assert "isError" not in started, text
+    run_id = started["structuredContent"]["id"]
+    deadline = time.monotonic() + 120
+    while True:
+        result, _ = call(mcp, "get_training_run", id=run_id)
+        run = result["structuredContent"]
+        if run["status"] in TERMINAL_STATUSES:
+            break
+        assert time.monotonic() < deadline, run["message"]
+        time.sleep(0.25)
+    assert run["status"] == "completed", run["message"]
+    assert run["tuning"]["metric"] == "r2" and run["tuning"]["trials_done"] == 3
+    assert "cv_folds" not in run["tuning"]  # the validation rows compared the trials
+    assert "validation R²" in run["message"]

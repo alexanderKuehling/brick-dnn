@@ -13,6 +13,7 @@ import type {
   TuningConfig,
 } from '@/api/types';
 import { isClassicalRun } from './classical';
+import { PARAM_LABELS } from './search';
 
 /** Not finished yet: waiting in the queue or training. */
 export const ACTIVE_STATUSES: readonly RunStatus[] = ['queued', 'starting', 'preparing', 'running'];
@@ -243,8 +244,26 @@ export function formatSetting(name: TunableSetting, value: number | string | und
   return name === 'batch_size' ? String(value) : String(Number(value.toPrecision(3)));
 }
 
-/** "learning rate 0.00312, batch size 64, Adam" (like the engine's messages). */
+/** Whether the parameters are brick parameters of a classical model (not training settings). */
+function isBrickParams(names: string[]): boolean {
+  return names.some((name) => !(TUNABLE_SETTINGS as string[]).includes(name));
+}
+
+/** "Max. depth" → "max. depth", but "C" and "L2 regularisation" stay as they are. */
+const inSentence = (label: string) =>
+  /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+
+/**
+ * "learning rate 0.00312, batch size 64, Adam" (like the engine's messages); for a classical
+ * model "C 3.16, gamma scale".
+ */
 export function describeParams(params: TrialParams): string {
+  const names = Object.keys(params).filter((name) => params[name] !== undefined);
+  if (isBrickParams(names)) {
+    return names
+      .map((name) => `${inSentence(paramLabel(name))} ${formatParam(name, params[name])}`)
+      .join(', ');
+  }
   return TUNABLE_SETTINGS.filter((name) => params[name] !== undefined)
     .map((name) => {
       const value = formatSetting(name, params[name]);
@@ -255,7 +274,45 @@ export function describeParams(params: TrialParams): string {
 
 /** The settings a search varies, in display order. */
 export function searchedSettings(tuning: TuningConfig | null | undefined): TunableSetting[] {
-  return tuning ? TUNABLE_SETTINGS.filter((name) => tuning.space[name] !== undefined) : [];
+  if (!tuning) {
+    return [];
+  }
+  const space = tuning.space as Record<string, unknown>;
+  return TUNABLE_SETTINGS.filter((name) => space[name] !== undefined);
+}
+
+/**
+ * What a search varies, in display order: the training settings of a network, or the brick
+ * parameters of a classical model (in the order of the search space).
+ */
+export function searchedParams(tuning: TuningConfig | null | undefined): string[] {
+  if (!tuning) {
+    return [];
+  }
+  const names = Object.keys(tuning.space);
+  return isBrickParams(names) ? names : searchedSettings(tuning);
+}
+
+/** "Learning rate", "Max. leaves per tree", "C". */
+export function paramLabel(name: string): string {
+  return SETTING_LABELS[name as TunableSetting] ?? PARAM_LABELS[name] ?? name;
+}
+
+/** A searched value as people write it: 0.00312, 64, "Adam", "balanced", "none". */
+export function formatParam(name: string, value: unknown): string {
+  if ((TUNABLE_SETTINGS as string[]).includes(name)) {
+    return formatSetting(name as TunableSetting, value as number | string | undefined);
+  }
+  if (value === undefined) {
+    return '–';
+  }
+  if (value === null) {
+    return 'none';
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(3)));
+  }
+  return String(value);
 }
 
 /** "search · 10 trials" or "grid search · 6 trials". */

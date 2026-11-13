@@ -2,8 +2,9 @@
 
 A search trains the same network several times (*trials*), each time with other values
 for some settings, on exactly the same training and validation data. The trial with the
-lowest validation loss after its last epoch wins; its weights are kept. A test set, if
-there is one, is only used afterwards to measure the winner.
+best objective metric (by default the lowest validation loss, see objectives.py) wins; its
+weights are kept. A test set, if there is one, is only used afterwards to measure the
+winner.
 
 The search space maps setting names to the values to try::
 
@@ -14,6 +15,13 @@ The search space maps setting names to the values to try::
 Settings that are not in the space keep the value of the normal training settings.
 ``random`` search draws ``trials`` different combinations; ``grid`` search tries every
 combination of the listed values (ranges are not allowed there).
+
+A classical model (scikit-learn) searches over the parameters of its brick instead, and
+may cross-validate on the training rows (``cv_folds``); see classical_tuning.py. All
+settings together::
+
+    {"method": "random", "trials": 20, "metric": "roc_auc", "cv_folds": 5,
+     "space": {"C": {"min": 0.1, "max": 100}, "kernel": ["rbf", "linear"]}}
 """
 
 from __future__ import annotations
@@ -25,6 +33,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .config import OPTIMIZERS, ConfigError, TrainingConfig
+from .objectives import DEFAULT_METRIC, parse_metric
 
 METHODS = ("random", "grid")
 # Settings that can be tuned, in the order they are shown.
@@ -43,25 +52,39 @@ DEFAULT_SPACE: dict[str, Any] = {
     "learning_rate": {"min": 1e-4, "max": 1e-2},
     "batch_size": [32, 64, 128],
 }
+# Cross-validation (classical models only): the number of folds of the training rows.
+MIN_FOLDS = 2
+MAX_FOLDS = 10
 # Sampled numbers are rounded to this many significant digits (easier to read and reuse).
 DIGITS = 3
 
 
 @dataclass(frozen=True)
 class Range:
-    """Numbers between ``min`` and ``max``, sampled log-uniformly."""
+    """Numbers between ``min`` and ``max``, sampled log-uniformly (``log``, the default) or
+    uniformly. An ``integer`` range gives whole numbers."""
 
     min: float
     max: float
+    log: bool = True
+    integer: bool = False
 
     def sample(self, rng: random.Random) -> float:
         if self.min == self.max:
             return self.min
-        value = math.exp(rng.uniform(math.log(self.min), math.log(self.max)))
+        if self.log:
+            value = math.exp(rng.uniform(math.log(self.min), math.log(self.max)))
+        else:
+            value = rng.uniform(self.min, self.max)
+        if self.integer:
+            return int(min(max(round(value), self.min), self.max))
         return min(max(float(f"{value:.{DIGITS}g}"), self.min), self.max)
 
-    def to_dict(self) -> dict[str, float]:
-        return {"min": self.min, "max": self.max}
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {"min": self.min, "max": self.max}
+        if not self.log:
+            data["scale"] = "linear"
+        return data
 
 
 Values = tuple[Any, ...]
@@ -113,8 +136,12 @@ def _range(name: str, raw: dict[str, Any]) -> Range:
     label = LABELS[name]
     if name not in ("learning_rate", "weight_decay"):
         raise ConfigError(f"Hyperparameter search: give a list of values for the {label}.")
-    if set(raw) - {"min", "max"} or "min" not in raw or "max" not in raw:
+    if set(raw) - {"min", "max", "scale"} or "min" not in raw or "max" not in raw:
         raise ConfigError(f'Hyperparameter search: a range for the {label} needs "min" and "max".')
+    if raw.get("scale") not in (None, "log"):
+        raise ConfigError(
+            f'Hyperparameter search: the {label} is drawn on a log scale; leave out "scale".'
+        )
     hi = 10.0 if name == "learning_rate" else 1.0
     lo = _number(raw["min"], f"the {label} range", 0.0, hi, True, False)
     top = _number(raw["max"], f"the {label} range", 0.0, hi, True, False)
@@ -164,6 +191,13 @@ def _combinations(space: dict[str, Range | Values]) -> int | None:
     return count
 
 
+def _folds(value: Any) -> int | None:
+    if value is None or value == "" or value is False:
+        return None
+    what = "the number of cross-validation folds"
+    return int(_number(value, what, MIN_FOLDS, MAX_FOLDS, False, True))
+
+
 @dataclass
 class TuningConfig:
     method: str = "random"
@@ -171,10 +205,20 @@ class TuningConfig:
     # over lists only: at most the number of combinations (every one is tried once).
     trials: int = DEFAULT_TRIALS
     space: dict[str, Range | Values] = field(default_factory=lambda: _space(None))
+    # What ranks the trials (see objectives.py).
+    metric: str = DEFAULT_METRIC
+    # Classical models only: compare the trials by k-fold cross-validation on the training
+    # rows instead of on the validation rows (None: the validation rows, and without them
+    # cross-validation with DEFAULT_FOLDS of classical_tuning.py).
+    cv_folds: int | None = None
+    # The type of the classical model brick whose parameters are searched; None for a
+    # neural network (its training settings are searched).
+    model: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> TuningConfig:
-        """Validate the search settings. Raises :class:`ConfigError` (shown to the user)."""
+    def from_dict(cls, data: dict[str, Any] | None, model: str | None = None) -> TuningConfig:
+        """Validate the search settings. ``model``: the type of the classical model brick
+        (None: a neural network). Raises :class:`ConfigError` (shown to the user)."""
         if data is None:
             data = {}
         if not isinstance(data, dict):
@@ -184,13 +228,27 @@ class TuningConfig:
             raise ConfigError(
                 f"Hyperparameter search: the method must be one of: {', '.join(METHODS)}."
             )
-        space = _space(data.get("space"))
+        metric = parse_metric(data.get("metric"))
+        folds = _folds(data.get("cv_folds"))
+        if model is None:
+            space = _space(data.get("space"))
+            if folds is not None:
+                raise ConfigError(
+                    "Hyperparameter search: cross-validation (cv_folds) is only available for "
+                    "classical models; a neural network compares its trials on the "
+                    "validation data."
+                )
+        else:
+            from .classical_tuning import parse_space
+
+            space = parse_space(model, data.get("space"))
         combinations = _combinations(space)
         if method == "grid":
             for name, values in space.items():
                 if isinstance(values, Range) and values.min != values.max:
                     raise ConfigError(
-                        f"Grid search needs a list of values for the {LABELS[name]}, not a range."
+                        f"Grid search needs a list of values for the {param_label(name, model)}, "
+                        "not a range."
                     )
             assert combinations is not None
             if combinations > MAX_TRIALS:
@@ -198,24 +256,28 @@ class TuningConfig:
                     f"The grid has {combinations:,} combinations, at most {MAX_TRIALS} are "
                     "possible. Use fewer values or random search."
                 )
-            return cls(method, combinations, space)
+            return cls(method, combinations, space, metric, folds, model)
         trials = data.get("trials")
         if trials is None or trials == "":
             trials = DEFAULT_TRIALS
         trials = int(_number(trials, "the number of trials", 1, MAX_TRIALS, False, True))
         if combinations is not None:
             trials = min(trials, combinations)
-        return cls(method, trials, space)
+        return cls(method, trials, space, metric, folds, model)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "method": self.method,
             "trials": self.trials,
             "space": {
                 name: values.to_dict() if isinstance(values, Range) else list(values)
                 for name, values in self.space.items()
             },
+            "metric": self.metric,
         }
+        if self.model is not None:
+            data["cv_folds"] = self.cv_folds
+        return data
 
     def sample(self, seed: int) -> list[dict[str, Any]]:
         """The settings of every trial (only the tuned ones), reproducible for a seed."""
@@ -257,6 +319,16 @@ class TuningConfig:
         return f"{method}, {self.trials} trial{'s' if self.trials != 1 else ''}"
 
 
+def param_label(name: str, model: str | None = None) -> str:
+    """``"learning rate"``; for a classical model (``model``: the type of its brick) the
+    label of the brick parameter."""
+    if model is not None:
+        from .classical_tuning import tunable_label
+
+        return tunable_label(model, name)
+    return LABELS.get(name, name)
+
+
 def trial_config(base: TrainingConfig, params: dict[str, Any]) -> TrainingConfig:
     """The training settings of one trial."""
     return replace(base, **params)
@@ -265,13 +337,21 @@ def trial_config(base: TrainingConfig, params: dict[str, Any]) -> TrainingConfig
 def format_value(name: str, value: Any) -> str:
     if name == "optimizer":
         return OPTIMIZER_NAMES.get(value, str(value))
-    if name == "batch_size":
+    if value is None:
+        return "no limit"
+    if name == "batch_size" or isinstance(value, (bool, str, int)):
         return str(value)
     return f"{value:g}"
 
 
-def describe_params(params: dict[str, Any]) -> str:
-    """``"learning rate 0.00312, batch size 64, Adam"``."""
+def describe_params(params: dict[str, Any], model: str | None = None) -> str:
+    """``"learning rate 0.00312, batch size 64, Adam"``; for a classical model (``model``:
+    the type of its brick) ``"C 3.2, gamma 0.01"``."""
+    if model is not None:
+        return ", ".join(
+            f"{param_label(name, model)} {format_value(name, value)}"
+            for name, value in params.items()
+        )
     parts = []
     for name in TUNABLE:
         if name in params:

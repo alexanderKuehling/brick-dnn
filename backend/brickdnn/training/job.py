@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..graph import analyze
+from ..graph import Analysis, analyze
 from .config import ConfigError, TrainingConfig
 from .datasets import DatasetInfo, builtin_info, random_info
 from .reporting import TrainingError
@@ -59,7 +59,9 @@ class TrainingJob:
         try:
             config = TrainingConfig.from_dict(data.get("config"))
             tuning = data.get("tuning")
-            tuning = TuningConfig.from_dict(tuning) if tuning is not None else None
+            if tuning is not None:
+                # A classical model searches over the parameters of its brick.
+                tuning = TuningConfig.from_dict(tuning, classical_model(graph))
         except ConfigError as exc:
             raise TrainingError(str(exc)) from exc
         path = dataset.get("path")
@@ -92,6 +94,16 @@ class TrainingResult:
     weights_epoch: int | None = None
     # True if early stopping ended the training (in a search: the best trial)
     stopped_early: bool = False
+
+
+def classical_model(graph: Any) -> str | None:
+    """The type of the classical model brick of ``graph`` (a document or an analysis), or
+    None for a neural network or a graph that cannot be read."""
+    try:
+        model = (graph if isinstance(graph, Analysis) else analyze(graph)).model
+    except Exception:  # pragma: no cover - analyze() reports problems instead of raising
+        return None
+    return model.type if model is not None else None
 
 
 def graph_family(graph: Any) -> str:

@@ -552,11 +552,12 @@ def test_data_errors(rows, graph, message, tmp_path):
     assert rec.finished[2] is False and not (tmp_path / "model.joblib").exists()
 
 
-def test_tuning_and_images_are_refused(tmp_path):
+def test_network_search_settings_and_images_are_refused(tmp_path):
     from brickdnn.training.tuning import TuningConfig
 
+    # A search of training settings (a neural network's) does not fit a classical model.
     result, _ = run_job(model_graph("SVR"), random_info(), tmp_path, tuning=TuningConfig())
-    assert result.status == "failed" and "not available for classical models" in result.message
+    assert result.status == "failed" and "parameters of its brick" in result.message
     result, _ = run_job(model_graph("SVC"), builtin_info("mnist"), tmp_path)
     assert result.status == "failed" and "not on images" in result.message
 

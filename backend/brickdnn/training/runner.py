@@ -213,6 +213,7 @@ class StateReporter(Reporter):
             "weights_epoch": None,
             "stopped_early": False,
             "seconds": None,
+            "score": None,
         }
         with self._lock:
             self.state.update(

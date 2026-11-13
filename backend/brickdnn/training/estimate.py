@@ -16,7 +16,9 @@ and the start of the process (Python, PyTorch, the data).
 Classical models are fitted once: a Gaussian process needs about n³ operations per
 optimizer step for n training rows (a classifier once per class), a support vector machine
 between n² and n³. Gradient boosting builds one tree per iteration (per class with more than
-two classes); a tree costs about n × features histogram updates plus a fixed overhead.
+two classes); a tree costs about n × features histogram updates plus a fixed overhead. A
+hyperparameter search multiplies the fits: one per trial, or one per trial and fold (plus
+the final fit) with cross-validation.
 """
 
 from __future__ import annotations
@@ -181,15 +183,20 @@ def estimate_training(
     config: TrainingConfig | None,
     plan: dict[str, Any] | None,
     trials: int = 1,
+    folds: int | None = None,
 ) -> Estimate | None:
     """The estimated CPU time of training ``analysis`` on ``info``; None if the network is
-    not valid. ``trials``: the trials of a hyperparameter search (1 for a normal run)."""
+    not valid. ``trials``: the trials of a hyperparameter search (1 for a normal run).
+    ``folds``: a classical search that cross-validates (each trial fits ``folds`` times)."""
     if not analysis.valid:
         return None
     config = config or TrainingConfig()
     n_train, n_val, n_test = sample_counts(info, config, plan)
     if analysis.family == "classical":
-        return _classical(analysis, info, config, plan, n_train, n_val + n_test)
+        single = _classical(analysis, info, config, plan, n_train, n_val + n_test)
+        if single is not None and (trials > 1 or folds):
+            return _classical_search(single, trials, folds)
+        return single
 
     flops = forward_flops(analysis)
     layers = sum(1 for info_ in analysis.nodes.values() if info_.type != "Input")
@@ -281,6 +288,18 @@ def _classical(
     basis = f"{model} fitted on {n:,} training rows with {features:,} features"
     details = {"family": "classical", "train_rows": n, "features": features, "max_rows": max_rows}
     return _estimate(seconds, basis, details)
+
+
+def _classical_search(single: Estimate, trials: int, folds: int | None) -> Estimate:
+    """A search of a classical model: every trial fits the model once (on the validation
+    rows) or ``folds`` times (cross-validation, each fit on fewer rows; counted as whole
+    fits), and with cross-validation the best trial is fitted once more on all rows."""
+    fits = trials * (folds or 1) + (1 if folds else 0)
+    work = max(0.0, single.cpu_seconds - CLASSICAL_STARTUP_CPU_SECONDS)
+    seconds = CLASSICAL_STARTUP_CPU_SECONDS + work * fits
+    runs = f"{trials} trials" + (f" × {folds} folds + the final fit" if folds else "")
+    details = {**single.details, "trials": trials, "folds": folds, "fits": fits}
+    return _estimate(seconds, f"{single.basis}, {runs}", details)
 
 
 def _estimate(seconds: float, basis: str, details: dict[str, Any]) -> Estimate:

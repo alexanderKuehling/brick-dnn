@@ -252,9 +252,7 @@ def _training_check(request, args: dict[str, Any]) -> dict[str, Any] | None:
             return None
         dataset = training.resolve_dataset(user, args.get("dataset"))
         config = training.parse_config(args.get("config"))
-        search = training.parse_tuning(args.get("tuning"))
-        if search is not None and training.graph_family(graph) == "classical":
-            return None
+        search = training.parse_tuning(args.get("tuning"), graph)
         result = training.check(graph, dataset, config, search)
         if not result.ok or result.plan is None:
             return None

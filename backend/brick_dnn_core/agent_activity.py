@@ -68,6 +68,17 @@ MAX_USER_AGENT = 200
 MAX_KEYS = 20  # arguments (and settings inside them) per entry
 # POST requests that change nothing.
 READ_ONLY_ROUTES = {*READ_ONLY_POSTS, "data-prep-preview"}
+# The objective metric of a hyperparameter search other than the loss, in a summary.
+METRIC_WORDS = {
+    "accuracy": "accuracy",
+    "balanced_accuracy": "balanced accuracy",
+    "macro_f1": "macro F1",
+    "roc_auc": "ROC AUC",
+    "pr_auc": "PR AUC",
+    "rmse": "RMSE",
+    "mae": "MAE",
+    "r2": "R²",
+}
 
 
 def enabled() -> bool:
@@ -684,6 +695,9 @@ def _start_training(user, args, result) -> Described:
     )
     if isinstance(run.get("tuning"), Mapping) and run["tuning"].get("trials"):
         text = f", hyperparameter search with {count(run['tuning']['trials'], 'trial')}"
+        metric = run["tuning"].get("metric")
+        if isinstance(metric, str) and metric in METRIC_WORDS:
+            text += f" by {METRIC_WORDS[metric]}"
     done = None
     if run.get("status") == "queued":
         # With a training worker the run waits for a free slot first.
