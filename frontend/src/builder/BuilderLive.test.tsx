@@ -440,10 +440,12 @@ describe('Live editing in the builder', () => {
     const first = await connect();
     await screen.findByRole('status');
     act(() => first.drop(1006));
-    await waitFor(() => expect(liveStatus()).toHaveTextContent('Offline – changes will sync'));
+    // A short drop is not shown as offline (see OFFLINE_GRACE_MS): changes wait as "Saving".
+    expect(liveStatus()).not.toHaveTextContent('Offline');
 
     await userEvent.clear(nameInput());
     await userEvent.type(nameInput(), 'Offline name');
+    await waitFor(() => expect(liveStatus()).toHaveTextContent(/Saving/));
     // The reconnect (after a short backoff) gets the newest state from the server ...
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 2000 });
     const second = FakeWebSocket.last;
