@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Error monitoring with Sentry** (off unless `BRICKDNN_SENTRY_DSN` /
+  `BRICKDNN_SENTRY_FRONTEND_DSN` are set): errors of the web backend, the realtime server, the
+  training worker, the clean-up and the browser app, with a sample of traces (10 % in
+  production) and the server's log messages. Nothing personal is sent: no user, IP address,
+  cookies or request bodies, no Session Replay; health checks are not traced. Deploys pass the
+  settings from GitHub variables and set the release to the deployed commit. See
+  docs/monitoring.md.
 - **Refund policy page.** `refund.md` in the legal folder is shown at `/refund` and linked
   with the other legal pages (header menu, page footers). The links now also offer *Contact*
   (the imprint), and the empty builder canvas says in one sentence what Brick DNN is and links

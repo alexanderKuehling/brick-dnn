@@ -26,6 +26,8 @@ SETTINGS_FROM_GITHUB=(
   BRICKDNN_EMAIL_HOST BRICKDNN_EMAIL_PORT BRICKDNN_EMAIL_USER BRICKDNN_EMAIL_PASSWORD
   BRICKDNN_EMAIL_FROM BRICKDNN_EMAIL_REPLY_TO BRICKDNN_ADMIN_EMAIL BRICKDNN_PUBLIC_URL
   BRICKDNN_REQUIRE_2FA_FOR_STAFF
+  BRICKDNN_SENTRY_DSN BRICKDNN_SENTRY_FRONTEND_DSN BRICKDNN_SENTRY_ENVIRONMENT
+  BRICKDNN_SENTRY_TRACES_SAMPLE_RATE
 )
 declare -A settings=()
 if [ ! -t 0 ] && IFS= read -r -t 10 header && [ "$header" = "brickdnn-settings 1" ]; then
@@ -87,6 +89,8 @@ web_cpus="$(LC_ALL=C awk -v n="$cpus" 'BEGIN { c = n / 4; if (c < 1) c = 1; if (
 threads=$((cpus * 3 / 4 > 0 ? cpus * 3 / 4 : 1))
 sed -i '/^# Limits for the backend/d; /^# Limits of the containers/d' .env
 sed -i '/^BRICKDNN_\(BACKEND\|WEB\|WORKER\)_\(CPUS\|MEMORY\|THREADS\)=/d' .env
+# The deployed commit, so that Sentry ties every error to the release it came from.
+sed -i '/^BRICKDNN_SENTRY_RELEASE=/d' .env
 [ -z "$(tail -c 1 .env)" ] || echo >> .env  # .env did not end with a line break
 cat >> .env <<EOF
 # Limits of the containers (web backend and worker share 3/4 of this server), written by brickdnn-deploy on every deploy.
@@ -98,6 +102,7 @@ BRICKDNN_WEB_MEMORY=${web_mb}m
 BRICKDNN_WORKER_CPUS=$shared_cpus
 BRICKDNN_WORKER_MEMORY=$((shared_mb - web_mb))m
 BRICKDNN_WORKER_THREADS=$threads
+BRICKDNN_SENTRY_RELEASE=brick-dnn@$SHA
 EOF
 
 if [ "${#settings[@]}" -gt 0 ]; then

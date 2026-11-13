@@ -387,6 +387,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
 | `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900`                   | Memory a batch of a segmentation training may need; larger batches are refused ([docs/training.md](docs/training.md#settings-memory-and-time)) |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
+| `BRICKDNN_SENTRY_DSN` / `_FRONTEND_DSN` | – (off)         | Report errors of the server and the browser app to Sentry, without personal data ([docs/monitoring.md](docs/monitoring.md)) |
 | `BRICKDNN_EMAIL_HOST` / `_PORT` | – (no e-mail) / `587`     | SMTP server of an e-mail provider: password reset, confirming addresses, notices ([docs/email.md](docs/email.md)) |
 | `BRICKDNN_EMAIL_USER` / `_PASSWORD` | –                     | SMTP login and password (secret; only in `.env`)     |
 | `BRICKDNN_EMAIL_FROM` / `_REPLY_TO` | `Brick DNN <no-reply@localhost>` / – | Sender of the e-mails, e.g. `Brick DNN <no-reply@brickdnn.com>` |
@@ -432,7 +433,8 @@ delete their account, and the optional automatic deletion of old data. E-mail (p
 reset, confirming addresses, notices) and two-factor login: [docs/email.md](docs/email.md).
 Selling plans as
 subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
-training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); what
+training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); error
+monitoring with Sentry (off unless configured): [docs/monitoring.md](docs/monitoring.md); what
 comes after one server: [docs/scaling.md](docs/scaling.md).
 
 ## Tests
