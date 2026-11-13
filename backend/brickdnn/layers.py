@@ -12,8 +12,8 @@ a sequence of 32 token ids is ``(32,)``.
 
 Besides the neural layers there are *classical* bricks (scikit-learn): kernels for Gaussian
 processes, whose output is a kernel instead of a tensor, and classical models (Gaussian
-processes, support vector machines) that take the features straight from the Input layer.
-See the end of this module and ``docs/graph-format.md``.
+processes, support vector machines, gradient boosting) that take the features straight from
+the Input layer. See the end of this module and ``docs/graph-format.md``.
 
 To add a new layer, subclass :class:`Layer`, fill in the class attributes and
 decorate it with :func:`register`. See ``docs/adding-a-layer.md``.
@@ -1650,7 +1650,7 @@ class ClassicalModel(Layer):
     estimator: ClassVar[str]  # the scikit-learn class
     module: ClassVar[str]  # where it is imported from
     takes_kernel: ClassVar[bool] = False
-    scale: ClassVar[str]  # gaussian_process | svm
+    scale: ClassVar[str]  # gaussian_process | svm | gradient_boosting
     # Which row limit applies (brickdnn.training.config.CLASSICAL_MAX_ROWS)
     limit: ClassVar[str]
 
@@ -1686,7 +1686,8 @@ class ClassicalModel(Layer):
         return None
 
     def num_params(self) -> int | None:
-        """Unknown before training (e.g. the support vectors of an SVM)."""
+        """Unknown before training (e.g. the support vectors of an SVM, the trees of gradient
+        boosting)."""
         return None
 
     def estimator_args(self) -> list[str]:
@@ -1933,6 +1934,165 @@ class SVC(_SupportVectorMachine):
         if self.p["class_weight"] == "balanced":
             args.append('class_weight="balanced"')
         return args
+
+
+EARLY_STOPPING = {"auto": '"auto"', "on": "True", "off": "False"}
+
+
+def _boosting_params() -> tuple[Param, ...]:
+    return (
+        Param(
+            "learning_rate",
+            "Learning rate",
+            "float",
+            default=0.1,
+            help="How much each tree corrects the trees before it. Smaller values need more "
+            "iterations but often generalise better.",
+        ),
+        Param(
+            "max_iter",
+            "Max. iterations",
+            "int",
+            default=200,
+            minimum=1,
+            maximum=10_000,
+            help="Boosting iterations: one tree each (a classifier with more than two classes "
+            "fits one tree per class and iteration). Early stopping may end sooner.",
+        ),
+        Param(
+            "max_leaf_nodes",
+            "Max. leaves per tree",
+            "int",
+            default=31,
+            minimum=2,
+            maximum=4096,
+            help="Limits the size of every tree. More leaves capture more interactions "
+            "between the features.",
+        ),
+        Param(
+            "max_depth",
+            "Max. depth",
+            "int",
+            default=None,
+            minimum=1,
+            maximum=100,
+            auto=True,
+            help="Empty: no limit (Max. leaves per tree limits the trees instead).",
+        ),
+        Param(
+            "min_samples_leaf",
+            "Min. rows per leaf",
+            "int",
+            default=20,
+            minimum=1,
+            maximum=1_000_000,
+            help="Every leaf holds at least this many training rows. Larger values regularise "
+            "more.",
+        ),
+        Param(
+            "l2_regularization",
+            "L2 regularisation",
+            "float",
+            default=0.0,
+            minimum=0.0,
+            help="Penalises large leaf values (0: none).",
+        ),
+        Param(
+            "early_stopping",
+            "Early stopping",
+            "select",
+            default="auto",
+            options=tuple(EARLY_STOPPING),
+            help="Hold out 10 % of the training rows and stop when the loss on them has not "
+            "improved for 10 iterations. auto: on above 10,000 training rows.",
+        ),
+    )
+
+
+_RANDOM_STATE = Param(
+    "random_state",
+    "Random state",
+    "int",
+    default=0,
+    minimum=0,
+    help="Seed for the rows early stopping holds out and for the sample the feature bins "
+    "are computed from (above 200,000 rows). The same seed gives the same model.",
+)
+
+
+class _GradientBoosting(ClassicalModel):
+    module = "sklearn.ensemble"
+    scale = "gradient_boosting"
+    limit = "gradient_boosting"
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        if self.p["learning_rate"] <= 0:
+            raise LayerError("Learning rate must be greater than 0.")
+
+    def boosting_args(self) -> list[str]:
+        return [
+            f"learning_rate={fmt_float(self.p['learning_rate'])}",
+            f"max_iter={self.p['max_iter']}",
+            f"max_leaf_nodes={self.p['max_leaf_nodes']}",
+            f"max_depth={self.p['max_depth']}",
+            f"min_samples_leaf={self.p['min_samples_leaf']}",
+            f"l2_regularization={fmt_float(self.p['l2_regularization'])}",
+            f"early_stopping={EARLY_STOPPING[self.p['early_stopping']]}",
+        ]
+
+
+@register
+class HistGradientBoostingRegressor(_GradientBoosting):
+    type = "HistGradientBoostingRegressor"
+    label = "Gradient boosting regression"
+    description = (
+        "Predicts a number with gradient-boosted decision trees (histogram-based): a strong "
+        "baseline for tabular data. Connect the Input (features). The time to fit grows "
+        "about linearly with the rows: for hundreds of thousands of training rows and more."
+    )
+    task = "regression"
+    estimator = "HistGradientBoostingRegressor"
+    params = (*_boosting_params(), _RANDOM_STATE)
+    name_prefix = "gb"
+
+    def estimator_args(self) -> list[str]:
+        return [*self.boosting_args(), f"random_state={self.p['random_state']}"]
+
+
+@register
+class HistGradientBoostingClassifier(_GradientBoosting):
+    type = "HistGradientBoostingClassifier"
+    label = "Gradient boosting classification"
+    description = (
+        "Classifies with gradient-boosted decision trees (histogram-based), with class "
+        "probabilities: a strong baseline for tabular data. Connect the Input (features); the "
+        "classes come from the data. For rare classes, set Class weights to balanced. The "
+        "time to fit grows about linearly with the rows: for hundreds of thousands of "
+        "training rows and more."
+    )
+    task = "classification"
+    estimator = "HistGradientBoostingClassifier"
+    params = (
+        *_boosting_params(),
+        Param(
+            "class_weight",
+            "Class weights",
+            "select",
+            default="none",
+            options=("none", "balanced"),
+            help="balanced: weight the classes inversely to their frequency (for imbalanced "
+            "data, e.g. a few percent of positives).",
+        ),
+        _RANDOM_STATE,
+    )
+    name_prefix = "gb"
+
+    def estimator_args(self) -> list[str]:
+        args = self.boosting_args()
+        if self.p["class_weight"] == "balanced":
+            args.append('class_weight="balanced"')
+        return [*args, f"random_state={self.p['random_state']}"]
 
 
 def layer_specs() -> list[dict[str, Any]]:

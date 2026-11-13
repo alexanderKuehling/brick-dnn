@@ -81,9 +81,11 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Classical models** next to the neural networks: **Gaussian process** regression and
   classification with kernels you compose from bricks (RBF, Matérn, rational quadratic,
   periodic, dot product, white noise and constant kernels, added and multiplied), and
-  **support vector machines** (SVR, SVC). They train on CSV files and prepared datasets with
-  scikit-learn (no PyTorch needed), report the fitted kernel and its log marginal likelihood
-  or the support vectors, predict with uncertainty (Gaussian processes) or class
+  **support vector machines** (SVR, SVC) and **gradient boosting** (histogram-based
+  decision trees, with balanced class weights for rare classes: a strong baseline for large
+  tables). They train on CSV files and prepared datasets with scikit-learn (no PyTorch
+  needed), report the fitted kernel and its log marginal likelihood, the support vectors or
+  the boosting iterations, predict with uncertainty (Gaussian processes) or class
   probabilities, and export as a scikit-learn script. See
   [docs/training.md](docs/training.md#classical-models).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
@@ -97,8 +99,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   batch and, for tabular models, a ready-to-use **CSV training loop**.
 - **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
   classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
-  tabular regression, multi-input model, Gaussian process regression, SVM classifier and a
-  periodic Gaussian process.
+  tabular regression, multi-input model, Gaussian process regression, SVM classifier, a
+  periodic Gaussian process and a gradient boosting classifier.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and
@@ -143,7 +145,7 @@ docker compose up -d
 Open <http://localhost:8080>. Data (accounts, saved networks, training runs) lives in the
 `brickdnn-data` volume. To enable training of neural networks, build the image with PyTorch
 (CPU, about 1 GB more): `BRICKDNN_INSTALL_TORCH=true docker compose up -d --build`. Classical
-models (Gaussian processes, SVMs) train in the default image. To create an admin account for the Django admin at `/admin/`:
+models (Gaussian processes, SVMs, gradient boosting) train in the default image. To create an admin account for the Django admin at `/admin/`:
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
@@ -385,6 +387,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
 | `BRICKDNN_GPC_MAX_ROWS`        | `2000`                     | Training rows a Gaussian process classifier is fitted on at most |
 | `BRICKDNN_SVM_MAX_ROWS`        | `50000`                    | Training rows an SVM is fitted on at most             |
+| `BRICKDNN_GB_MAX_ROWS`         | `1000000`                  | Training rows gradient boosting is fitted on at most  |
 | `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900`                   | Memory a batch of a segmentation training may need; larger batches are refused ([docs/training.md](docs/training.md#settings-memory-and-time)) |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
 | `BRICKDNN_SENTRY_DSN` / `_FRONTEND_DSN` | – (off)         | Report errors of the server and the browser app to Sentry, without personal data ([docs/monitoring.md](docs/monitoring.md)) |

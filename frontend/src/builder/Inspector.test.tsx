@@ -223,6 +223,70 @@ describe('Inspector of classical bricks', () => {
     expect(screen.queryByLabelText('Kernel as scikit-learn code')).not.toBeInTheDocument();
   });
 
+  it('shows the settings of gradient boosting and its trees after the fit', async () => {
+    const analysis: Analysis = {
+      ...GP_ANALYSIS,
+      nodes: {
+        gb: {
+          type: 'HistGradientBoostingClassifier',
+          output_shape: null,
+          dtype: null,
+          num_params: null,
+          params: { learning_rate: 0.1, max_iter: 200, max_depth: null, class_weight: 'none' },
+          output_kind: 'tensor',
+          kernel: null,
+          task: 'classification',
+        },
+      },
+      total_params: null,
+      classical: {
+        node: 'gb',
+        type: 'HistGradientBoostingClassifier',
+        estimator: 'HistGradientBoostingClassifier',
+        task: 'classification',
+        kernel: null,
+      },
+    };
+    const updateNode = vi.fn();
+    const node: LayerFlowNode = {
+      id: 'gb',
+      type: 'layer',
+      position: { x: 0, y: 0 },
+      data: { type: 'HistGradientBoostingClassifier', params: { class_weight: 'none' } },
+    };
+    renderBrick(node, analysis, updateNode);
+    expect(screen.getByText('classes from data')).toBeInTheDocument();
+    expect(screen.getByText('Decision trees').nextSibling).toHaveTextContent('after the fit');
+    expect(screen.getByLabelText('Learning rate')).toHaveAttribute('placeholder', '0.1');
+    // Empty max. depth: no limit.
+    expect(screen.getByLabelText('Max. depth')).toHaveAttribute('placeholder', 'auto');
+    expect(screen.getByRole('combobox', { name: 'Early stopping' })).toHaveValue(
+      'Auto (above 10,000 rows)'
+    );
+    expect(screen.queryByLabelText('Kernel as scikit-learn code')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Class weights' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Balanced' }));
+    expect(updateNode).toHaveBeenCalledWith('gb', { params: { class_weight: 'balanced' } });
+  });
+
+  it('summarises a gradient boosting network', () => {
+    renderBrick(null, {
+      ...GP_ANALYSIS,
+      total_params: null,
+      classical: {
+        node: 'gb',
+        type: 'HistGradientBoostingRegressor',
+        estimator: 'HistGradientBoostingRegressor',
+        task: 'regression',
+        kernel: null,
+      },
+    });
+    expect(screen.getByText('Parameters').nextSibling).toHaveTextContent(
+      'decision trees, after the fit'
+    );
+  });
+
   it('summarises a classical network', () => {
     renderBrick(null);
     expect(screen.getByText('Gaussian process regression')).toBeInTheDocument();

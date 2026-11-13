@@ -85,7 +85,7 @@ data. Its bricks are in two categories of the catalogue:
 | Category         | Bricks |
 | ---------------- | ------ |
 | Kernels          | `RBF`, `Matern` (ν 0.5, 1.5, 2.5), `RationalQuadratic`, `ExpSineSquared` (periodic), `DotProduct`, `WhiteKernel`, `ConstantKernel`; `KernelSum` and `KernelProduct` combine two or more kernels |
-| Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC` |
+| Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC`, `HistGradientBoostingRegressor`, `HistGradientBoostingClassifier` |
 
 ```json
 {
@@ -118,7 +118,12 @@ Rules (the analysis explains every violation at the brick concerned):
 - Kernel bricks have no inputs. A kernel goes into `KernelSum`, `KernelProduct` or a
   Gaussian process (at most one kernel per Gaussian process), nowhere else; every kernel
   brick is connected exactly once. `SVR` and `SVC` choose their kernel with their own
-  `kernel` parameter (`linear`, `poly`, `rbf`, `sigmoid`).
+  `kernel` parameter (`linear`, `poly`, `rbf`, `sigmoid`); gradient boosting takes no kernel.
+- Gradient boosting (`HistGradientBoostingRegressor`, `HistGradientBoostingClassifier`)
+  takes `learning_rate` (> 0, default 0.1), `max_iter` (1 … 10,000, 200), `max_leaf_nodes`
+  (2 … 4,096, 31), `max_depth` (1 … 100, empty: no limit), `min_samples_leaf` (≥ 1, 20),
+  `l2_regularization` (≥ 0, 0), `early_stopping` (`auto`, `on`, `off`), `random_state`
+  (≥ 0, 0) and, for the classifier, `class_weight` (`none` or `balanced`).
 - A Gaussian process without a kernel uses `ConstantKernel × RBF + WhiteKernel`
   (regression) or `ConstantKernel × RBF` (classification).
 - Kernel hyperparameters are **initial values**: the Gaussian process optimises them on the
@@ -147,8 +152,9 @@ sum inside a product gets parentheses.
 
 `num_params` counts what is fitted to the data: for kernel bricks the hyperparameters the
 Gaussian process optimises (none when `fixed`), for a Gaussian process those of its default
-kernel (`0` with a connected kernel, which counts its own), for `SVR`/`SVC` `null` (their
-support vectors are only known after fitting, so `total_params` is `null` too).
+kernel (`0` with a connected kernel, which counts its own), for `SVR`/`SVC` and gradient
+boosting `null` (their support vectors or trees are only known after fitting, so
+`total_params` is `null` too).
 
 ## Shapes
 
@@ -189,11 +195,14 @@ For a classical model the script uses scikit-learn instead of PyTorch:
   kernel built from the bricks, e.g.
   `ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)`.
   `SVC` is wrapped in `CalibratedClassifierCV(..., ensemble=False)` (Platt scaling with
-  5-fold cross-validation), which gives it class probabilities.
+  5-fold cross-validation), which gives it class probabilities. Gradient boosting is
+  `HistGradientBoostingRegressor(...)` or `HistGradientBoostingClassifier(...)` from
+  `sklearn.ensemble` with all its settings written out.
 - Without arguments, `main()` prints the model and fits it to 40 random rows.
 - `--csv data.csv` (with `include_training`) fits it to a random 80 % of the rows (`--seed`)
   and reports the validation RMSE and R² or the accuracy, for a Gaussian process the fitted
-  kernel and log marginal likelihood, for an SVM the number of support vectors. The scaler
+  kernel and log marginal likelihood, for an SVM the number of support vectors, for
+  gradient boosting the boosting iterations (of at most `max_iter`). The scaler
   learns from the training rows only. The target may hold class labels as text.
 - `--save model.joblib` (the default) stores `{"format": "brickdnn-sklearn-1", "model":
   <Pipeline>, "task", "columns", "target", "class_names"}` with joblib (a pickle: only load

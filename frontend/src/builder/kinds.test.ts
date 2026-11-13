@@ -5,6 +5,7 @@ import {
   compactKernel,
   connectionProblem,
   inputSlots,
+  isBoosting,
   kernelLines,
   kernelTerms,
   outputKind,
@@ -20,6 +21,12 @@ describe('input slots', () => {
     expect(inputSlots(SPECS.RBF)).toEqual([]);
     expect(outputKind(SPECS.RBF)).toBe('kernel');
     expect(outputKind(SPECS.SVC)).toBe('tensor');
+    expect(inputSlots(SPECS.HistGradientBoostingClassifier).map((slot) => slot.name)).toEqual([
+      'features',
+    ]);
+    expect(isBoosting('HistGradientBoostingClassifier')).toBe(true);
+    expect(isBoosting('SVC')).toBe(false);
+    expect(isBoosting(undefined)).toBe(false);
   });
 
   it('default to one tensor input for catalogues of older servers', () => {
@@ -46,6 +53,10 @@ describe('connections of the wrong kind', () => {
     expect(connectionProblem(SPECS.RBF, SPECS.SVC)).toBe(
       'Support vector classification cannot take a kernel.'
     );
+    expect(connectionProblem(SPECS.RBF, SPECS.HistGradientBoostingClassifier)).toBe(
+      'Gradient boosting classification cannot take a kernel.'
+    );
+    expect(connectionProblem(SPECS.Input, SPECS.HistGradientBoostingClassifier)).toBeNull();
     expect(connectionProblem(SPECS.Input, SPECS.KernelSum)).toBe('Kernel sum only takes kernels.');
     expect(connectionProblem(SPECS.Input, SPECS.RBF)).toBe('RBF kernel takes no inputs.');
   });

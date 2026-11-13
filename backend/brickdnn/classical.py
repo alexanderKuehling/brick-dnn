@@ -1,7 +1,7 @@
 """Turn an analysed classical network into a runnable scikit-learn script.
 
-A classical network is an Input layer, one classical model (Gaussian process or support
-vector machine) and, for a Gaussian process, optionally kernel bricks. The script defines
+A classical network is an Input layer, one classical model (Gaussian process, support vector
+machine or gradient boosting) and, for a Gaussian process, optionally kernel bricks. The script defines
 ``make_model()``, a ``Pipeline`` that standardises the features and then fits the model,
 and (with ``include_main``) a command line: fit it to a CSV file, save it with joblib and
 predict new rows. Like the rest of :mod:`brickdnn`, this module only writes text: it needs
@@ -49,6 +49,11 @@ def num_features(analysis: Analysis) -> int:
     shape = analysis.nodes[source].shape
     assert shape is not None
     return shape[0]
+
+
+def boosted(layer: ClassicalModel) -> bool:
+    """Gradient boosting (HistGradientBoostingRegressor or ...Classifier)."""
+    return layer.scale == "gradient_boosting"
 
 
 def calibrated(layer: ClassicalModel) -> bool:
@@ -171,6 +176,11 @@ class _ClassicalGenerator:
                 " Platt scaling (5-fold cross-validation) turns the SVM's scores into class "
                 "probabilities."
             )
+        if boosted(layer):
+            about += (
+                " The trees do not need standardised features (their splits stay the same); "
+                "the scaler keeps the saved model in the format of the other classical models."
+            )
         lines = [
             f'"""{layer.label}: generated with Brick DNN.',
             "",
@@ -260,6 +270,8 @@ class _ClassicalGenerator:
             report += _GP_REPORT
         elif calibrated(self.layer):
             report += _SVC_REPORT
+        elif boosted(self.layer):
+            report += _BOOSTING_REPORT
         else:
             report += _SVR_REPORT
         return _FIT.replace("[[REPORT]]", report)
@@ -419,6 +431,11 @@ _SVR_REPORT = """
 _SVC_REPORT = """
     svc = model.named_steps["model"].calibrated_classifiers_[0].estimator
     print(f"Support vectors: {int(svc.n_support_.sum())}")"""
+
+_BOOSTING_REPORT = """
+    boosting = model.named_steps["model"]
+    # Early stopping may end before max_iter.
+    print(f"Boosting iterations: {boosting.n_iter_} of at most {boosting.max_iter}")"""
 
 _SAVE_MODEL = '''\
 def save_model(model: Pipeline, path: str, header: list[str]) -> None:

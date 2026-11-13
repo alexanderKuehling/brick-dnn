@@ -1,5 +1,5 @@
 import type { Analysis, NodeAnalysis, Params, ParamValue } from '@/api/types';
-import { compactKernel } from './kinds';
+import { compactKernel, isBoosting } from './kinds';
 
 const ACTIVATION_NAMES: Record<string, string> = {
   relu: 'ReLU',
@@ -24,6 +24,8 @@ const OPTION_LABELS: Record<string, Record<string, string>> = {
   // The own kernel of SVR and SVC.
   kernel: { linear: 'Linear', poly: 'Polynomial', rbf: 'RBF', sigmoid: 'Sigmoid' },
   class_weight: { none: 'None', balanced: 'Balanced' },
+  // Gradient boosting: auto switches it on above 10,000 training rows.
+  early_stopping: { auto: 'Auto (above 10,000 rows)', on: 'On', off: 'Off' },
 };
 
 export function optionLabel(param: string, value: string): string {
@@ -199,6 +201,21 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       }
       return parts.join(' · ');
     }
+    case 'HistGradientBoostingRegressor':
+    case 'HistGradientBoostingClassifier': {
+      const parts = [
+        `${num(p.max_iter)} iterations`,
+        `rate ${num(p.learning_rate)}`,
+        `${num(p.max_leaf_nodes)} leaves`,
+      ];
+      if (typeof p.max_depth === 'number') {
+        parts.push(`depth ${p.max_depth}`);
+      }
+      if (p.class_weight === 'balanced') {
+        parts.push('balanced');
+      }
+      return parts.join(' · ');
+    }
     default:
       return '';
   }
@@ -225,14 +242,18 @@ export function hyperparameters(count: number): string {
 
 /**
  * The size of a valid network for the toolbar: "1.2k params"; for a Gaussian process the
- * kernel hyperparameters the fit optimises; an SVM has nothing to count before the fit.
+ * kernel hyperparameters the fit optimises; an SVM or gradient boosting has nothing to count
+ * before the fit.
  */
 export function networkSize(analysis: Analysis): string {
   if (analysis.family !== 'classical') {
     return `${formatCount(analysis.total_params)} params`;
   }
   if (analysis.total_params === null) {
-    return analysis.classical?.task === 'classification' ? 'SVM classifier' : 'SVM regression';
+    const what = isBoosting(analysis.classical?.type) ? 'Gradient boosting' : 'SVM';
+    return analysis.classical?.task === 'classification'
+      ? `${what} classifier`
+      : `${what} regression`;
   }
   return hyperparameters(analysis.total_params);
 }

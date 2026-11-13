@@ -87,8 +87,10 @@ A network is a JSON graph: {"version": 1, "nodes": [{"id": "in", "type": "Input"
 shape has no batch dimension; nodes without outgoing edges are the outputs.
 
 It also builds classical models (scikit-learn) for tabular data: Gaussian processes
-(GaussianProcessRegressor, GaussianProcessClassifier) and support vector machines (SVR,
-SVC). Connect the Input (shape [number of features]) straight to the model; a Gaussian
+(GaussianProcessRegressor, GaussianProcessClassifier), support vector machines (SVR, SVC)
+and gradient boosting (HistGradientBoostingRegressor, HistGradientBoostingClassifier: a
+strong baseline for large tables; class_weight "balanced" for rare classes). Connect the
+Input (shape [number of features]) straight to the model; a Gaussian
 process can also take a kernel built from kernel bricks (RBF, Matern, RationalQuadratic,
 ExpSineSquared, DotProduct, WhiteKernel, ConstantKernel, combined with KernelSum and
 KernelProduct), whose edges carry a kernel instead of a tensor. Classical models and neural
@@ -1162,7 +1164,8 @@ TOOLS: dict[str, Tool] = {
             "list_layer_types",
             "List layer types",
             "All layer types (Input, Linear, Conv2d, LSTM, …, kernel bricks such as RBF and "
-            "classical models such as GaussianProcessRegressor or SVC) with their parameters: "
+            "classical models such as GaussianProcessRegressor, SVC or "
+            "HistGradientBoostingClassifier) with their parameters: "
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
             "output_kind whether it puts out a tensor or a kernel, input_slots what it takes. "
@@ -1181,7 +1184,8 @@ TOOLS: dict[str, Tool] = {
             "list_examples",
             "List example networks",
             "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
-            "regression, SVM classifier, …): good starting points. Lists names and "
+            "regression, SVM classifier, gradient boosting classifier, …): good starting "
+            "points. Lists names and "
             "descriptions; id gives one example with its graph.",
             list_examples,
             {"id": {"type": "string", "description": "An example id: returns its graph"}},
@@ -1267,7 +1271,8 @@ TOOLS: dict[str, Tool] = {
             "get_training_options",
             "Show training options",
             "Whether training is available on this server (available: neural networks with "
-            "PyTorch; classical: Gaussian processes and SVMs with scikit-learn, with the "
+            "PyTorch; classical: Gaussian processes, SVMs and gradient boosting with "
+            "scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "
             "the hyperparameter search options (tuning, neural networks only). Datasets are "
@@ -1816,7 +1821,8 @@ TOOLS: dict[str, Tool] = {
             "per class and the confusion matrix up to 10 classes, else the most confused "
             "pairs; MAE, RMSE, R², MAPE, median and max error, residual quantiles), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
-            "kernel, log marginal likelihood or support vectors) and the end of the log if "
+            "kernel, log marginal likelihood, support vectors or boosting iterations) and "
+            "the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
             "epochs plus the best and the last), graph, plan, log (the last log_lines "
             "lines), trials and preprocessing.",

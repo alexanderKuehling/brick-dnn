@@ -13,8 +13,8 @@ brickdnn train graph.json --data mnist --tune-lr 1e-4:1e-2 --tune-batch-size 32,
 brickdnn train --example gp_regression --data houses.csv     # a classical model (scikit-learn)
 
 Press Ctrl+C to stop after the current batch; the weights are saved anyway. Classical
-models (Gaussian processes, SVMs) are fitted once with scikit-learn and saved with joblib
-(``<name>.joblib``); they do not need PyTorch.
+models (Gaussian processes, SVMs, gradient boosting) are fitted once with scikit-learn and
+saved with joblib (``<name>.joblib``); they do not need PyTorch.
 """
 
 from __future__ import annotations
@@ -176,6 +176,11 @@ class ConsoleReporter(Reporter):
             self._print(f"Log marginal likelihood: {details['log_marginal_likelihood']:.4g}")
         if details.get("support_vectors") is not None:
             self._print(f"Support vectors: {details['support_vectors']:,}")
+        if details.get("iterations") is not None:
+            self._print(
+                f"Boosting iterations: {details['iterations']:,} of at most "
+                f"{details['max_iterations']:,}"
+            )
 
     def progress(self, progress: dict[str, Any]) -> None:
         trial = f"Trial {self._trial['trial']}/{self._trial['trials']}  " if self._trial else ""
@@ -411,7 +416,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="brickdnn train",
         description="Train a Brick DNN network with PyTorch and save its weights, or fit a "
-        "classical model (Gaussian process, SVM) with scikit-learn and save it with joblib.",
+        "classical model (Gaussian process, SVM, gradient boosting) with scikit-learn and save "
+        "it with joblib.",
         epilog="Ctrl+C stops after the current batch and still saves the weights (a classical "
         "model stops once it is fitted and is not saved).",
     )

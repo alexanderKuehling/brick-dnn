@@ -16,9 +16,9 @@ layout information in the same document. A node may carry an optional
 
 A connection carries what its source puts out: a tensor, or a kernel (the kernel bricks of
 Gaussian processes). A *classical* network (scikit-learn) consists of an Input layer, one
-classical model (Gaussian process or SVM) that takes the features straight from it and,
-for a Gaussian process, optionally kernel bricks that feed its kernel. Classical models
-and neural layers cannot be mixed (yet).
+classical model (Gaussian process, SVM or gradient boosting) that takes the features straight
+from it and, for a Gaussian process, optionally kernel bricks that feed its kernel. Classical
+models and neural layers cannot be mixed (yet).
 """
 
 from __future__ import annotations
@@ -406,11 +406,14 @@ def _infer_classical(
         return
 
     if kernels and not layer.takes_kernel:
-        result.error(
-            f"{layer.label} chooses its kernel with its own Kernel setting "
-            f"({', '.join(SVM_KERNELS)}). {KERNEL_TARGETS}",
-            nid,
-        )
+        if layer.scale == "svm":
+            text = (
+                f"{layer.label} chooses its kernel with its own Kernel setting "
+                f"({', '.join(SVM_KERNELS)})."
+            )
+        else:
+            text = f"{layer.label} builds decision trees and takes no kernel."
+        result.error(f"{text} {KERNEL_TARGETS}", nid)
         return
     if len(kernels) > 1:
         result.error(

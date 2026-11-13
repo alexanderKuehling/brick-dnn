@@ -672,14 +672,16 @@ is gone when its turn comes ends as `failed` with "Not started: …" and
 is `queued` again in between (its `message` says why). The training check answers with the
 same `queue` object for a run that would be started now (plus `running` and `message`).
 
-**Classical models** (Gaussian processes, SVMs, see [training.md](training.md#classical-models))
+**Classical models** (Gaussian processes, SVMs, gradient boosting, see
+[training.md](training.md#classical-models))
 train with scikit-learn and do not need PyTorch. `GET /api/training/` describes them separately,
 because `available` and `reason` are about PyTorch:
 
 ```json
 "classical": {
   "available": true, "reason": null, "sklearn_version": "1.9.1",
-  "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000 },
+  "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000,
+                "HistGradientBoostingRegressor": 1000000, "HistGradientBoostingClassifier": 1000000 },
   "tuning": false
 }
 ```
@@ -700,7 +702,8 @@ is `neural` or `classical`; a classical run is fitted once: it has no `progress`
 `history` entry when the fit is done, and
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
 `fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
-`support_vectors` and `train` (the metrics on the training rows), see
+`support_vectors`, `iterations` and `max_iterations` (gradient boosting) and `train` (the
+metrics on the training rows), see
 [training.md](training.md#classical-models).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus

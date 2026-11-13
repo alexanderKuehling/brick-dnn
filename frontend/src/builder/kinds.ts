@@ -31,6 +31,11 @@ export function isClassicalSpec(spec: LayerSpec | undefined): boolean {
   return spec?.family === 'classical';
 }
 
+/** Gradient boosting (HistGradientBoostingRegressor or HistGradientBoostingClassifier). */
+export function isBoosting(type: string | null | undefined): boolean {
+  return Boolean(type?.startsWith('HistGradientBoosting'));
+}
+
 /** Handle id of a slot: only bricks with several slots name their handles. */
 export function slotHandle(slots: InputSlot[], slot: InputSlot): string | undefined {
   return slots.length > 1 ? slot.name : undefined;

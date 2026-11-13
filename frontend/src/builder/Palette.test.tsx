@@ -45,6 +45,18 @@ describe('Palette', () => {
     expect(rbf.querySelector('[data-kernel]')).not.toBeNull();
     const svc = screen.getByRole('button', { name: 'Support vector classification' });
     expect(svc.querySelector('[data-kernel]')).toBeNull();
+    const boosting = screen.getByRole('button', { name: 'Gradient boosting classification' });
+    expect(boosting.querySelector('[data-kernel]')).toBeNull();
+
+    // The search finds gradient boosting by its description, too.
+    await userEvent.type(screen.getByLabelText('Search layers'), 'decision trees');
+    expect(
+      screen.getByRole('button', { name: 'Gradient boosting classification' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Support vector classification' })
+    ).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('Search layers'));
 
     // Searching keeps the heading of what is found.
     await userEvent.type(screen.getByLabelText('Search layers'), 'white');

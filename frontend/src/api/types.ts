@@ -90,7 +90,7 @@ export interface NodeAnalysis {
   dtype: 'float' | 'long' | null;
   /**
    * Trainable parameters; kernels count the hyperparameters a Gaussian process optimises.
-   * Null when unknown before training (SVR, SVC).
+   * Null when unknown before training (SVR, SVC, gradient boosting).
    */
   num_params: number | null;
   params: Params | null;
@@ -102,7 +102,7 @@ export interface NodeAnalysis {
   task?: ClassicalTask | null;
 }
 
-/** The classical model of a network (a Gaussian process or support vector machine). */
+/** The classical model of a network (Gaussian process, support vector machine, gradient boosting). */
 export interface ClassicalModelInfo {
   node: string;
   type: string;
@@ -119,7 +119,7 @@ export interface Analysis {
   nodes: Record<string, NodeAnalysis>;
   inputs: string[];
   outputs: string[];
-  /** Null when a layer has an unknown count (SVR, SVC) or the network has errors. */
+  /** Null when a layer has an unknown count (SVR, SVC, gradient boosting) or on errors. */
   total_params: number | null;
   /** classical: the network contains kernels or a classical model (missing: neural). */
   family?: 'neural' | 'classical';
@@ -1603,6 +1603,10 @@ export interface ClassicalRunState {
   log_marginal_likelihood: number | null;
   /** SVMs: the number of support vectors. */
   support_vectors: number | null;
+  /** Gradient boosting: the boosting iterations (early stopping may end sooner; older servers: none). */
+  iterations?: number | null;
+  /** Gradient boosting: at most this many iterations (its max_iter). */
+  max_iterations?: number | null;
   /** The metrics on the training rows. */
   train: ClassicalMetrics | null;
   /** Gaussian processes: kernel hyperparameters the fit left at a bound (older servers: none). */

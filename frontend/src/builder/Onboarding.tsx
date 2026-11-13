@@ -83,7 +83,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     targets: [tour('code'), tour('export'), tour('export-icon')],
     title: 'Code and export',
     body:
-      'See the generated PyTorch code (scikit-learn for Gaussian processes and SVMs), or ' +
+      'See the generated PyTorch code (scikit-learn for classical models such as SVMs), or ' +
       'download it as a .py file that runs on its own.',
   },
   {

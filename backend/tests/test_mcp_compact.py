@@ -145,7 +145,7 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
     }
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
     # Four built-in datasets with their class names, the limits and the defaults.
-    assert sizes["get_training_options"] < 4400 < full
+    assert sizes["get_training_options"] < 4500 < full
 
     # A run with 200 epochs and a long log.
     run = long_run(user, training_dir)
@@ -238,6 +238,9 @@ def test_layer_types_are_compact_unless_asked(mcp):
     catalog, compact_size = answer(mcp, "list_layer_types")
     layers = {layer["type"]: layer for layer in catalog["layers"]}
     assert {"Input", "Linear", "Conv2d", "LSTM", "RBF", "SVC"} <= set(layers)
+    assert {"HistGradientBoostingRegressor", "HistGradientBoostingClassifier"} <= set(layers)
+    boosting = layers["HistGradientBoostingClassifier"]["params"]
+    assert {"learning_rate", "max_iter", "class_weight", "early_stopping"} <= set(boosting)
     assert layers["Linear"]["params"]["out_features"].startswith("int")
     assert "null = inferred" in layers["Linear"]["params"]["in_features"]
     assert layers["RBF"]["output_kind"] == "kernel"

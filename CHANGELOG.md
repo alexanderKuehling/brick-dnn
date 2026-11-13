@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Gradient boosting** as classical model bricks: `HistGradientBoostingRegressor` and
+  `HistGradientBoostingClassifier` (scikit-learn, no extra dependency), the usual strong
+  baseline for tabular data and fast on large tables. Settings: learning rate, iterations,
+  leaves per tree, depth, rows per leaf, L2 regularisation, early stopping (`auto`: above
+  10,000 training rows) and random state; the classifier also has *Class weights*
+  (`balanced` for rare classes such as a few percent of fraud cases). They train like the
+  other classical models (metrics, evaluation, predictions also from raw rows, explanations,
+  download, compute estimate), report the boosting iterations the fit took, and export as a
+  scikit-learn script. Fitted on at most 1,000,000 training rows (`BRICKDNN_GB_MAX_ROWS`);
+  small fits use one thread. New example *Gradient boosting classifier*.
 - **Error monitoring with Sentry** (off unless `BRICKDNN_SENTRY_DSN` /
   `BRICKDNN_SENTRY_FRONTEND_DSN` are set): errors of the web backend, the realtime server, the
   training worker, the clean-up and the browser app, with a sample of traces (10 % in

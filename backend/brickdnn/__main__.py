@@ -47,7 +47,12 @@ def _print_analysis(graph: dict) -> int:
         return 1
     if result.family == "classical":
         total = result.total_params
-        fitted = f"{total:,} kernel hyperparameters" if total is not None else "support vectors"
+        if total is not None:
+            fitted = f"{total:,} kernel hyperparameters"
+        elif result.model and getattr(result.model.layer, "scale", None) == "gradient_boosting":
+            fitted = "decision trees"
+        else:
+            fitted = "support vectors"
         print(f"OK - a classical model (scikit-learn), fitted: {fitted}")
     else:
         print(f"OK - {result.total_params:,} trainable parameters")

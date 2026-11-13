@@ -4,8 +4,8 @@ Brick DNN can train the network you built **on the machine that runs the backend
 PyTorch. You start and watch the training in the editor; nothing is computed in the browser.
 The same engine is available on the command line as `brickdnn train`. Networks that give
 every pixel a class are covered in [Image segmentation](#image-segmentation). Classical models
-(Gaussian processes and support vector machines) are fitted with scikit-learn instead, see
-[Classical models](#classical-models).
+(Gaussian processes, support vector machines and gradient boosting) are fitted with
+scikit-learn instead, see [Classical models](#classical-models).
 
 ![Finished training of a small CNN on MNIST with loss and accuracy curves](images/training.png)
 
@@ -578,13 +578,33 @@ Besides neural networks, Brick DNN builds and trains classical models for tabula
 | Gaussian process classification | classes with probabilities | `GaussianProcessClassifier` + optional kernel bricks |
 | Support vector regression | predicts a number | `SVR` |
 | Support vector classification | classes with probabilities (Platt scaling) | `SVC` |
+| Gradient boosting regression | predicts a number | `HistGradientBoostingRegressor` |
+| Gradient boosting classification | classes with probabilities | `HistGradientBoostingClassifier` |
 
 Connect the Input (shape: the number of feature columns) straight to the model; a Gaussian
 process may also take a kernel built from kernel bricks (`RBF`, `Matern`, `RationalQuadratic`,
 `ExpSineSquared`, `DotProduct`, `WhiteKernel`, `ConstantKernel`, combined with `KernelSum`
 and `KernelProduct`). Their hyperparameters are starting values that the fit optimises. The
-examples *Gaussian process regression (RBF + noise)*, *SVM classifier* and *Periodic Gaussian
-process* are good starting points.
+examples *Gaussian process regression (RBF + noise)*, *SVM classifier*, *Periodic Gaussian
+process* and *Gradient boosting classifier* are good starting points.
+
+**Gradient boosting** (scikit-learn's histogram-based `HistGradientBoostingRegressor` and
+`HistGradientBoostingClassifier`) adds decision trees one after the other, each correcting
+the ones before. It is the usual strong baseline for tabular data, and its time grows about
+linearly with the rows, so it suits large tables (hundreds of thousands of rows) where an MLP
+plateaus. Its settings: *Learning rate* (0.1), *Max. iterations* (200; one tree per
+iteration, or per class and iteration with more than two classes), *Max. leaves per tree*
+(31), *Max. depth* (empty: no limit), *Min. rows per leaf* (20), *L2 regularisation* (0),
+*Early stopping* (`auto`: on above 10,000 training rows; it holds out 10 % of the training
+rows, stratified by class, and stops when their loss has not improved for 10 iterations),
+*Random state* (0) and, for the classifier, *Class weights*: `balanced` weights every class
+inversely to its frequency, which helps with rare classes (e.g. 2 % fraud cases), where an
+unweighted model can reach a high accuracy by hardly ever predicting the rare class. Look at
+the balanced accuracy, the recall of the rare class and the confusion matrix in the run's
+evaluation rather than at the accuracy. The trees do not need standardised features; the
+pipeline standardises them anyway (it does not change the splits), so the saved model has
+the format of the other classical models. Missing values have to be filled in first (e.g. in
+the *Data* tab), as for the other models.
 
 In the editor, the bricks are in the *Classical · scikit-learn* part of the palette. A Gaussian
 process has two inputs, *features* (from the Input) and *kernel*; kernel connections are
@@ -598,13 +618,14 @@ They are trained with scikit-learn by the same runner process, with the same run
 history and API, but **fitted once instead of epoch by epoch**:
 
 - **Data**: CSV files, datasets from the *Data* tab (with their split) and demo data
-  (random rows with a hidden rule: 500 for Gaussian processes, 1,000 for SVMs; 3 classes
-  for classifiers). Images and the
+  (random rows with a hidden rule: 500 for Gaussian processes, 1,000 for SVMs, 2,000 for
+  gradient boosting; 3 classes for classifiers). Images and the
   built-in datasets give a compatibility error. Regression models need a numeric target;
   classifiers take text labels, whole numbers (each value is a class) or the classes of a
   prepared dataset. The check explains mismatches, e.g. *"The target column 'species'
   contains text labels (3 classes), so this is a classification task: use
-  GaussianProcessClassifier or SVC instead of Support vector regression."*
+  GaussianProcessClassifier, SVC or HistGradientBoostingClassifier instead of Support vector
+  regression."*
 - **Split and scaling**: the same rules as for neural networks (validation split, test split,
   the split of a prepared dataset, *Max. samples*, *Seed*); the random split uses NumPy's
   generator, so the rows differ from a neural run with the same seed. The model is a
@@ -613,28 +634,35 @@ history and API, but **fitted once instead of epoch by epoch**:
 - **Settings**: only validation split, test split, max. samples and seed apply. Epochs,
   batch size, learning rate, optimizer, weight decay, device, early stopping and the kept
   weights do not, and the hyperparameter search is not available (a Gaussian process
-  optimises its kernel hyperparameters itself).
+  optimises its kernel hyperparameters itself). Gradient boosting has an early stopping of
+  its own, set on the brick.
 - **Size limits**: fitting a Gaussian process takes O(n³) time and O(n²) memory, an SVM
-  between O(n²) and O(n³). A Gaussian process classifier is much slower than a regression
-  (its Laplace approximation is iterative, and it fits one Gaussian process per class when
-  there are more than two). Gaussian process regression is fitted on at most 5,000 training
+  between O(n²) and O(n³), gradient boosting about O(n) per tree. A Gaussian process
+  classifier is much slower than a regression (its Laplace approximation is iterative, and it
+  fits one Gaussian process per class when there are more than two). Gaussian process regression is fitted on at most 5,000 training
   rows (`BRICKDNN_GP_MAX_ROWS`), classification on at most 2,000 (`BRICKDNN_GPC_MAX_ROWS`),
-  SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`). Larger training
-  sets are subsampled like with *Max. samples* (validation and test shrink in proportion),
-  which the check warns about and the log says; a larger *Max. samples* is refused.
+  SVMs on at most 50,000 (`BRICKDNN_SVM_MAX_ROWS`), gradient boosting on at most 1,000,000
+  (`BRICKDNN_GB_MAX_ROWS`). On small data (fewer than 200,000 training values, rows ×
+  features) gradient boosting fits with one thread, otherwise with all threads the training
+  may use (`OMP_NUM_THREADS`). Larger training sets are subsampled like with *Max. samples*
+  (validation and test shrink in proportion), which the check warns about and the log says;
+  a larger *Max. samples* is refused.
 - **In the training panel** only the settings above are shown; *Max. samples* says how many rows
   the model is fitted on at most on this server and refuses more. Classical models train even
   when PyTorch is not installed. After the fit, the run shows the fit time, the rows it was
   fitted on, the fitted and the starting kernel with the log marginal likelihood (Gaussian
-  processes) or the number of support vectors (SVMs), and the accuracy and loss or the RMSE
-  and R² on the training, validation and test rows, instead of loss curves.
+  processes), the number of support vectors (SVMs) or the boosting iterations (gradient
+  boosting: fewer than *Max. iterations* when early stopping ended the fit), and the
+  accuracy and loss or the RMSE and R² on the training, validation and test rows, instead
+  of loss curves.
 - **What is reported**: the status says what happens ("Fitting the Gaussian process on 4,000
   rows …"); there is no progress during the fit. Afterwards the run has one history entry
   (epoch 1): the training and validation loss (cross-entropy of the predicted probabilities,
   or the mean squared error of the standardised target, like for neural networks), the
   accuracy or the RMSE and R², the test result if there is a test set, the fit time, the
   fitted kernel and log marginal likelihood of a Gaussian process (one kernel per class for
-  a classifier with more than two classes) or the number of support vectors of an SVM, and
+  a classifier with more than two classes), the number of support vectors of an SVM or the
+  boosting iterations of gradient boosting (`iterations` of at most `max_iterations`), and
   warnings of the fit in the log.
 - **Hyperparameters at a bound**: scikit-learn only warns when the optimiser stops at a bound
   of a kernel hyperparameter. Brick DNN compares every optimised hyperparameter with its
@@ -1012,6 +1040,7 @@ limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
 | `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process regression is fitted on at most (more are subsampled) |
 | `BRICKDNN_GPC_MAX_ROWS` | `2000` | Training rows a Gaussian process classifier is fitted on at most (more are subsampled) |
 | `BRICKDNN_SVM_MAX_ROWS` | `50000` | Training rows an SVM is fitted on at most (more are subsampled) |
+| `BRICKDNN_GB_MAX_ROWS` | `1000000` | Training rows gradient boosting is fitted on at most (more are subsampled) |
 | `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900` | Memory a batch of a segmentation training may need (every layer's output for all its images); larger batches are refused before the start. Fits a training process with about 1.8 GB; raise it on larger servers |
 | `BRICKDNN_PLANS` | unset | The plans and their limits as JSON (see [Plans and limits](#plans-and-limits)) |
 | `BRICKDNN_DEFAULT_PLAN` | the first plan | The plan of accounts without one |

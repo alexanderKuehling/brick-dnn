@@ -356,9 +356,9 @@ function Unavailable({
         </Alert>
         <Stack gap="xs">
           <Text size="sm">
-            Classical models (Gaussian processes, SVMs) are fitted with scikit-learn on the machine
-            of the Brick DNN backend; they do not need PyTorch. In the <Code>backend</Code> folder,
-            with the virtual environment active:
+            Classical models (Gaussian processes, SVMs, gradient boosting) are fitted with
+            scikit-learn on the machine of the Brick DNN backend; they do not need PyTorch. In the{' '}
+            <Code>backend</Code> folder, with the virtual environment active:
           </Text>
           <Code block>pip install -r requirements.txt</Code>
           <Text size="sm" c="dimmed">
