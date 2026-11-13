@@ -42,10 +42,6 @@ OAuth or an API token) fetch data on the user's behalf; their provider is respon
 The one exception to "nothing from other servers" is Paddle's checkout on a server that sells
 plans, see [Paid plans](#paid-plans-paddle).
 
-The [online demo](../deploy/huggingface/README.md) is a static page without accounts: it
-stores nothing on a server, keeps the draft in the browser and loads Pyodide from
-cdn.jsdelivr.net. It shows no legal links; Hugging Face's terms apply to the Space.
-
 ## Legal pages
 
 Put Markdown files into `BRICKDNN_LEGAL_DIR`:

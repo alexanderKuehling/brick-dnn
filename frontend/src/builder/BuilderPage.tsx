@@ -47,7 +47,6 @@ import { useAuth } from '@/auth/AuthContext';
 import { Collaboration } from '@/collab/Collaboration';
 import { CollabProvider } from '@/collab/context';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
-import { DEMO } from '@/demo';
 import { DataFlowTour } from '@/explain/DataFlowTour';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
@@ -249,7 +248,7 @@ function Builder() {
 
   // Live editing of a saved project: changes go out as they happen, others' changes come in.
   const live = useLiveBuilder({
-    enabled: !DEMO && ready && Boolean(user),
+    enabled: ready && Boolean(user),
     user,
     project,
     setProject,
@@ -1046,8 +1045,7 @@ function Builder() {
   };
 
   useHotkeys([
-    // The online demo has no accounts, so Ctrl+S saves a JSON file instead.
-    ['mod+S', () => (DEMO ? exportJson() : void save())],
+    ['mod+S', () => void save()],
     ['mod+E', () => void exportPython()],
     ['mod+Enter', () => !readOnly && training.open()],
     // Not inside text fields (Mantine skips them), and Ctrl+C copies selected text as usual.
@@ -1095,28 +1093,12 @@ function Builder() {
         {catalogError ? (
           <Stack align="center" maw={420} ta="center">
             <IconPlugConnectedX size={40} color="var(--mantine-color-red-6)" />
-            <Title order={3}>
-              {DEMO ? 'Cannot start the code generator' : 'Cannot reach the backend'}
-            </Title>
+            <Title order={3}>Cannot reach the backend</Title>
             <Text c="dimmed" size="sm">
-              {catalogError}
-              {!DEMO && (
-                <>
-                  {' '}
-                  If you run Brick DNN locally, start the API with{' '}
-                  <code>python manage.py runserver</code> in the <code>backend</code> folder.
-                </>
-              )}
+              {catalogError} If you run Brick DNN locally, start the API with{' '}
+              <code>python manage.py runserver</code> in the <code>backend</code> folder.
             </Text>
             <Button onClick={reload}>Try again</Button>
-          </Stack>
-        ) : DEMO ? (
-          // Pyodide takes a few seconds to load on the first visit.
-          <Stack align="center" gap="sm">
-            <Loader />
-            <Text c="dimmed" size="sm">
-              Loading the code generator…
-            </Text>
           </Stack>
         ) : (
           <Loader />
@@ -1183,7 +1165,7 @@ function Builder() {
             onExportJson={exportJson}
             onTidy={tidyUp}
             onSave={() => void save()}
-            onShare={DEMO ? undefined : () => void share()}
+            onShare={() => void share()}
             onDuplicate={() => void duplicateProject()}
             onShowCode={code.open}
             onExportPython={() => void exportPython()}

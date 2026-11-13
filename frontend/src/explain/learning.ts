@@ -1,7 +1,7 @@
 /**
  * Learning aids that need no training: how a brick's parameters are counted, how far a
  * convolution "sees" (its receptive field) and the steps of the data flow. They only use
- * the analysis (shapes and filled-in settings), so they also work in the demo build.
+ * the analysis (shapes and filled-in settings).
  */
 import type { Analysis, NodeAnalysis, Params } from '@/api/types';
 

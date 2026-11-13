@@ -9,7 +9,6 @@ import { useBuilder } from '@/builder/BuilderContext';
 import type { LayerFlowNode } from '@/builder/graph';
 import { CommentsPanel } from '@/comments/CommentsPanel';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
-import { DEMO } from '@/demo';
 import { HistoryPanel } from '@/history/HistoryPanel';
 import { useCollab, useCollabStore } from './context';
 import type { SubscribeToEvents } from './events';
@@ -46,7 +45,7 @@ export interface CollaborationProps {
  * corner of the canvas (render it inside `<ReactFlow>`) and the side panel they open.
  * Needs a `CollabProvider` above the canvas, which also feeds the comment markers on the
  * layers (`CommentMarker`) and the comments in the inspector (`LayerComments`). Nothing is
- * shown for networks that are not saved, without login and in the online demo.
+ * shown for networks that are not saved or without login.
  */
 export function Collaboration({
   projectId,
@@ -61,7 +60,7 @@ export function Collaboration({
   const theme = useMantineTheme();
   const wideScreen = useMediaQuery(`(min-width: ${theme.breakpoints.lg})`);
   const phone = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
-  const active = !DEMO && user !== null && projectId !== null && store !== null;
+  const active = user !== null && projectId !== null && store !== null;
   const openId = active ? projectId : null;
   const userId = user?.id ?? null;
 

@@ -1,7 +1,6 @@
 /**
  * Error monitoring with Sentry (docs/monitoring.md). Off unless the app was built with
- * VITE_SENTRY_DSN (on a server: BRICKDNN_SENTRY_FRONTEND_DSN): the online demo and local
- * builds send nothing.
+ * VITE_SENTRY_DSN (on a server: BRICKDNN_SENTRY_FRONTEND_DSN): local builds send nothing.
  *
  * Privacy: no user, no IP address, cookies, headers or bodies (dataCollection; the Sentry
  * project also drops IP addresses), no Session Replay. Traces follow requests to this server's API only.

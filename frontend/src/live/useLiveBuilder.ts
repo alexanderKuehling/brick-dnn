@@ -39,7 +39,7 @@ interface Base {
 }
 
 export interface LiveBuilderOptions {
-  /** Logged in and not the online demo. */
+  /** Logged in. */
   enabled: boolean;
   user: UserRef | null;
   project: OpenProject | null;
