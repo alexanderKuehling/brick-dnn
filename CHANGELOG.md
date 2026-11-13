@@ -677,6 +677,10 @@
   without one keep working.
 
 ### Fixed
+- **Live badge flickering "Offline".** A live connection that drops is reconnected at once and
+  is only shown as offline once it has stayed down for 8 seconds; changes made meanwhile show
+  as *Saving…* and are sent after the reconnect. The agent activity page says *Reconnecting…*
+  only after two failed polls in a row.
 - **Worker errors during a deploy.** The training worker started with the new code while the
   web server was still migrating the database and failed on columns that did not exist yet
   (e.g. `column ... does not exist`, reported to Sentry). It now waits until the database has
