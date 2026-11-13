@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis, analyze
-from ..layers import REGISTRY, ClassicalModel, fmt_shape
+from ..layers import REGISTRY, ClassicalModel, Ensemble, fmt_shape
 from .config import (
     NO_VALIDATION_PATIENCE,
     NO_VALIDATION_SEARCH,
@@ -1121,6 +1121,15 @@ CLASSICAL_NOTE = (
     "learning rate, optimizer, weight decay, device, early stopping and the kept weights are "
     "not used."
 )
+ENSEMBLE_NOTE = (
+    "An ensemble fits each of its models on the training rows (stacking also once per "
+    "cross-validation fold) and combines their predictions; the strictest row limit of its "
+    "models applies."
+)
+HARD_VOTING_NOTE = (
+    "Hard voting predicts classes, not probabilities: the share of the (weighted) votes "
+    "stands in for the probability of each class, also in the loss and the threshold analysis."
+)
 BOOSTING_NOTE = (
     "Gradient boosting has early stopping of its own (a setting of the brick): it holds out "
     "10 % of the training rows and stops adding trees when the loss on them no longer "
@@ -1133,7 +1142,9 @@ def _models_for(task: str) -> str:
     names = [
         name
         for name, cls in REGISTRY.items()
-        if issubclass(cls, ClassicalModel) and getattr(cls, "task", None) == task
+        if issubclass(cls, ClassicalModel)
+        and not issubclass(cls, Ensemble)
+        and getattr(cls, "task", None) == task
     ]
     return ", ".join(names[:-1]) + f" or {names[-1]}" if len(names) > 1 else "".join(names)
 
@@ -1148,8 +1159,10 @@ def _check_classical(
     node = analysis.model
     assert node is not None and isinstance(node.layer, ClassicalModel)
     layer = node.layer
-    max_rows = classical_max_rows(layer.limit)
-    models, variable, cost = LIMITS[layer.limit]
+    # An ensemble: the strictest row limit of its models.
+    limit = min(layer.row_limits(), key=classical_max_rows)
+    max_rows = classical_max_rows(limit)
+    models, variable, cost = LIMITS[limit]
     classical: dict[str, Any] = {
         "node": node.id,
         "type": node.type,
@@ -1160,6 +1173,20 @@ def _check_classical(
         "scale": layer.scale,
         "max_rows": max_rows,
     }
+    if isinstance(layer, Ensemble):
+        classical["members"] = [
+            {
+                "node": m.node,
+                "name": m.name,
+                "type": m.layer.type,
+                "estimator": m.layer.estimator,
+                "label": m.layer.label,
+                "kernel": m.layer.kernel.code() if m.layer.kernel is not None else None,
+            }
+            for m in layer.members
+        ]
+        if layer.type == "VotingClassifier":
+            classical["voting"] = layer.p["voting"]
     max_samples = config.max_samples if config is not None else None
     if max_samples is not None and max_samples > max_rows:
         result.errors.append(
@@ -1199,9 +1226,8 @@ def _check_classical(
         "Features are standardised (mean 0, standard deviation 1) with the statistics of the "
         "training rows; the scaler is saved as part of the model.",
         CLASSICAL_NOTE,
+        *_model_notes(layer),
     ]
-    if layer.scale == "gradient_boosting":
-        notes.append(BOOSTING_NOTE)
 
     if layer.task == "regression":
         if info.target_kind == "text":
@@ -1285,6 +1311,19 @@ def _check_classical(
     result.plan = plan
 
 
+def _model_notes(layer: ClassicalModel) -> list[str]:
+    """Notes about gradient boosting and ensembles."""
+    models = [m.layer for m in layer.members] if isinstance(layer, Ensemble) else [layer]
+    notes = []
+    if isinstance(layer, Ensemble):
+        notes.append(ENSEMBLE_NOTE)
+        if layer.type == "VotingClassifier" and layer.p["voting"] == "hard":
+            notes.append(HARD_VOTING_NOTE)
+    if any(model.scale == "gradient_boosting" for model in models):
+        notes.append(BOOSTING_NOTE)
+    return notes
+
+
 def _training_rows(info: DatasetInfo, config: TrainingConfig | None) -> int | None:
     """Training rows of a CSV dataset with these settings (the defaults without)."""
     config = config or TrainingConfig()
@@ -1307,9 +1346,8 @@ def _classical_demo_plan(
         "Demo data checks whether the model can learn at all: random features and a hidden "
         "rule. The numbers say nothing about real-world accuracy.",
         CLASSICAL_NOTE,
+        *_model_notes(layer),
     ]
-    if layer.scale == "gradient_boosting":
-        notes.append(BOOSTING_NOTE)
     if layer.task == "regression":
         return TrainingPlan(
             task="demo",

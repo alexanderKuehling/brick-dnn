@@ -54,14 +54,15 @@ Every brick also says what it is and what it connects to:
 | Field         | Meaning                                                                          |
 | ------------- | -------------------------------------------------------------------------------- |
 | `family`      | `neural` (PyTorch layer), `classical` (kernel or classical model, scikit-learn) or `shared` (`Input`, used by both) |
-| `output_kind` | What flows out of the brick along its connections: `tensor` or `kernel`          |
+| `output_kind` | What flows out of the brick along its connections: `tensor`, `kernel` or `estimator` (classical models and ensembles) |
 | `input_slots` | What it takes, one entry per kind of connection: `{"name", "label", "kind", "min", "max"}` (`max` `null`: any number). `[]` for bricks without inputs |
 | `min_inputs`/`max_inputs` | All incoming connections together (unchanged, for older clients)     |
 
 For example `Linear` takes `[{"name": "input", "kind": "tensor", "min": 1, "max": 1}]`, a
 Gaussian process `[{"name": "features", "kind": "tensor", "min": 1, "max": 1}, {"name":
-"kernel", "kind": "kernel", "min": 0, "max": 1}]` and `KernelSum`
-`[{"name": "kernels", "kind": "kernel", "min": 2, "max": null}]`.
+"kernel", "kind": "kernel", "min": 0, "max": 1}]`, `KernelSum`
+`[{"name": "kernels", "kind": "kernel", "min": 2, "max": null}]` and an ensemble
+`[{"name": "models", "kind": "estimator", "min": 2, "max": null}]`.
 
 ## Edges
 
@@ -73,19 +74,21 @@ Gaussian process `[{"name": "features", "kind": "tensor", "min": 1, "max": 1}, {
   `forward()` returns a tuple in node order.
 - The graph must be acyclic and every layer must be reachable from an `Input`.
 
-An edge carries what its source puts out (the source's `output_kind`): a **tensor** or, from
-a kernel brick, a **kernel**. Edges have no type field of their own; the analysis reports
-every node's `output_kind`, so a client can colour or check the connections.
+An edge carries what its source puts out (the source's `output_kind`): a **tensor**, from a
+kernel brick a **kernel**, or from a classical model the model itself, an **estimator**, for
+an ensemble. Edges have no type field of their own; the analysis reports every node's
+`output_kind`, so a client can colour or check the connections.
 
 ## Classical models
 
 Besides neural networks, a graph can describe a *classical* model (scikit-learn) for tabular
-data. Its bricks are in two categories of the catalogue:
+data. Its bricks are in three categories of the catalogue:
 
 | Category         | Bricks |
 | ---------------- | ------ |
 | Kernels          | `RBF`, `Matern` (ν 0.5, 1.5, 2.5), `RationalQuadratic`, `ExpSineSquared` (periodic), `DotProduct`, `WhiteKernel`, `ConstantKernel`; `KernelSum` and `KernelProduct` combine two or more kernels |
 | Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC`, `HistGradientBoostingRegressor`, `HistGradientBoostingClassifier` |
+| Ensembles        | `VotingClassifier`, `VotingRegressor`, `StackingClassifier`, `StackingRegressor` combine two or more classical models |
 
 ```json
 {
@@ -133,6 +136,61 @@ Rules (the analysis explains every violation at the brick concerned):
 `KernelSum` adds its kernels in the order of the edges, `KernelProduct` multiplies them; a
 sum inside a product gets parentheses.
 
+### Ensembles
+
+An ensemble combines two or more classical models of the same task. Every model takes the
+features from the `Input` as usual and is connected to the ensemble; that edge carries the
+model itself (an `estimator`), not its prediction. The ensemble has no other inputs and ends
+the network:
+
+```json
+{
+  "version": 1,
+  "nodes": [
+    { "id": "x", "type": "Input", "params": { "shape": [4] } },
+    { "id": "boosting", "type": "HistGradientBoostingClassifier", "params": {} },
+    { "id": "svc", "type": "SVC", "params": {} },
+    { "id": "gp", "type": "GaussianProcessClassifier", "params": {} },
+    { "id": "vote", "type": "VotingClassifier", "params": { "voting": "soft" } }
+  ],
+  "edges": [
+    { "source": "x", "target": "boosting" },
+    { "source": "x", "target": "svc" },
+    { "source": "x", "target": "gp" },
+    { "source": "boosting", "target": "vote" },
+    { "source": "svc", "target": "vote" },
+    { "source": "gp", "target": "vote" }
+  ]
+}
+```
+
+| Brick | Parameters | scikit-learn |
+| ----- | ---------- | ------------ |
+| `VotingClassifier` | `voting` (`soft`: average the class probabilities, the default; `hard`: the class most models predict), `weights` | `VotingClassifier` |
+| `VotingRegressor` | `weights` | `VotingRegressor` |
+| `StackingClassifier` | `cv` (2 … 20, default 5), `passthrough` (default `false`) | `StackingClassifier` with `final_estimator=LogisticRegression()` |
+| `StackingRegressor` | `cv`, `passthrough` | `StackingRegressor` with `final_estimator=RidgeCV()` |
+
+`weights` is empty (every model counts the same) or one whole number ≥ 0 per model **in the
+order of the edges into the ensemble**; at least one must be above 0. Stacking fits a
+logistic regression (classifier) or a ridge regression (regressor) on the predictions the
+models make for rows they were not fitted on (`cv` folds); with `passthrough` it also gets
+the features. Rules:
+
+- At least two models, all classifiers or all regression models (the ensemble's task), each
+  fed by the same `Input`. Kernel bricks still go into the Gaussian processes.
+- Every classical model of the network is connected to the ensemble, and only to it; one
+  ensemble per network; ensembles can't be nested and nothing follows them.
+- Soft voting needs class probabilities: every classifier brick predicts them (`SVC` through
+  Platt scaling), so this only refuses models that might not in the future. Hard voting
+  has none: training and predictions use the share of the (weighted) votes as the
+  probability of each class.
+- The models' names in the ensemble (and in the generated code) are their brick names or
+  ids as lower-case identifiers, made unique: `"Boosting 1"` becomes `boosting_1`.
+
+A model connected anywhere else than to an ensemble ends the network as before; the
+analysis says that only an ensemble can follow it.
+
 ## Analysis
 
 `analyze(graph).to_dict()` (`POST /api/analyze/`) returns `valid`, `errors`, `warnings`,
@@ -141,20 +199,21 @@ sum inside a product gets parentheses.
 
 | Field (per node) | Meaning |
 | ---------------- | ------- |
-| `output_kind`    | `tensor` or `kernel` (the kind of its outgoing edges) |
+| `output_kind`    | `tensor`, `kernel` or `estimator` (the kind of its outgoing edges) |
 | `kernel`         | Kernel bricks: the kernel built up to this brick as scikit-learn code, e.g. `ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)`; Gaussian processes: the kernel they start from (the default one if none is connected); otherwise `null` |
-| `task`           | Classical models: `regression` or `classification`; otherwise `null` |
+| `task`           | Classical models and ensembles: `regression` or `classification`; otherwise `null` |
+| `members`        | Ensembles only: their models in the order of the edges (and of `weights`), `[{"node", "name", "type", "estimator", "label"}]` |
 
 | Field (top level) | Meaning |
 | ----------------- | ------- |
 | `family`          | `classical` if the graph contains kernels or a classical model, else `neural` |
-| `classical`       | The classical model: `{"node", "type", "estimator", "task", "kernel"}`, or `null` |
+| `classical`       | The classical model (the ensemble, if there is one): `{"node", "type", "estimator", "task", "kernel", "members"}` (`members` as above, `null` for a single model), or `null` |
 
 `num_params` counts what is fitted to the data: for kernel bricks the hyperparameters the
 Gaussian process optimises (none when `fixed`), for a Gaussian process those of its default
 kernel (`0` with a connected kernel, which counts its own), for `SVR`/`SVC` and gradient
 boosting `null` (their support vectors or trees are only known after fitting, so
-`total_params` is `null` too).
+`total_params` is `null` too), as for ensembles.
 
 ## Shapes
 
@@ -197,18 +256,22 @@ For a classical model the script uses scikit-learn instead of PyTorch:
   `SVC` is wrapped in `CalibratedClassifierCV(..., ensemble=False)` (Platt scaling with
   5-fold cross-validation), which gives it class probabilities. Gradient boosting is
   `HistGradientBoostingRegressor(...)` or `HistGradientBoostingClassifier(...)` from
-  `sklearn.ensemble` with all its settings written out.
+  `sklearn.ensemble` with all its settings written out. An ensemble gets a variable per
+  model, named like the model in the ensemble (a Gaussian process's kernel `<name>_kernel`,
+  an SVC's SVM `<name>_svm`), then e.g. `VotingClassifier(estimators=[("boosting",
+  boosting), ("svc", svc), ("gp", gp)], voting="soft")`.
 - Without arguments, `main()` prints the model and fits it to 40 random rows.
 - `--csv data.csv` (with `include_training`) fits it to a random 80 % of the rows (`--seed`)
   and reports the validation RMSE and R² or the accuracy, for a Gaussian process the fitted
   kernel and log marginal likelihood, for an SVM the number of support vectors, for
-  gradient boosting the boosting iterations (of at most `max_iter`). The scaler
+  gradient boosting the boosting iterations (of at most `max_iter`), for an ensemble its
+  models (and the fitted final estimator of stacking). The scaler
   learns from the training rows only. The target may hold class labels as text.
 - `--save model.joblib` (the default) stores `{"format": "brickdnn-sklearn-1", "model":
   <Pipeline>, "task", "columns", "target", "class_names"}` with joblib (a pickle: only load
   files you trust); `class_names` has one name per column of `predict_proba`. Models
   trained in Brick DNN are saved in the same format.
-- `--predict new.csv` loads it and prints the class with its probability, the value, or for
-  a Gaussian process the value and its standard deviation. It is also there without
+- `--predict new.csv` loads it and prints the class with its probability (hard voting: the
+  class only), the value, or for a Gaussian process the value and its standard deviation. It is also there without
   `include_training`, to predict with a downloaded model.
 - `class_name` does not apply. The script needs `scikit-learn` (with NumPy and joblib).

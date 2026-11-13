@@ -6,6 +6,7 @@ import {
   connectionProblem,
   inputSlots,
   isBoosting,
+  isEnsemble,
   kernelLines,
   kernelTerms,
   outputKind,
@@ -20,7 +21,13 @@ describe('input slots', () => {
     ]);
     expect(inputSlots(SPECS.RBF)).toEqual([]);
     expect(outputKind(SPECS.RBF)).toBe('kernel');
-    expect(outputKind(SPECS.SVC)).toBe('tensor');
+    // A classical model passes itself on (into an ensemble).
+    expect(outputKind(SPECS.SVC)).toBe('estimator');
+    expect(inputSlots(SPECS.VotingClassifier)).toEqual([
+      { name: 'models', label: 'Models', kind: 'estimator', min: 2, max: null },
+    ]);
+    expect(isEnsemble('StackingRegressor')).toBe(true);
+    expect(isEnsemble('SVC')).toBe(false);
     expect(inputSlots(SPECS.HistGradientBoostingClassifier).map((slot) => slot.name)).toEqual([
       'features',
     ]);
@@ -75,6 +82,23 @@ describe('connections of the wrong kind', () => {
     expect(connectionProblem(SPECS.RBF, gp)).toBeNull();
   });
 
+  it('connects classical models only to ensembles', () => {
+    expect(connectionProblem(SPECS.SVC, SPECS.VotingClassifier)).toBeNull();
+    expect(connectionProblem(SPECS.GaussianProcessRegressor, SPECS.StackingRegressor)).toBeNull();
+    expect(connectionProblem(SPECS.SVC, SPECS.Linear)).toBe(
+      'Nothing can follow Support vector classification except an ensemble (voting or stacking).'
+    );
+    expect(connectionProblem(SPECS.SVC, SPECS.GaussianProcessRegressor, 'features')).toBe(
+      'The features input of Gaussian process regression takes data, not a model.'
+    );
+    expect(connectionProblem(SPECS.Input, SPECS.VotingClassifier)).toBe(
+      'Voting classifier only takes classical models: connect the Input to the models.'
+    );
+    expect(connectionProblem(SPECS.RBF, SPECS.VotingClassifier)).toBe(
+      'Voting classifier cannot take a kernel.'
+    );
+  });
+
   it('leaves neural layers and unknown types alone', () => {
     expect(connectionProblem(SPECS.Input, SPECS.Linear)).toBeNull();
     expect(connectionProblem(SPECS.Linear, SPECS.Linear, 'whatever')).toBeNull();
@@ -107,6 +131,18 @@ describe('edges on the canvas', () => {
     expect(intoSum.className).toMatch(/kernelEdge/);
     // Neural connections stay as they are.
     expect(neural).toBe(edges[3]);
+  });
+
+  it('draw the models that go into an ensemble dotted', () => {
+    const kinds: Record<string, string> = { ...types, svc: 'SVC', vote: 'VotingClassifier' };
+    const edges = [edge('in', 'svc'), edge('svc', 'vote')];
+    const [features, model] = decorateEdges(edges, (id) => kinds[id], SPECS);
+    expect(features.className).toBeUndefined();
+    expect(model.className).toMatch(/estimatorEdge/);
+    expect(model.targetHandle).toBeUndefined(); // an ensemble has one input
+    expect(model.markerEnd).toMatchObject({ color: 'var(--mantine-color-grape-6)' });
+    // Unchanged edges keep their identity.
+    expect(decorateEdges([model], (id) => kinds[id], SPECS)[0]).toBe(model);
   });
 });
 

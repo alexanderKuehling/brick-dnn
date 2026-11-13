@@ -57,6 +57,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Merge: 'orange',
   Kernels: 'pink',
   'Classical models': 'grape',
+  Ensembles: 'indigo',
 };
 
 export function categoryColor(category: string | undefined): string {

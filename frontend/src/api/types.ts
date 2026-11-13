@@ -18,8 +18,11 @@ export interface ParamSpec {
   show_if: { param: string; value: ParamValue } | null;
 }
 
-/** What flows along a connection: data (a tensor) or the kernel of a Gaussian process. */
-export type OutputKind = 'tensor' | 'kernel';
+/**
+ * What flows along a connection: data (a tensor), the kernel of a Gaussian process, or a
+ * classical model itself (an estimator, into an ensemble).
+ */
+export type OutputKind = 'tensor' | 'kernel' | 'estimator';
 
 /** neural: PyTorch layer · classical: kernel or classical model (scikit-learn) · shared: Input. */
 export type LayerFamily = 'neural' | 'classical' | 'shared';
@@ -100,9 +103,24 @@ export interface NodeAnalysis {
   kernel?: string | null;
   /** Classical models: what they predict. */
   task?: ClassicalTask | null;
+  /** Ensembles: the models they combine, in the order of their connections (and weights). */
+  members?: EnsembleMember[];
 }
 
-/** The classical model of a network (Gaussian process, support vector machine, gradient boosting). */
+/** A classical model of an ensemble. */
+export interface EnsembleMember {
+  node: string;
+  /** Its name in the ensemble and the generated code (from the brick's name or id). */
+  name: string;
+  type: string;
+  estimator: string;
+  label: string;
+}
+
+/**
+ * The classical model of a network (Gaussian process, support vector machine, gradient
+ * boosting, or an ensemble of them).
+ */
 export interface ClassicalModelInfo {
   node: string;
   type: string;
@@ -110,6 +128,8 @@ export interface ClassicalModelInfo {
   task: ClassicalTask;
   /** Gaussian processes: the kernel they start from (the default one without kernel bricks). */
   kernel: string | null;
+  /** Ensembles: their models (null otherwise; missing from older servers). */
+  members?: EnsembleMember[] | null;
 }
 
 export interface Analysis {
@@ -1072,6 +1092,10 @@ export interface ClassicalPlan {
   kernel: string | null;
   scale: string;
   max_rows: number;
+  /** Ensembles: their models (with the kernel each Gaussian process starts from). */
+  members?: (EnsembleMember & { kernel: string | null })[];
+  /** VotingClassifier: soft or hard voting. */
+  voting?: 'soft' | 'hard';
 }
 
 /**
@@ -1672,6 +1696,10 @@ export interface ClassicalRunState {
   train: ClassicalMetrics | null;
   /** Gaussian processes: kernel hyperparameters the fit left at a bound (older servers: none). */
   at_bounds?: KernelBound[] | null;
+  /** Ensembles: how they combine their models. */
+  ensemble?: 'voting' | 'stacking';
+  /** Ensembles: their models, after the fit each with its own metrics (on the validation rows, or the training rows without them). */
+  members?: (EnsembleMember & { metrics: ClassicalMetrics | null })[];
 }
 
 /** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */

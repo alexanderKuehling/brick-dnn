@@ -60,17 +60,20 @@ including inferred `auto` parameters; parameters that have no effect with the ot
 and `outputs` list the Input layers and the layers without outgoing connections, also when
 the graph has errors.
 
-Every node also has `output_kind` (`tensor` or `kernel`: what its outgoing edges carry),
-`kernel` (kernel bricks and Gaussian processes: the kernel as scikit-learn code, otherwise
-`null`) and `task` (classical models: `regression` or `classification`). The top level adds
-`family` (`neural` or `classical`) and `classical` (`{"node", "type", "estimator", "task",
-"kernel"}` for a network with a classical model, else `null`). For example a Gaussian process
-without a kernel brick:
+Every node also has `output_kind` (`tensor`, `kernel` or `estimator`: what its outgoing
+edges carry; classical models and ensembles pass on the model itself), `kernel` (kernel
+bricks and Gaussian processes: the kernel as scikit-learn code, otherwise `null`) and `task`
+(classical models and ensembles: `regression` or `classification`); ensembles also have
+`members` (their models in the order of the edges: `[{"node", "name", "type", "estimator",
+"label"}]`). The top level adds `family` (`neural` or `classical`) and `classical`
+(`{"node", "type", "estimator", "task", "kernel", "members"}` for a network with a classical
+model or an ensemble, else `null`; `members` is `null` for a single model). For example a
+Gaussian process without a kernel brick:
 
 ```json
 "gp": { "type": "GaussianProcessRegressor", "output_shape": [1], "dtype": "float", "num_params": 3,
         "params": { "alpha": 1e-10, "normalize_y": true, "n_restarts_optimizer": 0 },
-        "output_kind": "tensor", "task": "regression",
+        "output_kind": "estimator", "task": "regression",
         "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)" }
 ```
 
@@ -718,7 +721,10 @@ because `available` and `reason` are about PyTorch:
 ```
 
 `max_rows` gives, per classical model type, the most training rows it is fitted on (larger
-training sets are subsampled). Only `val_split`, `test_split`, `max_samples` (at most
+training sets are subsampled); an ensemble (`VotingClassifier`, `StackingRegressor`, …) has
+the strictest limit of its models, so it is not listed. The training check's
+`plan.classical` lists an ensemble's `members` (with the kernel of each Gaussian process)
+and, for `VotingClassifier`, `voting`. Only `val_split`, `test_split`, `max_samples` (at most
 `max_rows`) and `seed` of `config` apply;
 a `tuning` gives `400`. Their runs have `family` `"classical"` (otherwise `"neural"`) and
 `epochs` 1.
@@ -734,8 +740,11 @@ is `neural` or `classical`; a classical run is fitted once: it has no `progress`
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
 `fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
 `support_vectors`, `iterations` and `max_iterations` (gradient boosting) and `train` (the
-metrics on the training rows), see
-[training.md](training.md#classical-models).
+metrics on the training rows); an ensemble adds `ensemble` (`voting` or `stacking`) and
+`members` (`[{"node", "name", "type", "estimator", "label", "metrics"}]`, `metrics` being
+each model's own `loss`, `accuracy`, `rmse` and `r2` on the validation rows, or on the
+training rows without them), see
+[training.md](training.md#ensembles-of-classical-models-in-the-graph).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
 `test_loss`, `test_accuracy`, `test_rmse` and `test_r2`; RMSE and R² for regressions, `null`

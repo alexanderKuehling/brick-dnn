@@ -86,7 +86,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   tables). They train on CSV files and prepared datasets with scikit-learn (no PyTorch
   needed), report the fitted kernel and its log marginal likelihood, the support vectors or
   the boosting iterations, predict with uncertainty (Gaussian processes) or class
-  probabilities, and export as a scikit-learn script. See
+  probabilities, and export as a scikit-learn script. **Ensembles** combine several of them
+  in the graph: voting (soft or hard, optionally weighted) and stacking, with each model's
+  own score next to the ensemble's. See
   [docs/training.md](docs/training.md#classical-models).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
   maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
@@ -100,7 +102,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
   classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
   tabular regression, multi-input model, Gaussian process regression, SVM classifier, a
-  periodic Gaussian process and a gradient boosting classifier.
+  periodic Gaussian process, a gradient boosting classifier, and voting and stacking
+  ensembles of classical models.
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and

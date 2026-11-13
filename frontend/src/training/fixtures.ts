@@ -711,6 +711,50 @@ export function boostingDetail(overrides: Partial<RunDetail> = {}): RunDetail {
   };
 }
 
+/** A finished voting ensemble of gradient boosting and an SVM, each also measured alone. */
+export function ensembleDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = svcDetail();
+  const member = (node: string, type: string, label: string, accuracy: number) => ({
+    node,
+    name: node,
+    type,
+    estimator: type,
+    label,
+    metrics: { loss: 0.3, accuracy, rmse: null, r2: null },
+  });
+  return {
+    ...base,
+    name: 'Voting ensemble',
+    plan: {
+      ...base.plan!,
+      classical: {
+        ...base.plan!.classical!,
+        node: 'vote',
+        type: 'VotingClassifier',
+        estimator: 'VotingClassifier',
+        label: 'Voting classifier',
+        scale: 'ensemble',
+        voting: 'soft',
+      },
+    },
+    state: {
+      ...base.state!,
+      classical: {
+        ...base.state!.classical!,
+        estimator: 'VotingClassifier',
+        label: 'Voting classifier',
+        support_vectors: null,
+        ensemble: 'voting',
+        members: [
+          member('gb', 'HistGradientBoostingClassifier', 'Gradient boosting classification', 0.9),
+          member('svc', 'SVC', 'Support vector classification', 0.88),
+        ],
+      },
+    },
+    ...overrides,
+  };
+}
+
 // --------------------------------------------------------------------------
 // Segmentation (a class for every pixel)
 // --------------------------------------------------------------------------

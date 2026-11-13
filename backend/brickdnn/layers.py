@@ -11,9 +11,11 @@ Shapes never include the batch dimension: an MNIST image is ``(1, 28, 28)``,
 a sequence of 32 token ids is ``(32,)``.
 
 Besides the neural layers there are *classical* bricks (scikit-learn): kernels for Gaussian
-processes, whose output is a kernel instead of a tensor, and classical models (Gaussian
+processes, whose output is a kernel instead of a tensor, classical models (Gaussian
 processes, support vector machines, gradient boosting) that take the features straight from
-the Input layer. See the end of this module and ``docs/graph-format.md``.
+the Input layer, and ensembles (voting, stacking) that combine classical models: the
+connections into an ensemble carry an estimator. See the end of this module and
+``docs/graph-format.md``.
 
 To add a new layer, subclass :class:`Layer`, fill in the class attributes and
 decorate it with :func:`register`. See ``docs/adding-a-layer.md``.
@@ -211,10 +213,11 @@ CATEGORIES = (
     "Merge",
     "Kernels",
     "Classical models",
+    "Ensembles",
 )
-# What flows out of a brick (and so along each of its connections): data, or a kernel of a
-# Gaussian process.
-OUTPUT_KINDS = ("tensor", "kernel")
+# What flows out of a brick (and so along each of its connections): data, a kernel of a
+# Gaussian process, or a classical model (an estimator) for an ensemble.
+OUTPUT_KINDS = ("tensor", "kernel", "estimator")
 # Neural layers (PyTorch), classical bricks (scikit-learn), or both (the Input layer).
 FAMILIES = ("neural", "classical", "shared")
 
@@ -1638,21 +1641,30 @@ def fmt_str(value: str) -> str:
 class ClassicalModel(Layer):
     """A scikit-learn estimator. It takes a flat feature vector straight from the Input
     layer (Gaussian processes optionally also a kernel) and ends the network: its output is
-    the prediction, one value (regression) or one class (classification) per sample.
+    the prediction, one value (regression) or one class (classification) per sample. Or it
+    is connected to an ensemble (see :class:`Ensemble`), which then ends the network: that
+    connection carries the estimator, hence the output kind.
 
     The analysis calls :meth:`setup` instead of :meth:`infer`.
     """
 
     category = "Classical models"
     family = "classical"
+    output_kind = "estimator"
     has_module = False
     task: ClassVar[str]  # regression | classification
     estimator: ClassVar[str]  # the scikit-learn class
     module: ClassVar[str]  # where it is imported from
     takes_kernel: ClassVar[bool] = False
-    scale: ClassVar[str]  # gaussian_process | svm | gradient_boosting
+    scale: ClassVar[str]  # gaussian_process | svm | gradient_boosting | ensemble
     # Which row limit applies (brickdnn.training.config.CLASSICAL_MAX_ROWS)
     limit: ClassVar[str]
+
+    @property
+    def probabilities(self) -> bool:
+        """Whether a classifier predicts class probabilities (soft voting needs them). All
+        classifier bricks do: SVC gets them from Platt scaling."""
+        return self.task == "classification"
 
     def __init__(self, raw_params: dict[str, Any] | None = None):
         super().__init__(raw_params)
@@ -1693,6 +1705,10 @@ class ClassicalModel(Layer):
     def estimator_args(self) -> list[str]:
         """Keyword arguments of the estimator as code (a GP's kernel is ``kernel=kernel``)."""
         raise NotImplementedError
+
+    def row_limits(self) -> list[str]:
+        """The row limits that apply (keys of CLASSICAL_MAX_ROWS); the strictest one counts."""
+        return [self.limit]
 
 
 def _gp_default_kernel(noise: bool) -> KernelExpr:
@@ -2093,6 +2109,226 @@ class HistGradientBoostingClassifier(_GradientBoosting):
         if self.p["class_weight"] == "balanced":
             args.append('class_weight="balanced"')
         return [*args, f"random_state={self.p['random_state']}"]
+
+
+# --------------------------------------------------------------------------- #
+# Ensembles of classical models (scikit-learn)
+# --------------------------------------------------------------------------- #
+
+# Arguments of the ensembles: scikit-learn refuses models with these names.
+ENSEMBLE_ARGUMENTS = frozenset(
+    {
+        "estimators",
+        "voting",
+        "weights",
+        "n_jobs",
+        "flatten_transform",
+        "verbose",
+        "final_estimator",
+        "cv",
+        "stack_method",
+        "passthrough",
+    }
+)
+
+
+@dataclass(frozen=True)
+class Member:
+    """A classical model of an ensemble: its node, its name in the ensemble (a Python
+    identifier, also its variable in the generated code) and its brick."""
+
+    node: str
+    name: str
+    layer: ClassicalModel
+
+
+class Ensemble(ClassicalModel):
+    """Combines two or more classical models (scikit-learn's voting and stacking ensembles).
+
+    The models take their features from the Input layer and are connected to the ensemble;
+    these connections carry an estimator instead of data. The ensemble ends the network and
+    takes no features itself: scikit-learn hands every model the same (standardised)
+    features. The analysis fills :attr:`members`, then calls :meth:`setup`.
+    """
+
+    category = "Ensembles"
+    module = "sklearn.ensemble"
+    scale = "ensemble"
+    min_inputs = 2
+    max_inputs = None
+    combines: ClassVar[str]  # voting | stacking
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        self.members: list[Member] = []
+
+    @classmethod
+    def input_slots(cls) -> list[dict[str, Any]]:
+        return [{"name": "models", "label": "Models", "kind": "estimator", "min": 2, "max": None}]
+
+    def row_limits(self) -> list[str]:
+        return [limit for member in self.members for limit in member.layer.row_limits()]
+
+    def check_members(self) -> None:
+        """Rules that depend on the members (raises LayerError)."""
+
+    def estimator_args(self) -> list[str]:
+        """The arguments after ``estimators=[...]`` (the code generator writes that one)."""
+        return []
+
+
+_WEIGHTS = Param(
+    "weights",
+    "Weights",
+    "ints",
+    default=None,
+    minimum=0,
+    auto=True,
+    help="One whole number per model, in the order in which the models are connected (the "
+    "brick lists them), e.g. 2, 1, 1. Empty: every model counts the same.",
+)
+
+
+class _Voting(Ensemble):
+    combines = "voting"
+    name_prefix = "voting"
+
+    def check_members(self) -> None:
+        weights = self.p["weights"]
+        if weights is None:
+            return
+        if len(weights) != len(self.members):
+            names = ", ".join(member.name for member in self.members)
+            raise LayerError(
+                f"Weights has {len(weights)} value{'s' if len(weights) != 1 else ''}, but "
+                f"{len(self.members)} models are connected (in this order: {names})."
+            )
+        if not any(weights):
+            raise LayerError("At least one weight must be greater than 0.")
+
+    def _weights(self) -> list[str]:
+        weights = self.p["weights"]
+        return [f"weights=[{', '.join(str(w) for w in weights)}]"] if weights else []
+
+
+@register
+class VotingClassifier(_Voting):
+    type = "VotingClassifier"
+    label = "Voting classifier"
+    description = (
+        "Combines two or more classifiers: soft voting averages their class probabilities, "
+        "hard voting counts the classes they predict. Connect the Input to every model and "
+        "every model to this brick. Fitting takes as long as fitting all of them."
+    )
+    task = "classification"
+    estimator = "VotingClassifier"
+    params = (
+        Param(
+            "voting",
+            "Voting",
+            "select",
+            default="soft",
+            options=("soft", "hard"),
+            help="soft: average the class probabilities of the models (usually better); "
+            "hard: the class most models predict. Hard voting has no probabilities: the "
+            "share of the votes stands in for them.",
+        ),
+        _WEIGHTS,
+    )
+
+    @property
+    def probabilities(self) -> bool:
+        return self.p["voting"] == "soft"
+
+    def estimator_args(self) -> list[str]:
+        return [f"voting={fmt_str(self.p['voting'])}", *self._weights()]
+
+
+@register
+class VotingRegressor(_Voting):
+    type = "VotingRegressor"
+    label = "Voting regression"
+    description = (
+        "Averages the predictions of two or more regression models, optionally weighted. "
+        "Connect the Input to every model and every model to this brick. Fitting takes as "
+        "long as fitting all of them."
+    )
+    task = "regression"
+    estimator = "VotingRegressor"
+    params = (_WEIGHTS,)
+
+    def estimator_args(self) -> list[str]:
+        return self._weights()
+
+
+def _stacking_params() -> tuple[Param, ...]:
+    return (
+        Param(
+            "cv",
+            "Cross-validation folds",
+            "int",
+            default=5,
+            minimum=2,
+            maximum=20,
+            help="The final estimator learns from predictions that the models make for rows "
+            "they were not fitted on: every model is fitted once per fold, and once more on "
+            "all training rows.",
+        ),
+        Param(
+            "passthrough",
+            "Pass the features through",
+            "bool",
+            default=False,
+            help="The final estimator also gets the features, not only the predictions of "
+            "the models.",
+        ),
+    )
+
+
+class _Stacking(Ensemble):
+    combines = "stacking"
+    name_prefix = "stacking"
+    final_estimator: ClassVar[str]  # a class of sklearn.linear_model
+    final_module = "sklearn.linear_model"
+
+    def estimator_args(self) -> list[str]:
+        return [
+            f"final_estimator={self.final_estimator}()",
+            f"cv={self.p['cv']}",
+            f"passthrough={self.p['passthrough']}",
+        ]
+
+
+@register
+class StackingClassifier(_Stacking):
+    type = "StackingClassifier"
+    label = "Stacking classifier"
+    description = (
+        "Combines two or more classifiers: a logistic regression learns from their "
+        "cross-validated class probabilities how much to trust each model. Connect the "
+        "Input to every model and every model to this brick. Every model is fitted once "
+        "per fold and once more."
+    )
+    task = "classification"
+    estimator = "StackingClassifier"
+    final_estimator = "LogisticRegression"
+    params = _stacking_params()
+
+
+@register
+class StackingRegressor(_Stacking):
+    type = "StackingRegressor"
+    label = "Stacking regression"
+    description = (
+        "Combines two or more regression models: a ridge regression (RidgeCV) learns from "
+        "their cross-validated predictions how to weigh them. Connect the Input to every "
+        "model and every model to this brick. Every model is fitted once per fold and "
+        "once more."
+    )
+    task = "regression"
+    estimator = "StackingRegressor"
+    final_estimator = "RidgeCV"
+    params = _stacking_params()
 
 
 def layer_specs() -> list[dict[str, Any]]:
