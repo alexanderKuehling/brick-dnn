@@ -1560,12 +1560,13 @@ TOOLS: dict[str, Tool] = {
             "list_prep_steps",
             "List preparation steps",
             "The step types of data preparation (join and append tables; drop, keep, rename, "
-            "cast columns, formulas, replace values, extract parts of text (e.g. a deck letter "
-            "mapped to a number); filter, sort and deduplicate rows; fill missing values; "
-            "outliers and clipping; scale and transform numbers, bins; encode categories; date "
-            "parts; balance classes; feature selection) with one line per parameter: what it "
-            "accepts, its default and when it applies. With type: the help texts of that step "
-            "type and an example.",
+            "cast columns, formulas with numbers and text functions such as left, extract, "
+            "split_part, contains, to_number and map, replace values, extract parts of text "
+            "(e.g. a deck letter mapped to a number); filter, sort and deduplicate rows; fill "
+            "missing values; outliers and clipping; scale and transform numbers, bins; encode "
+            "categories; date parts; balance classes; feature selection) with one line per "
+            "parameter: what it accepts, its default and when it applies. With type: the help "
+            "texts of that step type and an example.",
             list_prep_steps,
             {"type": {"type": "string", "description": "A step type, e.g. impute"}},
         ),

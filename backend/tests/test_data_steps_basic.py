@@ -274,7 +274,7 @@ def test_formula_summary_counts_missing_and_invalid(numbers):
         ("df.drop", "Attribute access"),
         ("open('/etc/passwd')", "open(…) is not allowed"),
         ("eval('1')", "eval(…) is not allowed"),
-        ("(lambda: 1)()", "not allowed"),
+        ("(lambda: 1)()", "lambda"),
         ("[a for a in b]", "not allowed"),
         ("a[0]", "Indexing"),
         ("a if b else 1", "where(condition, a, b)"),
@@ -296,7 +296,7 @@ def test_formula_summary_counts_missing_and_invalid(numbers):
         ("__col0__", "not allowed"),
         pytest.param(" + ".join(["a"] * 200), "too long", id="many-nodes"),
         pytest.param("(" * 400 + "1" + ")" * 400, "formula", id="deep-nesting"),
-        pytest.param("1" * 1001, "at most 1,000 characters", id="long-text"),
+        pytest.param("1" * 2_001, "at most 2,000 characters", id="long-text"),
     ],
 )
 def test_formula_rejects_unsafe_or_invalid_expressions(numbers, expression, message):
