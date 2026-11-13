@@ -2,7 +2,7 @@ import { act, FakeWebSocket, renderHook, waitFor } from '@test-utils';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { setTokens } from '@/api';
 import type { ServerMessage } from './protocol';
-import { liveUrl, useLiveProject } from './useLiveProject';
+import { liveUrl, OFFLINE_GRACE_MS, useLiveProject } from './useLiveProject';
 
 const hello = (id: number) => ({
   type: 'hello',
@@ -61,6 +61,50 @@ describe('useLiveProject', () => {
     ]);
     expect(result.current.pendingCount).toBe(1);
     off();
+  });
+
+  it('shows a dropped connection as offline only when it stays down', async () => {
+    const { result } = renderHook(() => useLiveProject(5, true));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const first = FakeWebSocket.last;
+    act(() => {
+      first.open();
+      first.receive(hello(5));
+    });
+    expect(result.current.status).toBe('live');
+
+    vi.useFakeTimers();
+    try {
+      // A short drop: reconnected before the grace period ends, the badge never says offline.
+      act(() => first.drop(1006));
+      expect(result.current.status).toBe('live');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      const second = FakeWebSocket.last;
+      act(() => {
+        second.open();
+        second.receive(hello(5));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OFFLINE_GRACE_MS);
+      });
+      expect(result.current.status).toBe('live');
+
+      // A drop that lasts: offline once the grace period is over.
+      act(() => second.drop(1006));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OFFLINE_GRACE_MS - 100);
+      });
+      expect(result.current.status).toBe('live');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(result.current.status).toBe('offline');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stays off without a project or when disabled, and switches projects', async () => {

@@ -5,8 +5,9 @@ PyTorch. You start and watch the training in the editor; nothing is computed in 
 The same engine is available on the command line as `brickdnn train`. Networks that give
 every pixel a class are covered in [Image segmentation](#image-segmentation). Classical models
 (Gaussian processes, support vector machines and gradient boosting) are fitted with
-scikit-learn instead, see [Classical models](#classical-models). Finished runs of one dataset
-can be combined into an [ensemble](#ensembles).
+scikit-learn instead, see [Classical models](#classical-models); neural layers can learn
+their features in a [hybrid network](#hybrid-networks). Finished runs of one dataset can be
+combined into an [ensemble](#ensembles).
 
 ![Finished training of a small CNN on MNIST with loss and accuracy curves](images/training.png)
 
@@ -143,6 +144,7 @@ follows the data.
 | Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs (needs validation data) |
 | Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch (without validation data the last epoch is always kept) |
 | Loss | Cross-entropy | Segmentation only: *Cross-entropy + Dice* for classes with few pixels |
+| Features | Learn them | [Hybrid networks](#hybrid-networks) only: learn the features with a temporary head (`pretrain`), or keep random ones (`frozen`) |
 
 The loss is chosen from the task: cross-entropy for classification (the network should end
 with raw scores, not Softmax), mean squared error for regression, the cross-entropy of every
@@ -928,6 +930,84 @@ and generated script:
 - **Stacking classifiers** need at least as many training rows of some class as folds; the
   run says so otherwise.
 
+## Hybrid networks
+
+Neural layers can learn the features of a classical model: an MLP before gradient boosting
+for a table, a small CNN (ending in `Flatten` or `Linear`) before an SVM for images, or
+several models after the same layers combined by an ensemble brick. The graph rules are in
+[graph-format.md](graph-format.md#hybrid-networks); the example *MLP features for gradient
+boosting (hybrid)* is a good start. Such a network needs PyTorch and scikit-learn.
+
+**Two phases**, in one run:
+
+1. **Learning the features.** The neural layers get a temporary `Linear` head after the
+   boundary: one output per class with the cross-entropy loss if the classical model is a
+   classifier, one output with the mean squared error of the standardised target if it is a
+   regression model. They are trained like a network of their own, with the normal settings
+   (epochs, batch size, learning rate, optimizer, weight decay, device, early stopping, the
+   kept weights). Their curves are the run's curves. Then the head is dropped. With
+   *Features: Frozen random features* (`feature_training: "frozen"`, `--frozen-features`)
+   nothing is trained: the random initial weights (fixed by the seed) make the features, a
+   quick baseline for what the learning adds.
+2. **Fitting the classical model.** The neural layers compute the features of the training,
+   validation and test rows (the split of phase 1: the model never learned from a validation
+   or test row), and the classical model (or ensemble) is fitted on the features of the
+   training rows, at most its row limit of them (the neural layers learn from all of them).
+   It is measured, evaluated (with the threshold analysis of two classes) and saved like a
+   classical model.
+
+**Settings.** The training panel shows the settings of a network (they learn the features),
+*Features* (learn them, or keep random ones) and the **hyperparameter search of the
+classical model**: it varies the parameters of the model brick like for a
+[classical model](#searching-a-classical-model), on the learned features (which are learned
+once), compared on the validation rows or by cross-validation. A search of the training
+settings of the neural layers is not available yet. Data: CSV files, datasets from the
+*Data* tab, image folders, the built-in image datasets and demo data; not segmentation data.
+The task follows the classical model: a classifier needs classes, a regression model a
+number (*"The target column 'species' contains text labels (3 classes), so this is a
+classification task: use … instead of Support vector regression."*). Only the Input's shape
+is adapted to a dataset: the head follows the data.
+
+**Results.** The run view shows *Phase 1 · The neural layers learn the features* (the curves
+of the head, and the epoch whose weights are kept) and *Phase 2 · … on the learned features*
+(fit time, rows, what the fit found, the training, validation and test scores, the trials of
+a search and the final evaluation). The run's metrics (in the list of runs, `metrics`) are
+those of the classical model, which is what predicts; `state.classical` adds `hybrid`
+(`boundary`, `features`, `feature_training`, `epochs`) and `validation` (the fitted model on
+the validation rows), while `history` and `best` keep the curves of phase 1.
+
+**Compute.** The estimate adds both phases: the epochs of the neural layers (none for frozen
+features), one pass that computes the features of every row, and the fit of the classical
+model on them (times the trials and folds of a search).
+
+**Stopping.** While the features are learned, a stop ends the run without saving anything
+(there is no classical model yet). While the classical model is fitted, it stops like a
+classical run (a search keeps its best trial).
+
+**The model** is two files in the run directory: `weights.pt` with the neural layers and
+their preprocessing (`{"state_dict", "preprocessing"}`, the format of the generated
+script's `--weights`), and `model.joblib` with the classical pipeline fitted on the
+features (the classical format, with `"columns": ["feature_1", …]` and `"hybrid":
+{"features", "input_columns"}`). The download (**Model (.zip)**) is a ZIP file with both
+(`<run>.features.pt`, `<run>.joblib`), `<run>.preprocessing.json`, the generated script and
+a short README:
+
+```bash
+unzip my-run.zip
+python my_run.py --predict new.csv --weights my-run.features.pt --save my-run.joblib
+```
+
+**Predictions** (web app, REST and MCP, also of raw rows of a dataset from the *Data* tab)
+prepare the inputs like those of a network, let the neural layers compute the features and
+the classical model predict: classes with their probabilities and the run's decision
+threshold, or values in the units of the target. A hybrid run can be a **member of an
+ensemble** of runs like any run that predicts probabilities or values.
+
+**Explanations.** Permutation importance, Shapley values and decision boundaries work on the
+whole pipeline (they only need predictions); activations and weights show the neural layers
+(the last one's output is the feature vector). Saliency maps and Grad-CAM are not available:
+the network's gradients do not reach through the classical model.
+
 ## Command line
 
 The `brickdnn` package trains without the web UI:
@@ -950,7 +1030,9 @@ includes it) and save the fitted model as `<name>.joblib`.
 
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,
 `--test-split`, `--device`, `--max-samples`, `--seed`, `--patience N` (early stopping),
-`--no-restore-best` (keep the weights of the last epoch), `--save weights.pt`, `--data-root`
+`--no-restore-best` (keep the weights of the last epoch), `--frozen-features` (a hybrid
+network: fit the classical model on random features), `--save weights.pt` (a hybrid network:
+`<name>.joblib` and its neural layers in `<name>.features.pt`), `--data-root`
 (download folder for built-in datasets, default `~/.cache/brickdnn/datasets`), and for a
 segmentation `--loss cross_entropy_dice` and `--previews DIR` (write the
 [predictions](#seeing-the-predictions) for eight validation images into a folder). Press

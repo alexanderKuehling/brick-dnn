@@ -98,9 +98,19 @@ more classical models of the same task: VotingClassifier (voting "soft" or "hard
 weights), VotingRegressor, StackingClassifier and StackingRegressor (a logistic or ridge
 regression learns from the cross-validated predictions; cv, passthrough). Connect the Input
 to every model and every model to the ensemble: those edges carry an estimator, and the
-ensemble ends the network (example voting_ensemble_classifier). Classical models and neural
-layers cannot be mixed in one network yet. Their code is a scikit-learn script, and they
-are trained on CSV data or demo data (fitted once, no epochs).
+ensemble ends the network (example voting_ensemble_classifier). Their code is a
+scikit-learn script, and they are trained on CSV data or demo data (fitted once, no epochs).
+
+Hybrid networks put neural layers before a classical model: the layers learn the features,
+the model (or an ensemble of models) is fitted on them, e.g. Input -> Linear -> ReLU ->
+Linear(32) -> HistGradientBoostingClassifier (example hybrid_mlp_gradient_boosting), or a
+CNN ending in Flatten/Linear before SVC for images. The last neural layer feeds the model a
+flat vector (shape [n]), every neural layer leads to it, nothing neural follows the model.
+Training has two phases: the layers learn with a temporary linear head on the target
+(epochs, optimizer, early stopping as usual; config feature_training "frozen" skips this for
+random features), then the model is fitted on the features of the training rows. A search
+(tuning) varies the classical model's parameters. Family "hybrid"; the download is a ZIP
+file with both parts and the script.
 
 Typical workflow: look up layer types with list_layer_types (or start from list_examples),
 build the graph, call analyze_network until it is valid (it infers shapes and parameter
@@ -1236,7 +1246,8 @@ TOOLS: dict[str, Tool] = {
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
             "output_kind whether it puts out a tensor, a kernel or an estimator (a classical "
-            "model, for an ensemble), input_slots what it takes. "
+            "model, for an ensemble), input_slots what it takes. A classical model's features "
+            "slot also takes the flat output of neural layers (a hybrid network). "
             "Compact by default (one line per parameter); types gives the full specs with "
             "help texts of some types.",
             list_layer_types,
@@ -1253,7 +1264,7 @@ TOOLS: dict[str, Tool] = {
             "List example networks",
             "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
             "regression, SVM classifier, gradient boosting classifier, voting and stacking "
-            "ensembles, …): good starting "
+            "ensembles, an MLP that learns the features of gradient boosting, …): good starting "
             "points. Lists names and "
             "descriptions; id gives one example with its graph.",
             list_examples,
@@ -1266,8 +1277,10 @@ TOOLS: dict[str, Tool] = {
             "layer. Returns valid, errors (with the node they belong to), warnings, nodes and "
             "total_params. Kernel bricks and Gaussian processes report their kernel as "
             "scikit-learn code (kernel); family and classical describe a classical model "
-            "(an ensemble lists its models in members, in the order of its weights). "
-            "Use it after every change.",
+            "(an ensemble lists its models in members, in the order of its weights). family "
+            "'hybrid': neural layers learn the features of the classical model; hybrid gives "
+            "the boundary (the last neural layer), the number of features and the neural "
+            "parameters. Use it after every change.",
             analyze_network,
             {"graph": GRAPH_SCHEMA},
             ("graph",),
@@ -1279,7 +1292,10 @@ TOOLS: dict[str, Tool] = {
             "with a demo main and a CSV training loop). For a classical model it is a "
             "scikit-learn script instead: make_model() returns Pipeline(StandardScaler, model), "
             "the main fits it to a CSV file, saves it with joblib and predicts new rows "
-            "(class_name does not apply).",
+            "(class_name does not apply). A hybrid network gets both: the neural layers as "
+            "class FeatureExtractor (or class_name), the training of the features with a "
+            "temporary head, the feature extraction, make_model() and --predict with both "
+            "saved files.",
             generate_pytorch_code,
             {
                 "graph": GRAPH_SCHEMA,
@@ -1799,7 +1815,8 @@ TOOLS: dict[str, Tool] = {
             "check_training",
             "Check a network against a dataset",
             "Check whether a network fits a dataset (input shape and dtype, output size, loss; "
-            "classical models: tabular data and the right task) before training. Returns ok, "
+            "classical models: tabular data and the right task; hybrid networks: both, the "
+            "neural layers with their temporary head) before training. Returns ok, "
             "errors, warnings, the plan (task, classes) and fixes: the params to set on the "
             "Input layer and the last layer to make it fit. Pass config to also check the "
             "settings (e.g. max_samples against the row limit of classical models). Also "
@@ -1837,7 +1854,10 @@ TOOLS: dict[str, Tool] = {
             "space holds parameters of the model brick ({C: {min: 0.1, max: 100}, kernel: "
             "[rbf, linear]}; ranges are log-scaled unless scale: linear) plus cv_folds "
             "(2-10) to compare the trials by cross-validation on the training rows (always "
-            "without validation rows). "
+            "without validation rows). A hybrid network takes the neural settings (epochs, "
+            "learning rate, patience …) for its features and feature_training ('pretrain', "
+            "default, or 'frozen': random features, a quick baseline); its tuning searches the "
+            "classical model like above. "
             "Refused when a compute budget is used up (get_usage); the run stops by itself, "
             "keeping its weights, when it has used what is left (budget_warning says if that "
             "is likely).",
@@ -1908,7 +1928,9 @@ TOOLS: dict[str, Tool] = {
             "the rows per split, tuning (method, the objective metric and its direction, "
             "cv_folds, the trials and the best one with its score), classical (the fitted "
             "kernel, log marginal likelihood, support vectors or boosting iterations; an "
-            "ensemble's members with their own metrics) and "
+            "ensemble's members with their own metrics; a hybrid network: the features its "
+            "neural layers learned and the classical model's validation metrics, while "
+            "history holds the curves of the feature training) and "
             "the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
             "epochs plus the best and the last), graph, plan, log (the last log_lines "
@@ -1943,7 +1965,8 @@ TOOLS: dict[str, Tool] = {
             "get_weights_download",
             "Get the trained weights",
             "A download link for the trained weights of a finished or stopped run (a PyTorch "
-            "state_dict, .pt; for a classical model the fitted scikit-learn pipeline, .joblib), "
+            "state_dict, .pt; for a classical model the fitted scikit-learn pipeline, .joblib; "
+            "for a hybrid network a .zip with both parts and the script), "
             "valid for 15 minutes and usable without logging in: give it to the user or fetch "
             "it with a tool that can download files. Also returns the matching model code "
             "(class NeuralNetwork, or make_model()), how inputs were prepared during training "

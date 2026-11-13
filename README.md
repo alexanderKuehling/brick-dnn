@@ -90,6 +90,12 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   in the graph: voting (soft or hard, optionally weighted) and stacking, with each model's
   own score next to the ensemble's. See
   [docs/training.md](docs/training.md#classical-models).
+- **Hybrid networks**: neural layers learn the features of a classical model, e.g. an MLP
+  before gradient boosting or a small CNN before an SVM. The layers train first with a
+  temporary head on the target (or stay random, for a baseline), then the model is fitted
+  on their features; curves, metrics, predictions, ensembles of runs and the download (a ZIP
+  file with both parts and the script) work as for the other runs. See
+  [docs/training.md](docs/training.md#hybrid-networks).
 - **Ensembles of finished runs**: combine, say, an MLP and a gradient boosting model trained
   on the same prepared dataset into one model, by a weighted average of their predictions or
   by stacking (a logistic or ridge regression fitted on the validation rows). The ensemble is
@@ -215,7 +221,9 @@ scikit-learn* part of the palette (Gaussian process, SVR, SVC). Kernels flow alo
 connections into a *Kernel sum*, a *Kernel product* or the kernel input of a Gaussian
 process; select the Gaussian process or a kernel sum and click a kernel to plug it in. The
 inspector shows the resulting kernel as scikit-learn code. Training fits the model once and
-gives you the fitted model as a `.joblib` file.
+gives you the fitted model as a `.joblib` file. Put neural layers between the Input and the
+model (ending in a flat vector, e.g. `Linear` or `Flatten`) and they learn its features: the
+connection into the model is drawn teal and labelled *features*.
 
 The exported file runs as is:
 

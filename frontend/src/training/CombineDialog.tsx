@@ -131,7 +131,11 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
                   </Text>
                   <Text size="xs" c="dimmed">
                     {[
-                      run.family === 'classical' ? 'classical model' : 'neural network',
+                      run.family === 'classical'
+                        ? 'classical model'
+                        : run.family === 'hybrid'
+                          ? 'hybrid network'
+                          : 'neural network',
                       run.dataset.name,
                     ]
                       .filter(Boolean)

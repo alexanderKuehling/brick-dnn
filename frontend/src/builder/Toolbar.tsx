@@ -144,7 +144,13 @@ function Status({
 
 export function Toolbar(props: ToolbarProps) {
   const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
-  const library = networkFamily(props.analysis) === 'classical' ? 'scikit-learn' : 'PyTorch';
+  const family = networkFamily(props.analysis);
+  const library =
+    family === 'classical'
+      ? 'scikit-learn'
+      : family === 'hybrid'
+        ? 'PyTorch and scikit-learn'
+        : 'PyTorch';
   const { onShare, onDuplicate, here = null, live = null } = props;
   const canSave = !readOnly && !live;
 

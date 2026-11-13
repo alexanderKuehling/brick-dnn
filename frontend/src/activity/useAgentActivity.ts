@@ -11,6 +11,8 @@ import { getPendingCount, setPendingCount } from '@/approvals/pending';
 
 /** How often the page asks for new entries while it is visible. */
 export const POLL_INTERVAL = 3000;
+/** Failed polls in a row before the page says it is reconnecting. */
+const OFFLINE_AFTER_FAILURES = 2;
 const PAGE_SIZE = 50;
 const POLL_SIZE = 100;
 
@@ -140,6 +142,7 @@ export function useAgentActivity(
     let timer: number | undefined;
     let busy = false;
     let stopped = false;
+    let failures = 0;
 
     const poll = async () => {
       window.clearTimeout(timer);
@@ -160,6 +163,7 @@ export function useAgentActivity(
         if (stopped || current !== generation.current) {
           return;
         }
+        failures = 0;
         setLive('live');
         takeApprovals(page);
         if (page.has_more) {
@@ -173,7 +177,10 @@ export function useAgentActivity(
           setFresh((ids) => new Set([...ids, ...page.results.map((entry) => entry.id)]));
         }
       } catch {
-        if (!stopped) {
+        // One failed poll (a slow answer, a restart) is not worth a warning: only the second
+        // one in a row shows "Reconnecting…".
+        failures += 1;
+        if (!stopped && failures >= OFFLINE_AFTER_FAILURES) {
           setLive('offline');
         }
       } finally {

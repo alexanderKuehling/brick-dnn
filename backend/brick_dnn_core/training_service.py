@@ -103,6 +103,7 @@ from brickdnn.training.state import (
     PREVIEW_INDEX_FILE,
     STATE_FILE,
     STOP_FILE,
+    WEIGHTS_FILE,
     is_stale,
     preprocessing_path,
     read_json,
@@ -111,6 +112,7 @@ from brickdnn.training.state import (
     stop_request,
     stop_requested,
     weights_file,
+    weights_files,
     write_job,
 )
 from brickdnn.training.tuning import (
@@ -354,8 +356,9 @@ def probe() -> dict[str, Any]:
 
 
 def unavailable_reason(family: str = "neural") -> str | None:
-    """Why runs of neural networks (PyTorch) or ``classical`` models (scikit-learn) cannot
-    be started right now (cheap: does not run the probe)."""
+    """Why runs of neural networks (PyTorch), ``classical`` models (scikit-learn) or
+    ``hybrid`` networks (both) cannot be started right now (cheap: does not run the
+    probe)."""
     if not settings.TRAINING_ENABLED:
         return DISABLED_REASON
     if family == "ensemble":  # its members need what they need (ensembles.py checks it)
@@ -364,15 +367,20 @@ def unavailable_reason(family: str = "neural") -> str | None:
         return None if sklearn_installed() else NO_SKLEARN_REASON
     if not torch_installed():
         return NO_TORCH_REASON
+    if family == "hybrid" and not sklearn_installed():
+        return NO_SKLEARN_REASON
     return None
 
 
 def run_family(run: TrainingRun) -> str:
-    """``classical`` for a run of a classical model (scikit-learn), ``ensemble`` for an
-    ensemble of runs (ensembles.py), else ``neural``."""
+    """``classical`` for a run of a classical model (scikit-learn), ``hybrid`` for neural
+    layers that learn the features of a classical model, ``ensemble`` for an ensemble of
+    runs (ensembles.py), else ``neural``."""
     if run.kind == "ensemble":
         return "ensemble"
     plan = run.plan if isinstance(run.plan, dict) else {}
+    if isinstance(plan.get("hybrid"), dict):
+        return "hybrid"
     return "classical" if isinstance(plan.get("classical"), dict) else "neural"
 
 
@@ -696,12 +704,14 @@ def check(
     family = graph.family if isinstance(graph, Analysis) else graph_family(graph)
     if search is not None:
         _check_search(result, search, family, dataset.info, config or TrainingConfig())
-    if family == "classical":
-        reason = unavailable_reason("classical")
-        if reason is not None and reason != DISABLED_REASON:
-            result.errors.insert(0, reason)
-            result.plan = None
-        return result
+    if family in ("classical", "hybrid"):
+        reason = unavailable_reason(family)
+        if family == "classical" or reason == NO_SKLEARN_REASON:
+            if reason is not None and reason != DISABLED_REASON:
+                result.errors.insert(0, reason)
+                result.plan = None
+            if family == "classical":
+                return result
     builtin = BUILTIN_DATASETS.get(dataset.info.builtin or "")
     generated = builtin is not None and builtin.generated
     if dataset.info.kind == "builtin" and not generated and not torchvision_installed():
@@ -724,10 +734,11 @@ def _check_search(
     without validation rows says that it cross-validates."""
     if result.plan is None:
         return
-    if (family == "classical") != (search.model is not None):
+    if (family in ("classical", "hybrid")) != (search.model is not None):
         result.errors.append(
-            "The search settings do not fit the network: a classical model searches over the "
-            "parameters of its brick, a neural network over its training settings."
+            "The search settings do not fit the network: a classical model (also after neural "
+            "layers that learn its features) searches over the parameters of its brick, a "
+            "neural network over its training settings."
         )
     elif (error := objectives.metric_error(search.metric, result.plan)) is not None:
         result.errors.append(error)
@@ -984,8 +995,9 @@ def start_claimed(run: TrainingRun, limit: budgets.RunLimit) -> None:
     if run.pid:
         _kill(run, wait=3.0)  # only a process that still is the runner of this run
     family = run_family(run)
-    leftovers = [STATE_FILE, STOP_FILE, weights_file(family)]
-    leftovers.append(preprocessing_path(weights_file(family)).name)
+    leftovers = [STATE_FILE, STOP_FILE]
+    for name in weights_files(family):
+        leftovers += [name, preprocessing_path(name).name]
     for name in leftovers:
         with contextlib.suppress(OSError):
             (directory / name).unlink()
@@ -1117,6 +1129,28 @@ def _apply_state(run: TrainingRun, state: dict[str, Any]) -> None:
             )
     elif isinstance(history, list):
         run.epochs_done = 0  # a new trial of a search has started
+    classical = state.get("classical")
+    if (
+        state.get("family") == "hybrid"
+        and isinstance(classical, dict)
+        and isinstance(classical.get("train"), dict)
+    ):
+        # The model of a hybrid run is the classical one fitted on the learned features: its
+        # metrics, not those of the temporary head that the history (the features) has.
+        trained = classical["train"]
+        validated = (
+            classical.get("validation") if isinstance(classical.get("validation"), dict) else {}
+        )
+        test = state.get("test") if isinstance(state.get("test"), dict) else {}
+        run.metrics = {
+            "train_loss": trained.get("loss"),
+            "train_accuracy": trained.get("accuracy"),
+            "val_loss": validated.get("loss"),
+            "val_accuracy": validated.get("accuracy"),
+            "val_rmse": validated.get("rmse"),
+            "val_r2": validated.get("r2"),
+            **{key: test.get(name) for key, name in TEST_KEYS.items()},
+        }
     if isinstance(state.get("best"), dict) or state.get("best") is None:
         run.best = state.get("best")
     trials = state.get("trials")
@@ -1582,17 +1616,77 @@ def _weights_file(run: TrainingRun) -> Path:
 
 def weights_path(run: TrainingRun) -> Path | None:
     """The file of the trained weights (or fitted model), if the run has one. Ensembles
-    have none of their own: they predict with their members' (see ensembles.py)."""
+    have none of their own: they predict with their members' (see ensembles.py). A hybrid
+    network: its classical model, if its neural layers (``weights.pt``) are there too."""
     if run.kind == "ensemble":
         return None
     path = _weights_file(run)
-    return path if run.has_weights and path.is_file() else None
+    if not run.has_weights or not path.is_file():
+        return None
+    family = run_family(run)
+    if any(not (path.parent / name).is_file() for name in weights_files(family)):
+        return None
+    return path
 
 
 def weights_filename(run: TrainingRun) -> str:
-    """Download name: ``<run>.pt``, or ``<run>.joblib`` for a fitted classical model."""
-    suffix = ".joblib" if run_family(run) == "classical" else ".pt"
-    return (slugify(run.name) or ("model" if suffix == ".joblib" else "weights")) + suffix
+    """Download name: ``<run>.pt``, ``<run>.joblib`` for a fitted classical model, or
+    ``<run>.zip`` for a hybrid network (see :func:`weights_archive`)."""
+    family = run_family(run)
+    suffix = {"classical": ".joblib", "hybrid": ".zip"}.get(family, ".pt")
+    return (slugify(run.name) or ("weights" if suffix == ".pt" else "model")) + suffix
+
+
+def weights_archive(run: TrainingRun) -> Any:
+    """The download of a hybrid network: a ZIP file (a temporary file, at its start) with
+    the neural layers (``<run>.features.pt``: ``{"state_dict", "preprocessing"}``), the
+    fitted classical model (``<run>.joblib``), the preprocessing (``.preprocessing.json``),
+    the generated script (``<run>.py``, whose ``--predict`` reads both files) and a short
+    README.txt. None if the run has no trained model."""
+    import tempfile
+    import zipfile
+
+    from brickdnn.codegen import generate_code
+    from brickdnn.training.inference import module_name
+
+    path = weights_path(run)
+    if path is None or run_family(run) != "hybrid":
+        return None
+    directory = path.parent
+    stem = weights_filename(run).removesuffix(".zip")
+    module = module_name(run.name)
+    archive = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024)  # noqa: SIM115
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+        bundle.write(directory / WEIGHTS_FILE, f"{stem}.features.pt")
+        bundle.write(path, f"{stem}.joblib")
+        preprocessing = preprocessing_path(directory / WEIGHTS_FILE)
+        if preprocessing.is_file():
+            bundle.write(preprocessing, f"{stem}.preprocessing.json")
+        script = None
+        try:
+            script = generate_code(run.graph)
+        except Exception:  # the network cannot be turned into code any more
+            logger.info("No script for the download of run %s", run.pk)
+        if script is not None:
+            bundle.writestr(f"{module}.py", script)
+        bundle.writestr("README.txt", HYBRID_README.format(stem=stem, module=module))
+    archive.seek(0)
+    return archive
+
+
+HYBRID_README = """\
+A hybrid network trained in Brick DNN: neural layers learn the features, a classical model
+(scikit-learn) is fitted on them.
+
+{stem}.features.pt          the neural layers (FeatureExtractor in {module}.py):
+                            torch.save({{"state_dict": ..., "preprocessing": ...}})
+{stem}.joblib               the fitted classical model on the learned features (joblib,
+                            a pickle: only load files you trust)
+{stem}.preprocessing.json   how the inputs were prepared (columns, mean, std, classes)
+{module}.py                 the script: it predicts the rows of a CSV file with both files
+
+    python {module}.py --predict new.csv --weights {stem}.features.pt --save {stem}.joblib
+"""
 
 
 def previews_of(run: TrainingRun, embed: bool = True) -> dict[str, Any] | None:

@@ -6,7 +6,14 @@
  * the server stays the judge of everything else (see docs/graph-format.md).
  */
 import type { Edge } from '@xyflow/react';
-import type { Analysis, InputSlot, LayerSpec, NodeAnalysis, OutputKind } from '@/api/types';
+import type {
+  Analysis,
+  InputSlot,
+  LayerSpec,
+  NetworkFamily,
+  NodeAnalysis,
+  OutputKind,
+} from '@/api/types';
 
 /** What a brick takes. Catalogues of older servers only know one tensor input. */
 export function inputSlots(spec: LayerSpec | undefined): InputSlot[] {
@@ -139,9 +146,31 @@ export function isKernelNode(
   return (info?.output_kind ?? outputKind(spec)) === 'kernel';
 }
 
-/** The network's family: classical if it contains kernels or a classical model. */
-export function networkFamily(analysis: Analysis | null | undefined): 'neural' | 'classical' {
-  return analysis?.family === 'classical' ? 'classical' : 'neural';
+/**
+ * The network's family: classical if it contains kernels or a classical model, hybrid if
+ * neural layers learn the features of a classical model.
+ */
+export function networkFamily(analysis: Analysis | null | undefined): NetworkFamily {
+  return analysis?.family === 'classical' || analysis?.family === 'hybrid'
+    ? analysis.family
+    : 'neural';
+}
+
+/**
+ * Whether a connection from `source` into `target` carries the features of a hybrid network:
+ * data from a neural layer into a classical model. The canvas draws it as the boundary
+ * between the two parts.
+ */
+export function isFeatureEdge(
+  source: LayerSpec | undefined,
+  target: LayerSpec | undefined
+): boolean {
+  return (
+    source?.family === 'neural' &&
+    outputKind(source) === 'tensor' &&
+    isEstimatorSpec(target) &&
+    inputSlots(target).some((slot) => slot.kind === 'tensor')
+  );
 }
 
 // --------------------------------------------------------------------------

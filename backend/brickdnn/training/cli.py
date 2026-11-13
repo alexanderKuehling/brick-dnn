@@ -117,6 +117,8 @@ class ConsoleReporter(Reporter):
         self._trials: list[dict[str, Any]] = []
         self._preprocessing: dict[str, Any] | None = None
         self.classical = False
+        # Hybrid networks: where the neural layers are saved (the classical model: save).
+        self.features: Path | None = None
         self.previews: Path | None = None  # where a segmentation writes its preview images
         # A search: the classical model brick whose parameters it tunes, and its metric.
         self.model: str | None = None
@@ -426,9 +428,12 @@ class ConsoleReporter(Reporter):
         self._print(message)
         if weights:
             what = "the fitted model (joblib)" if self.classical else "weights"
+            if self.features is not None:
+                what = "the classical model (joblib)"
+                self._print(f"Saved the neural layers (features) to {self.features}")
             self._print(f"Saved {what} to {self.save}")
             if (self._preprocessing or {}).get("kind", "demo") != "demo":
-                path = preprocessing_path(self.save)
+                path = preprocessing_path(self.features or self.save)
                 self._print(f"Saved the preprocessing (needed to prepare new inputs) to {path}")
 
     def should_stop(self) -> bool:
@@ -551,9 +556,16 @@ def build_parser() -> argparse.ArgumentParser:
         "validation images (image, mask, prediction, overlay) into this folder",
     )
     parser.add_argument(
+        "--frozen-features",
+        action="store_true",
+        help="hybrid networks only: do not train the neural layers before the classical "
+        "model, fit it on their random features (a quick baseline)",
+    )
+    parser.add_argument(
         "--save",
         help="where to store the weights (default <graph name>.pt; classical models: "
-        "<graph name>.joblib)",
+        "<graph name>.joblib; hybrid networks: <graph name>.joblib and the neural layers "
+        "in <graph name>.features.pt)",
     )
     parser.add_argument(
         "--data-root",
@@ -684,7 +696,8 @@ def main(argv: list[str] | None = None) -> int:
 
     analysis = analyze(graph)
     classical = analysis.family == "classical"
-    if classical and not sklearn_installed():
+    hybrid = analysis.family == "hybrid"
+    if (classical or hybrid) and not sklearn_installed():
         print(f"error: {SKLEARN_HINT}", file=sys.stderr)
         return 1
     if not classical and not torch_installed():
@@ -711,15 +724,17 @@ def main(argv: list[str] | None = None) -> int:
                 "patience": args.patience,
                 "restore_best": args.restore_best,
                 "loss": args.loss,
+                "feature_training": "frozen" if args.frozen_features else "pretrain",
             }
         )
-        model = analysis.model.type if classical and analysis.model is not None else None
+        fitted = (classical or hybrid) and analysis.model is not None
+        model = analysis.model.type if fitted and analysis.model is not None else None
         tuning = tuning_from_args(args, model)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    save = Path(args.save or f"{stem}{'.joblib' if classical else '.pt'}")
+    save = Path(args.save or f"{stem}{'.joblib' if classical or hybrid else '.pt'}")
     with tempfile.TemporaryDirectory(prefix="brickdnn-") as tmp:
         try:
             info, path = resolve_data(args.data, Path(tmp))
@@ -752,6 +767,8 @@ def main(argv: list[str] | None = None) -> int:
             tuning=tuning,
         )
         reporter = ConsoleReporter(config.epochs, save)
+        if hybrid:
+            reporter.features = save.with_name(f"{save.stem}.features.pt")
         reporter.previews = Path(args.previews) if args.previews else None
         if tuning is not None:
             reporter.model, reporter.metric = tuning.model, tuning.metric
@@ -761,6 +778,10 @@ def main(argv: list[str] | None = None) -> int:
                 from . import classical_engine
 
                 result = classical_engine.train(job, reporter, save)
+            elif hybrid:
+                from . import hybrid_engine
+
+                result = hybrid_engine.train(job, reporter, save, features_path=reporter.features)
             else:
                 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
                 from . import engine
