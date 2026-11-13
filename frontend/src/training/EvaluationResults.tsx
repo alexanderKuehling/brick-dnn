@@ -2,8 +2,9 @@
  * The final evaluation of a finished run (state.json `evaluation`): the kept weights measured
  * once more on the validation and the test rows (a run without either: on its training rows,
  * marked as optimistic). Tiles with the main numbers (the splits side by side); for
- * classification a confusion matrix and the values per class, for regression predicted
- * against actual values. Runs without an evaluation show nothing.
+ * classification a confusion matrix and the values per class (two classes also ROC AUC, PR AUC
+ * and the decision threshold, see ThresholdAnalysis), for regression predicted against actual
+ * values. Runs without an evaluation show nothing.
  */
 import { useMemo, useState } from 'react';
 import { IconArrowDown, IconArrowUp, IconSelector } from '@tabler/icons-react';
@@ -30,6 +31,7 @@ import { ChartFrame, GradientLegend } from '@/components/charts/ChartFrame';
 import { SEQUENTIAL, sequentialColor, textOn, useChartScheme } from '@/components/charts/colors';
 import { ScatterPlot } from '@/components/charts/ScatterPlot';
 import { formatMetric, formatPercent } from './format';
+import { ThresholdAnalysis } from './ThresholdAnalysis';
 import classes from './Training.module.css';
 
 type SplitKey = 'val' | 'test' | 'training';
@@ -474,12 +476,21 @@ function SplitPicker({
   );
 }
 
+/** Binary classification: the threshold the run predicts with, and how to save another. */
+export interface ThresholdProps {
+  decisionThreshold?: number | null;
+  /** Missing when the user may not change it (only who started the run may). */
+  onSaveThreshold?: (threshold: number) => Promise<void>;
+}
+
 function ClassificationResults({
   evaluation,
   trainHint,
+  threshold,
 }: {
   evaluation: ClassificationEvaluation;
   trainHint: string;
+  threshold?: ThresholdProps;
 }) {
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
   const parts = splitsOf(evaluation);
@@ -499,6 +510,20 @@ function ClassificationResults({
     tile(parts, 'Weighted F1', (s) => s.weighted_f1, formatScore, 'weighted by class size'),
     tile(parts, 'Top-3 accuracy', (s) => s.top_k_accuracy?.['3'], formatPercent),
     tile(parts, 'Top-5 accuracy', (s) => s.top_k_accuracy?.['5'], formatPercent),
+    tile(
+      parts,
+      'ROC AUC',
+      (s) => s.threshold_curve?.roc_auc,
+      formatScore,
+      '0.5: guessing, 1: perfect'
+    ),
+    tile(
+      parts,
+      'PR AUC',
+      (s) => s.threshold_curve?.pr_auc,
+      formatScore,
+      `average precision of “${names[1] ?? 'class 1'}”`
+    ),
   ].filter(Boolean);
   return (
     <>
@@ -522,6 +547,13 @@ function ClassificationResults({
         <ConfusedPairs evaluation={evaluation} split={split} />
       )}
       <PerClassTable names={names} perClass={split.per_class} />
+      {evaluation.binary && (
+        <ThresholdAnalysis
+          evaluation={evaluation}
+          savedThreshold={threshold?.decisionThreshold}
+          onSave={threshold?.onSaveThreshold}
+        />
+      )}
     </>
   );
 }
@@ -609,9 +641,12 @@ function RegressionResults({
 export function EvaluationResults({
   evaluation,
   classical = false,
+  threshold,
 }: {
   evaluation: RunEvaluation | null | undefined;
   classical?: boolean;
+  /** Binary classification: the decision threshold (see ThresholdAnalysis). */
+  threshold?: ThresholdProps;
 }) {
   if (!evaluation || splitsOf<unknown>(evaluation).length === 0) {
     return null;
@@ -648,7 +683,11 @@ export function EvaluationResults({
         </Text>
       )}
       {evaluation.task === 'classification' ? (
-        <ClassificationResults evaluation={evaluation} trainHint={trainHint} />
+        <ClassificationResults
+          evaluation={evaluation}
+          trainHint={trainHint}
+          threshold={threshold}
+        />
       ) : (
         <RegressionResults evaluation={evaluation} trainHint={trainHint} />
       )}

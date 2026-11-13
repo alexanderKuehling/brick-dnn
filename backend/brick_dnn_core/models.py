@@ -270,6 +270,9 @@ class TrainingRun(models.Model):
     # (The default is also in the database, so that a version from before the queue, which
     # does not know the column, can still create runs after it was deployed again.)
     restarts = models.PositiveSmallIntegerField(default=0, db_default=0)
+    # Binary classification: predictions are the second class when its probability is at
+    # least this (0 to 1, set by the owner; 0.5: the more probable class). Unused otherwise.
+    decision_threshold = models.FloatField(default=0.5, db_default=0.5)
 
     class Meta:
         ordering = ["-created_at"]

@@ -2,14 +2,28 @@ import { useEffect, useState } from 'react';
 import { Alert, Loader, Paper, Stack, Text } from '@mantine/core';
 import { api, type PredictionForm } from '@/api';
 import { slugify } from '@/builder/graph';
+import { formatThreshold } from '../threshold';
 import { ImagePredict } from './ImagePredict';
 import { TabularPredict } from './TabularPredict';
 
 /**
  * Try a trained run: predict a row typed in, pasted CSV rows, an uploaded or drawn image.
- * Loads what the run takes when it is shown (GET …/predict-form/).
+ * Loads what the run takes when it is shown (GET …/predict-form/). A binary classification
+ * says which decision threshold its predictions use.
  */
-export function PredictionPanel({ runId, runName }: { runId: string; runName: string }) {
+export function PredictionPanel({
+  runId,
+  runName,
+  decisionThreshold,
+  positiveClass,
+}: {
+  runId: string;
+  runName: string;
+  /** Binary classification: the run's decision threshold (null for other runs). */
+  decisionThreshold?: number | null;
+  /** The class the threshold decides for. */
+  positiveClass?: string;
+}) {
   const [form, setForm] = useState<PredictionForm | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +86,13 @@ export function PredictionPanel({ runId, runName }: { runId: string; runName: st
               Predictions use compute (CPU time) too, so they are not possible until it resets.
             </Text>
           </Alert>
+        )}
+        {typeof decisionThreshold === 'number' && form?.available && (
+          <Text size="xs" c="dimmed" data-testid="prediction-threshold">
+            Decision threshold {formatThreshold(decisionThreshold)}: the prediction is “
+            {positiveClass ?? 'the second class'}” when its probability is at least{' '}
+            {formatThreshold(decisionThreshold)}. Change it under Metrics.
+          </Text>
         )}
         {form?.raw_note && (
           <Text size="xs" c="dimmed">

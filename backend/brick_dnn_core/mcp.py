@@ -1100,6 +1100,29 @@ def predict(request: Request, args: dict[str, Any]) -> Any:
     return compact.prediction_answer(answer)
 
 
+def set_decision_threshold(request: Request, args: dict[str, Any]) -> Any:
+    run = _run(request, args)
+    if run.owner_id != request.user.pk:
+        raise ToolError(
+            f"Only who started this run ({run.owner.get_username()}) can change its decision "
+            "threshold."
+        )
+    try:
+        run = training.set_decision_threshold(run, args.get("threshold"))
+    except training.TrainingInputError as exc:
+        raise ToolError(str(exc)) from None
+    answer: dict[str, Any] = {"id": str(run.pk), "decision_threshold": run.decision_threshold}
+    found = (training.state_of(run) or {}).get("evaluation")
+    if isinstance(found, dict):
+        binary = compact.evaluation_summary(found, run.decision_threshold).get("binary")
+        if isinstance(binary, dict) and binary.get("at_decision_threshold"):
+            answer["at_decision_threshold"] = binary["at_decision_threshold"]
+            answer["note"] = (
+                "Measured at the closest threshold of the final evaluation's threshold curve."
+            )
+    return answer
+
+
 def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args)
     if not can_delete_run(request.user, run):
@@ -1814,7 +1837,9 @@ TOOLS: dict[str, Tool] = {
             "classification and regression runs: the kept weights on the validation and test "
             "rows; balanced accuracy, macro/weighted F1, top-k accuracy, precision/recall/F1 "
             "per class and the confusion matrix up to 10 classes, else the most confused "
-            "pairs; MAE, RMSE, R², MAPE, median and max error, residual quantiles), "
+            "pairs; two classes also ROC AUC and PR AUC, and binary: threshold suggestions "
+            "and the metrics at the run's decision_threshold; MAE, RMSE, R², MAPE, median "
+            "and max error, residual quantiles), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
             "kernel, log marginal likelihood or support vectors) and the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
@@ -1865,7 +1890,9 @@ TOOLS: dict[str, Tool] = {
             "Predict with a trained network",
             "Run the trained network of a finished or stopped run on up to "
             f"{inference.MAX_SAMPLES} samples on the server. Classification: the most likely "
-            "class with its probability and the top_k classes; regression: the predicted "
+            "class with its probability and the top_k classes (two classes: the second class "
+            "when its probability, positive_probability, is at least the run's "
+            "decision_threshold, see set_decision_threshold); regression: the predicted "
             "value in the units of the target column (a Gaussian process adds std, its "
             "uncertainty). Runs trained on a dataset exported from a data preparation: send "
             "raw rows with input_format 'raw', one object {column: value} per sample in the "
@@ -1927,6 +1954,25 @@ TOOLS: dict[str, Tool] = {
                 },
             },
             ("run_id",),
+        ),
+        Tool(
+            "set_decision_threshold",
+            "Set the decision threshold",
+            "Binary classification runs (two classes) only: the threshold that predict uses, "
+            "from 0 to 1 (default 0.5). A sample is predicted as the second class (the "
+            "positive class of evaluation.binary) when its probability is at least the "
+            "threshold, else as the first. On imbalanced data a lower threshold finds more "
+            "of the rare class (higher recall, lower precision). get_training_run shows the "
+            "suggestions of the final evaluation (best F1, the highest threshold with 80% "
+            "recall) and the precision, recall, F1 and confusion counts at the current "
+            "threshold; the answer shows them at the new one. Only who started the run can.",
+            set_decision_threshold,
+            {
+                "id": {"type": "string", "description": "Run id from list_training_runs"},
+                "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+            ("id", "threshold"),
+            writes=True,
         ),
         Tool(
             "delete_training_run",

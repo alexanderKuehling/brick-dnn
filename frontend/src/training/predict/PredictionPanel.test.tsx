@@ -252,6 +252,51 @@ describe('PredictionPanel', () => {
     });
   });
 
+  it('names the decision threshold of a binary classification', async () => {
+    const user = userEvent.setup();
+    predictForm.mockResolvedValue(IRIS);
+    render(
+      <PredictionPanel
+        runId="r1"
+        runName="Iris"
+        decisionThreshold={0.05}
+        positiveClass="versicolor"
+      />
+    );
+    expect(await screen.findByTestId('prediction-threshold')).toHaveTextContent(
+      'Decision threshold 0.05: the prediction is “versicolor” when its probability is at least 0.05. Change it under Metrics.'
+    );
+    await user.click(screen.getByRole('button', { name: 'Use a sample' }));
+    predict.mockResolvedValue(
+      answer(
+        [
+          {
+            class: 'versicolor',
+            index: 1,
+            probability: 0.076,
+            positive_probability: 0.076,
+            top: [
+              { class: 'setosa', index: 0, probability: 0.924 },
+              { class: 'versicolor', index: 1, probability: 0.076 },
+            ],
+          },
+        ],
+        { task: 'classification', decision_threshold: 0.05, positive_class: 'versicolor' }
+      )
+    );
+    await user.click(screen.getByRole('button', { name: 'Predict' }));
+    const card = await screen.findByLabelText('Prediction');
+    expect(within(card).getAllByText(/^versicolor/)[0]).toHaveTextContent('versicolor 7.6 %');
+    expect(
+      within(card).getByText(/Decided by the threshold on the probability of the positive class/)
+    ).toHaveTextContent('7.6 %');
+  });
+
+  it('says nothing about a threshold for other runs', async () => {
+    await show(IRIS);
+    expect(screen.queryByTestId('prediction-threshold')).toBeNull();
+  });
+
   it('switches to the prepared columns', async () => {
     const user = userEvent.setup();
     await show(SALES);

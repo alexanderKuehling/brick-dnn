@@ -75,6 +75,11 @@ export function canDeleteRun(run: RunSummary, scope: TrainingScope): boolean {
   return run.project !== null;
 }
 
+/** Only who started a run may change its decision threshold (binary classification). */
+export function canSetThreshold(run: RunSummary, scope: TrainingScope): boolean {
+  return isOwnRun(run, scope);
+}
+
 /** The runs of one view of the history, in the order of the list (newest first). */
 export function filterRuns(
   runs: RunSummary[],
