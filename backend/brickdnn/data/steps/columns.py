@@ -1,5 +1,5 @@
 """Preparation steps that work on whole columns: drop, keep, rename, change the type,
-compute a new column with a formula and replace values.
+compute a new column with a formula, replace values and extract parts of text.
 
 The first section holds small helpers that the other basic step modules (combine, rows,
 missing) use as well: number formatting for summaries, converting user-entered values to
@@ -9,7 +9,10 @@ the storage format of a column (see :mod:`brickdnn.data.table`) and writing them
 from __future__ import annotations
 
 import ast
+import inspect
 import math
+import re
+import textwrap
 from collections.abc import Iterable, Sequence
 from typing import Any
 
@@ -1275,3 +1278,318 @@ class ReplaceValues(Step):
             ref = f"df[{column!r}]"
             lines.append(f"{ref} = {ref}.mask({ref}.isin(list({literal})), {ref}.map({literal}))")
         return lines or ["# Nothing to replace."]
+
+
+# --------------------------------------------------------------------------- #
+# Extract from text
+# --------------------------------------------------------------------------- #
+
+# Longer patterns are refused: Python's re has no time limit, so patterns stay small.
+MAX_PATTERN_LENGTH = 200
+MAX_EXTRACT_LENGTH = 10_000
+MAX_WORD_INDEX = 1000
+EXTRACT_PARTS = (
+    ("first", "The first characters"),
+    ("last", "The last characters"),
+    ("pattern", "The match of a pattern (regular expression)"),
+    ("word", "A word"),
+)
+EXTRACT_CASES = (
+    ("keep", "Keep as it is"),
+    ("upper", "UPPER CASE"),
+    ("lower", "lower case"),
+)
+
+
+def extract_text(values, part, length=1, pattern=None, index=1, strip=True, case="upper"):
+    """A part of every text value: the first or last `length` characters, the first group
+    (or the whole match) of the regular expression `pattern`, or word number `index` (1 is
+    the first word, -1 the last; words are split by spaces). Missing values, values without
+    such a part and empty parts give None."""
+    regex = re.compile(pattern) if part == "pattern" else None
+    result = []
+    for value in values:
+        if not isinstance(value, str):
+            result.append(None)
+            continue
+        text = value.strip() if strip else value
+        if part == "first":
+            piece = text[:length]
+        elif part == "last":
+            piece = text[-length:]
+        elif part == "pattern":
+            match = regex.search(text)
+            piece = None if match is None else match.group(1 if regex.groups else 0)
+        else:
+            words = text.split()
+            number = index - 1 if index > 0 else index
+            piece = words[number] if -len(words) <= number < len(words) else None
+        if not piece:
+            result.append(None)
+        elif case == "upper":
+            result.append(piece.upper())
+        elif case == "lower":
+            result.append(piece.lower())
+        else:
+            result.append(piece)
+    return pd.Series(result, index=values.index, dtype=object)
+
+
+def extract_mapping(mapping: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """The new values of an extract mapping in storage format and the kind of the new
+    column: numbers if every new value is a number, else categories."""
+    present = [value for value in mapping.values() if value is not None]
+    if present and all(as_number(value) is not None for value in present):
+        numbers = {k: None if v is None else as_number(v) for k, v in mapping.items()}
+        return numbers, "numeric"
+    labels = {k: None if v is None else as_label(v) for k, v in mapping.items()}
+    return labels, "categorical"
+
+
+def _ordinal(n: int) -> str:
+    if n == 1:
+        return "first"
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _part_text(params: dict[str, Any]) -> str:
+    """``the first character``, ``the last 3 characters``, ``the 2nd word`` …"""
+    part = params["part"]
+    if part in ("first", "last"):
+        length = params["length"]
+        return f"the {part} {'character' if length == 1 else f'{length:,} characters'}"
+    if part == "pattern":
+        pattern = params["pattern"]
+        shown = pattern if len(pattern) <= 40 else pattern[:39] + "…"
+        return f"the part matching '{shown}'"
+    index = params["index"]
+    if index > 0:
+        return f"the {_ordinal(index)} word"
+    return "the last word" if index == -1 else f"the {_ordinal(-index)} last word"
+
+
+def _code_lines(function: Any) -> list[str]:
+    return textwrap.dedent(inspect.getsource(function)).rstrip().splitlines()
+
+
+@register
+class ExtractText(Step):
+    type = "extract_text"
+    label = "Extract from text"
+    group = "columns"
+    description = (
+        "Take a part of a text column into a new column, e.g. the deck letter of a cabin "
+        "(C85 → C), and optionally map it to numbers (A → 1, B → 2 …)."
+    )
+    # The deck of a Titanic cabin as a number: C85 → C → 3; a missing cabin stays missing.
+    example = {
+        "column": "Cabin",
+        "name": "Deck",
+        "part": "first",
+        "length": 1,
+        "strip": True,
+        "case": "upper",
+        "mapping": {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "T": 8},
+    }
+    params = (
+        Param("column", "column", "Text column", default=None, column_kinds=STRING_KINDS),
+        Param("name", "string", "New column", default="", help="An existing column is replaced."),
+        Param(
+            "part",
+            "select",
+            "Take",
+            default="first",
+            options=EXTRACT_PARTS,
+            help="Values without such a part (too few words, no match) become missing.",
+        ),
+        Param(
+            "length",
+            "int",
+            "Characters",
+            default=1,
+            min=1,
+            max=MAX_EXTRACT_LENGTH,
+            help="How many characters to take.",
+            visible_if={"param": "part", "values": ["first", "last"]},
+        ),
+        Param(
+            "pattern",
+            "string",
+            "Pattern",
+            default="",
+            help=(
+                r"A regular expression (Python), e.g. [A-Z] for the first capital letter or \d+ "
+                "for the first number. With a group in brackets the first group is taken, "
+                f"else the whole match. At most {MAX_PATTERN_LENGTH} characters."
+            ),
+            visible_if={"param": "part", "values": ["pattern"]},
+        ),
+        Param(
+            "index",
+            "int",
+            "Word number",
+            default=1,
+            min=-MAX_WORD_INDEX,
+            max=MAX_WORD_INDEX,
+            help="1 is the first word, 2 the second; -1 is the last word. Words are split by "
+            "spaces.",
+            visible_if={"param": "part", "values": ["word"]},
+        ),
+        Param(
+            "strip",
+            "bool",
+            "Trim spaces first",
+            default=True,
+            help="Remove spaces at the start and the end of every value before taking the part.",
+        ),
+        Param(
+            "case",
+            "select",
+            "Case",
+            default="upper",
+            options=EXTRACT_CASES,
+            help="Of the part taken, before the mapping.",
+        ),
+        Param(
+            "mapping",
+            "mapping",
+            "Map to new values",
+            default={},
+            optional=True,
+            help=(
+                "Optional: part → new value, e.g. A → 1, B → 2. If every new value is a "
+                "number, the new column holds numbers. Parts not listed become missing. "
+                "Empty: the parts themselves, as categories."
+            ),
+            key_kind="value",
+        ),
+    )
+
+    def clean(self, table: Table, ctx: StepContext) -> dict[str, Any]:
+        raw = self.raw_params if isinstance(self.raw_params, dict) else {}
+        column = raw.get("column")
+        if isinstance(column, str) and table.kinds.get(column) not in (None, *STRING_KINDS):
+            kind = table.kinds[column]
+            raise DataError(
+                f"Text column: '{column}' holds {KIND_NAMES[kind]}, not text. Choose a text "
+                "or category column, or turn it into categories with “Change type” first."
+            )
+        params = super().clean(table, ctx)
+        if params["part"] == "pattern":
+            # Spaces count in a pattern: use it as typed (the generic check trims it).
+            pattern = raw.get("pattern")
+            pattern = pattern if isinstance(pattern, str) and pattern.strip() else ""
+            if len(pattern) > MAX_PATTERN_LENGTH:
+                raise DataError(f"Pattern: at most {MAX_PATTERN_LENGTH} characters.")
+            try:
+                re.compile(pattern)
+            except (re.error, OverflowError, RecursionError, ValueError) as exc:
+                raise DataError(
+                    f"Pattern: this is not a valid regular expression ({exc})."
+                ) from None
+            params["pattern"] = pattern
+        if params["part"] == "word" and params["index"] == 0:
+            raise DataError("Word number: use 1 for the first word or -1 for the last one.")
+        target = ctx.target
+        if target and params["column"] == target and params["name"] != target:
+            raise DataError(
+                f"Text column: '{target}' is the target. A column taken from the target gives "
+                "the model the answer during training and cannot be computed for new rows. "
+                "Choose another column."
+            )
+        return params
+
+    def run(self, table: Table, params: dict[str, Any], ctx: StepContext) -> StepResult:
+        column, name, mapping = params["column"], params["name"], params["mapping"]
+        kind = extract_mapping(mapping)[1] if mapping else "categorical"
+        # Run the code of the pandas script, so the script and raw-row predictions
+        # (frozen.py) give the very same values.
+        namespace: dict[str, Any] = {"np": np, "pd": pd, "re": re, "df": table.df[[column]].copy()}
+        code = "\n".join(self.to_pandas(params, None, ctx))
+        exec(compile(code, "<extract step>", "exec"), namespace)  # noqa: S102 (our code)
+        values = storage(namespace["df"][name], kind)
+        parts = namespace.get("_extracted", values)
+        replaced = name in table.kinds
+        result = set_columns(table, {name: (values, kind)})
+
+        present = int(values.notna().sum())
+        missing = table.n_rows - present
+        summary = f"Took {_part_text(params)} of '{column}' into '{name}': "
+        summary += plural(present, "value")
+        if not mapping:
+            summary += f" in {plural(int(values.nunique()), 'category', 'categories')}"
+        if missing:
+            summary += f", {fmt_count(missing)} missing"
+        if mapping and present:
+            if kind == "numeric":
+                low, high = float(values.min()), float(values.max())
+                summary += (
+                    f"; mapped to the number {fmt_number(low)}"
+                    if low == high
+                    else f"; mapped to numbers {fmt_number(low)}–{fmt_number(high)}"
+                )
+            else:
+                count = int(values.nunique())
+                summary += f"; mapped to {plural(count, 'category', 'categories')}"
+        summary += "."
+
+        warnings = []
+        if mapping:
+            unmapped = parts.notna() & ~parts.isin(list(mapping))
+            count = int(unmapped.sum())
+            if count:
+                shown = quoted(parts[unmapped].value_counts().index.tolist(), 5)
+                warnings.append(
+                    f"{plural(count, 'value')} not in the mapping became missing: {shown}."
+                )
+            warnings += _case_warnings(params["case"], list(mapping))
+        if not present and table.n_rows:
+            warnings.append(f"Every value of '{name}' is missing.")
+        if replaced and name == ctx.target:
+            warnings.append(f"This step replaces the target column '{name}'.")
+        details = []
+        counts = parts.value_counts()
+        if len(counts):
+            top = ", ".join(f"'{value[:30]}' ({fmt_count(n)})" for value, n in counts[:5].items())
+            more = f" and {fmt_count(len(counts) - 5)} more" if len(counts) > 5 else ""
+            details.append({"column": name, "text": f"parts taken: {top}{more}"})
+        return StepResult(result, summary, details=details, warnings=warnings)
+
+    def to_pandas(
+        self, params: dict[str, Any], fitted: dict[str, Any] | None, ctx: StepContext
+    ) -> list[str]:
+        params = {**self.defaults(), **params}
+        part = params["part"]
+        args = [f"df[{params['column']!r}]", repr(part)]
+        if part in ("first", "last"):
+            args.append(f"length={int(params['length'])!r}")
+        elif part == "pattern":
+            args.append(f"pattern={params['pattern']!r}")
+        else:
+            args.append(f"index={int(params['index'])!r}")
+        args += [f"strip={bool(params['strip'])!r}", f"case={params['case']!r}"]
+        call = f"extract_text({', '.join(args)})"
+        target = f"df[{params['name']!r}]"
+        lines = [*_code_lines(extract_text), ""]
+        if not params["mapping"]:
+            return [*lines, f"{target} = {call}"]
+        mapping, kind = extract_mapping(params["mapping"])
+        pairs = ", ".join(f"{code_value(k)}: {code_value(v)}" for k, v in mapping.items())
+        convert = ".astype('float64')" if kind == "numeric" else ""
+        return [*lines, f"_extracted = {call}", f"{target} = _extracted.map({{{pairs}}}){convert}"]
+
+
+def _case_warnings(case: str, keys: list[str]) -> list[str]:
+    """A warning for mapping keys that cannot match because of the case of the parts."""
+    if case == "keep":
+        return []
+    change = str.upper if case == "upper" else str.lower
+    odd = [key for key in keys if change(key) != key]
+    if not odd:
+        return []
+    verb = "matches" if len(odd) == 1 else "match"
+    return [
+        f"The parts are in {case} case, so {quoted(odd)} in the mapping never {verb}. "
+        "Change the mapping or the case."
+    ]

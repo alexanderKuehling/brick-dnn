@@ -151,7 +151,7 @@ The exported dataset carries this split in `split.bin`, so training uses it unch
 | Group | Steps |
 | ----- | ----- |
 | **Combine data** | *Join another table* (match key columns; left, inner, outer or right join) · *Append rows* (stack another table with the same columns) |
-| **Columns** | Drop · Keep only · Rename · Change type · *Formula* (new column from an expression, e.g. `log1p(income) / household_size`) · Replace values |
+| **Columns** | Drop · Keep only · Rename · Change type · *Formula* (new column from an expression, e.g. `log1p(income) / household_size`) · Replace values · *Extract from text* (a part of a text column, e.g. the deck letter of a cabin, optionally mapped to numbers – see below) |
 | **Rows** | Remove duplicates · Filter rows (=, <, between, is one of, contains, is missing …) · Drop rows with missing values · Sort · *Drop rows* (picked by hand: by the values of an ID column, or by row number) · *Remove atypical rows* and *Find near-duplicate groups* (before the split, see *Rows* below) |
 | **Missing values** | *Mark as missing* (sentinel values like `-999` or `unknown`) · Drop sparse columns · *Fill missing values*: mean, median, most frequent, fixed value, nearest neighbours (KNN), forward/backward fill, interpolation, optionally with an indicator column |
 | **Outliers & clipping** | *Outliers*: IQR rule, z-score, robust z-score (MAD) or quantiles; clip, remove, set missing or flag · *Clip values*: fixed bounds, quantiles (e.g. 1st–99th percentile) or mean ± k standard deviations |
@@ -170,6 +170,36 @@ it.
 The training engine standardises all features again (mean 0, standard deviation 1, from the
 training rows), so a *Scale* step is optional for training in Brick DNN; it is useful for the
 exported files.
+
+### Extract from text
+
+*Extract from text* takes a part of a text or category column into a new column (an existing
+column of that name is replaced). *Take*:
+
+- *The first characters* / *The last characters*: the first or last *Characters* (default 1);
+- *The match of a pattern*: a regular expression (Python `re`, at most 200 characters). With a
+  group in brackets the first group is taken, else the whole match: `,\s*([^.]+)\.` takes
+  the title `Mr` from `Braund, Mr. Owen Harris`, `\d+` the first number;
+- *A word*: word number *n*, split by spaces (1 is the first word, -1 the last).
+
+*Trim spaces first* (on by default) removes spaces at the start and the end of every value.
+*Case* turns the part into *UPPER CASE* (the default), *lower case* or keeps it. Values
+without such a part (no match, too few words) and missing values stay missing.
+
+Without a mapping the new column holds the parts as categories. *Map to new values* turns
+them into other values, like *Replace values*: if every new value is a number, the new column
+holds numbers. Parts that are not in the mapping become **missing**, and the step report says
+how many and which ("3 values not in the mapping became missing: 'X'.").
+
+Example: the Titanic cabins `C85`, `D32`, `E46`, `B57 B59 B63 B66` (or missing) give the deck
+with *The first characters*, *Characters* 1 and the mapping A → 1, B → 2 … G → 7, T → 8:
+`D32` becomes 4, and a missing cabin stays missing. The report reads "Took the first
+character of 'Cabin' into 'Deck': 204 values, 687 missing; mapped to numbers 1–8." Follow
+with *Fill missing values* if the model needs a number in every row.
+
+The step learns nothing from the rows, so it runs the same way in the pandas script (which
+contains the function `extract_text`) and for predictions from raw rows. The target cannot
+be the text column, unless the step replaces the target itself.
 
 ### Feature engineering
 

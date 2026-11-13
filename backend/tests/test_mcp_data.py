@@ -782,6 +782,14 @@ def test_list_prep_steps(ada):
         "params": {"columns": [], "strategy": "median", "add_indicator": False},
     }
     assert detail["learns_from_training_rows"] is True
+
+    extract = steps["extract_text"]
+    assert extract["group"] == "Columns" and "C85 → C" in extract["description"]
+    assert extract["params"]["part"].startswith("one of first | last | pattern | word")
+    assert "only used if part is pattern" in extract["params"]["pattern"]
+    detail = ok(ada, "list_prep_steps", type="extract_text")
+    assert detail["example"]["params"]["mapping"]["T"] == 8
+    assert detail["example"]["params"]["column"] == "Cabin"
     text = error_of(ada, "list_prep_steps", type="impute_all")
     assert "Unknown step type 'impute_all'" in text and "impute" in text
 

@@ -457,7 +457,9 @@ def step_catalog(step_type: Any = None) -> dict[str, Any]:
 
 
 def _example(spec: dict[str, Any]) -> dict[str, Any]:
-    """The defaults of a step type, without the ones of hidden parameters."""
+    """The example of a step type, else its defaults without the ones of hidden parameters."""
+    if isinstance(spec.get("example"), dict):
+        return dict(spec["example"])
     example = {}
     for param in spec["params"]:
         condition = param.get("visible_if")

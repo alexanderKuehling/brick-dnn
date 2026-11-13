@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Data preparation step *Extract from text*** (`extract_text`, group *Columns*): takes a
+  part of a text or category column into a new column: the first or last characters, the
+  first group (or the whole match) of a regular expression, or the n-th word (-1 the last).
+  Spaces are trimmed first and the part is upper case by default. An optional mapping like
+  *Replace values* turns the parts into new values, numbers if every new value is a number;
+  parts not in the mapping become missing, and the report says how many and which. E.g. the
+  Titanic cabin `D32` gives deck 4 with the mapping A → 1 … G → 7, T → 8; a missing cabin
+  stays missing. The pandas script and predictions from raw rows run the same code, so they
+  give exactly the training values. `list_prep_steps` describes it with that example (step
+  types can now carry an example for agents). See docs/data-preparation.md.
 - **Hyperparameter search for classical models.** Gradient boosting, SVMs and Gaussian
   processes search over the parameters of their brick: e.g. learning rate, iterations, leaves,
   depth, rows per leaf, L2 regularisation and class weights of gradient boosting; C, gamma,
