@@ -1,7 +1,8 @@
 # MCP server, OAuth and API tokens
 
 Brick DNN has a built-in [MCP](https://modelcontextprotocol.io) server, so AI assistants such
-as Claude can build networks (and classical models: Gaussian processes, SVMs), check them,
+as Claude can build networks (and classical models: Gaussian processes, SVMs, gradient
+boosting), check them,
 generate PyTorch or scikit-learn code, save them in your account, prepare data files for
 training (the Data tab), train them on your server, predict with the trained networks and hand
 you their weights. The
@@ -185,7 +186,8 @@ start_training {…, config: {epochs: 10, batch_size: 8}} · get_training_run {i
 predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_png
 ```
 
-**Classical models.** The same tools work for Gaussian processes and support vector machines
+**Classical models.** The same tools work for Gaussian processes, support vector machines and
+gradient boosting
 ([graph-format.md](graph-format.md#classical-models)): the instructions and
 `list_layer_types` explain the kernel bricks (`RBF`, `WhiteKernel`, … combined with
 `KernelSum` and `KernelProduct`) and the models; `analyze_network` reports the kernel
@@ -193,7 +195,8 @@ expression; `generate_pytorch_code` returns a scikit-learn script; `get_training
 says under `classical` whether they can be trained and on how many rows at most;
 `start_training` fits them once (only `val_split`, `test_split`, `max_samples` and `seed`
 apply, no `tuning`; without validation rows the fit is measured on the test rows, or on its
-training rows); `get_training_run` shows the fitted kernel or the support vectors in
+training rows); `get_training_run` shows the fitted kernel, the support vectors or the
+boosting iterations in
 `state.classical` (see [training.md](training.md#classical-models)).
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and

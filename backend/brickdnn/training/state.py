@@ -129,6 +129,8 @@ both families can be compared. The details are in ``classical``::
         "kernel": "...",               # ... and the fitted one (null until fitted)
         "log_marginal_likelihood": 12.5,     # Gaussian processes, null until fitted
         "support_vectors": null,       # support vector machines: their number once fitted
+        "iterations": null,            # gradient boosting: boosting iterations once fitted
+        "max_iterations": null,        # ... and its max_iter (early stopping may end sooner)
         "train": {"loss": 0.1, "accuracy": null, "rmse": 0.3, "r2": 0.97}  # training rows
       }
 

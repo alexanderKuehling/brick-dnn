@@ -119,3 +119,26 @@ def test_estimate_of_classical_models():
     assert estimate_training(svm, random_info(), config, None).details["family"] == "classical"
     broken = analyze({"nodes": [{"id": "x", "type": "Linear", "params": {}}], "edges": []})
     assert estimate_training(broken, rows, config, None) is None
+
+
+def test_estimate_of_gradient_boosting():
+    boosting = analyze(EXAMPLES["gradient_boosting_classifier"]["graph"])
+    config = TrainingConfig()
+
+    def rows(n):
+        return DatasetInfo(kind="csv", name="rows", num_samples=n, num_features=30)
+
+    large = estimate_training(boosting, rows(500_000), config, None)
+    small = estimate_training(boosting, rows(50_000), config, None)
+    # About linear in the rows (plus a cost per tree), far from the n² of an SVM.
+    assert 3 < large.cpu_seconds / small.cpu_seconds < 10
+    assert large.details["trees"] == 200 and large.details["train_rows"] == 400_000
+    assert "up to 200 trees fitted on 400,000 training rows with 30 features" in large.basis
+    # Several classes: one tree per class and iteration.
+    plan = {"num_classes": 4}
+    multi = estimate_training(boosting, rows(50_000), config, plan)
+    assert multi.details["trees"] == 800 and multi.cpu_seconds > 2.5 * small.cpu_seconds
+    # 400,000 rows × 30 features × 200 trees: a few minutes of CPU time at most.
+    assert 10 < large.cpu_seconds < 300
+    demo = estimate_training(boosting, random_info(), config, None)
+    assert demo.details["train_rows"] == 2000

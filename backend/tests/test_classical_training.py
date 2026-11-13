@@ -38,9 +38,14 @@ from brickdnn.training.job import TrainingJob  # noqa: E402
 from brickdnn.training.reporting import Reporter  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parent.parent
+BOOSTING = ["HistGradientBoostingRegressor", "HistGradientBoostingClassifier"]
+# Gradient boosting on the small test files: fewer iterations, smaller leaves.
+QUICK_BOOSTING = {"max_iter": 50, "min_samples_leaf": 5}
 
 
 def model_graph(model, features=4, params=None, kernel=None):
+    if params is None and model in BOOSTING:
+        params = QUICK_BOOSTING
     nodes = [
         {"id": "in", "type": "Input", "params": {"shape": [features]}},
         {"id": "m", "type": model, "params": params or {}},
@@ -154,9 +159,20 @@ INTEGER = {"target_kind": "integer", "target_range": [1, 7], "class_names": ["1"
             csv_info(num_features=5, columns=list("abcdey"), **NUMBER),
             "Set the Input shape to 5",
         ),
-        ("SVR", csv_info(**TEXT), "use GaussianProcessClassifier or SVC instead"),
+        (
+            "SVR",
+            csv_info(**TEXT),
+            "use GaussianProcessClassifier, SVC or HistGradientBoostingClassifier instead",
+        ),
         ("GaussianProcessRegressor", csv_info(**TEXT), "classification task"),
-        ("SVC", csv_info(**NUMBER), "use GaussianProcessRegressor or SVR instead"),
+        ("HistGradientBoostingRegressor", csv_info(**TEXT), "classification task"),
+        (
+            "SVC",
+            csv_info(**NUMBER),
+            "use GaussianProcessRegressor, SVR or HistGradientBoostingRegressor instead",
+        ),
+        ("HistGradientBoostingClassifier", csv_info(**NUMBER), "regression task"),
+        ("HistGradientBoostingClassifier", builtin_info("mnist"), "not on images like MNIST"),
         ("GaussianProcessClassifier", csv_info(**NUMBER), "regression task"),
         ("SVC", csv_info(target_kind="text", class_names=["only"]), "only one class"),
         ("SVC", csv_info(target_kind="integer", class_names=None), "more than 1,000"),
@@ -197,6 +213,16 @@ def test_plans_of_classical_models():
 
     result = check_compatibility(model_graph("SVR"), csv_info(**INTEGER))
     assert result.ok and "predicts them as numbers" in result.warnings[0]
+
+    for model, info in zip(BOOSTING, [csv_info(**NUMBER), csv_info(**TEXT)], strict=True):
+        plan = check_compatibility(model_graph(model), info).plan
+        assert plan.classical["estimator"] == model
+        assert plan.classical["scale"] == "gradient_boosting"
+        assert plan.classical["max_rows"] == 1_000_000  # BRICKDNN_GB_MAX_ROWS
+        assert plan.classical["kernel"] is None
+        assert any("early stopping of its own" in note for note in plan.notes)
+    plan = check_compatibility(model_graph(BOOSTING[1]), random_info()).plan
+    assert plan.task == "demo" and any("early stopping of its own" in n for n in plan.notes)
 
 
 def test_suggested_fixes_only_change_the_input():
@@ -249,6 +275,11 @@ def test_row_limits(monkeypatch):
         "(BRICKDNN_GPC_MAX_ROWS; the time to fit grows with n³ for every class)"
         in (result.warnings[0])
     )
+    # Gradient boosting grows about linearly: a much higher limit.
+    monkeypatch.setenv("BRICKDNN_GB_MAX_ROWS", "60")
+    result = check_compatibility(model_graph("HistGradientBoostingRegressor"), csv_info(**NUMBER))
+    assert result.ok and result.plan.classical["max_rows"] == 60
+    assert "(BRICKDNN_GB_MAX_ROWS; the time to fit grows with n)" in result.warnings[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -256,7 +287,9 @@ def test_row_limits(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("model", ["GaussianProcessRegressor", "SVR"])
+@pytest.mark.parametrize(
+    "model", ["GaussianProcessRegressor", "SVR", "HistGradientBoostingRegressor"]
+)
 def test_regression_on_csv(model, tmp_path):
     path = regression_csv(tmp_path / "houses.csv")
     result, rec = run_job(model_graph(model), inspect_csv(path), tmp_path, path, test_split=0.1)
@@ -294,6 +327,11 @@ def test_regression_on_csv(model, tmp_path):
     assert details["fit_seconds"] >= 0 and details["train"]["r2"] > 0.5
     if model == "SVR":
         assert details["support_vectors"] > 0 and details["kernel"] is None
+    elif model in BOOSTING:
+        # 56 training rows: early stopping ("auto") stays off below 10,000 rows.
+        assert details["iterations"] == details["max_iterations"] == 50
+        assert details["support_vectors"] is None and details["kernel"] is None
+        assert "Boosting iterations: 50 of at most 50." in rec.logs
     else:
         assert "RBF(length_scale=" in details["kernel"]
         assert details["initial_kernel"].startswith("ConstantKernel(constant_value=1.0)")
@@ -316,7 +354,9 @@ def test_regression_on_csv(model, tmp_path):
     assert list(scaler.mean_) == pytest.approx(preprocessing["mean"])
 
 
-@pytest.mark.parametrize("model", ["GaussianProcessClassifier", "SVC"])
+@pytest.mark.parametrize(
+    "model", ["GaussianProcessClassifier", "SVC", "HistGradientBoostingClassifier"]
+)
 def test_classification_on_csv(model, tmp_path):
     path = classification_csv(tmp_path / "mail.csv")
     result, rec = run_job(model_graph(model), inspect_csv(path), tmp_path, path)
@@ -333,6 +373,9 @@ def test_classification_on_csv(model, tmp_path):
     if model == "GaussianProcessClassifier":
         # One Gaussian process per class (one against the rest), each with its kernel.
         assert rec.info["classical"]["kernel"].startswith("eggs: ")
+    elif model in BOOSTING:
+        assert rec.info["classical"]["iterations"] == 50
+        assert type(bundle["model"].named_steps["model"]).__name__ == model
     else:
         assert rec.info["classical"]["support_vectors"] > 0
 
@@ -358,6 +401,61 @@ def test_integer_classes_and_demo_data(tmp_path):
     assert rec.history[0]["val_r2"] > 0.5  # the hidden rule can be learned
     assert (tmp_path / "demo" / "model.joblib").exists()
     assert not (tmp_path / "demo" / "model.preprocessing.json").exists()
+
+
+def test_gradient_boosting_on_demo_data(tmp_path):
+    for model in BOOSTING:
+        result, rec = run_job(model_graph(model, 3), random_info(), tmp_path / model)
+        assert result.status == "completed", result.message
+        assert rec.info["task"] == "demo" and rec.info["train_size"] == 1600
+        assert any(
+            "Fitting the gradient boosting model on 1,600 rows" in m for _, m in rec.statuses
+        )
+        entry = rec.history[0]
+        if model == "HistGradientBoostingRegressor":
+            assert entry["val_r2"] > 0.5  # the hidden rule can be learned
+        else:
+            assert entry["val_accuracy"] > 0.5 and rec.info["num_classes"] == 3
+
+
+def test_gradient_boosting_stops_early(tmp_path):
+    path = regression_csv(tmp_path / "noisy.csv", n=400)
+    # A large learning rate overfits soon: the loss on the held-out rows stops improving.
+    params = {"early_stopping": "on", "learning_rate": 0.9, "max_iter": 500}
+    graph = model_graph("HistGradientBoostingRegressor", params=params)
+    result, rec = run_job(graph, inspect_csv(path), tmp_path, path)
+    assert result.status == "completed", result.message
+    details = rec.info["classical"]
+    assert details["max_iterations"] == 500 and 10 < details["iterations"] < 500
+    assert f"Boosting iterations: {details['iterations']} of at most 500 (early stopping)." in (
+        rec.logs
+    )
+
+
+@pytest.mark.parametrize(
+    "labels,message",
+    [
+        (["a", "b"] * 30 + ["c"], "the class 'c' has only one training row"),
+        (["a", "b", "c", "d", "e"] * 4, "2 rows are too few for 5 classes"),
+    ],
+)
+def test_early_stopping_needs_rows_of_every_class(labels, message, tmp_path):
+    rng = np.random.default_rng(1)
+    path = tmp_path / "rare.csv"
+    rows = [
+        f"{a:.4f},{b:.4f},{label}"
+        for (a, b), label in zip(rng.normal(size=(len(labels), 2)), labels, strict=True)
+    ]
+    path.write_text("\n".join(["x,y,label", *rows]) + "\n")
+    params = {"early_stopping": "on", "max_iter": 20}
+    graph = model_graph("HistGradientBoostingClassifier", 2, params)
+    result, _ = run_job(graph, inspect_csv(path), tmp_path, path, val_split=0)
+    assert result.status == "failed" and message in result.message, result.message
+    assert "Set Early stopping to off" in result.message
+    # Without early stopping the same rows train.
+    graph = model_graph("HistGradientBoostingClassifier", 2, {**params, "early_stopping": "off"})
+    result, _ = run_job(graph, inspect_csv(path), tmp_path, path, val_split=0)
+    assert result.status == "completed", result.message
 
 
 class EvaluationRecorder(Recorder):
@@ -531,7 +629,14 @@ def write_job(run_dir, graph, path=None, **config):
 
 
 @pytest.mark.parametrize(
-    "model", ["GaussianProcessRegressor", "GaussianProcessClassifier", "SVR", "SVC"]
+    "model",
+    [
+        "GaussianProcessRegressor",
+        "GaussianProcessClassifier",
+        "SVR",
+        "SVC",
+        "HistGradientBoostingClassifier",
+    ],
 )
 def test_runner_fits_and_saves_a_joblib_model(model, tmp_path):
     regression = model in ("GaussianProcessRegressor", "SVR")
@@ -560,6 +665,9 @@ def test_runner_fits_and_saves_a_joblib_model(model, tmp_path):
         assert state["test"]["accuracy"] is not None and state["class_names"]
     if model.startswith("Gaussian"):
         assert details["kernel"] and details["log_marginal_likelihood"] is not None
+    elif model in BOOSTING:
+        assert details["iterations"] == 50 and details["support_vectors"] is None
+        assert state["evaluation"]["val"]["confusion_matrix"]
     else:
         assert details["support_vectors"] > 0
     assert sorted(p.name for p in run_dir.iterdir()) == [
@@ -629,9 +737,10 @@ def trained_run(tmp_path, graph, path=None, **config):
     return run_dir, plan, rec.info["preprocessing"]
 
 
-def test_predict_classes_with_probabilities(tmp_path):
+@pytest.mark.parametrize("model", ["SVC", "HistGradientBoostingClassifier"])
+def test_predict_classes_with_probabilities(model, tmp_path):
     path = classification_csv(tmp_path / "mail.csv")
-    run_dir, plan, preprocessing = trained_run(tmp_path, model_graph("SVC"), path)
+    run_dir, plan, preprocessing = trained_run(tmp_path, model_graph(model), path)
     rows = [{"a": 2, "b": 0, "c": 0, "d": 0}, [-2, 0, 0, 0], [0.5, 2, 0, 0]]
     prepared = inference.prepare_inputs(plan, preprocessing, rows, top_k=3)
     answer = predict.predict(run_dir, {"inputs": prepared.tensors, "kind": prepared.kind})
@@ -666,6 +775,19 @@ def test_predict_gp_values_with_uncertainty(tmp_path):
     assert predictions[0]["value"] == pytest.approx(100, abs=1)  # in the units of the target
     assert predictions[1]["value"] - predictions[0]["value"] == pytest.approx(3, abs=0.5)
     assert all(p["std"] > 0 for p in predictions)
+
+
+def test_predict_boosted_values(tmp_path):
+    path = regression_csv(tmp_path / "houses.csv", n=200)
+    graph = model_graph("HistGradientBoostingRegressor")
+    run_dir, plan, preprocessing = trained_run(tmp_path, graph, path)
+    rows = [[0, 0, 0, 0], [1.5, 0, 0, 0]]
+    prepared = inference.prepare_inputs(plan, preprocessing, rows)
+    answer = predict.predict(run_dir, {"inputs": prepared.tensors, "kind": prepared.kind})
+    assert "std" not in answer and "probabilities" not in answer
+    predictions = inference.read_outputs(plan, preprocessing, answer["outputs"], 2)
+    assert predictions[0]["value"] == pytest.approx(100, abs=1.5)  # in the units of the target
+    assert predictions[1]["value"] - predictions[0]["value"] > 2  # about 4.5
 
 
 def test_predict_demo_runs_and_bad_requests(tmp_path):

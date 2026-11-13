@@ -94,6 +94,24 @@ describe('format', () => {
     expect(summarize('SVR', { kernel: 'poly', degree: 3, C: 10, epsilon: 0.1 })).toBe(
       'Polynomial kernel (degree 3) · C = 10 · ε = 0.1'
     );
+    expect(
+      summarize('HistGradientBoostingClassifier', {
+        max_iter: 200,
+        learning_rate: 0.1,
+        max_leaf_nodes: 31,
+        max_depth: null,
+        class_weight: 'balanced',
+      })
+    ).toBe('200 iterations · rate 0.1 · 31 leaves · balanced');
+    expect(
+      summarize('HistGradientBoostingRegressor', {
+        max_iter: 500,
+        learning_rate: 0.05,
+        max_leaf_nodes: 15,
+        max_depth: 6,
+      })
+    ).toBe('500 iterations · rate 0.05 · 15 leaves · depth 6');
+    expect(optionLabel('early_stopping', 'auto')).toBe('Auto (above 10,000 rows)');
   });
 
   it('describes outputs of kernels and classifiers', () => {
@@ -116,5 +134,20 @@ describe('format', () => {
       classical: { ...GP_ANALYSIS.classical!, type: 'SVC', task: 'classification' as const },
     };
     expect(networkSize(svm)).toBe('SVM classifier');
+    const boosting = {
+      ...svm,
+      classical: {
+        ...svm.classical,
+        type: 'HistGradientBoostingRegressor',
+        task: 'regression' as const,
+      },
+    };
+    expect(networkSize(boosting)).toBe('Gradient boosting regression');
+    expect(
+      networkSize({
+        ...boosting,
+        classical: { ...boosting.classical, task: 'classification' as const },
+      })
+    ).toBe('Gradient boosting classifier');
   });
 });

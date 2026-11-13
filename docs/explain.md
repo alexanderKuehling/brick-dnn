@@ -33,7 +33,8 @@ The builder also has two aids that need no training at all (and work in the onli
 | Decision boundary      | Predictions on a grid, with training points   | models with exactly 2 input features   |
 | Inside the network     | Output of every brick, filters, weight histograms | neural networks                    |
 
-Classical models (Gaussian processes, support vector machines) have no layers: they get the
+Classical models (Gaussian processes, support vector machines, gradient boosting) have no
+layers: they get the
 model-agnostic methods (Shapley values, permutation importance, decision boundary); a Gaussian
 process regressor also shows its predictive standard deviation.
 

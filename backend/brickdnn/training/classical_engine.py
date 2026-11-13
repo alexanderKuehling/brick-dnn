@@ -23,6 +23,7 @@ other callers wait for the fit and discard it.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import os
 import random
@@ -51,7 +52,7 @@ from .state import finite, preprocessing_path, write_json_atomic
 from .tabular import CHANGED, csv_columns, csv_rows, held_out_size, read_split, split_sizes
 
 # Demo data: this many random rows (Gaussian processes fit in O(n³)).
-DEMO_ROWS = {"gaussian_process": 500, "svm": 1000}
+DEMO_ROWS = {"gaussian_process": 500, "svm": 1000, "gradient_boosting": 2000}
 # Rows per prediction call: a Gaussian process builds a (training rows × chunk) matrix.
 PREDICT_CHUNK = 2048
 # How often the stop request is checked while fitting (seconds).
@@ -60,13 +61,25 @@ STOP_CHECK_INTERVAL = 0.2
 MAX_WARNINGS = 5
 # SVC calibrates its probabilities with this many folds (CalibratedClassifierCV).
 CALIBRATION_FOLDS = 5
+# Gradient boosting: early_stopping "auto" switches it on above this many training rows,
+# and it holds out this share of them (scikit-learn's defaults).
+AUTO_EARLY_STOPPING_ROWS = 10_000
+EARLY_STOPPING_SHARE = 0.1
+# Gradient boosting below this many training values (rows × features) fits and predicts
+# with one thread: more OpenMP threads cost more than they gain on small data, and they
+# stall when the CPUs are busy.
+SINGLE_THREAD_CELLS = 200_000
 
 NO_TUNING = (
     "Hyperparameter search is not available for classical models yet. Switch it off: a "
     "Gaussian process optimises its kernel hyperparameters while it is fitted."
 )
 STOPPED = "Stopped before the model was fitted: nothing was saved."
-WHAT = {"gaussian_process": "Gaussian process", "svm": "support vector machine"}
+WHAT = {
+    "gaussian_process": "Gaussian process",
+    "svm": "support vector machine",
+    "gradient_boosting": "gradient boosting model",
+}
 
 
 def _seconds(seconds: float) -> str:
@@ -233,6 +246,8 @@ class _ClassicalRun:
             "kernel": None,
             "log_marginal_likelihood": None,
             "support_vectors": None,
+            "iterations": None,
+            "max_iterations": None,
             "train": None,
         }
         reporter.setup(
@@ -290,6 +305,10 @@ class _ClassicalRun:
         self.details.update(fit_seconds=round(fit_seconds, 3), train=trained, **self._learned())
         if self.layer.scale == "gaussian_process":
             self.details["at_bounds"] = self._at_bounds(analysis)
+        iterations, most = self.details["iterations"], self.details["max_iterations"]
+        if iterations is not None:
+            stopped = " (early stopping)" if iterations < most else ""
+            reporter.log(f"Boosting iterations: {iterations:,} of at most {most:,}{stopped}.")
         reporter.setup({"classical": dict(self.details), "preprocessing": self._preprocessing()})
         reporter.epoch_end(dict(entry), dict(self.best) if self.best else None)
         reporter.weights_kept({"weights_epoch": 1, "stopped_early": False})
@@ -542,6 +561,27 @@ class _ClassicalRun:
                 f"SVC needs at least {CALIBRATION_FOLDS} training rows of some class to turn "
                 f"its scores into probabilities ({CALIBRATION_FOLDS}-fold cross-validation)."
             )
+        if self._early_stopping(len(y)):
+            # The held-out rows are stratified: every class needs a row on both sides.
+            rare = [names[i] if i < len(names) else str(i) for i in np.flatnonzero(counts == 1)]
+            held_out = math.ceil(EARLY_STOPPING_SHARE * len(y))
+            if rare or held_out < len(present):
+                reason = (
+                    f"the class '{rare[0]}' has only one training row"
+                    if rare
+                    else f"{held_out} rows are too few for {len(present)} classes"
+                )
+                raise TrainingError(
+                    "Early stopping holds out 10 % of the training rows with every class in "
+                    f"proportion, but {reason}. Set Early stopping to off, or use more rows."
+                )
+
+    def _early_stopping(self, rows: int) -> bool:
+        """Whether gradient boosting holds out rows for its early stopping."""
+        if self.layer.scale != "gradient_boosting":
+            return False
+        setting = self.layer.p["early_stopping"]
+        return setting == "on" or (setting == "auto" and rows > AUTO_EARLY_STOPPING_ROWS)
 
     # -- fitting ------------------------------------------------------------- #
 
@@ -551,7 +591,7 @@ class _ClassicalRun:
 
         def work() -> None:
             try:
-                with warnings.catch_warnings(record=True) as caught:
+                with warnings.catch_warnings(record=True) as caught, self._threads():
                     warnings.simplefilter("always")
                     self.pipeline.fit(x, y)
                 outcome["warnings"] = caught
@@ -580,8 +620,10 @@ class _ClassicalRun:
 
     def _learned(self) -> dict[str, Any]:
         """What the fit found: the kernel of a Gaussian process, the support vectors of an
-        SVM."""
+        SVM, the boosting iterations of gradient boosting (early stopping may end sooner)."""
         model = final_estimator(self.pipeline)
+        if self.layer.scale == "gradient_boosting":
+            return {"iterations": int(model.n_iter_), "max_iterations": int(model.max_iter)}
         if self.layer.scale == "gaussian_process":
             likelihood = getattr(model, "log_marginal_likelihood_value_", None)
             return {
@@ -614,9 +656,22 @@ class _ClassicalRun:
 
     # -- measuring ----------------------------------------------------------- #
 
+    def _threads(self) -> contextlib.AbstractContextManager[Any]:
+        """One OpenMP thread for gradient boosting on small data (SINGLE_THREAD_CELLS), in
+        the calling thread; otherwise no limit."""
+        data = self.data
+        if self.layer.scale != "gradient_boosting" or len(data.train) * data.x.shape[1] >= (
+            SINGLE_THREAD_CELLS
+        ):
+            return contextlib.nullcontext()
+        from threadpoolctl import threadpool_limits
+
+        return threadpool_limits(limits=1, user_api="openmp")
+
     def _chunks(self, x: np.ndarray, method: str) -> np.ndarray:
         call = getattr(self.pipeline, method)
-        parts = [call(x[i : i + PREDICT_CHUNK]) for i in range(0, len(x), PREDICT_CHUNK)]
+        with self._threads():
+            parts = [call(x[i : i + PREDICT_CHUNK]) for i in range(0, len(x), PREDICT_CHUNK)]
         return np.concatenate(parts) if parts else np.empty(0)
 
     def probabilities(self, x: np.ndarray) -> np.ndarray:

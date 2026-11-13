@@ -25,7 +25,8 @@ classifiers = [
 # `pip install "brickdnn[train]"` enables `brickdnn train` (local training with PyTorch, and
 # of classical models with scikit-learn).
 train = ["torch>=2.1", "torchvision>=0.16", "scikit-learn>=1.3"]
-# `pip install "brickdnn[classic]"` trains classical models (Gaussian processes, SVMs) only.
+# `pip install "brickdnn[classic]"` trains classical models (Gaussian processes, SVMs,
+# gradient boosting) only.
 classic = ["scikit-learn>=1.3"]
 # `pip install "brickdnn[data]"` enables data preparation (brickdnn.data), including the
 # imports of Excel, Parquet and Feather files.

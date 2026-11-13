@@ -161,7 +161,9 @@ def moons_csv(path: Path, rows: int = 240) -> Path:
     return path
 
 
-@pytest.mark.parametrize("estimator", ["SVC", "GaussianProcessClassifier"])
+@pytest.mark.parametrize(
+    "estimator", ["SVC", "GaussianProcessClassifier", "HistGradientBoostingClassifier"]
+)
 def test_decision_boundary_of_a_classical_model_is_its_prediction(tmp_path, estimator):
     """The boundary's grid holds the model's own predictions; the validation rows are those
     of the training (same split)."""
@@ -242,6 +244,36 @@ def test_gaussian_process_regression_reports_its_uncertainty(tmp_path):
     answer = ask(directory, plan, preprocessing, method="permutation")
     assert answer["metric"] == "r2" and answer["features"][0]["name"] == "a"
     assert answer["features"][0]["mean"] > 0.5 and abs(answer["features"][1]["mean"]) < 0.1
+
+
+def test_permutation_importance_of_gradient_boosting(tmp_path):
+    """Permutation importance only needs predictions: it works for trees as for the other
+    classical models."""
+    from brickdnn.training.classical_engine import _ClassicalRun
+
+    rng = np.random.default_rng(3)
+    lines = ["a,b,y"] + [
+        f"{a:.4f},{b:.4f},{3 * a + 0.05 * rng.normal():.4f}"
+        for a, b in rng.uniform(-2, 2, size=(300, 2))
+    ]
+    csv = tmp_path / "line.csv"
+    csv.write_text("\n".join(lines) + "\n")
+    info = inspect_csv(csv)
+    graph = chain(("Input", {"shape": [2]}), ("HistGradientBoostingRegressor", {"max_iter": 50}))
+    directory = run_dir(tmp_path, graph, info, csv, {"seed": 1})
+    job = TrainingJob.from_dict(json.loads((directory / "job.json").read_text()))
+    fitted = _ClassicalRun(job, Reporter(), directory / "model.joblib", False)
+    fitted._execute()
+    plan = check_compatibility(graph, info, job.config).plan.to_dict()
+    preprocessing = fitted._preprocessing()
+
+    answer = ask(directory, plan, preprocessing, method="permutation")
+    assert answer["metric"] == "r2" and answer["features"][0]["name"] == "a"
+    assert answer["features"][0]["mean"] > 0.5 and abs(answer["features"][1]["mean"]) < 0.1
+    answer = ask(directory, plan, preprocessing, method="tabular", sample={"index": 0})
+    assert "std" not in answer["prediction"]  # only Gaussian processes know their uncertainty
+    total = sum(f["shapley"] for f in answer["features"])
+    assert total == pytest.approx(answer["value"] - answer["base_value"], abs=2e-3)
 
 
 # --------------------------------------------------------------------------- #

@@ -49,7 +49,7 @@ import { CodeView } from '@/builder/CodeView';
 import { downloadBlob, downloadText } from '@/builder/download';
 import { formatCount } from '@/builder/format';
 import { semanticKey, slugify } from '@/builder/graph';
-import { kernelLines, kernelTerms } from '@/builder/kinds';
+import { isBoosting, kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
@@ -941,7 +941,8 @@ function QueueNotice({ run }: { run: RunDetail }) {
 /**
  * The results of a classical model, fitted once: how long the fit took and on how many
  * rows, what it found (the kernel and log marginal likelihood of a Gaussian process, the
- * support vectors of an SVM) and its scores on the training, validation and test rows.
+ * support vectors of an SVM, the boosting iterations of gradient boosting) and its scores on
+ * the training, validation and test rows.
  */
 function ClassicalResults({
   run,
@@ -1010,6 +1011,9 @@ function ClassicalResults({
     splits.push({ label: 'Test', metrics: test, size: testSize });
   }
   const supportShare = fit?.support_vectors != null && rows ? fit.support_vectors / rows : null;
+  const boosting = Boolean(fit && (fit.iterations != null || isBoosting(fit.estimator)));
+  const iterations = fit?.iterations ?? null;
+  const maxIterations = fit?.max_iterations ?? null;
 
   return (
     <Stack gap="sm">
@@ -1031,6 +1035,18 @@ function ClassicalResults({
             label="Log marginal likelihood"
             value={formatMetric(fit?.log_marginal_likelihood)}
             hint="of the fitted kernel; higher fits better"
+          />
+        ) : boosting ? (
+          <Tile
+            label="Boosting iterations"
+            value={sizeText(iterations)}
+            hint={
+              iterations !== null && maxIterations !== null
+                ? iterations < maxIterations
+                  ? `of at most ${sizeText(maxIterations)}: early stopping`
+                  : `of at most ${sizeText(maxIterations)}`
+                : undefined
+            }
           />
         ) : (
           <Tile

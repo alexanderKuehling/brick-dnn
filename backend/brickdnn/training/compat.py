@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis, analyze
-from ..layers import ClassicalModel, fmt_shape
+from ..layers import REGISTRY, ClassicalModel, fmt_shape
 from .config import (
     NO_VALIDATION_PATIENCE,
     NO_VALIDATION_SEARCH,
@@ -1114,12 +1114,28 @@ LIMITS = {
         "n³ for every class",
     ),
     "svm": ("Support vector machines", "BRICKDNN_SVM_MAX_ROWS", "n² or more"),
+    "gradient_boosting": ("Gradient boosting models", "BRICKDNN_GB_MAX_ROWS", "n"),
 }
 CLASSICAL_NOTE = (
     "A classical model is fitted once, without epochs: the settings for epochs, batch size, "
     "learning rate, optimizer, weight decay, device, early stopping and the kept weights are "
     "not used."
 )
+BOOSTING_NOTE = (
+    "Gradient boosting has early stopping of its own (a setting of the brick): it holds out "
+    "10 % of the training rows and stops adding trees when the loss on them no longer "
+    "improves."
+)
+
+
+def _models_for(task: str) -> str:
+    """The classical models of a task: "GaussianProcessRegressor, SVR or …"."""
+    names = [
+        name
+        for name, cls in REGISTRY.items()
+        if issubclass(cls, ClassicalModel) and getattr(cls, "task", None) == task
+    ]
+    return ", ".join(names[:-1]) + f" or {names[-1]}" if len(names) > 1 else "".join(names)
 
 
 def _check_classical(
@@ -1184,20 +1200,22 @@ def _check_classical(
         "training rows; the scaler is saved as part of the model.",
         CLASSICAL_NOTE,
     ]
+    if layer.scale == "gradient_boosting":
+        notes.append(BOOSTING_NOTE)
 
     if layer.task == "regression":
         if info.target_kind == "text":
             result.errors.append(
                 f"The target column '{target}' contains text labels ({info.num_classes or 0} "
-                f"classes), so this is a classification task: use GaussianProcessClassifier or "
-                f"SVC instead of {layer.label}."
+                f"classes), so this is a classification task: use "
+                f"{_models_for('classification')} instead of {layer.label}."
             )
             return
         if info.target_kind == "integer" and info.class_names and len(info.class_names) <= 10:
             result.warnings.append(
                 f"The target column '{target}' only holds {len(info.class_names)} different "
                 f"values or classes ({_shown(info.class_names)}). {layer.label} predicts them "
-                "as numbers; for classification use GaussianProcessClassifier or SVC instead."
+                f"as numbers; for classification use {_models_for('classification')} instead."
             )
         plan = TrainingPlan(
             task="regression",
@@ -1212,14 +1230,14 @@ def _check_classical(
         if info.target_kind == "number":
             result.errors.append(
                 f"The target column '{target}' contains decimal numbers, which is a regression "
-                f"task: use GaussianProcessRegressor or SVR instead of {layer.label}."
+                f"task: use {_models_for('regression')} instead of {layer.label}."
             )
             return
         if not info.class_names:
             result.errors.append(
                 f"This dataset was prepared for regression: its target '{target}' has no "
                 "classes. Prepare it for classification in the Data tab, or use "
-                "GaussianProcessRegressor or SVR."
+                f"{_models_for('regression')}."
                 if prepared
                 else f"The target column '{target}' has more than {MAX_CLASSES:,} different "
                 "values: it cannot be used for classification."
@@ -1290,6 +1308,8 @@ def _classical_demo_plan(
         "rule. The numbers say nothing about real-world accuracy.",
         CLASSICAL_NOTE,
     ]
+    if layer.scale == "gradient_boosting":
+        notes.append(BOOSTING_NOTE)
     if layer.task == "regression":
         return TrainingPlan(
             task="demo",

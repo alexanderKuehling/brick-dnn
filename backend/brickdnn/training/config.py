@@ -34,12 +34,15 @@ MAX_HELD_OUT = 0.8
 # Classical models fit on at most this many training rows; larger training sets are
 # subsampled. Gaussian processes need O(n²) memory and O(n³) time (a classifier once per
 # class, and its Laplace approximation is much slower than a regression), support vector
-# machines O(n²) memory (kernel cache) and between O(n²) and O(n³) time.
+# machines O(n²) memory (kernel cache) and between O(n²) and O(n³) time. Gradient boosting
+# grows about linearly with the rows (its features are binned into bytes); its limit only
+# keeps very long fits in bounds.
 # {limit (ClassicalModel.limit): (variable, default)}
 CLASSICAL_MAX_ROWS = {
     "gaussian_process": ("BRICKDNN_GP_MAX_ROWS", 5_000),
     "gaussian_process_classifier": ("BRICKDNN_GPC_MAX_ROWS", 2_000),
     "svm": ("BRICKDNN_SVM_MAX_ROWS", 50_000),
+    "gradient_boosting": ("BRICKDNN_GB_MAX_ROWS", 1_000_000),
 }
 
 

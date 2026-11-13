@@ -127,7 +127,7 @@ class GeneratorOptions:
 
 def generate_code(graph: Any, options: GeneratorOptions | dict[str, Any] | None = None) -> str:
     """Generate PyTorch code for ``graph``, or a scikit-learn script for a classical
-    network (a Gaussian process or SVM, see :mod:`brickdnn.classical`).
+    network (a Gaussian process, SVM or gradient boosting, see :mod:`brickdnn.classical`).
 
     Raises :class:`GraphValidationError` if the graph contains errors.
     """

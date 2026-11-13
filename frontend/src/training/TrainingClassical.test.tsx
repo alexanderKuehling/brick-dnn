@@ -6,7 +6,16 @@ import { api, type Compatibility } from '@/api';
 import { GP_ANALYSIS } from '@/builder/classicalFixtures';
 import { downloadBlob } from '@/builder/download';
 import { NO_SCOPE } from './access';
-import { ANALYSIS, CLASSICAL_STATUS, DOC, GP_DOC, gpDetail, summary, svcDetail } from './fixtures';
+import {
+  ANALYSIS,
+  boostingDetail,
+  CLASSICAL_STATUS,
+  DOC,
+  GP_DOC,
+  gpDetail,
+  summary,
+  svcDetail,
+} from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
 import TrainingDrawer, { type TrainingDrawerProps } from './TrainingDrawer';
 import type { DataController } from './useDatasets';
@@ -296,6 +305,15 @@ describe('A run of a classical model', () => {
         .map((row) => row.textContent)
     ).toEqual(['RowsAccuracyLoss', 'Training · 80095.0%0.2', 'Validation · 20093.0%0.25']);
     expect(screen.queryByLabelText('Fitted kernel')).not.toBeInTheDocument();
+  });
+
+  it('shows the boosting iterations of gradient boosting', () => {
+    show(boostingDetail());
+    expect(screen.getByText('Boosting iterations').nextSibling).toHaveTextContent('87');
+    expect(screen.getByText('of at most 200: early stopping')).toBeInTheDocument();
+    expect(screen.getByText('at most 1,000,000 on this server')).toBeInTheDocument();
+    expect(screen.queryByText('Support vectors')).not.toBeInTheDocument();
+    expect(screen.queryByText('Log marginal likelihood')).not.toBeInTheDocument();
   });
 
   it('warns that stopping ends the fit at once', async () => {

@@ -27,7 +27,7 @@ interface CodeModalProps {
   filename: string;
   options: GenerateOptions;
   onOptionsChange: (options: GenerateOptions) => void;
-  /** classical: the network is a scikit-learn model (a Gaussian process or an SVM). */
+  /** classical: the network is a scikit-learn model (Gaussian process, SVM, gradient boosting). */
   family?: 'neural' | 'classical';
 }
 

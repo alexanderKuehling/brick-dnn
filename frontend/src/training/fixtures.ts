@@ -671,6 +671,46 @@ export function svcDetail(overrides: Partial<RunDetail> = {}): RunDetail {
   };
 }
 
+/** A finished gradient boosting classifier whose early stopping ended the fit. */
+export function boostingDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+  const base = svcDetail();
+  return {
+    ...base,
+    name: 'Fraud trees',
+    message: 'Finished: validation accuracy 98.1%. Fitted on 240,000 rows in 6.2 s.',
+    plan: {
+      ...base.plan!,
+      classical: {
+        ...base.plan!.classical!,
+        node: 'gb',
+        type: 'HistGradientBoostingClassifier',
+        estimator: 'HistGradientBoostingClassifier',
+        label: 'Gradient boosting classification',
+        scale: 'gradient_boosting',
+        max_rows: 1_000_000,
+      },
+    },
+    state: {
+      ...base.state!,
+      train_size: 240_000,
+      val_size: 60_000,
+      classical: {
+        ...base.state!.classical!,
+        estimator: 'HistGradientBoostingClassifier',
+        label: 'Gradient boosting classification',
+        max_rows: 1_000_000,
+        rows: 240_000,
+        subsampled_from: null,
+        fit_seconds: 6.2,
+        support_vectors: null,
+        iterations: 87,
+        max_iterations: 200,
+      },
+    },
+    ...overrides,
+  };
+}
+
 // --------------------------------------------------------------------------
 // Segmentation (a class for every pixel)
 // --------------------------------------------------------------------------

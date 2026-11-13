@@ -4,8 +4,9 @@ Every run is trained by its own process (``python -m brickdnn.training.runner <r
 so the web server never imports PyTorch. The API writes ``job.json`` into the run
 directory, starts the process and afterwards only looks at the files the process writes
 (``state.json``, ``weights.pt``). See :mod:`brickdnn.training.state` for the file format.
-Classical models (Gaussian processes, SVMs) are fitted with scikit-learn by the same
-runner and saved as ``model.joblib``; they need scikit-learn, not PyTorch.
+Classical models (Gaussian processes, SVMs, gradient boosting) are fitted with
+scikit-learn by the same runner and saved as ``model.joblib``; they need scikit-learn, not
+PyTorch.
 Predictions with the trained weights also run in a process of their own
 (``python -m brickdnn.training.predict <run_dir>``), one per request.
 
@@ -139,7 +140,8 @@ NO_TORCH_REASON = (
 )
 NO_SKLEARN_REASON = (
     "scikit-learn is not installed on the server, which classical models (Gaussian processes, "
-    "support vector machines) need. Run `pip install scikit-learn` in the backend environment."
+    "support vector machines, gradient boosting) need. Run `pip install scikit-learn` in the "
+    "backend environment."
 )
 NO_TUNING_MESSAGE = (
     "Hyperparameter search is not available for classical models yet. Switch it off: a "

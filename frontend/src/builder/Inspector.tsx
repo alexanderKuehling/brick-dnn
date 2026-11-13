@@ -33,12 +33,22 @@ import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
 import { formatOutput, formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
-import { inputSlots, isClassicalSpec, isKernelNode, kernelTerms, networkFamily } from './kinds';
+import {
+  inputSlots,
+  isBoosting,
+  isClassicalSpec,
+  isKernelNode,
+  kernelTerms,
+  networkFamily,
+} from './kinds';
 import { ParamField } from './ParamField';
 
 const GAUSSIAN_PROCESSES = ['GaussianProcessRegressor', 'GaussianProcessClassifier'];
 
-/** The parameters of a layer: weights; hyperparameters of kernels; nothing yet for SVMs. */
+/**
+ * The parameters of a layer: weights; hyperparameters of kernels; nothing yet for SVMs and
+ * gradient boosting (their support vectors or trees come from the fit).
+ */
 function paramsStat(
   spec: LayerSpec,
   info: NodeAnalysis | undefined,
@@ -54,7 +64,8 @@ function paramsStat(
     return { label: 'Fitted hyperparameters', value: total?.toLocaleString('en-US') ?? '–' };
   }
   if (count === null) {
-    return { label: 'Support vectors', value: 'after the fit' };
+    const label = isBoosting(spec.type) ? 'Decision trees' : 'Support vectors';
+    return { label, value: 'after the fit' };
   }
   if (inputSlots(spec).length > 0) {
     // A kernel sum or product has none of its own; the kernels it combines count theirs.
@@ -347,7 +358,9 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
                     }
                     value={
                       analysis.total_params === null
-                        ? 'support vectors, after the fit'
+                        ? isBoosting(classical.type)
+                          ? 'decision trees, after the fit'
+                          : 'support vectors, after the fit'
                         : analysis.total_params.toLocaleString('en-US')
                     }
                   />

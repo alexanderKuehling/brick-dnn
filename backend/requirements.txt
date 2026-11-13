@@ -20,8 +20,8 @@ defusedxml>=0.7
 # Segmentation datasets: reading the masks of an upload to find its classes (NumPy above
 # is needed too). Training comes with it anyway (torchvision).
 pillow>=10
-# Classical models (Gaussian processes, SVMs): training and predictions. Brings SciPy and
-# joblib along; PyTorch is not needed for them.
+# Classical models (Gaussian processes, SVMs, gradient boosting): training and predictions.
+# Brings SciPy and joblib along; PyTorch is not needed for them.
 scikit-learn>=1.3,<2
 # Live editing over WebSockets (Django Channels; Redis connects the server processes).
 channels>=4.2,<5

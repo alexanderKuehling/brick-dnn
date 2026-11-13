@@ -34,7 +34,15 @@ KERNELS = [
     "ConstantKernel",
 ]
 COMBINATIONS = ["KernelSum", "KernelProduct"]
-MODELS = ["GaussianProcessRegressor", "GaussianProcessClassifier", "SVR", "SVC"]
+MODELS = [
+    "GaussianProcessRegressor",
+    "GaussianProcessClassifier",
+    "SVR",
+    "SVC",
+    "HistGradientBoostingRegressor",
+    "HistGradientBoostingClassifier",
+]
+BOOSTING = ["HistGradientBoostingRegressor", "HistGradientBoostingClassifier"]
 
 
 def graph(nodes, edges):
@@ -196,6 +204,16 @@ def test_default_kernels_and_parameter_counts():
     assert svc["valid"] and svc["nodes"]["m"]["num_params"] is None
     assert svc["total_params"] is None  # support vectors are only known after fitting
     assert svc["nodes"]["m"]["kernel"] is None
+    for model in BOOSTING:
+        boosting = analyze(model_graph(model)).to_dict()
+        assert boosting["valid"] and boosting["family"] == "classical"
+        assert boosting["nodes"]["m"]["num_params"] is None  # the trees come from the fit
+        assert boosting["total_params"] is None and boosting["nodes"]["m"]["kernel"] is None
+        assert boosting["classical"]["estimator"] == model
+        params = boosting["nodes"]["m"]["params"]
+        assert params["max_depth"] is None and params["early_stopping"] == "auto"
+        assert params["learning_rate"] == 0.1 and params["max_iter"] == 200
+    assert analyze(model_graph(BOOSTING[0])).to_dict()["nodes"]["m"]["output_shape"] == [1]
     neural = analyze(EXAMPLES["mlp_mnist"]["graph"]).to_dict()
     assert neural["family"] == "neural" and neural["classical"] is None
     assert {n["output_kind"] for n in neural["nodes"].values()} == {"tensor"}
@@ -357,6 +375,56 @@ def test_kernel_lines_break_long_kernels():
         ),
         (model_graph(kernel=None, params={"C": 0}), "m", "C must be greater than 0"),
         (
+            model_graph("HistGradientBoostingClassifier", kernel=("RBF", {})),
+            "m",
+            "builds decision trees and takes no kernel",
+        ),
+        (
+            model_graph("HistGradientBoostingRegressor", {"learning_rate": 0}),
+            "m",
+            "Learning rate must be greater than 0",
+        ),
+        (
+            model_graph("HistGradientBoostingClassifier", {"max_iter": 0}),
+            "m",
+            "Max. iterations must be at least 1",
+        ),
+        (
+            model_graph("HistGradientBoostingClassifier", {"max_leaf_nodes": 1}),
+            "m",
+            "Max. leaves per tree must be at least 2",
+        ),
+        (
+            model_graph("HistGradientBoostingRegressor", {"max_depth": 0}),
+            "m",
+            "Max. depth must be at least 1",
+        ),
+        (
+            model_graph("HistGradientBoostingRegressor", {"min_samples_leaf": 0}),
+            "m",
+            "Min. rows per leaf must be at least 1",
+        ),
+        (
+            model_graph("HistGradientBoostingRegressor", {"l2_regularization": -1}),
+            "m",
+            "L2 regularisation must be at least 0",
+        ),
+        (
+            model_graph("HistGradientBoostingClassifier", {"early_stopping": "yes"}),
+            "m",
+            "Early stopping must be one of: auto, on, off",
+        ),
+        (
+            model_graph("HistGradientBoostingClassifier", {"class_weight": "heavy"}),
+            "m",
+            "Class weights must be one of: none, balanced",
+        ),
+        (
+            model_graph("HistGradientBoostingClassifier", {"random_state": -1}),
+            "m",
+            "Random state must be at least 0",
+        ),
+        (
             model_graph("SVC", params={"gamma": "value", "gamma_value": -1}),
             "m",
             "Gamma value must be greater than 0",
@@ -461,6 +529,37 @@ def test_script_builds_the_estimator():
     assert "from sklearn.gaussian_process.kernels import RBF, ConstantKernel" in code
 
 
+def test_script_builds_gradient_boosting():
+    code = generate_code(
+        model_graph(
+            "HistGradientBoostingClassifier",
+            {"class_weight": "balanced", "max_depth": 6, "early_stopping": "on"},
+        )
+    )
+    assert "from sklearn.ensemble import HistGradientBoostingClassifier" in code
+    assert (
+        "    model = HistGradientBoostingClassifier(\n"
+        "        learning_rate=0.1,\n"
+        "        max_iter=200,\n"
+        "        max_leaf_nodes=31,\n"
+        "        max_depth=6,\n"
+        "        min_samples_leaf=20,\n"
+        "        l2_regularization=0.0,\n"
+        "        early_stopping=True,\n"
+        '        class_weight="balanced",\n'
+        "        random_state=0,\n"
+        "    )\n"
+    ) in code
+    assert "CalibratedClassifierCV" not in code and "kernel" not in code
+    assert "Boosting iterations:" in code
+    code = generate_code(
+        model_graph("HistGradientBoostingRegressor", {"early_stopping": "off", "random_state": 7})
+    )
+    assert "max_depth=None" in code and "early_stopping=False" in code
+    assert "random_state=7" in code and "class_weight" not in code
+    assert 'early_stopping="auto"' in generate_code(model_graph("HistGradientBoostingRegressor"))
+
+
 @pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not installed")
 @pytest.mark.parametrize("example_id", CLASSICAL_EXAMPLES)
 @pytest.mark.parametrize("options", [{}, {"include_main": False}, {"include_training": False}])
@@ -530,18 +629,24 @@ def test_script_demo_runs(model, tmp_path):
 
 
 @needs_sklearn
-@pytest.mark.parametrize("model", ["GaussianProcessRegressor", "SVR"])
+@pytest.mark.parametrize(
+    "model", ["GaussianProcessRegressor", "SVR", "HistGradientBoostingRegressor"]
+)
 def test_script_fits_and_predicts_regression(model, tmp_path):
     import joblib
 
     write_regression_csv(tmp_path / "data.csv")
-    code = generate_code(model_graph(model))
+    # 48 training rows: smaller leaves than the default 20 rows.
+    params = {"min_samples_leaf": 5} if model in BOOSTING else None
+    code = generate_code(model_graph(model, params))
     result = run_script(code, tmp_path, "--csv", "data.csv", "--seed", "1")
     assert result.returncode == 0, result.stderr
     assert "Fitting on 48 rows, 12 for validation" in result.stdout
     assert "Validation RMSE" in result.stdout and "R²" in result.stdout
     if model == "SVR":
         assert "Support vectors:" in result.stdout
+    elif model in BOOSTING:
+        assert "Boosting iterations: 200 of at most 200" in result.stdout
     else:
         assert "Learned kernel:" in result.stdout and "Log marginal likelihood:" in result.stdout
     bundle = joblib.load(tmp_path / "model.joblib")
@@ -557,7 +662,7 @@ def test_script_fits_and_predicts_regression(model, tmp_path):
     assert result.returncode == 0, result.stderr
     lines = result.stdout.split()
     header, values = lines[0], lines[1:]
-    if model == "SVR":
+    if model != "GaussianProcessRegressor":
         assert header == "price"
         first, second = float(values[0]), float(values[1])
     else:
@@ -572,7 +677,9 @@ def test_script_fits_and_predicts_regression(model, tmp_path):
 
 
 @needs_sklearn
-@pytest.mark.parametrize("model", ["GaussianProcessClassifier", "SVC"])
+@pytest.mark.parametrize(
+    "model", ["GaussianProcessClassifier", "SVC", "HistGradientBoostingClassifier"]
+)
 def test_script_fits_and_predicts_classes(model, tmp_path):
     import joblib
 
@@ -648,3 +755,6 @@ def test_check_on_the_command_line(capsys):
     assert brickdnn_main(["--example", "svm_classifier", "--check"]) == 0
     out = capsys.readouterr().out
     assert "-> class" in out and "fitted: support vectors" in out
+    assert brickdnn_main(["--example", "gradient_boosting_classifier", "--check"]) == 0
+    out = capsys.readouterr().out
+    assert "-> class" in out and "fitted: decision trees" in out

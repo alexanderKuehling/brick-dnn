@@ -15,7 +15,8 @@ and the start of the process (Python, PyTorch, the data).
 
 Classical models are fitted once: a Gaussian process needs about n³ operations per
 optimizer step for n training rows (a classifier once per class), a support vector machine
-between n² and n³.
+between n² and n³. Gradient boosting builds one tree per iteration (per class with more than
+two classes); a tree costs about n × features histogram updates plus a fixed overhead.
 """
 
 from __future__ import annotations
@@ -60,7 +61,12 @@ UNCERTAINTY = 3.0
 # Demo data: samples in total (see data.py, which also limits them to DEMO_BYTES).
 DEMO_SAMPLES = 2560
 DEMO_BYTES = 500 * 1024**2
-CLASSICAL_DEMO_ROWS = {"gaussian_process": 500, "svm": 1000}
+CLASSICAL_DEMO_ROWS = {"gaussian_process": 500, "svm": 1000, "gradient_boosting": 2000}
+# Gradient boosting (measured, all threads together): CPU seconds per tree, per row and
+# feature of a tree (histograms and splits), and per row and tree of a prediction.
+TREE_CPU_SECONDS = 0.006
+TREE_ROW_FEATURE_CPU_SECONDS = 8e-9
+TREE_PREDICT_CPU_SECONDS = 5e-8
 # Built-in datasets: their official test split is shrunk with max_samples as if it were
 # this share of all samples (see data.py).
 BUILTIN_TEST_SHARE = 0.2
@@ -236,6 +242,24 @@ def _classical(
     n = max(1, min(n_train, max_rows))
     features = max(1, _prod(analysis.nodes[analysis.inputs[0]].shape or (1,)))
     classes = int((plan or {}).get("num_classes") or 1)
+    if layer.scale == "gradient_boosting":
+        # At most max_iter iterations: early stopping often ends sooner.
+        trees = int(layer.p["max_iter"]) * (classes if classes > 2 else 1)
+        fit = trees * (TREE_CPU_SECONDS + TREE_ROW_FEATURE_CPU_SECONDS * n * features)
+        predict = trees * (n_held_out + n) * TREE_PREDICT_CPU_SECONDS
+        seconds = CLASSICAL_STARTUP_CPU_SECONDS + fit + predict
+        basis = (
+            f"gradient boosting with up to {trees:,} trees fitted on {n:,} training rows with "
+            f"{features:,} features"
+        )
+        details = {
+            "family": "classical",
+            "train_rows": n,
+            "features": features,
+            "max_rows": max_rows,
+            "trees": trees,
+        }
+        return _estimate(seconds, basis, details)
     if layer.scale == "gaussian_process":
         restarts = int(layer.p.get("n_restarts_optimizer") or 0)
         per_class = classes if classes > 2 else 1

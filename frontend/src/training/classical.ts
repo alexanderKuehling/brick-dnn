@@ -1,5 +1,6 @@
 /**
- * Classical models (Gaussian processes, SVMs) train with scikit-learn instead of PyTorch:
+ * Classical models (Gaussian processes, SVMs, gradient boosting) train with scikit-learn
+ * instead of PyTorch:
  * fitted once, without epochs, on tabular data (see docs/training.md#classical-models).
  */
 import type { Analysis, RunSummary, TrainingStatus } from '@/api/types';
@@ -61,4 +62,6 @@ export const MODEL_KINDS: Record<string, string> = {
   GaussianProcessClassifier: 'Gaussian process classification',
   SVR: 'Support vector regression',
   SVC: 'Support vector classification',
+  HistGradientBoostingRegressor: 'Gradient boosting regression',
+  HistGradientBoostingClassifier: 'Gradient boosting classification',
 };

@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("sklearn")
 
 import joblib  # noqa: E402
+import numpy as np  # noqa: E402
 from rest_framework.test import APIClient  # noqa: E402
 
 from brick_dnn_core import training_service  # noqa: E402
@@ -65,6 +66,8 @@ def test_capabilities_list_classical_models(auth_client, training_dir, monkeypat
         "GaussianProcessClassifier": 2_000,
         "SVR": 50_000,
         "SVC": 50_000,
+        "HistGradientBoostingRegressor": 1_000_000,
+        "HistGradientBoostingClassifier": 1_000_000,
     }
     monkeypatch.setattr(training_service, "sklearn_installed", lambda: False)
     classical = auth_client.get("/api/training/").data["classical"]
@@ -167,6 +170,62 @@ def test_classical_run_end_to_end(auth_client, user, real_processes, tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines()[1].startswith("spam,")
+
+
+@pytest.mark.django_db
+def test_gradient_boosting_end_to_end(auth_client, user, real_processes, tmp_path):
+    """An imbalanced classification (a rare class) with balanced class weights: trained by
+    the runner, evaluated, predicted over REST and MCP, and downloaded."""
+    rng = np.random.default_rng(7)
+    x = rng.normal(size=(600, 4))
+    fraud = x[:, 0] + x[:, 1] > 2.2  # about 6 % of the rows
+    lines = ["a,b,c,d,label"] + [
+        ",".join([*(f"{v:.4f}" for v in row), "fraud" if bad else "ok"])
+        for row, bad in zip(x, fraud, strict=True)
+    ]
+    (tmp_path / "payments.csv").write_text("\n".join(lines) + "\n")
+    dataset = upload_csv(auth_client, tmp_path / "payments.csv")
+    graph = model_graph(
+        "HistGradientBoostingClassifier",
+        params={"class_weight": "balanced", "max_iter": 60, "min_samples_leaf": 10},
+    )
+    checked = auth_client.post(
+        "/api/training/check/", {"graph": graph, "dataset": dataset}, format="json"
+    ).data
+    assert checked["ok"] is True and checked["estimate"]["details"]["trees"] == 60
+    response = auth_client.post(
+        "/api/training/runs/",
+        {"name": "Fraud trees", "graph": graph, "dataset": dataset, "config": {"seed": 1}},
+        format="json",
+    )
+    assert response.status_code == 201, response.data
+    run_id = response.data["id"]
+    data = wait_for(auth_client, run_id, timeout=120, interval=0.25)
+    assert data["status"] == "completed", data["message"]
+    assert data["plan"]["classical"]["estimator"] == "HistGradientBoostingClassifier"
+    state = data["state"]
+    assert state["classical"]["iterations"] == state["classical"]["max_iterations"] == 60
+    evaluation = state["evaluation"]
+    assert evaluation["val"]["confusion_matrix"] and evaluation["val"]["balanced_accuracy"] > 0.7
+    assert data["metrics"]["val_accuracy"] > 0.85
+
+    response = auth_client.post(
+        f"/api/training/runs/{run_id}/predict/",
+        {"inputs": [{"a": 2.5, "b": 2.5, "c": 0, "d": 0}, [-2, -2, 0, 0]]},
+        format="json",
+    )
+    assert response.status_code == 200, response.data
+    assert [p["class"] for p in response.data["predictions"]] == ["fraud", "ok"]
+
+    mcp = mcp_client(user)
+    result, text = call(mcp, "get_training_run", id=run_id)
+    assert result["structuredContent"]["classical"]["iterations"] == 60, text
+    response = auth_client.get(f"/api/training/runs/{run_id}/weights/")
+    assert response.status_code == 200
+    (tmp_path / "trees.joblib").write_bytes(b"".join(response.streaming_content))
+    bundle = joblib.load(tmp_path / "trees.joblib")
+    assert bundle["class_names"] == ["fraud", "ok"]
+    assert bundle["model"].named_steps["model"].class_weight == "balanced"
 
 
 @pytest.mark.django_db
