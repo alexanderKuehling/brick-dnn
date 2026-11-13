@@ -128,6 +128,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
 | `predict`               | read   |             | Run a trained network on up to 64 samples, or on image files (base64) |
 | `set_decision_threshold` | full  |             | Binary classification: the threshold `predict` uses (0–1; who started the run) |
+| `create_ensemble`       | full   |             | Combine 2–10 finished runs of one dataset into an ensemble: weighted average or stacking ([Ensembles](#ensembles)) |
 | `explain_prediction`    | read   |             | Explain a trained model: saliency/Grad-CAM/occlusion, Shapley values, permutation importance, decision boundary |
 | `get_layer_activations` | read   |             | The output of every brick of a trained network for one sample (shape, statistics, values) |
 
@@ -248,7 +249,8 @@ never count.
   editing it live are disconnected, as when it is deleted in the web app. Training runs
   started in it are kept for who started them.
 - `delete_training_run`: who started the run and the owner of its project. An active run is
-  killed first (`killed_running_training`; false for a run that only waited in the queue).
+  killed first (`killed_running_training`; false for a run that only waited in the queue). A
+  run that an ensemble uses is kept: the error names the ensemble to delete first.
 - `delete_dataset`: your own datasets only (not the ones others shared with you), and not
   while a training uses them.
 
@@ -421,6 +423,38 @@ answers per image with `classes` (the classes that occur and the share of their 
 for 64×64) whose pixel values are the class indices. `mask: "rle"` returns run-lengths
 (`mask_rle`: class, pixels, class, pixels … row by row) instead, `mask: "none"` only the
 shares, which keeps the answer below 1 KB.
+
+### Ensembles
+
+`create_ensemble {members, method?, weights?, name?, project_id?}` combines 2 to 10 finished
+runs into one model, e.g. a neural network and a gradient boosting model trained on the same
+fraud dataset ([training.md](training.md#ensembles)). The members must solve the same task
+(classifications with the same classes, or regressions) and be trained on the same dataset
+made in the Data tab (`export_training_dataset`), so that their validation and test rows line
+up; runs of the user's shared networks may be members. Otherwise the error says which run does
+not fit and why.
+
+- `method: "average"` (default): the weighted average of the members' class probabilities or
+  values; `weights` (one per member, default equal) are scaled to add up to 1.
+- `method: "stacking"`: a logistic regression (classification) or ridge regression
+  (regression) fitted on the members' predictions of the validation rows and measured on the
+  test rows. It needs validation rows; without test rows its metrics are optimistic.
+
+The ensemble is a run (`family: "ensemble"`): it measures its members like a short training
+(queued like one, its CPU time counts like a training's), then `list_training_runs` lists it
+with `ensemble: "average of 2 runs: MLP, Boosting"` and `get_training_run` shows its
+`evaluation` (with the threshold analysis of two classes) and `ensemble`: the members with
+their weights and models, `comparison` (every member next to the ensemble per split, on the
+same rows), the stacking model and a `note` about optimistic numbers. `predict` and
+`set_decision_threshold` work on it like on a run; `predict` with `members: true` also returns
+what each member predicted. Weights cannot be downloaded (the members have them), and a member
+cannot be deleted while the ensemble exists.
+
+```text
+create_ensemble {members: ["<mlp>", "<boosting>"], method: "stacking"} → {id, status: "starting", family: "ensemble"}
+get_training_run {id}  → ensemble.comparison: [{name: "MLP", test: {accuracy: 0.95, roc_auc: 0.93}}, …, {name: "Ensemble", …}]
+predict {run_id: id, inputs: [...], input_format: "raw", members: true}
+```
 
 ### Explanations
 

@@ -16,9 +16,12 @@ export function PredictionPanel({
   runName,
   decisionThreshold,
   positiveClass,
+  ensemble = false,
 }: {
   runId: string;
   runName: string;
+  /** An ensemble: it can show what each member predicts too. */
+  ensemble?: boolean;
   /** Binary classification: the run's decision threshold (null for other runs). */
   decisionThreshold?: number | null;
   /** The class the threshold decides for. */
@@ -67,7 +70,14 @@ export function PredictionPanel({
   } else if (form.kind === 'image' && form.image) {
     body = <ImagePredict runId={runId} form={form} />;
   } else if (form.kind === 'tabular' && form.prepared) {
-    body = <TabularPredict runId={runId} form={form} fileBase={slugify(runName) || 'run'} />;
+    body = (
+      <TabularPredict
+        runId={runId}
+        form={form}
+        fileBase={slugify(runName) || 'run'}
+        ensemble={ensemble}
+      />
+    );
   } else {
     body = (
       <Text size="sm" c="dimmed">

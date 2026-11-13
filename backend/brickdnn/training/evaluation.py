@@ -297,6 +297,13 @@ class _Ranked:
         }
 
 
+def binary_aucs(scores: np.ndarray, labels: np.ndarray) -> tuple[float | None, float | None]:
+    """ROC AUC and PR AUC (average precision) of the positive-class probabilities ``scores``
+    of rows with the true classes ``labels``, as in the threshold curve."""
+    ranked = _Ranked(scores, labels)
+    return ranked.roc_auc(), ranked.average_precision()
+
+
 def suggested_thresholds(ranked: _Ranked) -> dict[str, float | None]:
     """``best_f1``: the threshold with the best F1 score (the highest of equally good ones);
     ``recall``: the highest threshold that still finds RECALL_TARGET of the positive rows.

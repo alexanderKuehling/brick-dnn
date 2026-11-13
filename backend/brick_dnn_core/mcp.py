@@ -37,7 +37,7 @@ from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training.config import TrainingConfig
 
-from . import approvals, budgets, downloads, history, raw_predictions
+from . import approvals, budgets, downloads, ensembles, history, raw_predictions
 from . import data_service as data
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
@@ -123,6 +123,11 @@ check_training and start_training. predict then takes raw rows of the source tab
 (input_format "raw"): the server prepares them like the training rows.
 get_data_prep_script returns the pandas script that prepares new data the same way.
 Files too large to pass as text: create_upload_link gives a one-time link for curl.
+
+Finished runs trained on the same exported dataset (e.g. an MLP and gradient boosting) can
+be combined into an ensemble with create_ensemble (weighted average or stacking). It is a
+run: get_training_run compares it with its members, predict and set_decision_threshold
+work on it.
 
 Answers are compact: lists are capped with their totals, and arguments such as include,
 columns_offset or types ask for more.
@@ -1045,7 +1050,9 @@ def get_training_run(request: Request, args: dict[str, Any]) -> Any:
     run = _run(request, args)
     with _compact_errors():
         includes = compact.run_includes(args.get("include"))
-        return compact.run_detail(run, training.state_of(run), includes, args.get("log_lines"))
+        return compact.run_detail(
+            run, training.state_of(run), includes, args.get("log_lines"), request.user
+        )
 
 
 def stop_training(request: Request, args: dict[str, Any]) -> Any:
@@ -1081,6 +1088,7 @@ def predict(request: Request, args: dict[str, Any]) -> Any:
             args.get("image"),
             args.get("mask"),
             input_format=args.get("input_format"),
+            members=args.get("members", False),
         )
     except training.TrainingInputError as exc:
         message = str(exc)
@@ -1100,6 +1108,32 @@ def predict(request: Request, args: dict[str, Any]) -> Any:
     except (training.TrainingBusy, training.PredictionFailed) as exc:
         raise ToolError(str(exc)) from None
     return compact.prediction_answer(answer)
+
+
+def create_ensemble(request: Request, args: dict[str, Any]) -> Any:
+    _require_training()
+    if not ScopedRateThrottle().allow_request(request, _TrainingScope()):
+        raise ToolError("Too many trainings were started recently. Try again later.")
+    try:
+        run = ensembles.create_ensemble(
+            request.user,
+            args.get("name"),
+            args.get("members"),
+            args.get("method"),
+            args.get("weights"),
+            args.get("project_id"),
+            actor=budgets.Actor.of(request),
+        )
+    except (
+        training.TrainingUnavailable,
+        training.TrainingInputError,
+        training.TrainingBusy,
+    ) as exc:
+        raise ToolError(str(exc)) from None
+    data = dict(RunSummarySerializer(run, context={"user": request.user}).data)
+    if run.budget_warning:
+        data["budget_warning"] = run.budget_warning
+    return data
 
 
 def set_decision_threshold(request: Request, args: dict[str, Any]) -> Any:
@@ -1134,7 +1168,10 @@ def delete_training_run(request: Request, args: dict[str, Any]) -> Any:
         )
     deleted = {"deleted": True, "id": str(run.pk), "name": run.name}
     was_training = run.status in RUNNING_STATUSES
-    training.delete_run(run)
+    try:
+        training.delete_run(run, request.user)
+    except training.RunInUse as exc:
+        raise ToolError(str(exc)) from None
     return {**deleted, "killed_running_training": was_training}
 
 
@@ -1958,8 +1995,55 @@ TOOLS: dict[str, Tool] = {
                     "preparation, prepared by the server like the training rows; 'prepared' "
                     "(default): the feature columns of the training dataset",
                 },
+                "members": {
+                    "type": "boolean",
+                    "description": "Ensembles: also return what each member predicted",
+                },
             },
             ("run_id",),
+        ),
+        Tool(
+            "create_ensemble",
+            "Combine runs into an ensemble",
+            "Combine 2 to 10 finished runs into one model, e.g. a neural network and a gradient "
+            "boosting model trained on the same fraud dataset. The members must solve the same "
+            "task (the same classes, or a regression) and be trained on the same dataset made "
+            "in the Data tab (export_training_dataset), so that their validation and test rows "
+            "line up; runs of the user's shared networks may be members. method 'average' "
+            "(default): the weighted average of the class probabilities or values (weights: "
+            "one number per member, default equal; they are scaled to add up to 1). "
+            "'stacking': a logistic regression (classification) or ridge regression "
+            "(regression) fitted on the members' predictions of the validation rows and "
+            "measured on the test rows (without test rows its metrics are optimistic); needs "
+            "validation rows. The ensemble is a run: it measures its members like a short "
+            "training (queued like one), then get_training_run shows its evaluation (with the "
+            "threshold analysis of two classes) and ensemble.comparison (each member next to "
+            "the ensemble per split); predict and set_decision_threshold work on it like on a "
+            "run, and predict with members true also returns what each member predicted. A run "
+            "cannot be deleted while an ensemble uses it.",
+            create_ensemble,
+            {
+                "members": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 10,
+                    "description": "Run ids from list_training_runs (finished runs)",
+                },
+                "method": {"type": "string", "enum": ["average", "stacking"]},
+                "weights": {
+                    "type": "array",
+                    "items": {"type": "number", "minimum": 0},
+                    "description": "average only: one weight per member, in their order",
+                },
+                "name": {"type": "string", "maxLength": 120},
+                "project_id": {
+                    "type": "integer",
+                    "description": "Shared project for the ensemble: its members see it",
+                },
+            },
+            ("members",),
+            writes=True,
         ),
         Tool(
             "set_decision_threshold",

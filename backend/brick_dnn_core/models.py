@@ -195,6 +195,7 @@ class TrainingRun(models.Model):
         ("stopped", "Stopped"),
         ("failed", "Failed"),
     ]
+    KINDS = [("training", "Training"), ("ensemble", "Ensemble")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -273,6 +274,10 @@ class TrainingRun(models.Model):
     # Binary classification: predictions are the second class when its probability is at
     # least this (0 to 1, set by the owner; 0.5: the more probable class). Unused otherwise.
     decision_threshold = models.FloatField(default=0.5, db_default=0.5)
+    # "ensemble": the run combines finished runs (its EnsembleMember rows, see ensembles.py)
+    # instead of training a network. Its "training" predicts the validation and test rows
+    # with every member and measures the combination; ``config`` holds the method.
+    kind = models.CharField(max_length=10, choices=KINDS, default="training", db_default="training")
 
     class Meta:
         ordering = ["-created_at"]
@@ -280,6 +285,42 @@ class TrainingRun(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.owner}, {self.status})"
+
+
+class EnsembleMember(models.Model):
+    """A finished run that an ensemble (a :class:`TrainingRun` of kind "ensemble") combines,
+    with its weight in the weighted average (the weights of an ensemble add up to 1).
+
+    Deleting a member through the app is refused while an ensemble uses it. ``run`` only
+    becomes empty when the member goes another way (with its owner's account, or deleted
+    by its owner when the ensemble belongs to someone else): the ensemble keeps its
+    evaluation, but cannot predict any more."""
+
+    ensemble = models.ForeignKey(
+        TrainingRun, on_delete=models.CASCADE, related_name="ensemble_members"
+    )
+    run = models.ForeignKey(
+        TrainingRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ensemble_memberships",
+    )
+    position = models.PositiveSmallIntegerField()
+    weight = models.FloatField(default=1.0)
+    # Copied, so that a deleted member is still named.
+    name = models.CharField(max_length=120)
+
+    class Meta:
+        ordering = ["ensemble", "position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ensemble", "position"], name="ensemble_member_position"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} in {self.ensemble_id}"
 
 
 class TrainingWorker(models.Model):

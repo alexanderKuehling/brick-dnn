@@ -75,10 +75,16 @@ export async function predictAll(
     };
     throw problem;
   }
+  // An ensemble's members, each with the predictions of all requests.
+  const members = answers[0].members?.map((member, index) => ({
+    ...member,
+    predictions: answers.flatMap((a) => a.members?.[index]?.predictions ?? []),
+  }));
   return {
     ...answers[0],
     predictions: answers.flatMap((a) => a.predictions),
     warnings,
+    ...(members ? { members } : {}),
   };
 }
 

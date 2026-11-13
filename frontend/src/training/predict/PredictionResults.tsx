@@ -11,7 +11,7 @@ import {
   Table,
   Text,
 } from '@mantine/core';
-import type { Prediction, PredictionResult } from '@/api';
+import type { MemberPredictions, Prediction, PredictionResult } from '@/api';
 import { formatProbability, formatValue } from './rows';
 
 /** One prediction: the class with the top classes as bars, or the value (± std). */
@@ -100,6 +100,59 @@ export function ResultCard({
   );
 }
 
+/** A prediction in a cell: the class with its probability, or the value. */
+function shortPrediction(prediction: Prediction | undefined, classification: boolean): string {
+  if (!prediction) {
+    return '–';
+  }
+  if (classification) {
+    return `${prediction.class ?? '–'} (${formatProbability(prediction.probability)})`;
+  }
+  return formatValue(prediction.value);
+}
+
+/** What each member of an ensemble predicted for one sample. */
+export function MemberResults({
+  members,
+  index,
+  task,
+}: {
+  members: MemberPredictions[];
+  index: number;
+  task: PredictionResult['task'];
+}) {
+  const classification = task === 'classification';
+  return (
+    <Table fz="xs" withTableBorder aria-label="Predictions of the members">
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Member</Table.Th>
+          <Table.Th>Prediction</Table.Th>
+          {classification && <Table.Th>p(positive)</Table.Th>}
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {members.map((member) => {
+          const prediction = member.predictions[index];
+          return (
+            <Table.Tr key={member.id}>
+              <Table.Td>{member.name}</Table.Td>
+              <Table.Td>{shortPrediction(prediction, classification)}</Table.Td>
+              {classification && (
+                <Table.Td>
+                  {typeof prediction?.positive_probability === 'number'
+                    ? formatProbability(prediction.positive_probability)
+                    : ''}
+                </Table.Td>
+              )}
+            </Table.Tr>
+          );
+        })}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
 const SHOWN_ROWS = 100;
 
 /** Predictions of many rows, with a download of all of them as a CSV file. */
@@ -108,11 +161,14 @@ export function ResultsTable({
   task,
   actual,
   onDownload,
+  members,
 }: {
   predictions: Prediction[];
   task: PredictionResult['task'];
   actual?: string[] | null;
   onDownload: () => void;
+  /** An ensemble's members: a column each. */
+  members?: MemberPredictions[];
 }) {
   const classification = task === 'classification';
   const withStd = predictions.some((p) => typeof p.std === 'number');
@@ -139,6 +195,9 @@ export function ResultsTable({
               <Table.Th>Prediction</Table.Th>
               <Table.Th>{classification ? 'Probability' : withStd ? '± std' : ''}</Table.Th>
               {actual && <Table.Th>Actual</Table.Th>}
+              {members?.map((member) => (
+                <Table.Th key={member.id}>{member.name}</Table.Th>
+              ))}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -154,6 +213,11 @@ export function ResultsTable({
                       : ''}
                 </Table.Td>
                 {actual && <Table.Td>{actual[i] ?? ''}</Table.Td>}
+                {members?.map((member) => (
+                  <Table.Td key={member.id}>
+                    {shortPrediction(member.predictions[i], classification)}
+                  </Table.Td>
+                ))}
               </Table.Tr>
             ))}
           </Table.Tbody>
