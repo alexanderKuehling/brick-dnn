@@ -202,8 +202,20 @@ MODEL_LABELS = {
 }
 
 
+# The ensemble bricks (layers.py): their models are searched one by one, not inside them.
+ENSEMBLES = frozenset(
+    {"VotingClassifier", "VotingRegressor", "StackingClassifier", "StackingRegressor"}
+)
+
+
 def tunables(model: str) -> tuple[Tunable, ...]:
     """The tunable parameters of the classical model brick ``model`` (a type)."""
+    if model in ENSEMBLES:
+        raise ConfigError(
+            "A hyperparameter search is not available for ensembles yet. Search each model "
+            "on its own (a network with only that model), then put the best values into "
+            "the ensemble's models."
+        )
     if model not in TUNABLES:
         raise ConfigError(f"Hyperparameter search: {model} has no parameters to tune.")
     return TUNABLES[model]

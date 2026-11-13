@@ -64,6 +64,20 @@ describe('Palette', () => {
     expect(screen.queryByText('Neural network · PyTorch')).not.toBeInTheDocument();
   });
 
+  it('lists the ensembles after the classical models', async () => {
+    render(<Palette catalog={CLASSICAL_CATALOG} onAdd={() => {}} />);
+    const categories = screen
+      .getAllByText(/^(Kernels|Classical models|Ensembles)$/)
+      .map((h) => h.textContent);
+    expect(categories).toEqual(['Kernels', 'Classical models', 'Ensembles']);
+    expect(screen.getByText(/two or more models of the same task/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Voting classifier' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stacking regression' })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Search layers'), 'ensemble');
+    expect(screen.getByRole('button', { name: 'Voting classifier' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RBF kernel' })).not.toBeInTheDocument();
+  });
+
   it('adds a layer on click', async () => {
     const onAdd = vi.fn();
     render(<Palette catalog={catalog} onAdd={onAdd} />);

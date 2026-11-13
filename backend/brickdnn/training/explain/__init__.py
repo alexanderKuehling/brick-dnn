@@ -214,12 +214,14 @@ class _Context:
             # Standardised rows skip the pipeline's StandardScaler (it would do the same).
             model = pipeline[1:] if self.kind == "tabular" else pipeline
             if bundle.get("task") == "classification":
+                from ..classical_engine import class_probabilities  # hard voting: vote shares
+
                 indices = bundle.get("class_indices") or []
                 k = int(bundle.get("num_classes") or len(indices))
 
                 def predict(rows: np.ndarray) -> np.ndarray:
                     with _thread_limit():
-                        proba = model.predict_proba(rows)
+                        proba = class_probabilities(model, rows)
                     full = np.zeros((len(rows), k))
                     full[:, indices or list(range(proba.shape[1]))] = proba
                     return full

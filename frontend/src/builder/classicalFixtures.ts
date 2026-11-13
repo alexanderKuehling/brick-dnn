@@ -320,7 +320,7 @@ export const CLASSICAL_LAYERS: LayerSpec[] = [
     min_inputs: 1,
     max_inputs: 2,
     family: 'classical',
-    output_kind: 'tensor',
+    output_kind: 'estimator',
     input_slots: [
       {
         name: 'features',
@@ -446,7 +446,7 @@ export const CLASSICAL_LAYERS: LayerSpec[] = [
     min_inputs: 1,
     max_inputs: 1,
     family: 'classical',
-    output_kind: 'tensor',
+    output_kind: 'estimator',
     input_slots: [
       {
         name: 'features',
@@ -585,7 +585,7 @@ export const CLASSICAL_LAYERS: LayerSpec[] = [
     min_inputs: 1,
     max_inputs: 1,
     family: 'classical',
-    output_kind: 'tensor',
+    output_kind: 'estimator',
     input_slots: [
       {
         name: 'features',
@@ -596,10 +596,106 @@ export const CLASSICAL_LAYERS: LayerSpec[] = [
       },
     ],
   },
+  {
+    type: 'VotingClassifier',
+    label: 'Voting classifier',
+    category: 'Ensembles',
+    description:
+      'Combines two or more classifiers: soft voting averages their class probabilities, hard voting counts the classes they predict. Connect the Input to every model and every model to this brick. Fitting takes as long as fitting all of them.',
+    params: [
+      {
+        name: 'voting',
+        label: 'Voting',
+        kind: 'select',
+        default: 'soft',
+        help: 'soft: average the class probabilities of the models (usually better); hard: the class most models predict. Hard voting has no probabilities: the share of the votes stands in for them.',
+        options: ['soft', 'hard'],
+        min: null,
+        max: null,
+        auto: false,
+        length: null,
+        show_if: null,
+      },
+      {
+        name: 'weights',
+        label: 'Weights',
+        kind: 'ints',
+        default: null,
+        help: 'One whole number per model, in the order in which the models are connected (the brick lists them), e.g. 2, 1, 1. Empty: every model counts the same.',
+        options: [],
+        min: 0,
+        max: null,
+        auto: true,
+        length: null,
+        show_if: null,
+      },
+    ],
+    min_inputs: 2,
+    max_inputs: null,
+    family: 'classical',
+    output_kind: 'estimator',
+    input_slots: [
+      {
+        name: 'models',
+        label: 'Models',
+        kind: 'estimator',
+        min: 2,
+        max: null,
+      },
+    ],
+  },
+  {
+    type: 'StackingRegressor',
+    label: 'Stacking regression',
+    category: 'Ensembles',
+    description:
+      'Combines two or more regression models: a ridge regression (RidgeCV) learns from their cross-validated predictions how to weigh them. Connect the Input to every model and every model to this brick. Every model is fitted once per fold and once more.',
+    params: [
+      {
+        name: 'cv',
+        label: 'Cross-validation folds',
+        kind: 'int',
+        default: 5,
+        help: 'The final estimator learns from predictions that the models make for rows they were not fitted on: every model is fitted once per fold, and once more on all training rows.',
+        options: [],
+        min: 2,
+        max: 20,
+        auto: false,
+        length: null,
+        show_if: null,
+      },
+      {
+        name: 'passthrough',
+        label: 'Pass the features through',
+        kind: 'bool',
+        default: false,
+        help: 'The final estimator also gets the features, not only the predictions of the models.',
+        options: [],
+        min: null,
+        max: null,
+        auto: false,
+        length: null,
+        show_if: null,
+      },
+    ],
+    min_inputs: 2,
+    max_inputs: null,
+    family: 'classical',
+    output_kind: 'estimator',
+    input_slots: [
+      {
+        name: 'models',
+        label: 'Models',
+        kind: 'estimator',
+        min: 2,
+        max: null,
+      },
+    ],
+  },
 ];
 
 export const CLASSICAL_CATALOG: LayerCatalog = {
-  categories: ['Input', 'Basic', 'Kernels', 'Classical models'],
+  categories: ['Input', 'Basic', 'Kernels', 'Classical models', 'Ensembles'],
   layers: CLASSICAL_LAYERS,
 };
 
@@ -659,7 +755,7 @@ export const GP_ANALYSIS: Analysis = {
       dtype: 'float',
       num_params: 0,
       params: { alpha: 1e-10, normalize_y: true, n_restarts_optimizer: 0 },
-      output_kind: 'tensor',
+      output_kind: 'estimator',
       kernel: 'RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)',
       task: 'regression',
     },
@@ -674,5 +770,109 @@ export const GP_ANALYSIS: Analysis = {
     estimator: 'GaussianProcessRegressor',
     task: 'regression',
     kernel: 'RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)',
+  },
+};
+
+/** Analysis of Input → gradient boosting and SVC → VotingClassifier (soft, weights 2:1). */
+export const VOTING_ANALYSIS: Analysis = {
+  valid: true,
+  errors: [],
+  warnings: [],
+  nodes: {
+    in: {
+      type: 'Input',
+      output_shape: [4],
+      dtype: 'float',
+      num_params: 0,
+      params: {
+        shape: [4],
+        dtype: 'float',
+      },
+      output_kind: 'tensor',
+      kernel: null,
+      task: null,
+    },
+    gb: {
+      type: 'HistGradientBoostingClassifier',
+      output_shape: null,
+      dtype: null,
+      num_params: null,
+      params: {
+        max_iter: 200,
+        learning_rate: 0.1,
+      },
+      output_kind: 'estimator',
+      kernel: null,
+      task: 'classification',
+    },
+    svc: {
+      type: 'SVC',
+      output_shape: null,
+      dtype: null,
+      num_params: null,
+      params: {
+        kernel: 'rbf',
+        C: 1.0,
+      },
+      output_kind: 'estimator',
+      kernel: null,
+      task: 'classification',
+    },
+    vote: {
+      type: 'VotingClassifier',
+      output_shape: null,
+      dtype: null,
+      num_params: null,
+      params: {
+        voting: 'soft',
+        weights: [2, 1],
+      },
+      output_kind: 'estimator',
+      kernel: null,
+      task: 'classification',
+      members: [
+        {
+          node: 'gb',
+          name: 'gb',
+          type: 'HistGradientBoostingClassifier',
+          estimator: 'HistGradientBoostingClassifier',
+          label: 'Gradient boosting classification',
+        },
+        {
+          node: 'svc',
+          name: 'svc',
+          type: 'SVC',
+          estimator: 'SVC',
+          label: 'Support vector classification',
+        },
+      ],
+    },
+  },
+  inputs: ['in'],
+  outputs: ['vote'],
+  total_params: null,
+  family: 'classical',
+  classical: {
+    node: 'vote',
+    type: 'VotingClassifier',
+    estimator: 'VotingClassifier',
+    task: 'classification',
+    kernel: null,
+    members: [
+      {
+        node: 'gb',
+        name: 'gb',
+        type: 'HistGradientBoostingClassifier',
+        estimator: 'HistGradientBoostingClassifier',
+        label: 'Gradient boosting classification',
+      },
+      {
+        node: 'svc',
+        name: 'svc',
+        type: 'SVC',
+        estimator: 'SVC',
+        label: 'Support vector classification',
+      },
+    ],
   },
 };

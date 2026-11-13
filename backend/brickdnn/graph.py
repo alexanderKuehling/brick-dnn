@@ -14,26 +14,33 @@ Extra keys (``position``, ``data`` …) are ignored, so the UI can store its own
 layout information in the same document. A node may carry an optional
 ``name`` that becomes the attribute name in the generated code.
 
-A connection carries what its source puts out: a tensor, or a kernel (the kernel bricks of
-Gaussian processes). A *classical* network (scikit-learn) consists of an Input layer, one
-classical model (Gaussian process, SVM or gradient boosting) that takes the features straight
-from it and, for a Gaussian process, optionally kernel bricks that feed its kernel. Classical
-models and neural layers cannot be mixed (yet).
+A connection carries what its source puts out: a tensor, a kernel (the kernel bricks of
+Gaussian processes) or an estimator (a classical model connected to an ensemble). A
+*classical* network (scikit-learn) consists of an Input layer, one classical model (Gaussian
+process, SVM or gradient boosting) that takes the features straight from it and, for a
+Gaussian process, optionally kernel bricks that feed its kernel. Or of several such models,
+all fed by the same Input, that are connected to one ensemble (voting or stacking), which
+then ends the network. Classical models and neural layers cannot be mixed (yet).
 """
 
 from __future__ import annotations
 
 import heapq
+import keyword
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from .layers import (
+    ENSEMBLE_ARGUMENTS,
     SVM_KERNELS,
     ClassicalModel,
+    Ensemble,
     Kernel,
     KernelExpr,
     Layer,
     LayerError,
+    Member,
     Shape,
     fmt_shape,
     get_layer_class,
@@ -44,6 +51,9 @@ KERNEL_TARGETS = (
     "GaussianProcessClassifier) or to KernelSum and KernelProduct."
 )
 NOT_MIXED = "Classical models and neural layers can't be mixed yet"
+ENSEMBLE_TYPES = "VotingClassifier, VotingRegressor, StackingClassifier or StackingRegressor"
+# Names that the models of an ensemble do not get (variables of the generated make_model()).
+RESERVED_NAMES = frozenset({"kernel", "model", "make_model", "pipeline"}) | ENSEMBLE_ARGUMENTS
 
 MAX_NODES = 500
 MAX_EDGES = 2000
@@ -92,7 +102,7 @@ class NodeInfo:
                 for k, v in self.layer.p.items()
                 if self.layer.param_visible(k)
             }
-        return {
+        result = {
             "type": self.type,
             "output_shape": list(self.shape) if self.shape is not None else None,
             "dtype": self.dtype,
@@ -102,6 +112,20 @@ class NodeInfo:
             "kernel": self.kernel.code() if self.kernel is not None else None,
             "task": self.layer.task if isinstance(self.layer, ClassicalModel) else None,
         }
+        if isinstance(self.layer, Ensemble):
+            # The models it combines, in the order of their connections (that of the weights).
+            result["members"] = [_member_dict(m) for m in self.layer.members]
+        return result
+
+
+def _member_dict(member: Member) -> dict[str, Any]:
+    return {
+        "node": member.node,
+        "name": member.name,
+        "type": member.layer.type,
+        "estimator": member.layer.estimator,
+        "label": member.layer.label,
+    }
 
 
 @dataclass
@@ -147,11 +171,15 @@ class Analysis:
 
     @property
     def model(self) -> NodeInfo | None:
-        """The classical model of the graph (the first one if there are several)."""
-        for nid in self._ordered():
-            if isinstance(self.nodes[nid].layer, ClassicalModel):
-                return self.nodes[nid]
-        return None
+        """The classical model of the graph: the ensemble if there is one, otherwise the
+        model (the first one of each if there are several)."""
+        models = [
+            self.nodes[nid]
+            for nid in self._ordered()
+            if isinstance(self.nodes[nid].layer, ClassicalModel)
+        ]
+        ensembles = [info for info in models if isinstance(info.layer, Ensemble)]
+        return (ensembles or models or [None])[0]
 
     def classical_dict(self) -> dict[str, Any] | None:
         model = self.model
@@ -165,6 +193,11 @@ class Analysis:
             "estimator": layer.estimator,
             "task": layer.task,
             "kernel": model.kernel.code() if model.kernel is not None else None,
+            # Ensembles: the models they combine ({"node", "name", "type", "estimator",
+            # "label"}), else None.
+            "members": (
+                [_member_dict(m) for m in layer.members] if isinstance(layer, Ensemble) else None
+            ),
         }
 
     def error(self, message: str, node: str | None = None) -> None:
@@ -184,7 +217,7 @@ class Analysis:
             "outputs": self.outputs,
             "total_params": self.total_params if self.valid else None,
             "family": self.family,
-            # Classical networks: {"node", "type", "estimator", "task", "kernel"}
+            # Classical networks: {"node", "type", "estimator", "task", "kernel", "members"}
             "classical": self.classical_dict(),
         }
 
@@ -312,7 +345,7 @@ def _infer_shapes(result: Analysis) -> None:
         if layer is None:
             continue
         sources = [result.nodes[s] for s in info.inputs]
-        if layer.family == "classical" or any(s.output_kind == "kernel" for s in sources):
+        if layer.family == "classical" or any(s.output_kind != "tensor" for s in sources):
             _infer_classical(result, info, layer, sources)
             continue
 
@@ -367,10 +400,12 @@ def _infer_shapes(result: Analysis) -> None:
 def _infer_classical(
     result: Analysis, info: NodeInfo, layer: Layer, sources: list[NodeInfo]
 ) -> None:
-    """Kernel bricks, classical models, and any brick that is fed a kernel."""
+    """Kernel bricks, classical models, ensembles, and any brick that is fed a kernel or an
+    estimator."""
     nid = info.id
     kernels = [s for s in sources if s.output_kind == "kernel"]
     tensors = [s for s in sources if s.output_kind == "tensor"]
+    estimators = [s for s in sources if s.output_kind == "estimator"]
 
     if isinstance(layer, Kernel):
         if layer.max_inputs == 0:
@@ -381,8 +416,9 @@ def _infer_classical(
                     nid,
                 )
                 return
-        elif tensors:
-            other = tensors[0].layer.label if tensors[0].layer else tensors[0].type
+        elif tensors or estimators:
+            first = (tensors or estimators)[0]
+            other = first.layer.label if first.layer else first.type
             result.error(
                 f"{layer.label} combines kernels: connect kernel bricks such as RBF or "
                 f"WhiteKernel to it, not {other}.",
@@ -398,11 +434,25 @@ def _infer_classical(
         info.resolved = True
         return
 
-    if not isinstance(layer, ClassicalModel):  # an Input or neural layer fed a kernel
+    if not isinstance(layer, ClassicalModel):  # an Input or neural layer
         if layer.max_inputs == 0:
             result.error("Input layers cannot have incoming connections.", nid)
-        else:
+        elif kernels:
             result.error(f"{layer.label} cannot take a kernel. {KERNEL_TARGETS}", nid)
+        # Fed a classical model: the model says that nothing can follow it.
+        return
+
+    if isinstance(layer, Ensemble):
+        _infer_ensemble(result, info, layer, sources)
+        return
+    if estimators:
+        other = estimators[0].layer.label if estimators[0].layer else estimators[0].type
+        result.error(
+            f"{layer.label} takes its features from the Input layer, not the predictions of "
+            f"{other}. To combine models, connect each of them to an ensemble "
+            f"({ENSEMBLE_TYPES}).",
+            nid,
+        )
         return
 
     if kernels and not layer.takes_kernel:
@@ -458,10 +508,114 @@ def _infer_classical(
     info.resolved = True
 
 
+def _infer_ensemble(
+    result: Analysis, info: NodeInfo, layer: Ensemble, sources: list[NodeInfo]
+) -> None:
+    """An ensemble: two or more models of its task, all fed by the same Input."""
+    nid = info.id
+    others = [s for s in sources if s.output_kind != "estimator"]
+    if others:
+        first = others[0]
+        what = "kernel" if first.output_kind == "kernel" else "data"
+        name = first.layer.label if first.layer else first.type
+        result.error(
+            f"{layer.label} combines classical models and takes no {what} ({name}): connect "
+            "model bricks such as SVC or gradient boosting to it. The models take the "
+            "features from the Input layer themselves.",
+            nid,
+        )
+        return
+    nested = [s for s in sources if isinstance(s.layer, Ensemble)]
+    if nested:
+        inner = nested[0].layer.label  # type: ignore[union-attr]
+        result.error(
+            f"Ensembles can't be nested yet: connect the models of {inner} to {layer.label} "
+            "directly.",
+            nid,
+        )
+        return
+    if len(sources) < 2:
+        result.error(
+            f"{layer.label} combines at least 2 models, but "
+            f"{'only one is' if sources else 'none is'} connected.",
+            nid,
+        )
+        return
+    if any(not s.resolved for s in sources):
+        return  # a model already reported an error
+    models: list[ClassicalModel] = [s.layer for s in sources]  # type: ignore[misc]
+    classification = layer.task == "classification"
+    wrong = [m for m in models if m.task != layer.task]
+    if wrong:
+        kinds = (
+            ("classifiers", "regression model")
+            if classification
+            else ("regression models", "classifier")
+        )
+        result.error(
+            f"{layer.label} combines {kinds[0]}, but {wrong[0].label} is a {kinds[1]}. All "
+            "models of an ensemble predict the same kind of target.",
+            nid,
+        )
+        return
+    features = {
+        next(i for i in s.inputs if result.nodes[i].output_kind == "tensor") for s in sources
+    }
+    if len(features) > 1:
+        result.error(
+            "The models of an ensemble take their features from the same Input layer: "
+            "scikit-learn hands every model the same rows.",
+            nid,
+        )
+        return
+    if classification and layer.probabilities:
+        without = [m for m in models if not m.probabilities]
+        if without:
+            result.error(
+                f"Soft voting averages class probabilities, but {without[0].label} predicts "
+                "none. Choose hard voting, or another model.",
+                nid,
+            )
+            return
+    names = _member_names(sources)
+    layer.members = [
+        Member(s.id, name, model) for s, name, model in zip(sources, names, models, strict=True)
+    ]
+    try:
+        layer.check_members()
+    except LayerError as exc:
+        result.error(str(exc), nid)
+        return
+    info.shape = layer.setup(None)
+    info.dtype = "float" if info.shape is not None else None
+    info.resolved = True
+
+
+def _member_names(sources: list[NodeInfo]) -> list[str]:
+    """Names of the models of an ensemble (scikit-learn wants unique names, and they are
+    variables of the generated code): the name of the brick or its id as a lower-case
+    identifier, e.g. "Boosting 1" -> "boosting_1"."""
+    names: list[str] = []
+    for source in sources:
+        text = re.sub(r"[^0-9a-zA-Z]+", "_", source.name or source.id).strip("_").lower()
+        prefix = source.layer.name_prefix if source.layer is not None else "model"
+        if not text or text[0].isdigit():
+            text = f"{prefix}_{text}" if text else prefix
+        if keyword.iskeyword(text) or text in RESERVED_NAMES:
+            text = f"{text}_{prefix}"
+        name, number = text, 2
+        while name in names:
+            name, number = f"{text}_{number}", number + 1
+        names.append(name)
+    return names
+
+
 def _check_classical(result: Analysis) -> None:
     """Rules for the network as a whole: every kernel is used exactly once, one classical
-    model at most, nothing after it and no neural layers besides it."""
+    model at most (or one ensemble and the models it combines), nothing after it and no
+    neural layers besides it."""
     models: list[NodeInfo] = []
+    ensembles: list[NodeInfo] = []
     neural: list[NodeInfo] = []
     for nid in result.order:
         info = result.nodes[nid]
@@ -474,20 +628,32 @@ def _check_classical(result: Analysis) -> None:
                     "each further use.",
                     nid,
                 )
+        elif isinstance(info.layer, Ensemble):
+            ensembles.append(info)
         elif isinstance(info.layer, ClassicalModel):
             models.append(info)
         elif info.layer is not None and info.layer.family == "neural":
             neural.append(info)
 
-    for extra in models[1:]:
-        result.error(
-            "Only one classical model per network. Remove this one or build it in a network "
-            "of its own.",
-            extra.id,
-        )
-    if not models:
-        return
-    model = models[0]
+    if ensembles:
+        _check_members(result, ensembles[0], models)
+        for extra in ensembles[1:]:
+            result.error(
+                "Only one ensemble per network. Remove this one or build it in a network of "
+                "its own.",
+                extra.id,
+            )
+        model = ensembles[0]
+    else:
+        for extra in models[1:]:
+            result.error(
+                "Only one classical model per network. Remove this one, build it in a network "
+                f"of its own, or combine the models with an ensemble ({ENSEMBLE_TYPES}).",
+                extra.id,
+            )
+        if not models:
+            return
+        model = models[0]
     label = model.layer.label  # type: ignore[union-attr]
     if model.outputs:
         result.error(
@@ -498,11 +664,35 @@ def _check_classical(result: Analysis) -> None:
     elif neural and not any(issue.node == model.id for issue in result.errors):
         names = sorted({n.layer.label for n in neural if n.layer is not None})
         shown = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
+        takes = (
+            f"the models of {label} take their"
+            if isinstance(model.layer, Ensemble)
+            else f"{label} takes its"
+        )
         result.error(
             f"{NOT_MIXED}, but this network also contains {shown}. Remove the neural layers: "
-            f"{label} takes its features straight from the Input layer.",
+            f"{takes} features straight from the Input layer.",
             model.id,
         )
+
+
+def _check_members(result: Analysis, ensemble: NodeInfo, models: list[NodeInfo]) -> None:
+    """Every model of a network with an ensemble feeds that ensemble, and nothing else."""
+    label = ensemble.layer.label  # type: ignore[union-attr]
+    for info in models:
+        name = info.layer.label  # type: ignore[union-attr]
+        if not info.outputs:
+            result.error(
+                f"{name} is not connected to {label}. Connect it to the ensemble, or remove "
+                "it: the ensemble ends the network.",
+                info.id,
+            )
+        elif any(target != ensemble.id for target in info.outputs):
+            result.error(
+                f"{name} can only be connected to {label}: what it passes on is the model "
+                f"itself, which the ensemble combines. {NOT_MIXED}.",
+                info.id,
+            )
 
 
 def _check_structure(result: Analysis) -> None:

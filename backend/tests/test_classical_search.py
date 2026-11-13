@@ -555,3 +555,13 @@ def test_cli_classical_search_errors(tmp_path, capsys, args, message):
 def test_cli_param_option_is_for_classical_models(capsys):
     assert cli.main(["--example", "mlp_mnist", "--tune-param", "C=1,2"]) == 1
     assert "--tune-param is for classical models" in capsys.readouterr().err
+
+
+def test_a_search_on_an_ensemble_is_refused_clearly():
+    from brickdnn.examples import get_example
+    from brickdnn.training.job import classical_model
+
+    model = classical_model(get_example("voting_ensemble_classifier")["graph"])
+    assert model == "VotingClassifier"
+    with pytest.raises(ConfigError, match="not available for ensembles yet"):
+        TuningConfig.from_dict({"method": "random", "trials": 3}, model)

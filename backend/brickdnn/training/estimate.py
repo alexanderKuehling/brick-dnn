@@ -16,9 +16,11 @@ and the start of the process (Python, PyTorch, the data).
 Classical models are fitted once: a Gaussian process needs about n³ operations per
 optimizer step for n training rows (a classifier once per class), a support vector machine
 between n² and n³. Gradient boosting builds one tree per iteration (per class with more than
-two classes); a tree costs about n × features histogram updates plus a fixed overhead. A
-hyperparameter search multiplies the fits: one per trial, or one per trial and fold (plus
-the final fit) with cross-validation.
+two classes); a tree costs about n × features histogram updates plus a fixed overhead. An
+ensemble costs what its models cost together; stacking fits every model once per
+cross-validation fold and once more, about cv + 1 times. A hyperparameter search multiplies
+the fits: one per trial, or one per trial and fold (plus the final fit) with
+cross-validation.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis
-from ..layers import ClassicalModel
+from ..layers import ClassicalModel, Ensemble
 from .config import TrainingConfig, classical_max_rows
 from .datasets import DatasetInfo
 from .tabular import held_out_size, split_sizes
@@ -236,37 +238,61 @@ def _classical(
     n_train: int,
     n_held_out: int,
 ) -> Estimate | None:
-    node = next(
-        (n for n in analysis.nodes.values() if isinstance(n.layer, ClassicalModel)),
-        None,
-    )
-    if node is None or node.layer is None:
+    node = analysis.model
+    if node is None or not isinstance(node.layer, ClassicalModel):
         return None
-    layer: ClassicalModel = node.layer  # type: ignore[assignment]
-    max_rows = classical_max_rows(layer.limit)
+    layer = node.layer
+    models = [m.layer for m in layer.members] if isinstance(layer, Ensemble) else [layer]
+    if not models:
+        return None  # an ensemble without (valid) models
+    # An ensemble: the strictest row limit of its models.
+    max_rows = min(classical_max_rows(limit) for limit in layer.row_limits())
     if info.kind == "random":
-        n_train = CLASSICAL_DEMO_ROWS.get(layer.scale, 1000)
+        n_train = min(CLASSICAL_DEMO_ROWS.get(model.scale, 1000) for model in models)
     n = max(1, min(n_train, max_rows))
     features = max(1, _prod(analysis.nodes[analysis.inputs[0]].shape or (1,)))
     classes = int((plan or {}).get("num_classes") or 1)
+    costs = [_model_cost(model, n, n_held_out, features, classes) for model in models]
+    details: dict[str, Any] = {
+        "family": "classical",
+        "train_rows": n,
+        "features": features,
+        "max_rows": max_rows,
+    }
+    if not isinstance(layer, Ensemble):
+        seconds, what, extra = costs[0]
+        details.update(extra)
+        basis = f"{what} fitted on {n:,} training rows with {features:,} features"
+        return _estimate(CLASSICAL_STARTUP_CPU_SECONDS + seconds, basis, details)
+    # Stacking fits every model once per fold (on (cv - 1) / cv of the rows) and once more
+    # on all of them, and predicts the held-out fold each time: about cv + 1 fits.
+    fits = int(layer.p["cv"]) + 1 if layer.combines == "stacking" else 1
+    seconds = CLASSICAL_STARTUP_CPU_SECONDS + fits * sum(cost[0] for cost in costs)
+    times = f", each fitted {fits} times" if fits > 1 else ""
+    basis = (
+        f"{layer.combines} ensemble of {len(models)} models ("
+        + "; ".join(cost[1] for cost in costs)
+        + f") fitted on {n:,} training rows with {features:,} features{times}"
+    )
+    details["fits"] = fits
+    details["members"] = [
+        {"type": model.type, "cpu_seconds": round(cost[0], 1)}
+        for model, cost in zip(models, costs, strict=True)
+    ]
+    return _estimate(seconds, basis, details)
+
+
+def _model_cost(
+    layer: ClassicalModel, n: int, n_held_out: int, features: int, classes: int
+) -> tuple[float, str, dict[str, Any]]:
+    """CPU seconds to fit one classical model on ``n`` rows and predict all rows (without
+    the start of the process), what it is in words and further details."""
     if layer.scale == "gradient_boosting":
         # At most max_iter iterations: early stopping often ends sooner.
         trees = int(layer.p["max_iter"]) * (classes if classes > 2 else 1)
         fit = trees * (TREE_CPU_SECONDS + TREE_ROW_FEATURE_CPU_SECONDS * n * features)
         predict = trees * (n_held_out + n) * TREE_PREDICT_CPU_SECONDS
-        seconds = CLASSICAL_STARTUP_CPU_SECONDS + fit + predict
-        basis = (
-            f"gradient boosting with up to {trees:,} trees fitted on {n:,} training rows with "
-            f"{features:,} features"
-        )
-        details = {
-            "family": "classical",
-            "train_rows": n,
-            "features": features,
-            "max_rows": max_rows,
-            "trees": trees,
-        }
-        return _estimate(seconds, basis, details)
+        return fit + predict, f"gradient boosting with up to {trees:,} trees", {"trees": trees}
     if layer.scale == "gaussian_process":
         restarts = int(layer.p.get("n_restarts_optimizer") or 0)
         per_class = classes if classes > 2 else 1
@@ -284,10 +310,7 @@ def _classical(
             flops *= 5
         model = "support vector machine"
     flops += (n_held_out + n) * n * features * 2  # predictions on all parts
-    seconds = CLASSICAL_STARTUP_CPU_SECONDS + flops / CLASSICAL_FLOPS_PER_CPU_SECOND
-    basis = f"{model} fitted on {n:,} training rows with {features:,} features"
-    details = {"family": "classical", "train_rows": n, "features": features, "max_rows": max_rows}
-    return _estimate(seconds, basis, details)
+    return flops / CLASSICAL_FLOPS_PER_CPU_SECOND, model, {}
 
 
 def _classical_search(single: Estimate, trials: int, folds: int | None) -> Estimate:

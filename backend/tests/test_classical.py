@@ -43,6 +43,8 @@ MODELS = [
     "HistGradientBoostingClassifier",
 ]
 BOOSTING = ["HistGradientBoostingRegressor", "HistGradientBoostingClassifier"]
+# Tested in test_classical_ensembles.py.
+ENSEMBLES = ["VotingClassifier", "VotingRegressor", "StackingClassifier", "StackingRegressor"]
 
 
 def graph(nodes, edges):
@@ -73,15 +75,15 @@ def errors(g):
 
 def test_every_classical_brick_is_covered():
     classical = {t for t, cls in REGISTRY.items() if cls.family == "classical"}
-    assert classical == set(KERNELS + COMBINATIONS + MODELS)
+    assert classical == set(KERNELS + COMBINATIONS + MODELS + ENSEMBLES)
 
 
 def test_catalogue_describes_kinds_and_slots():
     specs = {spec["type"]: spec for spec in layer_specs()}
-    assert {"Kernels", "Classical models"} <= set(CATEGORIES)
+    assert {"Kernels", "Classical models", "Ensembles"} <= set(CATEGORIES)
     for spec in specs.values():
         assert spec["family"] in ("neural", "classical", "shared")
-        assert spec["output_kind"] in ("tensor", "kernel")
+        assert spec["output_kind"] in ("tensor", "kernel", "estimator")
         assert isinstance(spec["input_slots"], list)
     assert specs["Input"]["family"] == "shared" and specs["Input"]["input_slots"] == []
     assert specs["Linear"]["input_slots"] == [
@@ -97,7 +99,8 @@ def test_catalogue_describes_kinds_and_slots():
         ]
     for model in MODELS:
         spec = specs[model]
-        assert spec["category"] == "Classical models" and spec["output_kind"] == "tensor"
+        # What a model passes on is itself (an estimator for an ensemble).
+        assert spec["category"] == "Classical models" and spec["output_kind"] == "estimator"
         kinds = [slot["kind"] for slot in spec["input_slots"]]
         assert kinds == (["tensor", "kernel"] if model.startswith("Gaussian") else ["tensor"])
         assert spec["max_inputs"] == len(kinds)
@@ -182,6 +185,7 @@ def test_kernel_combinations_respect_precedence():
         "estimator": "GaussianProcessRegressor",
         "task": "regression",
         "kernel": expected,
+        "members": None,
     }
     assert data["total_params"] == 2  # RBF and WhiteKernel; the constant is fixed
     assert data["family"] == "classical"

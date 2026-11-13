@@ -1,4 +1,4 @@
-import { GP_ANALYSIS } from './classicalFixtures';
+import { GP_ANALYSIS, VOTING_ANALYSIS } from './classicalFixtures';
 import {
   formatCount,
   formatOutput,
@@ -149,5 +149,23 @@ describe('format', () => {
         classical: { ...boosting.classical, task: 'classification' as const },
       })
     ).toBe('Gradient boosting classifier');
+    expect(networkSize(VOTING_ANALYSIS)).toBe('Ensemble of 2 models');
+  });
+
+  it('summarizes ensembles with their models', () => {
+    const info = VOTING_ANALYSIS.nodes.vote;
+    expect(summarize('VotingClassifier', { voting: 'soft', weights: [2, 1] }, { info })).toBe(
+      'soft voting · weights 2:1 · gb, svc'
+    );
+    // Before the analysis knows the models.
+    expect(summarize('VotingClassifier', { voting: 'hard', weights: null })).toBe('hard voting');
+    expect(summarize('VotingRegressor', { weights: null }, { info })).toBe('average · gb, svc');
+    expect(summarize('StackingClassifier', { cv: 5, passthrough: false }, { info })).toBe(
+      'logistic on 5 folds · gb, svc'
+    );
+    expect(summarize('StackingRegressor', { cv: 3, passthrough: true })).toBe(
+      'ridge on 3 folds · + features'
+    );
+    expect(optionLabel('voting', 'soft')).toBe('Soft (average the probabilities)');
   });
 });

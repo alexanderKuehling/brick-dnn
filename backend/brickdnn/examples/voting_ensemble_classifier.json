@@ -1,0 +1,111 @@
+{
+  "id": "voting_ensemble_classifier",
+  "name": "Voting ensemble classifier",
+  "description": "An ensemble of classical models (scikit-learn): gradient boosting, a support vector machine and a Gaussian process classify rows of 4 numeric features (e.g. the iris flowers), and soft voting averages their class probabilities. Every model takes the features from the Input; the dotted connections into the voting brick carry the models themselves. The classes come from the target column of the data.",
+  "order": 13,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            4
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 190
+        }
+      },
+      {
+        "id": "boosting",
+        "type": "HistGradientBoostingClassifier",
+        "params": {
+          "learning_rate": 0.1,
+          "max_iter": 200,
+          "max_leaf_nodes": 31,
+          "min_samples_leaf": 20,
+          "l2_regularization": 0.0,
+          "early_stopping": "auto",
+          "class_weight": "none",
+          "random_state": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 0
+        }
+      },
+      {
+        "id": "svc",
+        "type": "SVC",
+        "params": {
+          "kernel": "rbf",
+          "C": 1.0,
+          "gamma": "scale",
+          "class_weight": "none"
+        },
+        "position": {
+          "x": 300,
+          "y": 190
+        }
+      },
+      {
+        "id": "gp",
+        "type": "GaussianProcessClassifier",
+        "params": {
+          "n_restarts_optimizer": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 380
+        }
+      },
+      {
+        "id": "vote",
+        "type": "VotingClassifier",
+        "params": {
+          "voting": "soft",
+          "weights": null
+        },
+        "position": {
+          "x": 600,
+          "y": 190
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-boosting",
+        "source": "features",
+        "target": "boosting"
+      },
+      {
+        "id": "e-features-svc",
+        "source": "features",
+        "target": "svc"
+      },
+      {
+        "id": "e-features-gp",
+        "source": "features",
+        "target": "gp"
+      },
+      {
+        "id": "e-boosting-vote",
+        "source": "boosting",
+        "target": "vote"
+      },
+      {
+        "id": "e-svc-vote",
+        "source": "svc",
+        "target": "vote"
+      },
+      {
+        "id": "e-gp-vote",
+        "source": "gp",
+        "target": "vote"
+      }
+    ]
+  }
+}

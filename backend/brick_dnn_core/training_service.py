@@ -60,7 +60,7 @@ from django.utils.text import slugify
 from rest_framework import serializers
 
 from brickdnn import REGISTRY, Analysis, analyze
-from brickdnn.layers import ClassicalModel
+from brickdnn.layers import ClassicalModel, Ensemble
 from brickdnn.training import (
     ACTIVE_STATUSES,
     BUILTIN_DATASETS,
@@ -390,11 +390,12 @@ def classical_capabilities() -> dict[str, Any]:
         "available": reason is None,
         "reason": reason,
         "sklearn_version": _sklearn_version() if reason is None else None,
-        # Training rows each classical model is fitted on at most (more are subsampled).
+        # Training rows each classical model is fitted on at most (more are subsampled). An
+        # ensemble has the strictest limit of its models.
         "max_rows": {
             name: classical_max_rows(layer.limit)
             for name, layer in REGISTRY.items()
-            if issubclass(layer, ClassicalModel)
+            if issubclass(layer, ClassicalModel) and not issubclass(layer, Ensemble)
         },
         # The hyperparameter search over the parameters of the model brick: what each model
         # can vary (see brickdnn.training.classical_tuning) and the cross-validation folds.

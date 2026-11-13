@@ -15,6 +15,7 @@ import {
   gpDetail,
   summary,
   svcDetail,
+  votingDetail,
 } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
 import TrainingDrawer, { type TrainingDrawerProps } from './TrainingDrawer';
@@ -356,6 +357,25 @@ describe('A run of a classical model', () => {
     expect(screen.getByText('at most 1,000,000 on this server')).toBeInTheDocument();
     expect(screen.queryByText('Support vectors')).not.toBeInTheDocument();
     expect(screen.queryByText('Log marginal likelihood')).not.toBeInTheDocument();
+  });
+
+  it('shows the models of an ensemble with their own scores', () => {
+    show(votingDetail());
+    expect(screen.getByText('Ensemble').nextSibling).toHaveTextContent('2 models');
+    expect(screen.queryByText('Support vectors')).not.toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'Models of the ensemble' });
+    expect(
+      within(table)
+        .getAllByRole('row')
+        .map((row) => row.textContent)
+    ).toEqual([
+      'ModelAccuracyLoss',
+      'gb · Gradient boosting classification90.0%0.3',
+      'svc · Support vector classification88.0%0.3',
+    ]);
+    expect(
+      screen.getByText(/Each model of the ensemble on its own, on the validation/)
+    ).toBeVisible();
   });
 
   it('warns that stopping ends the fit at once', async () => {

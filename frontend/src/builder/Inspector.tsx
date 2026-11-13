@@ -26,7 +26,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import type { Analysis, LayerSpec, NodeAnalysis } from '@/api/types';
+import type { Analysis, LayerSpec, ModelMember, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
 import { LayerLearning } from '@/explain/LayerLearning';
 import { categoryColor } from '@/theme';
@@ -37,6 +37,7 @@ import {
   inputSlots,
   isBoosting,
   isClassicalSpec,
+  isEnsemble,
   isKernelNode,
   kernelTerms,
   networkFamily,
@@ -47,7 +48,8 @@ const GAUSSIAN_PROCESSES = ['GaussianProcessRegressor', 'GaussianProcessClassifi
 
 /**
  * The parameters of a layer: weights; hyperparameters of kernels; nothing yet for SVMs and
- * gradient boosting (their support vectors or trees come from the fit).
+ * gradient boosting (their support vectors or trees come from the fit); the models of an
+ * ensemble.
  */
 function paramsStat(
   spec: LayerSpec,
@@ -57,6 +59,9 @@ function paramsStat(
   const count = info?.num_params;
   if (!isClassicalSpec(spec)) {
     return { label: 'Parameters', value: count?.toLocaleString('en-US') ?? '–' };
+  }
+  if (isEnsemble(spec.type)) {
+    return { label: 'Models', value: info?.members ? String(info.members.length) : '–' };
   }
   if (GAUSSIAN_PROCESSES.includes(spec.type)) {
     // With kernel bricks, their hyperparameters are the ones the fit optimises.
@@ -88,6 +93,44 @@ function KernelCode({ code, label }: { code: string; label: string }) {
     >
       {kernelTerms(code).join('\n')}
     </Code>
+  );
+}
+
+/**
+ * The models of an ensemble in the order of their connections, which is also the order of
+ * its weights. A click selects the model on the canvas.
+ */
+function EnsembleMembers({
+  members,
+  weights,
+  onSelect,
+}: {
+  members: ModelMember[];
+  weights: unknown;
+  onSelect: (node: string) => void;
+}) {
+  const weighted = Array.isArray(weights) && weights.length === members.length;
+  return (
+    <Stack gap={4}>
+      <Text size="xs" c="dimmed">
+        Models, in the order of their connections{weighted ? ' and weights' : ''}
+      </Text>
+      <List size="sm" spacing={2} type="ordered" aria-label="Models of the ensemble">
+        {members.map((member, index) => (
+          <List.Item key={member.node}>
+            <UnstyledButton onClick={() => onSelect(member.node)}>
+              <Text span size="sm" ff="monospace" fw={600}>
+                {member.name}
+              </Text>{' '}
+              <Text span size="sm" c="dimmed">
+                {member.label}
+                {weighted ? ` · weight ${String((weights as unknown[])[index])}` : ''}
+              </Text>
+            </UnstyledButton>
+          </List.Item>
+        ))}
+      </List>
+    </Stack>
   );
 }
 
@@ -127,6 +170,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
     duplicateNode,
     inputFit,
     links,
+    focusNode,
   } = useBuilder();
   const spec = specs[node.data.type];
   const info = analysis?.nodes[node.id];
@@ -222,6 +266,13 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
           </Text>
           <KernelCode code={kernelCode} label="Kernel as scikit-learn code" />
         </Stack>
+      )}
+      {info?.members && info.members.length > 0 && (
+        <EnsembleMembers
+          members={info.members}
+          weights={node.data.params.weights}
+          onSelect={focusNode}
+        />
       )}
       {inputFit && inputFit.nodeId === node.id && !readOnly && <DatasetFit fit={inputFit} />}
 
@@ -350,20 +401,27 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
                     label="Classical model (scikit-learn)"
                     value={specs[classical.type]?.label ?? classical.estimator}
                   />
-                  <Stat
-                    label={
-                      analysis.total_params === null
-                        ? 'Parameters'
-                        : 'Hyperparameters the fit optimises'
-                    }
-                    value={
-                      analysis.total_params === null
-                        ? isBoosting(classical.type)
-                          ? 'decision trees, after the fit'
-                          : 'support vectors, after the fit'
-                        : analysis.total_params.toLocaleString('en-US')
-                    }
-                  />
+                  {classical.members ? (
+                    <Stat
+                      label={`${classical.members.length} models`}
+                      value={classical.members.map((member) => member.name).join(', ')}
+                    />
+                  ) : (
+                    <Stat
+                      label={
+                        analysis.total_params === null
+                          ? 'Parameters'
+                          : 'Hyperparameters the fit optimises'
+                      }
+                      value={
+                        analysis.total_params === null
+                          ? isBoosting(classical.type)
+                            ? 'decision trees, after the fit'
+                            : 'support vectors, after the fit'
+                          : analysis.total_params.toLocaleString('en-US')
+                      }
+                    />
+                  )}
                 </>
               ) : (
                 <Stat
@@ -461,6 +519,10 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
               <List.Item>
                 Kernel values are starting values: the Gaussian process optimises them when it is
                 trained, unless they are fixed.
+              </List.Item>
+              <List.Item>
+                To combine models, connect each of them to a voting or stacking ensemble: the dotted
+                connections carry the models themselves.
               </List.Item>
             </>
           ) : (

@@ -1,5 +1,6 @@
 .node {
   --kernel-color: var(--mantine-color-pink-6);
+  --estimator-color: var(--mantine-color-grape-6);
 
   position: relative;
   width: 220px;
@@ -120,6 +121,12 @@
       background: var(--kernel-color);
       transform: rotate(45deg);
     }
+  }
+
+  /* Classical models flow into ensembles: ring handles in the model colour. */
+  &[data-kind='estimator'] {
+    border: 3px solid var(--estimator-color);
+    background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
   }
 
   /* A bigger target for fingers; the dot keeps its size. */
