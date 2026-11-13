@@ -554,3 +554,8 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO")},
 }
+
+# Error monitoring with Sentry (docs/monitoring.md): off unless BRICKDNN_SENTRY_DSN is set.
+from .monitoring import init_sentry  # noqa: E402
+
+init_sentry(debug=DEBUG)

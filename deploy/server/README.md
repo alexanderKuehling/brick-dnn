@@ -110,6 +110,9 @@ Deploy server → Run workflow*) or push to `main`.
 | `BRICKDNN_EMAIL_REPLY_TO` | `support@brickdnn.com` | |
 | `BRICKDNN_PUBLIC_URL` | `https://brickdnn.com` | |
 | `BRICKDNN_REQUIRE_2FA_FOR_STAFF` | `true` (only once your account has two-factor login) | |
+| `BRICKDNN_SENTRY_DSN` | DSN of the Sentry server project | [monitoring](../../docs/monitoring.md#settings) |
+| `BRICKDNN_SENTRY_FRONTEND_DSN` | DSN of the Sentry frontend project | |
+| `BRICKDNN_SENTRY_ENVIRONMENT`, `BRICKDNN_SENTRY_TRACES_SAMPLE_RATE` | `production`, `0.1` (the defaults) | |
 
 | Secret (tab *Secrets*) | Is |
 | --- | --- |
@@ -136,7 +139,9 @@ the settings):
 ssh root@SERVER install -m 755 /opt/brick-dnn/deploy/server/deploy.sh /usr/local/bin/brickdnn-deploy
 ```
 
-Run it after a deploy that contains this change, then deploy again.
+Run it after a deploy that contains this change, then deploy again. The same goes for the
+Sentry settings, which came later: copy the script again once after the deploy that added
+them. Every deploy also writes `BRICKDNN_SENTRY_RELEASE=brick-dnn@<commit>` into `.env`.
 
 ## CPU and memory: the site comes first
 

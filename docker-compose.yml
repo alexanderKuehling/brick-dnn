@@ -88,6 +88,16 @@ x-email: &email
   # request; the cleanup service has none).
   BRICKDNN_PUBLIC_URL: ${BRICKDNN_PUBLIC_URL:-}
 
+# Error monitoring with Sentry (docs/monitoring.md); no DSN: off. The backend, the worker, the
+# realtime server and the cleanup service report their errors to the server project; the
+# frontend gets its own DSN when its image is built (below). The release is the deployed
+# commit, written to .env by every deploy.
+x-sentry: &sentry
+  BRICKDNN_SENTRY_DSN: ${BRICKDNN_SENTRY_DSN:-}
+  BRICKDNN_SENTRY_ENVIRONMENT: ${BRICKDNN_SENTRY_ENVIRONMENT:-}
+  BRICKDNN_SENTRY_RELEASE: ${BRICKDNN_SENTRY_RELEASE:-}
+  BRICKDNN_SENTRY_TRACES_SAMPLE_RATE: ${BRICKDNN_SENTRY_TRACES_SAMPLE_RATE:-}
+
 services:
   backend:
     build:
@@ -101,7 +111,7 @@ services:
     # worker) whose gunicorn worker was restarted.
     init: true
     environment:
-      <<: [*retention, *budgets, *paddle, *training, *email, *backup]
+      <<: [*retention, *budgets, *paddle, *training, *email, *backup, *sentry]
       # Staff accounts need two-factor authentication for the Django admin (docs/email.md).
       BRICKDNN_REQUIRE_2FA_FOR_STAFF: ${BRICKDNN_REQUIRE_2FA_FOR_STAFF:-}
       # Leave DJANGO_SECRET_KEY empty to generate one on first start (stored in the volume).
@@ -150,7 +160,7 @@ services:
     # them back into the queue: the next worker starts them again.
     stop_grace_period: 60s
     environment:
-      <<: [*budgets, *training]
+      <<: [*budgets, *training, *sentry]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
       BRICKDNN_WORKER_DRAIN_SECONDS: ${BRICKDNN_WORKER_DRAIN_SECONDS:-}
@@ -180,6 +190,7 @@ services:
     pull_policy: never
     command: ["daphne", "--bind", "0.0.0.0", "--port", "8001", "brick_dnn_site.asgi:application"]
     environment:
+      <<: *sentry
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DATABASE_URL: ${DATABASE_URL:-}
@@ -213,7 +224,7 @@ services:
       - -c
       - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; python manage.py backup; sleep 86400; done"
     environment:
-      <<: [*retention, *budgets, *paddle, *email, *backup]
+      <<: [*retention, *budgets, *paddle, *email, *backup, *sentry]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
@@ -233,7 +244,14 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Error monitoring in the browser (docs/monitoring.md); empty: off. Built into the app.
+        VITE_SENTRY_DSN: ${BRICKDNN_SENTRY_FRONTEND_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${BRICKDNN_SENTRY_ENVIRONMENT:-}
+        VITE_SENTRY_RELEASE: ${BRICKDNN_SENTRY_RELEASE:-}
+        VITE_SENTRY_TRACES_SAMPLE_RATE: ${BRICKDNN_SENTRY_TRACES_SAMPLE_RATE:-}
     ports:
       - "${BRICKDNN_PORT:-8080}:80"
     depends_on:

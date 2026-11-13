@@ -3,7 +3,7 @@ import '@mantine/notifications/styles.css';
 import '@xyflow/react/dist/style.css';
 import './global.css';
 
-import { BrowserRouter, HashRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Route } from 'react-router-dom';
 import { AppShell, MantineProvider } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
@@ -17,6 +17,7 @@ import { RequireAuth } from './components/RequireAuth';
 import { DataPage } from './data/DataPage';
 import { DEMO } from './demo';
 import { LegalPage } from './legal/LegalPage';
+import { MonitoredRoutes } from './monitoring';
 import { AuthorizePage } from './oauth/AuthorizePage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
@@ -46,7 +47,7 @@ export default function App() {
                 <AppHeader />
               </AppShell.Header>
               <AppShell.Main>
-                <Routes>
+                <MonitoredRoutes>
                   <Route path="/" element={<BuilderPage />} />
                   {/* One route, so switching preparations keeps the page (and its state). */}
                   <Route path="/data/:prepId?" element={<DataPage />} />
@@ -119,7 +120,7 @@ export default function App() {
                     </>
                   )}
                   <Route path="*" element={<NotFoundPage />} />
-                </Routes>
+                </MonitoredRoutes>
               </AppShell.Main>
             </AppShell>
           </Router>

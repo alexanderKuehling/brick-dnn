@@ -48,6 +48,10 @@ jobs:
           BRICKDNN_EMAIL_USER: ${{ secrets.BRICKDNN_EMAIL_USER }}
           BRICKDNN_EMAIL_PASSWORD: ${{ secrets.BRICKDNN_EMAIL_PASSWORD }}
           BRICKDNN_ADMIN_EMAIL: ${{ secrets.BRICKDNN_ADMIN_EMAIL }}
+          BRICKDNN_SENTRY_DSN: ${{ vars.BRICKDNN_SENTRY_DSN }}
+          BRICKDNN_SENTRY_FRONTEND_DSN: ${{ vars.BRICKDNN_SENTRY_FRONTEND_DSN }}
+          BRICKDNN_SENTRY_ENVIRONMENT: ${{ vars.BRICKDNN_SENTRY_ENVIRONMENT }}
+          BRICKDNN_SENTRY_TRACES_SAMPLE_RATE: ${{ vars.BRICKDNN_SENTRY_TRACES_SAMPLE_RATE }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
@@ -57,7 +61,8 @@ jobs:
             BRICKDNN_PADDLE_OVERAGE_PRODUCT BRICKDNN_PADDLE_API_KEY BRICKDNN_PADDLE_WEBHOOK_SECRET
             BRICKDNN_EMAIL_HOST BRICKDNN_EMAIL_PORT BRICKDNN_EMAIL_USER BRICKDNN_EMAIL_PASSWORD
             BRICKDNN_EMAIL_FROM BRICKDNN_EMAIL_REPLY_TO BRICKDNN_ADMIN_EMAIL BRICKDNN_PUBLIC_URL
-            BRICKDNN_REQUIRE_2FA_FOR_STAFF"
+            BRICKDNN_REQUIRE_2FA_FOR_STAFF BRICKDNN_SENTRY_DSN BRICKDNN_SENTRY_FRONTEND_DSN
+            BRICKDNN_SENTRY_ENVIRONMENT BRICKDNN_SENTRY_TRACES_SAMPLE_RATE"
           # The settings go on stdin (never on the command line or into the log), base64 so
           # that any character arrives unchanged; deploy.sh checks the names and the values.
           {

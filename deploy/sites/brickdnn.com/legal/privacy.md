@@ -1,6 +1,6 @@
 # Datenschutzerklärung
 
-Stand: 12. November 2026
+Stand: 13. November 2026
 
 ## 1. Verantwortlicher
 
@@ -15,9 +15,9 @@ Ein Datenschutzbeauftragter ist nicht benannt (gesetzlich nicht vorgeschrieben).
 
 Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammensetzen, PyTorch-Code erzeugen, Daten aufbereiten und Netze auf diesem Server trainieren können. Die Grundfunktionen sind kostenlos. Für Netze, Daten und Trainings brauchen Sie ein Konto.
 
-- Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
+- Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10). Technische Fehlerberichte gehen ohne Angaben zu Ihrer Person an den Dienst Sentry (Abschnitt 4).
 - E-Mails versendet die App nur zu Ihrem Konto (z. B. zum Bestätigen Ihrer Adresse oder Zurücksetzen des Passworts), keine Werbung und keine Newsletter (Abschnitt 5).
-- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank bzw. den E-Mail-Versand für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
+- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank, den E-Mail-Versand bzw. die Fehlerüberwachung für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Links zu anderen Seiten (z. B. GitHub oder „Buy me a coffee“) werden erst geladen, wenn Sie sie anklicken; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
 
 ## 3. Hosting
@@ -31,6 +31,8 @@ Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Dienstes) und li
 ## 4. Aufruf der Website und Server-Logdateien
 
 Beim Aufruf der Seite verarbeitet der Server technisch notwendig Ihre IP-Adresse. In den Protokollen (Logdateien) des Webservers werden gespeichert: die **gekürzte** IP-Adresse (bei IPv4 ist der letzte Block 0, bei IPv6 bleiben nur die ersten beiden Blöcke), Datum und Uhrzeit, die aufgerufene Seite ohne Parameter, HTTP-Status, übertragene Datenmenge, Antwortzeit und die Browserkennung (User-Agent). Fehlerprotokolle können vollständige IP-Adressen enthalten. Wenn bei einer Anfrage ein Fehler im Server auftritt, erhalte ich per E-Mail einen technischen Fehlerbericht (aufgerufene Adresse, Benutzername, Programmablauf; keine Passwörter oder Token), um den Fehler zu beheben; höchstens eine E-Mail je Fehlerart und Stunde.
+
+**Fehlerüberwachung (Sentry).** Damit ich Fehler finden und beheben kann, melden der Server und die App in Ihrem Browser technische Fehler und Messwerte an den Dienst **Sentry** der Functional Software, Inc. (Sentry), 45 Fremont Street, 8th Floor, San Francisco, CA 94105, USA. Übermittelt werden: die Fehlermeldung mit dem Programmablauf, die aufgerufene Seite bzw. Schnittstelle ohne Parameter, Version der App, Browser und Betriebssystem (aus der Browserkennung), das Land (aus der IP-Adresse abgeleitet), Ladezeiten für einen Teil der Seitenaufrufe (etwa jeden zehnten) und Protokollmeldungen des Servers. **Nicht** übermittelt werden Ihr Benutzername, Ihre E-Mail-Adresse oder eine Kennung Ihres Kontos, Cookies, Formularinhalte, hochgeladene Dateien und Passwörter oder Token; die IP-Adresse wird von Sentry nicht gespeichert. Es gibt keine Aufzeichnung Ihrer Sitzung. Die Daten werden in der EU-Region von Sentry (Frankfurt am Main, Deutschland) gespeichert und dort nach den Fristen von Sentry gelöscht (in der Regel nach 90 Tagen). Mit Sentry besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO; soweit Sentry als US-Unternehmen oder seine Unterauftragnehmer Daten in die USA übermitteln, geschieht das auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO) bzw. des EU-US Data Privacy Framework (Art. 45 DSGVO). Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem fehlerfreien, sicheren Betrieb).
 
 Die Protokolle werden nach Größe automatisch überschrieben (höchstens etwa 30 MB je Dienst); bei wenig Verkehr können sie einige Wochen alt werden.
 
