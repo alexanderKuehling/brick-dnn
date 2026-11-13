@@ -49,6 +49,9 @@ export interface StepParamFieldProps {
 
 const comboboxProps = { withinPortal: true, shadow: 'md' } as const;
 
+/** Text params that hold code (a formula, a regular expression): shown in a monospace font. */
+const CODE_PARAMS = ['expression', 'pattern'];
+
 /** One form field of a pipeline step, chosen by the param kind of the step catalog. */
 export function StepParamField(props: StepParamFieldProps) {
   const { param, value, onChange, sources, currentSourceId, params, error } = props;
@@ -174,7 +177,7 @@ export function StepParamField(props: StepParamFieldProps) {
           value={typeof value === 'string' ? value : value == null ? '' : String(value)}
           placeholder={param.optional ? 'Optional' : undefined}
           styles={
-            param.name === 'expression'
+            CODE_PARAMS.includes(param.name)
               ? { input: { fontFamily: 'var(--mantine-font-family-monospace)' } }
               : undefined
           }

@@ -180,6 +180,9 @@ class Step:
     # near-duplicate groups): comes after the combine steps and before all other steps, so a
     # column it adds can decide the split. Learns nothing from labels; sees all rows.
     pre_split: ClassVar[bool] = False
+    # Typical params for the help of agents (list_prep_steps), e.g. {"column": "Cabin", ...};
+    # None: the defaults serve as the example.
+    example: ClassVar[dict[str, Any] | None] = None
 
     def __init__(self, params: dict[str, Any]):
         self.raw_params = params
@@ -188,7 +191,7 @@ class Step:
 
     @classmethod
     def spec(cls) -> dict[str, Any]:
-        return {
+        spec = {
             "type": cls.type,
             "label": cls.label,
             "group": cls.group,
@@ -199,6 +202,9 @@ class Step:
             "pre_split": cls.pre_split,
             "params": [p.to_dict() for p in cls.params],
         }
+        if cls.example is not None:
+            spec["example"] = dict(cls.example)
+        return spec
 
     @classmethod
     def defaults(cls) -> dict[str, Any]:

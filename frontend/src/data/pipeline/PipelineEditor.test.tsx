@@ -355,6 +355,75 @@ describe('PipelineEditor', () => {
     expect(within(item).getByLabelText('and')).toHaveValue('65');
   });
 
+  it('edits an extract-from-text step: fields per part and a mapping to numbers', async () => {
+    render(<Harness initialSteps={[]} />);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Add step' })[0]);
+    await userEvent.type(screen.getByLabelText('Search steps'), 'deck letter');
+    await userEvent.click(screen.getByRole('menuitem', { name: /Extract from text/ }));
+    expect(steps[0]).toMatchObject({
+      type: 'extract_text',
+      params: {
+        column: null,
+        name: '',
+        part: 'first',
+        length: 1,
+        pattern: '',
+        index: 1,
+        strip: true,
+        case: 'upper',
+        mapping: {},
+      },
+    });
+    const item = card('Step 1: Extract from text');
+
+    // Only text and category columns are offered.
+    await userEvent.click(within(item).getByRole('combobox', { name: 'Text column' }));
+    const offered = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(offered).toEqual(['city', 'plan', 'notes', 'churn']);
+    await userEvent.click(screen.getByRole('option', { name: 'notes' }));
+    await userEvent.type(within(item).getByLabelText('New column'), 'Deck');
+    expect(steps[0].params).toMatchObject({ column: 'notes', name: 'Deck' });
+
+    // The first characters: how many; no pattern, no word number.
+    expect(within(item).getByLabelText('Characters')).toHaveValue('1');
+    expect(within(item).queryByLabelText('Pattern')).not.toBeInTheDocument();
+    expect(within(item).queryByLabelText('Word number')).not.toBeInTheDocument();
+
+    const take = () => within(item).getByRole('combobox', { name: 'Take' });
+    await userEvent.click(take());
+    await userEvent.click(screen.getByRole('option', { name: 'A word' }));
+    expect(within(item).queryByLabelText('Characters')).not.toBeInTheDocument();
+    const word = within(item).getByLabelText('Word number');
+    await userEvent.clear(word);
+    await userEvent.type(word, '-1');
+    expect(steps[0].params).toMatchObject({ part: 'word', index: -1 });
+
+    await userEvent.click(take());
+    await userEvent.click(
+      screen.getByRole('option', { name: 'The match of a pattern (regular expression)' })
+    );
+    expect(within(item).queryByLabelText('Word number')).not.toBeInTheDocument();
+    const pattern = within(item).getByLabelText('Pattern');
+    expect(pattern).toHaveStyle({ fontFamily: 'var(--mantine-font-family-monospace)' });
+    await userEvent.type(pattern, '^\\w');
+    expect(steps[0].params).toMatchObject({ part: 'pattern', pattern: '^\\w' });
+
+    await userEvent.click(within(item).getByRole('combobox', { name: 'Case' }));
+    await userEvent.click(screen.getByRole('option', { name: 'lower case' }));
+    await userEvent.click(within(item).getByRole('switch', { name: /^Trim spaces first/ }));
+    expect(steps[0].params).toMatchObject({ case: 'lower', strip: false });
+
+    // The mapping editor of "Replace values": new values typed as numbers are numbers.
+    const mapping = within(item).getByRole('group', { name: 'Map to new values' });
+    await userEvent.click(within(mapping).getByRole('button', { name: 'Add value' }));
+    await userEvent.type(within(mapping).getByLabelText('Value 1'), 'a');
+    await userEvent.type(within(mapping).getByLabelText('Replace with 1'), '1');
+    await userEvent.click(within(mapping).getByRole('button', { name: 'Add value' }));
+    await userEvent.type(within(mapping).getByLabelText('Value 2'), 't');
+    await userEvent.type(within(mapping).getByLabelText('Replace with 2'), '8');
+    expect(steps[0].params.mapping).toEqual({ a: 1, t: 8 });
+  });
+
   it('marks the field a step error is about', async () => {
     render(<Harness />);
     const clip = card('Step 2: Clip values');

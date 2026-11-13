@@ -2271,6 +2271,8 @@ export interface StepSpec {
    */
   pre_split?: boolean;
   params: StepParamSpec[];
+  /** Typical params, e.g. for agents (list_prep_steps). Missing for most step types. */
+  example?: Record<string, unknown>;
 }
 
 export interface StepCatalog {
