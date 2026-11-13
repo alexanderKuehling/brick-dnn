@@ -8,9 +8,22 @@ import type {
   TrainingStatus,
   TuningInput,
   TuningMethod,
+  TuningMetric,
   TuningSpace,
 } from '@/api/types';
 import { isOwnDataset } from './access';
+import {
+  CLASSICAL_TUNABLES,
+  classicalCombinations,
+  classicalSpace,
+  FOLDS,
+  METRICS,
+  paramStates,
+  parseList,
+  rangeError,
+  usesRange,
+  type ParamState,
+} from './search';
 
 /**
  * A number field as typed. NumberInput reports unfinished input such as "0.00" or "12." as a
@@ -69,6 +82,16 @@ export interface SettingsValues {
   optimizers: Optimizer[];
   tune_weight_decay: boolean;
   weight_decays: number[];
+  /** What ranks the trials (networks and classical models). */
+  metric: TuningMetric;
+  /** Classical models: compare the trials by cross-validation on the training rows. */
+  cv_enabled: boolean;
+  cv_folds: NumberField;
+  /**
+   * Classical models: the parameters of the model brick to search, by model type and name
+   * (only what differs from the defaults needs to be there).
+   */
+  classical_params: Record<string, Record<string, Partial<ParamState>>>;
 }
 
 const NUMBER_FIELDS = [
@@ -85,6 +108,7 @@ const NUMBER_FIELDS = [
   'search_trials',
   'lr_min',
   'lr_max',
+  'cv_folds',
 ] as const;
 
 const BOOLEAN_FIELDS = [
@@ -95,6 +119,7 @@ const BOOLEAN_FIELDS = [
   'tune_batch_size',
   'tune_optimizer',
   'tune_weight_decay',
+  'cv_enabled',
 ] as const;
 
 /** Values offered by the search form. */
@@ -131,6 +156,10 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   optimizers: ['adam', 'sgd'],
   tune_weight_decay: false,
   weight_decays: [0, 0.0001, 0.001],
+  metric: 'loss',
+  cv_enabled: false,
+  cv_folds: FOLDS.default,
+  classical_params: {},
 };
 
 /** Same limits as backend/brickdnn/training/config.py. */
@@ -148,6 +177,7 @@ export const LIMITS = {
   patience: { min: 1, max: 1000 },
   /** Same limits as backend/brickdnn/training/tuning.py. */
   search_trials: { min: 1, max: 100 },
+  cv_folds: { min: FOLDS.min, max: FOLDS.max },
 } as const;
 
 export const OPTIMIZERS: { value: Optimizer; label: string }[] = [
@@ -183,7 +213,10 @@ export function maxSegmentationBatch(
   return Math.floor((memoryMb * 1024 * 1024 - plan.fixed_bytes) / plan.sample_bytes);
 }
 
-export type SettingsErrors = Partial<Record<keyof SettingsValues, string>>;
+export type SettingsErrors = Partial<Record<keyof SettingsValues, string>> & {
+  /** Classical search: problems with a parameter, by name. */
+  params?: Record<string, string>;
+};
 
 /** '' for an empty field, the number, or null if the text is not a number. */
 export function parseField(value: NumberField): number | '' | null {
@@ -282,11 +315,35 @@ export function plannedTrials(values: SettingsValues): number | null {
 }
 
 /**
- * Classical models (scikit-learn) are fitted once: only the splits, Max. samples and the
- * seed apply. `maxRows` is the most training rows the model is fitted on on this server.
+ * Classical models (scikit-learn) are fitted once: only the splits, Max. samples, the seed
+ * and a search over the parameters of the model brick apply. `maxRows` is the most training
+ * rows the model is fitted on on this server; `model` the type of the model brick.
  */
 export interface ClassicalScope {
   maxRows: number | null;
+  model?: string | null;
+}
+
+/** The form state of the parameters of a classical `model` (defaults where none is saved). */
+export function classicalParams(values: SettingsValues, model: string) {
+  return paramStates(model, values.classical_params[model]);
+}
+
+/**
+ * How many trials a classical search runs: every combination for a grid, otherwise the
+ * chosen number (each combination of lists at most once). Null if unknown.
+ */
+export function plannedClassicalTrials(values: SettingsValues, model: string): number | null {
+  const grid = values.search_method === 'grid';
+  const combos = classicalCombinations(model, classicalParams(values, model), grid);
+  if (grid) {
+    return combos;
+  }
+  const trials = parseField(values.search_trials);
+  if (typeof trials !== 'number' || !Number.isInteger(trials) || trials < 1) {
+    return null;
+  }
+  return combos === null ? trials : Math.min(trials, combos);
 }
 
 /** Shown when a setting needs validation data that the run will not have. */
@@ -339,9 +396,55 @@ function validateSplits(values: SettingsValues, errors: SettingsErrors) {
   }
 }
 
-function validateClassical(values: SettingsValues, { maxRows }: ClassicalScope): SettingsErrors {
+function validateClassicalSearch(values: SettingsValues, model: string, errors: SettingsErrors) {
+  const grid = values.search_method === 'grid';
+  if (!grid) {
+    const trials = wholeNumber(values.search_trials, LIMITS.search_trials, true);
+    if (trials) {
+      errors.search_trials = trials;
+    }
+  }
+  if (values.cv_enabled) {
+    const folds = wholeNumber(values.cv_folds, LIMITS.cv_folds, true);
+    if (folds) {
+      errors.cv_folds = folds;
+    }
+  }
+  const states = classicalParams(values, model);
+  const params: Record<string, string> = {};
+  let ticked = 0;
+  for (const item of CLASSICAL_TUNABLES[model] ?? []) {
+    const state = states[item.name];
+    if (!state?.on) {
+      continue;
+    }
+    ticked += 1;
+    const problem = usesRange(item, state, grid) ? rangeError(item, state) : null;
+    const list = usesRange(item, state, grid) ? [] : parseList(item, state);
+    if (problem || typeof list === 'string') {
+      params[item.name] = problem ?? (list as string);
+    }
+  }
+  if (Object.keys(params).length > 0) {
+    errors.params = params;
+  }
+  const combos = classicalCombinations(model, states, grid);
+  if (ticked === 0) {
+    errors.search = 'Choose at least one parameter to search.';
+  } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
+    errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+  }
+}
+
+function validateClassical(
+  values: SettingsValues,
+  { maxRows, model = null }: ClassicalScope
+): SettingsErrors {
   const errors: SettingsErrors = {};
   validateSplits(values, errors);
+  if (values.search && model) {
+    validateClassicalSearch(values, model, errors);
+  }
   const limit = { min: LIMITS.max_samples.min, max: maxRows ?? LIMITS.max_samples.max };
   const samples = wholeNumber(values.max_samples, limit, false);
   if (samples) {
@@ -369,14 +472,21 @@ export function validateSettings(
     classical = null,
     segmentation = null,
     validationRows = null,
+    metrics = null,
   }: {
     classical?: ClassicalScope | null;
     segmentation?: SegmentationScope | null;
     validationRows?: number | null;
+    /** The objective metrics the data allows (null: not known yet, not checked). */
+    metrics?: TuningMetric[] | null;
   } = {}
 ): SettingsErrors {
   if (classical) {
-    return validateClassical(values, classical);
+    const errors = validateClassical(values, classical);
+    if (values.search && classical.model) {
+      checkMetric(values, metrics, errors);
+    }
+    return errors;
   }
   const errors: SettingsErrors = {};
   const set = (key: keyof SettingsValues, message: string | null) => {
@@ -466,8 +576,20 @@ export function validateSettings(
     } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
       errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
     }
+    checkMetric(values, metrics, errors);
   }
   return errors;
+}
+
+/** The chosen objective metric must fit the data (e.g. ROC AUC needs two classes). */
+function checkMetric(
+  values: SettingsValues,
+  metrics: TuningMetric[] | null,
+  errors: SettingsErrors
+) {
+  if (metrics !== null && !metrics.includes(values.metric)) {
+    errors.metric = 'Not available for this data: choose another metric.';
+  }
 }
 
 /** Fractions with at most four decimals: 12.5 % → 0.125. */
@@ -523,10 +645,29 @@ export function toConfig(
 
 const ascending = (a: number, b: number) => a - b;
 
-/** The search settings for the API, or null for a single training. */
-export function toTuning(values: SettingsValues): TuningInput | null {
+/**
+ * The search settings for the API, or null for a single training. `classicalModel`: the
+ * type of a classical model brick, whose parameters the search varies.
+ */
+export function toTuning(
+  values: SettingsValues,
+  classicalModel: string | null = null
+): TuningInput | null {
   if (!values.search) {
     return null;
+  }
+  const metric = values.metric !== 'loss' ? { metric: values.metric } : {};
+  if (classicalModel) {
+    const grid = values.search_method === 'grid';
+    const trials = parseField(values.search_trials);
+    const folds = parseField(values.cv_folds);
+    return {
+      method: values.search_method,
+      ...(!grid && typeof trials === 'number' ? { trials } : {}),
+      ...metric,
+      ...(values.cv_enabled && typeof folds === 'number' ? { cv_folds: folds } : {}),
+      space: classicalSpace(classicalModel, classicalParams(values, classicalModel), grid),
+    };
   }
   const tuned = tunedSettings(values);
   const grid = values.search_method === 'grid';
@@ -553,6 +694,7 @@ export function toTuning(values: SettingsValues): TuningInput | null {
   return {
     method: values.search_method,
     ...(!grid && typeof trials === 'number' ? { trials } : {}),
+    ...metric,
     space,
   };
 }
@@ -641,11 +783,14 @@ function read<T extends object>(key: string, fallback: T): T {
     for (const name of Object.keys(fallback) as (keyof T)[]) {
       const value = data[name];
       const expected = fallback[name];
+      const object = (item: unknown) =>
+        typeof item === 'object' && item !== null && !Array.isArray(item);
       if (
         value === null ||
         ['string', 'number'].includes(typeof value) ||
         (typeof expected === 'boolean' && typeof value === 'boolean') ||
-        (Array.isArray(expected) && Array.isArray(value))
+        (Array.isArray(expected) && Array.isArray(value)) ||
+        (object(expected) && object(value))
       ) {
         result[name] = value as T[keyof T];
       }
@@ -686,6 +831,12 @@ export function loadSettings(): SettingsValues {
   }
   if (!['random', 'grid'].includes(values.search_method)) {
     values.search_method = DEFAULT_SETTINGS.search_method;
+  }
+  if (!METRICS.some((metric) => metric.name === values.metric)) {
+    values.metric = DEFAULT_SETTINGS.metric;
+  }
+  if (typeof values.classical_params !== 'object' || values.classical_params === null) {
+    values.classical_params = {};
   }
   // Lists: only values the form offers, without duplicates.
   const only = <V>(list: unknown, allowed: readonly V[], fallback: V[]): V[] =>

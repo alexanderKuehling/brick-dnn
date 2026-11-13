@@ -965,8 +965,39 @@ export interface ClassicalCapabilities {
   sklearn_version: string | null;
   /** Training rows each model type is fitted on at most (larger sets are subsampled). */
   max_rows: Record<string, number>;
-  /** Hyperparameter search for classical models (not yet). */
-  tuning: boolean;
+  /**
+   * Hyperparameter search over the parameters of the model brick: what each model type can
+   * vary. `false` on older servers (no search for classical models).
+   */
+  tuning: ClassicalTuningLimits | false;
+}
+
+/** A brick parameter a classical search can vary. */
+export interface ClassicalTunable {
+  name: string;
+  /** Lower case, e.g. "max. leaves per tree". */
+  label: string;
+  /** gamma: numbers above 0, or "scale" and "auto". */
+  kind: 'float' | 'int' | 'choice' | 'bool' | 'gamma';
+  min: number;
+  max: number;
+  /** True: `min` itself is not allowed (e.g. C > 0). */
+  min_exclusive: boolean;
+  /** How ranges are drawn unless the space says otherwise. */
+  scale: 'log' | 'linear';
+  options: (string | boolean)[];
+  /** True: a list may hold null (e.g. no depth limit). */
+  none: boolean;
+  default: TuningRange | ClassicalValue[];
+  help: string;
+}
+
+export interface ClassicalTuningLimits {
+  models: Record<
+    string,
+    { tunable: ClassicalTunable[]; default: ClassicalTuningSpace; note: string | null }
+  >;
+  cv_folds: { min: number; max: number; default: number };
 }
 
 export type DatasetKind = 'random' | 'builtin' | 'csv' | 'images' | 'segmentation';
@@ -1169,11 +1200,27 @@ export type TuningMethod = 'random' | 'grid';
 /** Settings a search can vary, in display order. */
 export type TunableSetting = 'learning_rate' | 'batch_size' | 'optimizer' | 'weight_decay';
 
-/** Numbers between `min` and `max` (both > 0), drawn log-uniformly. */
+/**
+ * Numbers between `min` and `max`, drawn log-uniformly (both > 0), or uniformly with
+ * `scale` "linear" (classical models only).
+ */
 export interface TuningRange {
   min: number;
   max: number;
+  scale?: 'log' | 'linear';
 }
+
+/** What ranks the trials of a search (the default is the loss). */
+export type TuningMetric =
+  | 'loss'
+  | 'accuracy'
+  | 'balanced_accuracy'
+  | 'macro_f1'
+  | 'roc_auc'
+  | 'pr_auc'
+  | 'rmse'
+  | 'mae'
+  | 'r2';
 
 /** What a search tries. Settings that are missing keep their value from the config. */
 export interface TuningSpace {
@@ -1183,6 +1230,12 @@ export interface TuningSpace {
   weight_decay?: TuningRange | number[];
 }
 
+/** A value of a classical brick parameter in a search (null: e.g. no depth limit). */
+export type ClassicalValue = number | string | boolean | null;
+
+/** A classical model's search: parameters of its brick, by name. */
+export type ClassicalTuningSpace = Record<string, TuningRange | ClassicalValue[]>;
+
 /**
  * A hyperparameter search: random search draws `trials` combinations, grid search tries
  * every combination of the listed values. As stored on a run, `trials` is the planned
@@ -1191,14 +1244,36 @@ export interface TuningSpace {
 export interface TuningConfig {
   method: TuningMethod;
   trials: number;
-  space: TuningSpace;
+  /** Training settings (neural networks) or brick parameters (classical models). */
+  space: TuningSpace | ClassicalTuningSpace;
+  /** What ranks the trials (missing in runs of older versions: the loss). */
+  metric?: TuningMetric;
+  /**
+   * Classical models: the folds of the cross-validation that compares the trials; null:
+   * the validation rows.
+   */
+  cv_folds?: number | null;
 }
 
 /** Search settings sent to the API (`trials` is ignored by grid search). */
 export interface TuningInput {
   method: TuningMethod;
   trials?: number;
-  space: TuningSpace;
+  space: TuningSpace | ClassicalTuningSpace;
+  metric?: TuningMetric;
+  /** Classical models only. */
+  cv_folds?: number | null;
+}
+
+/** One objective metric of GET /api/training/ `tuning.metrics`. */
+export interface TuningMetricInfo {
+  name: TuningMetric;
+  label: string;
+  direction: 'maximize' | 'minimize';
+  /** null: any task. */
+  task: 'classification' | 'regression' | null;
+  /** Needs exactly two classes. */
+  binary: boolean;
 }
 
 /** GET /api/training/ `tuning`. */
@@ -1208,14 +1283,18 @@ export interface TuningLimits {
   max_trials: number;
   max_values: number;
   default: TuningConfig;
+  /** Missing on older servers. */
+  metrics?: TuningMetricInfo[];
+  default_metric?: TuningMetric;
 }
 
-/** Values of the tuned settings of one trial. */
+/** Values of the tuned settings (or brick parameters of a classical model) of one trial. */
 export interface TrialParams {
   learning_rate?: number;
   batch_size?: number;
   optimizer?: Optimizer;
   weight_decay?: number;
+  [param: string]: ClassicalValue | undefined;
 }
 
 export type TrialStatus = 'running' | 'completed' | 'failed' | 'stopped';
@@ -1247,12 +1326,20 @@ export interface TrialEntry {
   /** Ended by early stopping. */
   stopped_early?: boolean;
   seconds: number | null;
+  /** The objective metric of the search (missing in older runs; null: undefined). */
+  score?: number | null;
+  /**
+   * Classical models: the folds of the cross-validation; then the validation values are
+   * those of the out-of-fold predictions on the training rows. Null: the validation rows.
+   */
+  folds?: number | null;
 }
 
-/** The trial whose kept weights have the lowest validation loss; its weights are kept. */
+/** The trial with the best objective metric; its weights (or model) are kept. */
 export interface BestTrial {
   trial: number;
   params: TrialParams;
+  score?: number | null;
   val_loss: number | null;
   val_accuracy: number | null;
   val_rmse: number | null;

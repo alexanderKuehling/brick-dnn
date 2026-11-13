@@ -10,7 +10,10 @@ brickdnn train graph.json --data houses.csv --test-split 0.2       # hold out a 
 brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopping
 brickdnn train graph.json --data mnist --tune --trials 20          # hyperparameter search
 brickdnn train graph.json --data mnist --tune-lr 1e-4:1e-2 --tune-batch-size 32,64
+brickdnn train graph.json --data mnist --tune --metric balanced_accuracy  # rank by another metric
 brickdnn train --example gp_regression --data houses.csv     # a classical model (scikit-learn)
+brickdnn train svm.json --data iris.csv --tune-param C=0.1:100 --tune-param kernel=rbf,linear
+brickdnn train gb.json --data fraud.csv --tune --metric pr_auc --cv-folds 5
 
 Press Ctrl+C to stop after the current batch; the weights are saved anyway. Classical
 models (Gaussian processes, SVMs, gradient boosting) are fitted once with scikit-learn and
@@ -45,17 +48,35 @@ from .datasets import (
     random_info,
 )
 from .job import TrainingJob
+from .objectives import DEFAULT_METRIC, METRICS, metric_error
+from .objectives import format_value as format_metric
+from .objectives import label as metric_label
 from .reporting import Reporter
 from .segmentation import inspect_segmentation_folder, is_segmentation_folder
 from .state import preprocessing_path
-from .tuning import LABELS, METHODS, TUNABLE, TuningConfig, describe_params, format_value
+from .tuning import (
+    LABELS,
+    METHODS,
+    TUNABLE,
+    TuningConfig,
+    describe_params,
+    format_value,
+    param_label,
+)
 
 CSV_SUFFIXES = (".csv", ".tsv", ".txt")
 INSTALL_HINT = 'Training needs PyTorch. Install it with: pip install "brickdnn[train]"'
 SKLEARN_HINT = (
     'Classical models need scikit-learn. Install it with: pip install "brickdnn[classic]"'
 )
-NO_TUNING = "Hyperparameter search is not available for classical models yet."
+NEURAL_OPTIONS_FOR_CLASSICAL = (
+    "--tune-lr, --tune-batch-size, --tune-optimizer and --tune-weight-decay are for neural "
+    "networks. A classical model tunes the parameters of its brick: --tune-param NAME=VALUES."
+)
+PARAM_OPTION_FOR_NEURAL = (
+    "--tune-param is for classical models; a neural network tunes its training settings "
+    "with --tune-lr, --tune-batch-size, --tune-optimizer and --tune-weight-decay."
+)
 # The final evaluation printed at the end: (row name, key of the split, format).
 CLI_CLASSIFICATION = (
     ("loss", "loss", ".4g"),
@@ -97,6 +118,9 @@ class ConsoleReporter(Reporter):
         self._preprocessing: dict[str, Any] | None = None
         self.classical = False
         self.previews: Path | None = None  # where a segmentation writes its preview images
+        # A search: the classical model brick whose parameters it tunes, and its metric.
+        self.model: str | None = None
+        self.metric = DEFAULT_METRIC
 
     def _print(self, text: str, err: bool = False) -> None:
         self._clear()
@@ -119,7 +143,7 @@ class ConsoleReporter(Reporter):
         if message == self._last_message or (status != "preparing" and not self.classical):
             return
         self._last_message = message
-        if message.startswith("Loading images"):
+        if message.startswith(("Loading images", "Trial ")):
             self._show(message)
         else:
             self._print(message)
@@ -149,9 +173,12 @@ class ConsoleReporter(Reporter):
                 f"Training on {info['device_label']}: {samples}, "
                 f"{info['total_params']:,} parameters."
             )
+            ranked = ""
+            if tuning.metric != DEFAULT_METRIC:
+                ranked = f", ranked by {metric_label(tuning.metric)}"
             self._print(
                 f"Hyperparameter search: {tuning.describe()} of {self.epochs} "
-                f"epoch{'s' if self.epochs != 1 else ''} each."
+                f"epoch{'s' if self.epochs != 1 else ''} each{ranked}."
             )
             return
         self._print(
@@ -160,6 +187,15 @@ class ConsoleReporter(Reporter):
         )
 
     def _setup_classical(self, info: dict[str, Any]) -> None:
+        if info.get("tuning"):
+            tuning = info["tuning"]
+            folds = tuning.get("cv_folds")
+            where = f"{folds}-fold cross-validation" if folds else "the validation rows"
+            self._print(
+                f"Hyperparameter search: {tuning['method']} search, {tuning['trials']} trials, "
+                f"ranked by {metric_label(tuning.get('metric') or DEFAULT_METRIC)} on {where}."
+            )
+            return
         details = info.get("classical") or {}
         if "train_size" in info:
             samples = f"{info['train_size']:,} training and {info['val_size']:,} validation"
@@ -216,7 +252,8 @@ class ConsoleReporter(Reporter):
     def trial_start(self, trial: dict[str, Any]) -> None:
         self._trial = trial
         self._print(
-            f"\nTrial {trial['trial']}/{trial['trials']}: {describe_params(trial['params'])}"
+            f"\nTrial {trial['trial']}/{trial['trials']}: "
+            f"{describe_params(trial['params'], self.model)}"
         )
 
     def trial_end(self, trial: dict[str, Any], best_trial: int | None) -> None:
@@ -229,14 +266,25 @@ class ConsoleReporter(Reporter):
             epoch = f"epoch {kept}: " if kept and kept != trial.get("epochs_done") else ""
             early = "  (stopped early)" if trial.get("stopped_early") else ""
             best = "  (best so far)" if best_trial == trial["trial"] else ""
-            self._print(f"{name}: {epoch}{_metrics(trial, 'val')}{early}{best}")
+            folds = "  (cross-validated)" if trial.get("folds") else ""
+            score = ""
+            if self.metric != DEFAULT_METRIC:
+                value = format_metric(self.metric, trial.get("score"))
+                score = f", {metric_label(self.metric)} {value}"
+            self._print(f"{name}: {epoch}{_metrics(trial, 'val')}{score}{early}{folds}{best}")
 
     def search_end(self, result: dict[str, Any]) -> None:
         self._trial = None
         if not self._trials:
             return
-        names = [name for name in TUNABLE if name in self._trials[0]["params"]]
-        columns = ["trial", *[LABELS[name] for name in names], "val loss"]
+        if self.model is not None:
+            names = list(self._trials[0]["params"])
+            labels = [param_label(name, self.model) for name in names]
+        else:
+            names = [name for name in TUNABLE if name in self._trials[0]["params"]]
+            labels = [LABELS[name] for name in names]
+        metric = self.metric
+        columns = ["trial", *labels, "val loss"]
         accuracy = any(t.get("val_accuracy") is not None for t in self._trials)
         rmse = any(t.get("val_rmse") is not None for t in self._trials)
         r2 = not accuracy and any(t.get("val_r2") is not None for t in self._trials)
@@ -244,10 +292,17 @@ class ConsoleReporter(Reporter):
         columns += ["val acc"] if accuracy else ["val rmse"] if rmse else []
         columns += ["val R²"] if r2 else []
         columns += ["val IoU"] if iou else []
-        ranked = sorted(
-            self._trials,
-            key=lambda t: (t["val_loss"] is None, t["val_loss"] or 0.0, t["trial"]),
-        )
+        scored = metric not in (DEFAULT_METRIC, "accuracy", "rmse") and not (metric == "r2" and r2)
+        columns += [metric_label(metric)] if scored else []
+        maximize = METRICS[metric].maximize
+
+        def rank(trial: dict[str, Any]) -> tuple[Any, ...]:
+            value = trial.get("score") if metric != DEFAULT_METRIC else trial["val_loss"]
+            if value is None:
+                return (True, 0.0, trial["trial"])
+            return (False, -value if maximize else value, trial["trial"])
+
+        ranked = sorted(self._trials, key=rank)
         rows = []
         for trial in ranked:
             mark = "*" if trial["trial"] == result["best_trial"] else " "
@@ -256,7 +311,7 @@ class ConsoleReporter(Reporter):
             if trial["status"] != "completed":
                 cells.append(trial["status"])
             else:
-                cells.append(f"{trial['val_loss']:.4f}")
+                cells.append(_number(trial["val_loss"], ".4f"))
                 if accuracy:
                     cells.append(f"{trial['val_accuracy']:.1%}")
                 elif rmse:
@@ -265,6 +320,8 @@ class ConsoleReporter(Reporter):
                     cells.append(_number(trial.get("val_r2"), ".3f"))
                 if iou:
                     cells.append(_number(trial.get("val_iou"), ".1%"))
+                if scored:
+                    cells.append(format_metric(metric, trial.get("score")))
             rows.append(cells)
         widths = [
             max([len(columns[i])] + [len(row[i]) for row in rows if i < len(row)])
@@ -274,7 +331,8 @@ class ConsoleReporter(Reporter):
         self._print("  ".join(c.rjust(w) for c, w in zip(columns, widths, strict=True)))
         for row in rows:
             self._print("  ".join(c.rjust(w) for c, w in zip(row, widths, strict=False)))
-        self._print(f"Best: trial {result['best_trial']} ({describe_params(result['params'])})")
+        best = describe_params(result["params"], self.model)
+        self._print(f"Best: trial {result['best_trial']} ({best})")
 
     def test_end(self, result: dict[str, Any]) -> None:
         line = f"Test: loss {result['loss']:.4f}"
@@ -396,16 +454,29 @@ def _number(value: float | None, spec: str) -> str:
     return "–" if value is None else format(value, spec)
 
 
-def parse_values(text: str, name: str) -> dict[str, float] | list[Any]:
-    """``"1e-4:1e-2"`` -> a range, ``"32,64,128"`` -> a list (validated by TuningConfig)."""
+def parse_values(text: str, name: str) -> dict[str, Any] | list[Any]:
+    """``"1e-4:1e-2"`` -> a range (``"5:100:linear"`` drawn uniformly), ``"32,64,128"`` ->
+    a list (validated by TuningConfig)."""
     text = text.strip()
     if ":" in text:
-        low, _, high = text.partition(":")
-        return {"min": _to_number(low), "max": _to_number(high)}
+        low, _, rest = text.partition(":")
+        high, _, scale = rest.partition(":")
+        values: dict[str, Any] = {"min": _to_number(low), "max": _to_number(high)}
+        if scale.strip():
+            values["scale"] = scale.strip().lower()
+        return values
     items = [item.strip() for item in text.split(",") if item.strip()]
     if name == "optimizer":
         return items
     return [_to_number(item) for item in items]
+
+
+def parse_param(text: str) -> tuple[str, dict[str, Any] | list[Any]]:
+    """``"C=0.1:100"`` -> ("C", a range), ``"kernel=rbf,linear"`` -> ("kernel", a list)."""
+    name, sign, values = text.partition("=")
+    if not sign or not name.strip():
+        raise ConfigError(f"--tune-param needs NAME=VALUES, e.g. C=0.1:100, not '{text}'.")
+    return name.strip(), parse_values(values, name.strip())
 
 
 def _to_number(text: str) -> float | str:
@@ -492,18 +563,41 @@ def build_parser() -> argparse.ArgumentParser:
     search = parser.add_argument_group(
         "hyperparameter search",
         "Train several times with different settings on the same data and keep the trial "
-        "with the lowest validation loss. Any of these options starts a search. VALUES is "
-        "a list (32,64,128) or a range MIN:MAX for the learning rate and weight decay, "
-        "sampled log-uniformly. Without --tune-* options, the learning rate (1e-4:1e-2) "
-        "and the batch size (32,64,128) are tuned.",
+        "with the best objective metric (default: the lowest validation loss). Any of these "
+        "options starts a search. VALUES is a list (32,64,128) or a range MIN:MAX for the "
+        "learning rate and weight decay, sampled log-uniformly. Without --tune-* options, "
+        "the learning rate (1e-4:1e-2) and the batch size (32,64,128) are tuned. A classical "
+        "model tunes the parameters of its brick instead (--tune-param; ranges MIN:MAX or "
+        "MIN:MAX:linear); without --tune-param it tunes a default set per model.",
     )
     search.add_argument("--tune", action="store_true", help="run a hyperparameter search")
     search.add_argument("--search", choices=METHODS, help="random (default) or grid")
     search.add_argument("--trials", type=int, help="trials of a random search (default 10)")
+    search.add_argument(
+        "--metric",
+        choices=list(METRICS),
+        help="what ranks the trials (default loss); classification: accuracy, "
+        "balanced_accuracy, macro_f1, with two classes roc_auc and pr_auc; regression: rmse, "
+        "mae, r2",
+    )
     search.add_argument("--tune-lr", metavar="VALUES", help="learning rates to try")
     search.add_argument("--tune-batch-size", metavar="VALUES", help="batch sizes to try")
     search.add_argument("--tune-optimizer", metavar="VALUES", help="optimizers to try")
     search.add_argument("--tune-weight-decay", metavar="VALUES", help="weight decays to try")
+    search.add_argument(
+        "--tune-param",
+        metavar="NAME=VALUES",
+        action="append",
+        help="classical models: a parameter of the model brick to try, e.g. C=0.1:100 or "
+        "kernel=rbf,linear (repeat it for several)",
+    )
+    search.add_argument(
+        "--cv-folds",
+        type=int,
+        metavar="K",
+        help="classical models: compare the trials by K-fold cross-validation on the "
+        "training rows (always, with 5 folds, without validation rows)",
+    )
     return parser
 
 
@@ -515,17 +609,32 @@ TUNE_OPTIONS = {
 }
 
 
-def tuning_from_args(args: argparse.Namespace) -> TuningConfig | None:
-    """The search settings from the command line, or None for a normal training."""
+def tuning_from_args(args: argparse.Namespace, model: str | None = None) -> TuningConfig | None:
+    """The search settings from the command line, or None for a normal training.
+    ``model``: the type of the classical model brick (None: a neural network)."""
     given = {
         name: getattr(args, option)
         for name, option in TUNE_OPTIONS.items()
         if getattr(args, option) is not None
     }
-    if not (given or args.tune or args.search or args.trials is not None):
+    params = list(getattr(args, "tune_param", None) or [])
+    metric = getattr(args, "metric", None)
+    folds = getattr(args, "cv_folds", None)
+    started = given or params or metric or folds is not None
+    if not (started or args.tune or args.search or args.trials is not None):
         return None
-    space = {name: parse_values(text, name) for name, text in given.items()} or None
-    return TuningConfig.from_dict({"method": args.search, "trials": args.trials, "space": space})
+    if model is not None and given:
+        raise ConfigError(NEURAL_OPTIONS_FOR_CLASSICAL)
+    if model is None and params:
+        raise ConfigError(PARAM_OPTION_FOR_NEURAL)
+    if model is not None:
+        space = dict(parse_param(text) for text in params) or None
+    else:
+        space = {name: parse_values(text, name) for name, text in given.items()} or None
+    data = {"method": args.search, "trials": args.trials, "space": space, "metric": metric}
+    if folds is not None:
+        data["cv_folds"] = folds
+    return TuningConfig.from_dict(data, model)
 
 
 def resolve_data(value: str, workdir: Path) -> tuple[DatasetInfo, str | None]:
@@ -604,12 +713,10 @@ def main(argv: list[str] | None = None) -> int:
                 "loss": args.loss,
             }
         )
-        tuning = tuning_from_args(args)
+        model = analysis.model.type if classical and analysis.model is not None else None
+        tuning = tuning_from_args(args, model)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return 1
-    if classical and tuning is not None:
-        print(f"error: {NO_TUNING}", file=sys.stderr)
         return 1
 
     save = Path(args.save or f"{stem}{'.joblib' if classical else '.pt'}")
@@ -620,6 +727,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         compat = check_compatibility(analysis, info, config, tuning=tuning is not None)
+        if tuning is not None and compat.ok and compat.plan is not None:
+            error = metric_error(tuning.metric, compat.plan)
+            if error is not None:
+                print(f"error: {error}", file=sys.stderr)
+                return 1
         for warning in compat.warnings:
             print(f"warning: {warning}")
         if not compat.ok or compat.plan is None:
@@ -641,6 +753,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         reporter = ConsoleReporter(config.epochs, save)
         reporter.previews = Path(args.previews) if args.previews else None
+        if tuning is not None:
+            reporter.model, reporter.metric = tuning.model, tuning.metric
         restore = _catch_ctrl_c(reporter)
         try:
             if classical:

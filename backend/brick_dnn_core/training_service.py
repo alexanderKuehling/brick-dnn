@@ -74,12 +74,14 @@ from brickdnn.training import (
     TrainingConfig,
     builtin_info,
     check_compatibility,
+    classical_tuning,
     extract_image_zip,
     inference,
     inspect_csv,
     inspect_image_folder,
     inspect_segmentation_folder,
     is_segmentation_folder,
+    objectives,
     random_info,
     sklearn_installed,
     torch_installed,
@@ -93,7 +95,7 @@ from brickdnn.training.config import (
     segmentation_memory_bytes,
 )
 from brickdnn.training.estimate import Estimate, estimate_training
-from brickdnn.training.job import graph_family
+from brickdnn.training.job import classical_model, graph_family
 from brickdnn.training.segmentation import MAX_PAIRS, MAX_SEGMENTATION_CLASSES, class_colors
 from brickdnn.training.state import (
     LOG_FILE,
@@ -112,9 +114,11 @@ from brickdnn.training.state import (
     write_job,
 )
 from brickdnn.training.tuning import (
+    MAX_FOLDS,
     MAX_TRIALS,
     MAX_VALUES,
     METHODS,
+    MIN_FOLDS,
     TUNABLE,
     TuningConfig,
 )
@@ -142,10 +146,6 @@ NO_SKLEARN_REASON = (
     "scikit-learn is not installed on the server, which classical models (Gaussian processes, "
     "support vector machines, gradient boosting) need. Run `pip install scikit-learn` in the "
     "backend environment."
-)
-NO_TUNING_MESSAGE = (
-    "Hyperparameter search is not available for classical models yet. Switch it off: a "
-    "Gaussian process optimises its kernel hyperparameters while it is fitted."
 )
 BUSY_MESSAGE = "Another training is still running. Stop it or wait until it finishes."
 UNEXPECTED_MESSAGE = "The training process stopped unexpectedly."
@@ -198,6 +198,8 @@ TRIAL_KEYS = (
     "val_rmse",
     "val_r2",
     "weights_epoch",
+    # The objective metric of the search (the loss by default; see tuning.metric).
+    "score",
 )
 # Segmentation runs add these (other runs do not have the keys).
 SEGMENTATION_METRIC_KEYS = ("val_iou", "val_dice", "val_pixel_accuracy")
@@ -395,7 +397,16 @@ def classical_capabilities() -> dict[str, Any]:
             for name, layer in REGISTRY.items()
             if issubclass(layer, ClassicalModel) and not issubclass(layer, Ensemble)
         },
-        "tuning": False,
+        # The hyperparameter search over the parameters of the model brick: what each model
+        # can vary (see brickdnn.training.classical_tuning) and the cross-validation folds.
+        "tuning": {
+            "models": classical_tuning.capabilities(),
+            "cv_folds": {
+                "min": MIN_FOLDS,
+                "max": MAX_FOLDS,
+                "default": classical_tuning.DEFAULT_FOLDS,
+            },
+        },
     }
 
 
@@ -449,6 +460,9 @@ def capabilities(user=None) -> dict[str, Any]:
             "max_trials": MAX_TRIALS,
             "max_values": MAX_VALUES,
             "default": TuningConfig().to_dict(),
+            # What ranks the trials (objectives.py): every metric with its direction and
+            # the task it needs (check_training refuses one the data does not fit).
+            **objectives.capabilities(),
         },
         # Classical models (scikit-learn): "available" above is about PyTorch.
         "classical": classical_capabilities(),
@@ -615,12 +629,14 @@ def parse_config(config: Any) -> TrainingConfig | None:
         raise TrainingInputError(str(exc)) from None
 
 
-def parse_tuning(tuning: Any) -> TuningConfig | None:
-    """Search settings from a request (None stays None). Raises :class:`TrainingInputError`."""
+def parse_tuning(tuning: Any, graph: Any = None) -> TuningConfig | None:
+    """Search settings from a request (None stays None). ``graph``: the network (a document
+    or an analysis); a classical model searches over the parameters of its brick. Raises
+    :class:`TrainingInputError`."""
     if tuning is None:
         return None
     try:
-        return TuningConfig.from_dict(tuning)
+        return TuningConfig.from_dict(tuning, classical_model(graph) if graph else None)
     except ConfigError as exc:
         raise TrainingInputError(str(exc)) from None
 
@@ -635,8 +651,11 @@ def estimate_run(
     """The estimated CPU time of a run (None if it cannot be estimated)."""
     analysis = graph if isinstance(graph, Analysis) else analyze(graph)
     trials = search.trials if search is not None else 1
+    folds = None
+    if search is not None and search.model is not None:
+        folds = classical_tuning.search_folds(search, dataset.info, config or TrainingConfig())
     try:
-        return estimate_training(analysis, dataset.info, config, plan, trials)
+        return estimate_training(analysis, dataset.info, config, plan, trials, folds)
     except Exception:  # an estimate must never break a check or a start
         logger.exception("Could not estimate the CPU time of a training")
         return None
@@ -675,6 +694,8 @@ def check(
     hyperparameter search (it needs validation data)."""
     result = check_compatibility(graph, dataset.info, config, tuning=search is not None)
     family = graph.family if isinstance(graph, Analysis) else graph_family(graph)
+    if search is not None:
+        _check_search(result, search, family, dataset.info, config or TrainingConfig())
     if family == "classical":
         reason = unavailable_reason("classical")
         if reason is not None and reason != DISABLED_REASON:
@@ -690,6 +711,35 @@ def check(
             "used. Run `pip install torchvision` in the backend environment.",
         )
     return result
+
+
+def _check_search(
+    result: Compatibility,
+    search: TuningConfig,
+    family: str,
+    info: DatasetInfo,
+    config: TrainingConfig,
+) -> None:
+    """What a search adds to a check: its metric must fit the task, and a classical model
+    without validation rows says that it cross-validates."""
+    if result.plan is None:
+        return
+    if (family == "classical") != (search.model is not None):
+        result.errors.append(
+            "The search settings do not fit the network: a classical model searches over the "
+            "parameters of its brick, a neural network over its training settings."
+        )
+    elif (error := objectives.metric_error(search.metric, result.plan)) is not None:
+        result.errors.append(error)
+    elif search.model is not None and search.cv_folds is None:
+        folds = classical_tuning.search_folds(search, info, config)
+        if folds is not None:
+            result.warnings.append(
+                f"There are no validation rows: the search compares its trials by {folds}-fold "
+                "cross-validation on the training rows."
+            )
+    if result.errors:
+        result.plan = None
 
 
 def dataset_in_use(dataset: Dataset) -> bool:
@@ -774,11 +824,9 @@ def start_run(
     project = run_project(user, project_id)
     try:
         training_config = TrainingConfig.from_dict(config)
-        search = TuningConfig.from_dict(tuning) if tuning is not None else None
     except ConfigError as exc:
         raise TrainingInputError(str(exc)) from None
-    if family == "classical" and search is not None:
-        raise TrainingInputError(NO_TUNING_MESSAGE)
+    search = parse_tuning(tuning, graph)
     dataset = resolve_dataset(user, dataset_ref)
     analysis = analyze(graph)
     compatibility = check(analysis, dataset, training_config, search)

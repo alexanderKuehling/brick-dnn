@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { render, screen, userEvent, waitFor } from '@test-utils';
+import { availableMetrics, type MetricInfo } from './search';
 import {
   DEFAULT_SETTINGS,
   NO_VALIDATION_PATIENCE,
@@ -207,5 +208,191 @@ describe('SettingsForm', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Search optimizer' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one setting to search.');
     expect(screen.getByRole('textbox', { name: 'Learning rate' })).toBeEnabled();
+  });
+});
+
+describe('the objective metric', () => {
+  function MetricHarness({ metrics }: { metrics: MetricInfo[] | null }) {
+    const [values, setValues] = useState<SettingsValues>({ ...DEFAULT_SETTINGS, search: true });
+    latest = values;
+    return (
+      <SettingsForm
+        values={values}
+        onChange={setValues}
+        errors={validateSettings(values, { metrics: metrics && metrics.map((m) => m.name) })}
+        name=""
+        namePlaceholder="Tiny MLP"
+        onNameChange={() => {}}
+        devices={[]}
+        defaultDevice={null}
+        builtin={false}
+        metrics={metrics}
+      />
+    );
+  }
+
+  it('offers the metrics of the data and ranks a network search by one', async () => {
+    render(<MetricHarness metrics={availableMetrics('classification', 2)} />);
+    const select = screen.getByRole('combobox', { name: 'Objective metric' });
+    expect(select).toHaveValue('Loss');
+    expect(select).toHaveAccessibleDescription(
+      'Ranks the trials on the validation data; lower is better.'
+    );
+    expect(toTuning(latest)).not.toHaveProperty('metric');
+    await userEvent.click(select);
+    expect(await screen.findByRole('option', { name: 'PR AUC' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'RMSE' })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('option', { name: 'Balanced accuracy' }));
+    expect(toTuning(latest)?.metric).toBe('balanced_accuracy');
+    expect(screen.getByRole('combobox', { name: 'Objective metric' })).toHaveAccessibleDescription(
+      'Ranks the trials on the validation data; higher is better.'
+    );
+  });
+
+  it('refuses a metric the data does not have', () => {
+    latest = { ...DEFAULT_SETTINGS, search: true, metric: 'roc_auc' };
+    const errors = validateSettings(latest, { metrics: ['loss', 'rmse', 'mae', 'r2'] });
+    expect(errors.metric).toBe('Not available for this data: choose another metric.');
+    expect(validateSettings(latest, { metrics: null })).toEqual({});
+  });
+});
+
+describe('the search of a classical model', () => {
+  const SVC = {
+    model: 'Support vector classification',
+    maxRows: 50000,
+    optimisesKernel: false,
+    type: 'SVC',
+  };
+
+  function ClassicalHarness({
+    initial = DEFAULT_SETTINGS,
+    validationRows = null,
+  }: {
+    initial?: SettingsValues;
+    validationRows?: number | null;
+  }) {
+    const [values, setValues] = useState<SettingsValues>(initial);
+    latest = values;
+    return (
+      <SettingsForm
+        values={values}
+        onChange={setValues}
+        errors={validateSettings(values, {
+          classical: { maxRows: 50000, model: 'SVC' },
+          validationRows,
+          metrics: ['loss', 'accuracy', 'balanced_accuracy', 'macro_f1', 'roc_auc', 'pr_auc'],
+        })}
+        predefinedSplit={validationRows === null ? null : [100, validationRows, 20]}
+        name=""
+        namePlaceholder="SVM"
+        onNameChange={() => {}}
+        devices={[]}
+        defaultDevice={null}
+        builtin={false}
+        classical={SVC}
+        metrics={availableMetrics('classification', 2)}
+      />
+    );
+  }
+
+  it('ticks parameters of the model brick with ranges and lists', async () => {
+    render(<ClassicalHarness />);
+    await userEvent.click(screen.getByRole('switch', { name: /Hyperparameter search/ }));
+    expect(screen.getByRole('checkbox', { name: 'Search c' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Search gamma' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Search kernel' })).not.toBeChecked();
+    expect(screen.getByText(/10 trials, each fitted on the training rows/)).toBeInTheDocument();
+    expect(toTuning(latest, 'SVC')).toEqual({
+      method: 'random',
+      trials: 10,
+      space: { C: { min: 0.1, max: 100 }, gamma: { min: 0.001, max: 1 } },
+    });
+
+    // A list for gamma, the kernels to try and a linear range for C.
+    await userEvent.click(screen.getAllByRole('radio', { name: 'List' })[1]);
+    const gamma = screen.getByRole('textbox', { name: 'Gamma to try' });
+    await userEvent.clear(gamma);
+    await userEvent.type(gamma, 'scale, 0.1, fast');
+    expect(screen.getByText('fast: enter numbers')).toBeInTheDocument();
+    await userEvent.clear(gamma);
+    await userEvent.type(gamma, 'scale, 0.1');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Search kernel' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Scale of the c' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Linear' }));
+    const smallest = screen.getByRole('textbox', { name: 'Smallest c' });
+    await userEvent.clear(smallest);
+    await userEvent.type(smallest, '1');
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Cross-validate on the training rows' })
+    );
+    const folds = screen.getByRole('textbox', { name: 'Folds' });
+    await userEvent.clear(folds);
+    await userEvent.type(folds, '3');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Objective metric' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'ROC AUC' }));
+    expect(validateSettings(latest, { classical: { maxRows: null, model: 'SVC' } })).toEqual({});
+    expect(toTuning(latest, 'SVC')).toEqual({
+      method: 'random',
+      trials: 10,
+      metric: 'roc_auc',
+      cv_folds: 3,
+      space: {
+        C: { min: 1, max: 100, scale: 'linear' },
+        gamma: ['scale', 0.1],
+        kernel: ['linear', 'rbf'],
+      },
+    });
+    expect(screen.getByText(/10 trials × 3 folds/)).toBeInTheDocument();
+  });
+
+  it('lists every value of a grid and caps its size', async () => {
+    render(<ClassicalHarness initial={{ ...DEFAULT_SETTINGS, search: true }} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Grid search' }));
+    expect(screen.queryByLabelText('Trials')).not.toBeInTheDocument();
+    expect(screen.getByText(/4 trials, each fitted/)).toBeInTheDocument();
+    expect(toTuning(latest, 'SVC')?.space).toEqual({ C: [0.1, 100], gamma: [0.001, 1] });
+    const c = screen.getByRole('textbox', { name: 'C to try' });
+    await userEvent.clear(c);
+    await userEvent.type(c, Array.from({ length: 20 }, (_, i) => i + 1).join(','));
+    const gamma = screen.getByRole('textbox', { name: 'Gamma to try' });
+    await userEvent.clear(gamma);
+    await userEvent.type(gamma, '1,2,3,4,5,6');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The grid has 120 combinations, at most 100 are possible.'
+    );
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Search c' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Search gamma' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one parameter to search.');
+  });
+
+  it('cross-validates without validation rows', async () => {
+    render(<ClassicalHarness initial={{ ...DEFAULT_SETTINGS, search: true }} validationRows={0} />);
+    expect(
+      screen.getByText(
+        'No validation rows: the trials are compared by 5-fold cross-validation on the training rows.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Cross-validate/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/10 trials × 5 folds, then the best one/)).toBeInTheDocument();
+    expect(toTuning(latest, 'SVC')).not.toHaveProperty('cv_folds');
+  });
+
+  it('is not offered by servers without it', () => {
+    render(
+      <SettingsForm
+        values={DEFAULT_SETTINGS}
+        onChange={() => {}}
+        errors={{}}
+        name=""
+        namePlaceholder="SVM"
+        onNameChange={() => {}}
+        devices={[]}
+        defaultDevice={null}
+        builtin={false}
+        classical={{ ...SVC, type: null }}
+      />
+    );
+    expect(screen.queryByRole('switch', { name: /Hyperparameter search/ })).not.toBeInTheDocument();
   });
 });

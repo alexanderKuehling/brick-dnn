@@ -29,6 +29,7 @@ import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
 import { isSegmentationSource } from './fit';
 import { startsIn } from './format';
+import { CLASSICAL_TUNABLES, planMetrics } from './search';
 import {
   effectiveSource,
   loadSettings,
@@ -134,15 +135,23 @@ export function SetupView({
   const compatibility = fit ? fit.compatibility : ownCheck;
   const check = compatibility.result;
 
-  // A classical model (scikit-learn) is fitted once: fewer settings, no search.
+  // A classical model (scikit-learn) is fitted once: fewer settings; its search varies the
+  // parameters of the model brick (if the server offers it).
   const model = trainingFamily(analysis) === 'classical' ? (analysis?.classical ?? null) : null;
   const maxRows = classicalMaxRows(status, analysis);
+  const classicalSearch = Boolean(
+    model && status.classical?.tuning && CLASSICAL_TUNABLES[model.type]
+  );
   const classical: ClassicalSettings | null = model && {
     model: MODEL_KINDS[model.type] ?? model.estimator,
     maxRows,
     optimisesKernel: model.kernel !== null,
+    type: classicalSearch ? model.type : null,
   };
-  const search = settings.search && !classical;
+  const searchType = classical?.type ?? null;
+  const search = settings.search && (!classical || searchType !== null);
+  // The objective metrics the data allows (from the check; null while it is not known).
+  const metrics = compatibility.fresh ? planMetrics(check?.plan) : null;
 
   const builtinSource = choice.tab === 'builtin';
   // A class for every pixel: the batch size is limited by the memory a batch needs, which the
@@ -161,9 +170,10 @@ export function SetupView({
   // Datasets made in the Data tab bring their own split; the share fields are not used.
   const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
   const errors = validateSettings(settings, {
-    classical: classical && { maxRows },
+    classical: classical && { maxRows, model: searchType },
     segmentation,
     validationRows: predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit[1] : null,
+    metrics: metrics && metrics.map((metric) => metric.name),
   });
   if (builtinSource) {
     // Built-in datasets always test on their official test images: the test share is not used.
@@ -191,7 +201,10 @@ export function SetupView({
       ),
     [settings, knownDevice, builtinSource, isClassical, segmentationSource]
   );
-  const tuning = useMemo(() => (isClassical ? null : toTuning(settings)), [settings, isClassical]);
+  const tuning = useMemo(
+    () => (isClassical && !searchType ? null : toTuning(settings, searchType)),
+    [settings, isClassical, searchType]
+  );
   const cost = useCostEstimate(
     doc,
     ref,
@@ -343,6 +356,7 @@ export function SetupView({
         predefinedSplit={predefinedSplit}
         classical={classical}
         segmentation={segmentation}
+        metrics={metrics}
       />
 
       {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}

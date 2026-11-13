@@ -18,16 +18,33 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import type { Optimizer, SegmentationLoss, TrainingDevice, TuningMethod } from '@/api';
+import type {
+  Optimizer,
+  SegmentationLoss,
+  TrainingDevice,
+  TuningMethod,
+  TuningMetric,
+} from '@/api';
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
+  CLASSICAL_TUNABLES,
+  FOLDS,
+  metricDirection,
+  METRICS,
+  type MetricInfo,
+  type ParamState,
+  type Tunable,
+} from './search';
+import {
   BATCH_SIZE_PRESETS,
+  classicalParams,
   hasValidation,
   LIMITS,
   LOSSES,
   LR_PRESETS,
   OPTIMIZERS,
   parseField,
+  plannedClassicalTrials,
   plannedTrials,
   tunedSettings,
   WEIGHT_DECAY_PRESETS,
@@ -66,6 +83,11 @@ interface SettingsFormProps {
    * seed apply. `maxRows`: the most training rows it is fitted on on this server.
    */
   classical?: ClassicalSettings | null;
+  /**
+   * The objective metrics a search can rank by on this data (from the training check; null
+   * while it is not known: all are offered and the server checks).
+   */
+  metrics?: MetricInfo[] | null;
 }
 
 export interface ClassicalSettings {
@@ -74,6 +96,11 @@ export interface ClassicalSettings {
   maxRows: number | null;
   /** Gaussian processes optimise their kernel hyperparameters during the fit. */
   optimisesKernel: boolean;
+  /**
+   * The type of the model brick when a search over its parameters is possible (null: the
+   * server does not offer it).
+   */
+  type?: string | null;
 }
 
 /** Shown in the fixed fields while the search varies them. */
@@ -92,6 +119,7 @@ export function SettingsForm({
   predefinedSplit = null,
   classical = null,
   segmentation = null,
+  metrics = null,
 }: SettingsFormProps) {
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
@@ -224,6 +252,7 @@ export function SettingsForm({
   );
 
   if (classical) {
+    const type = classical.type ?? null;
     return (
       <Stack gap="sm">
         {nameField}
@@ -240,6 +269,26 @@ export function SettingsForm({
         </SimpleGrid>
         {testFields}
         {maxSamplesField}
+        {type && (
+          <div>
+            <Switch
+              label="Hyperparameter search"
+              description="Fits the model several times with other values of its parameters and keeps the best one."
+              checked={values.search}
+              onChange={(event) => set('search')(event.currentTarget.checked)}
+            />
+            {values.search && (
+              <ClassicalSearchFields
+                values={values}
+                onChange={onChange}
+                errors={errors}
+                model={type}
+                validates={validates}
+                metrics={metrics}
+              />
+            )}
+          </div>
+        )}
       </Stack>
     );
   }
@@ -339,11 +388,13 @@ export function SettingsForm({
       <div>
         <Switch
           label="Hyperparameter search"
-          description="Trains the network several times with different settings and keeps the one with the lowest validation loss."
+          description="Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss)."
           checked={values.search}
           onChange={(event) => set('search')(event.currentTarget.checked)}
         />
-        {values.search && <SearchFields values={values} onChange={onChange} errors={errors} />}
+        {values.search && (
+          <SearchFields values={values} onChange={onChange} errors={errors} metrics={metrics} />
+        )}
       </div>
 
       <Button
@@ -425,9 +476,38 @@ interface SearchFieldsProps {
   values: SettingsValues;
   onChange: (values: SettingsValues) => void;
   errors: SettingsErrors;
+  metrics: MetricInfo[] | null;
 }
 
-function SearchFields({ values, onChange, errors }: SearchFieldsProps) {
+/** What ranks the trials; only the metrics the data allows (all while that is not known). */
+function MetricField({
+  values,
+  onChange,
+  errors,
+  metrics,
+  where,
+}: SearchFieldsProps & { where: string }) {
+  const offered = metrics ?? METRICS;
+  const data = offered.map((metric) => ({ value: metric.name, label: metric.label }));
+  if (!offered.some((metric) => metric.name === values.metric)) {
+    const chosen = METRICS.find((metric) => metric.name === values.metric);
+    data.push({ value: values.metric, label: chosen?.label ?? values.metric });
+  }
+  return (
+    <Select
+      label="Objective metric"
+      description={`Ranks the trials on ${where}; ${metricDirection(values.metric)}.`}
+      data={data}
+      value={values.metric}
+      onChange={(value) => value && onChange({ ...values, metric: value as TuningMetric })}
+      allowDeselect={false}
+      error={errors.metric}
+      w={{ base: '100%', xs: 260 }}
+    />
+  );
+}
+
+function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) {
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const numbers = (list: string[]) => list.map(Number);
   const grid = values.search_method === 'grid';
@@ -558,6 +638,14 @@ function SearchFields({ values, onChange, errors }: SearchFieldsProps) {
           />
         </SearchRow>
 
+        <MetricField
+          values={values}
+          onChange={onChange}
+          errors={errors}
+          metrics={metrics}
+          where="the validation data"
+        />
+
         {errors.search && (
           <Text size="sm" c="red" role="alert">
             {errors.search}
@@ -568,8 +656,8 @@ function SearchFields({ values, onChange, errors }: SearchFieldsProps) {
           {grid
             ? 'Every combination of the chosen values is trained.'
             : 'Learning rates are drawn evenly on a log scale.'}{' '}
-          All trials use the same data and starting weights; the trial with the lowest validation
-          loss wins.
+          All trials use the same data and starting weights; the trial with the best objective
+          metric wins (each trial keeps the weights of its epoch with the lowest validation loss).
         </Text>
       </Stack>
     </Paper>
@@ -620,5 +708,266 @@ function SearchRow({
         )}
       </Box>
     </Group>
+  );
+}
+
+// --------------------------------------------------------------------------
+// Hyperparameter search of a classical model
+// --------------------------------------------------------------------------
+
+const MODEL_NOTES: Record<string, string> = {
+  GaussianProcessRegressor:
+    'The fit optimises the kernel hyperparameters itself: a search can only vary alpha, the normalisation of the targets and the optimizer restarts.',
+  GaussianProcessClassifier:
+    'The fit optimises the kernel hyperparameters itself: a search can only vary the optimizer restarts.',
+};
+
+const RANGE_MODES = [
+  { value: 'range', label: 'Range' },
+  { value: 'list', label: 'List' },
+];
+const SCALES = [
+  { value: 'log', label: 'Log' },
+  { value: 'linear', label: 'Linear' },
+];
+
+interface ClassicalSearchFieldsProps extends SearchFieldsProps {
+  /** The type of the model brick, e.g. "SVC". */
+  model: string;
+  /** False: no validation rows, so the trials are always cross-validated. */
+  validates: boolean;
+}
+
+function ClassicalSearchFields({
+  values,
+  onChange,
+  errors,
+  model,
+  validates,
+  metrics,
+}: ClassicalSearchFieldsProps) {
+  const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
+  const grid = values.search_method === 'grid';
+  const states = classicalParams(values, model);
+  const setParam = (name: string, changes: Partial<ParamState>) =>
+    update({
+      classical_params: {
+        ...values.classical_params,
+        [model]: { ...states, [name]: { ...states[name], ...changes } },
+      },
+    });
+  const trials = plannedClassicalTrials(values, model);
+  const requested = parseField(values.search_trials);
+  const crossValidates = values.cv_enabled || !validates;
+  const folds = parseField(values.cv_folds);
+  const foldCount =
+    values.cv_enabled && typeof folds === 'number' && Number.isInteger(folds)
+      ? folds
+      : FOLDS.default;
+
+  let summary: string | null = null;
+  if (trials !== null) {
+    summary = `${trials} ${trials === 1 ? 'trial' : 'trials'}`;
+    summary += crossValidates
+      ? ` × ${foldCount} folds, then the best one is fitted on all training rows.`
+      : ', each fitted on the training rows and measured on the validation rows.';
+    if (!grid && typeof requested === 'number' && trials < requested) {
+      summary += ` Only ${trials} different combinations: each is tried once.`;
+    }
+  }
+
+  return (
+    <Paper withBorder p="sm" radius="sm" mt="xs">
+      <Stack gap="sm">
+        <Group gap="sm" align="flex-end" wrap="wrap">
+          <Input.Wrapper label="Method">
+            <SegmentedControl
+              display="flex"
+              data={METHODS}
+              value={values.search_method}
+              onChange={(value) => update({ search_method: value as TuningMethod })}
+            />
+          </Input.Wrapper>
+          {!grid && (
+            <NumberInput
+              label="Trials"
+              w={110}
+              value={values.search_trials}
+              onChange={(value) => update({ search_trials: value })}
+              min={LIMITS.search_trials.min}
+              max={LIMITS.search_trials.max}
+              allowDecimal={false}
+              allowNegative={false}
+              error={errors.search_trials}
+            />
+          )}
+        </Group>
+
+        {MODEL_NOTES[model] && (
+          <Text size="xs" c="dimmed">
+            {MODEL_NOTES[model]}
+          </Text>
+        )}
+
+        {(CLASSICAL_TUNABLES[model] ?? []).map((item) => (
+          <ParamRow
+            key={item.name}
+            item={item}
+            state={states[item.name]}
+            grid={grid}
+            error={errors.params?.[item.name]}
+            onChange={(changes) => setParam(item.name, changes)}
+          />
+        ))}
+
+        <MetricField
+          values={values}
+          onChange={onChange}
+          errors={errors}
+          metrics={metrics}
+          where={crossValidates ? 'the cross-validation' : 'the validation rows'}
+        />
+
+        {validates ? (
+          <Group gap="sm" align="flex-start" wrap="wrap">
+            <Checkbox
+              label="Cross-validate on the training rows"
+              description="Instead of the validation rows, which the search then does not see."
+              checked={values.cv_enabled}
+              onChange={(event) => update({ cv_enabled: event.currentTarget.checked })}
+              style={{ flex: 1, minWidth: 220 }}
+            />
+            {values.cv_enabled && (
+              <NumberInput
+                label="Folds"
+                w={110}
+                value={values.cv_folds}
+                onChange={(value) => update({ cv_folds: value })}
+                min={LIMITS.cv_folds.min}
+                max={LIMITS.cv_folds.max}
+                allowDecimal={false}
+                allowNegative={false}
+                error={errors.cv_folds}
+              />
+            )}
+          </Group>
+        ) : (
+          <Text size="xs" c="dimmed">
+            No validation rows: the trials are compared by {FOLDS.default}-fold cross-validation on
+            the training rows.
+          </Text>
+        )}
+
+        {errors.search && (
+          <Text size="sm" c="red" role="alert">
+            {errors.search}
+          </Text>
+        )}
+        <Text size="xs" c="dimmed">
+          {summary && `${summary} `}
+          {grid
+            ? 'Every combination of the listed values is fitted.'
+            : 'Ranges are drawn evenly on their scale; whole-number parameters give whole numbers.'}{' '}
+          The best trial is measured on the test rows like a single fit.
+        </Text>
+      </Stack>
+    </Paper>
+  );
+}
+
+function ParamRow({
+  item,
+  state,
+  grid,
+  error,
+  onChange,
+}: {
+  item: Tunable;
+  state: ParamState;
+  grid: boolean;
+  error: string | undefined;
+  onChange: (changes: Partial<ParamState>) => void;
+}) {
+  const choice = item.kind === 'choice' || item.kind === 'bool';
+  const range = !grid && !choice && state.mode === 'range';
+  let editor: React.ReactNode;
+  if (choice) {
+    editor = (
+      <MultiSelect
+        aria-label={`${item.label} to try`}
+        data={item.options.map((option) => ({ value: String(option), label: String(option) }))}
+        value={state.choices}
+        onChange={(choices) => onChange({ choices })}
+        error={error}
+      />
+    );
+  } else {
+    editor = (
+      <Stack gap={4}>
+        {!grid && (
+          <SegmentedControl
+            size="xs"
+            data={RANGE_MODES}
+            value={state.mode}
+            onChange={(mode) => onChange({ mode: mode as ParamState['mode'] })}
+            aria-label={`${item.label}: range or list`}
+            style={{ alignSelf: 'flex-start' }}
+          />
+        )}
+        {range ? (
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <NumberInput
+              aria-label={`Smallest ${item.label.toLowerCase()}`}
+              value={state.min}
+              onChange={(min) => onChange({ min })}
+              allowNegative={false}
+              allowDecimal={item.kind !== 'int'}
+              decimalScale={12}
+              error={error}
+              style={{ flex: 1 }}
+            />
+            <Text size="sm" mt={7}>
+              to
+            </Text>
+            <NumberInput
+              aria-label={`Largest ${item.label.toLowerCase()}`}
+              value={state.max}
+              onChange={(max) => onChange({ max })}
+              allowNegative={false}
+              allowDecimal={item.kind !== 'int'}
+              decimalScale={12}
+              style={{ flex: 1 }}
+            />
+            <Select
+              aria-label={`Scale of the ${item.label.toLowerCase()}`}
+              data={SCALES}
+              value={state.scale}
+              onChange={(scale) => scale && onChange({ scale: scale as ParamState['scale'] })}
+              allowDeselect={false}
+              w={90}
+            />
+          </Group>
+        ) : (
+          <TextInput
+            aria-label={`${item.label} to try`}
+            placeholder={item.none ? 'e.g. none, 3, 6' : 'e.g. 0.1, 1, 10'}
+            description={item.help}
+            value={state.text}
+            onChange={(event) => onChange({ text: event.currentTarget.value })}
+            error={error}
+          />
+        )}
+      </Stack>
+    );
+  }
+  return (
+    <SearchRow
+      label={item.label}
+      checked={state.on}
+      onToggle={(on) => onChange({ on })}
+      fixed="the value of the brick"
+    >
+      {editor}
+    </SearchRow>
   );
 }

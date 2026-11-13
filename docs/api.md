@@ -428,7 +428,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 `{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
 `val_split` (0–0.5; 0 = no validation data: the last epoch is kept, and `patience` and `tuning`
-are refused), `test_split` (0 = no test set; validation and test together at most 0.8; built-in
+are refused for neural networks), `test_split` (0 = no test set; validation and test together at most 0.8; built-in
 datasets take `val_split` of their training images and always test on their official test
 images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
@@ -459,6 +459,42 @@ defaults.
 `batch_size` and `optimizer` a list (at most 20 values each). Settings that are not in `space`
 keep their `config` value; `{}` uses the default space (learning rate 1e-4…1e-2, batch size
 32/64/128). `GET /api/training/` lists the limits and defaults under `tuning`.
+
+`metric` (optional) chooses what ranks the trials, see
+[training.md](training.md#the-objective-metric): `loss` (the default), for classification
+`accuracy`, `balanced_accuracy`, `macro_f1` and, with two classes, `roc_auc` and `pr_auc`, for
+regression `rmse`, `mae` and `r2`. The direction follows from the metric (`tuning.metrics` of
+`GET /api/training/` lists `{name, label, direction, task, binary}`). A metric that the task
+does not have is an error of the check (`ok: false`, e.g. "The objective metric ROC AUC needs
+two classes, this data has 3. …"), and the start answers `400` with it.
+
+A **classical model** searches over the parameters of its brick, see
+[training.md](training.md#searching-a-classical-model):
+
+```json
+{
+  "method": "random",
+  "trials": 20,
+  "metric": "pr_auc",
+  "cv_folds": 5,
+  "space": {
+    "learning_rate": { "min": 0.01, "max": 0.3 },
+    "min_samples_leaf": { "min": 5, "max": 100, "scale": "linear" },
+    "max_depth": [null, 3, 6],
+    "class_weight": ["none", "balanced"]
+  }
+}
+```
+
+A range is log-uniform unless `"scale": "linear"` (a log range needs `min` > 0); whole-number
+parameters give whole numbers. `cv_folds` (2–10, optional) compares the trials by k-fold
+cross-validation on the training rows instead of on the validation rows; without validation
+rows the search always cross-validates (5 folds, and the check warns). `classical.tuning` of
+`GET /api/training/` lists per model type what it can tune (`models.<type>.tunable`: `name`,
+`label`, `kind`, `min`, `max`, `min_exclusive`, `scale`, `options`, `none`, `default`) and the
+`default` space; an unknown parameter, a bad range or a grid of more than 100 combinations
+gives `400` ("'degree' cannot be tuned for support vector classification. Possible: C, gamma,
+kernel, class_weight."). `cv_folds` for a neural network is refused.
 
 ```bash
 TOKEN=...   # access token from /api/auth/token/
@@ -760,7 +796,11 @@ because `available` and `reason` are about PyTorch:
   "available": true, "reason": null, "sklearn_version": "1.9.1",
   "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000,
                 "HistGradientBoostingRegressor": 1000000, "HistGradientBoostingClassifier": 1000000 },
-  "tuning": false
+  "tuning": {
+    "models": { "SVC": { "tunable": [ { "name": "C", "kind": "float", "min": 0, "min_exclusive": true, "scale": "log", "default": { "min": 0.1, "max": 100 }, … }, … ],
+                         "default": { "C": { "min": 0.1, "max": 100 }, "gamma": { "min": 0.001, "max": 1 } }, "note": null }, … },
+    "cv_folds": { "min": 2, "max": 10, "default": 5 }
+  }
 }
 ```
 
@@ -769,8 +809,8 @@ training sets are subsampled); an ensemble (`VotingClassifier`, `StackingRegress
 the strictest limit of its models, so it is not listed. The training check's
 `plan.classical` lists an ensemble's `members` (with the kernel of each Gaussian process)
 and, for `VotingClassifier`, `voting`. Only `val_split`, `test_split`, `max_samples` (at most
-`max_rows`) and `seed` of `config` apply;
-a `tuning` gives `400`. Their runs have `family` `"classical"` (otherwise `"neural"`) and
+`max_rows`) and `seed` of `config` apply, and a `tuning` over the parameters of the model
+brick (above; older servers had `"tuning": false`). Their runs have `family` `"classical"` (otherwise `"neural"`) and
 `epochs` 1.
 
 A run's `status` is `starting`, `preparing` (loading or downloading data), `running`,
@@ -794,13 +834,17 @@ Every run also has `metrics` (the last epoch while it runs, then the kept epoch,
 `test_loss`, `test_accuracy`, `test_rmse` and `test_r2`; RMSE and R² for regressions, `null`
 otherwise), `family`, `tuning` (the normalised search settings or
 `null`), `trials_done` and `best_trial` (`{trial, params, val_loss, val_accuracy, val_rmse,
-val_r2, weights_epoch}`). Regressions of neural networks and classical models add `val_r2` to
+val_r2, weights_epoch, score}`; `score`: the objective metric, `null` in runs of older
+versions). Regressions of neural networks and classical models add `val_r2` to
 the `history` entries and trials and `r2` to `test`: R², the coefficient of determination,
 measured against the mean of the validation or test rows themselves, `null` when all their
 targets are equal (see [training.md](training.md#regression-metrics)).
 In a search, `state.trials` lists every trial with its `params`, `status`,
-the metrics of its kept weights, `weights_epoch` and `stopped_early`; `history`, `best` and
-`metrics` belong to the running trial and, at the end, to the best one. The file format is
+the metrics of its kept weights, `score` (its objective metric), `weights_epoch` and
+`stopped_early`; `history`, `best` and `metrics` belong to the running trial and, at the end,
+to the best one. `state.tuning` has the `metric` and, for a classical model, the `cv_folds`
+it used (`null`: the validation rows); its trials have `folds`, and with folds their `val_*`
+values and `score` are cross-validated on the training rows. The file format is
 documented in `backend/brickdnn/training/state.py`.
 
 **Download links.** `GET /api/training/runs/<id>/weights/?sig=…` works without login: the

@@ -49,8 +49,10 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
   checks beforehand whether network and data fit and says what to change. Hold out a test set,
   stop early when the validation loss no longer improves (the weights of the best epoch are
-  kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer,
-  and download the trained weights together with the matching script. With Docker, trainings
+  kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer
+  (or, for a classical model, the parameters of its brick, with cross-validation on the
+  training rows), ranked by the loss or a metric such as balanced accuracy, ROC AUC, PR AUC,
+  MAE or R², and download the trained weights together with the matching script. With Docker, trainings
   wait in a **queue** and a separate worker container trains them, so the site stays
   responsive and nothing is refused because the server is busy. See
   [docs/training.md](docs/training.md).
