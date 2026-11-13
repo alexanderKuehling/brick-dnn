@@ -1,5 +1,5 @@
 import type { Analysis, NodeAnalysis, Params, ParamValue } from '@/api/types';
-import { compactKernel, isBoosting } from './kinds';
+import { compactKernel, isBoosting, isEnsemble } from './kinds';
 
 const ACTIVATION_NAMES: Record<string, string> = {
   relu: 'ReLU',
@@ -26,6 +26,8 @@ const OPTION_LABELS: Record<string, Record<string, string>> = {
   class_weight: { none: 'None', balanced: 'Balanced' },
   // Gradient boosting: auto switches it on above 10,000 training rows.
   early_stopping: { auto: 'Auto (above 10,000 rows)', on: 'On', off: 'Off' },
+  // VotingClassifier.
+  voting: { soft: 'Soft (average the probabilities)', hard: 'Hard (count the classes)' },
 };
 
 export function optionLabel(param: string, value: string): string {
@@ -106,7 +108,18 @@ function svmKernel(p: Params): string {
   return `${optionLabel('kernel', String(p.kernel ?? 'rbf'))} kernel`;
 }
 
-/** What the analysis adds to a node's summary (kernels of Gaussian processes). */
+/** The models of an ensemble by name, in the order of their connections ("gb, svc, gp"). */
+function memberNames(context: SummaryContext): string | null {
+  const members = context.info?.members;
+  return members?.length ? members.map((member) => member.name).join(', ') : null;
+}
+
+/** "weights 2:1:1", or null without weights. */
+function weightsText(weights: ParamValue): string | null {
+  return Array.isArray(weights) && weights.length > 0 ? `weights ${weights.join(':')}` : null;
+}
+
+/** What the analysis adds to a node's summary (kernels of Gaussian processes, models of ensembles). */
 export interface SummaryContext {
   info?: NodeAnalysis | null;
   /** A Gaussian process gets a kernel from kernel bricks (otherwise it uses its default). */
@@ -216,6 +229,22 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       }
       return parts.join(' · ');
     }
+    case 'VotingClassifier':
+    case 'VotingRegressor': {
+      const how = type === 'VotingClassifier' ? `${String(p.voting ?? 'soft')} voting` : 'average';
+      const parts = [how, weightsText(p.weights), memberNames(context)];
+      return parts.filter(Boolean).join(' · ');
+    }
+    case 'StackingClassifier':
+    case 'StackingRegressor': {
+      const final = type === 'StackingClassifier' ? 'logistic' : 'ridge';
+      const parts = [
+        `${final} on ${num(p.cv)} folds`,
+        p.passthrough ? '+ features' : null,
+        memberNames(context),
+      ];
+      return parts.filter(Boolean).join(' · ');
+    }
     default:
       return '';
   }
@@ -243,11 +272,15 @@ export function hyperparameters(count: number): string {
 /**
  * The size of a valid network for the toolbar: "1.2k params"; for a Gaussian process the
  * kernel hyperparameters the fit optimises; an SVM or gradient boosting has nothing to count
- * before the fit.
+ * before the fit, an ensemble its models.
  */
 export function networkSize(analysis: Analysis): string {
   if (analysis.family !== 'classical') {
     return `${formatCount(analysis.total_params)} params`;
+  }
+  if (isEnsemble(analysis.classical?.type)) {
+    const count = analysis.classical?.members?.length ?? 0;
+    return `Ensemble of ${count} models`;
   }
   if (analysis.total_params === null) {
     const what = isBoosting(analysis.classical?.type) ? 'Gradient boosting' : 'SVM';

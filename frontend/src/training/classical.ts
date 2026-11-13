@@ -1,6 +1,6 @@
 /**
- * Classical models (Gaussian processes, SVMs, gradient boosting) train with scikit-learn
- * instead of PyTorch:
+ * Classical models (Gaussian processes, SVMs, gradient boosting and ensembles of them) train
+ * with scikit-learn instead of PyTorch:
  * fitted once, without epochs, on tabular data (see docs/training.md#classical-models).
  */
 import type { Analysis, RunSummary, TrainingStatus } from '@/api/types';
@@ -34,17 +34,23 @@ export function unavailableReason(status: TrainingStatus, family: Family): strin
 
 /**
  * The most training rows the classical model of the network is fitted on (larger training
- * sets are subsampled); null for neural networks or when the server does not say.
+ * sets are subsampled); for an ensemble the strictest limit of its models. Null for neural
+ * networks or when the server does not say.
  */
 export function classicalMaxRows(
   status: TrainingStatus | null,
   analysis: Analysis | null
 ): number | null {
-  const type = analysis?.classical?.type;
-  if (!status || !type || networkFamily(analysis) !== 'classical') {
+  const classical = analysis?.classical;
+  if (!status || !classical || networkFamily(analysis) !== 'classical') {
     return null;
   }
-  return status.classical?.max_rows[type] ?? null;
+  const types = classical.members ? classical.members.map((m) => m.type) : [classical.type];
+  const limits = types.map((type) => status.classical?.max_rows[type]);
+  if (limits.length === 0 || limits.some((limit) => limit === undefined)) {
+    return null;
+  }
+  return Math.min(...(limits as number[]));
 }
 
 /** A run of a classical model (fitted once with scikit-learn). */
@@ -64,4 +70,8 @@ export const MODEL_KINDS: Record<string, string> = {
   SVC: 'Support vector classification',
   HistGradientBoostingRegressor: 'Gradient boosting regression',
   HistGradientBoostingClassifier: 'Gradient boosting classification',
+  VotingClassifier: 'Voting classifier',
+  VotingRegressor: 'Voting regression',
+  StackingClassifier: 'Stacking classifier',
+  StackingRegressor: 'Stacking regression',
 };

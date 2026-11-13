@@ -8,7 +8,7 @@ import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
 import { formatCount, formatOutput, hyperparameters, summarize } from './format';
 import type { LayerFlowNode } from './graph';
-import { inputSlots, isClassicalSpec, isKernelNode, slotHandle } from './kinds';
+import { inputSlots, isClassicalSpec, isKernelNode, outputKind, slotHandle } from './kinds';
 import classes from './LayerNode.module.css';
 
 /** Vertical position (percent) of the input handle `index` of `count`. */
@@ -133,7 +133,7 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
         type="source"
         position={Position.Right}
         className={classes.handle}
-        data-kind={kernel ? 'kernel' : 'tensor'}
+        data-kind={kernel ? 'kernel' : (info?.output_kind ?? outputKind(spec))}
       />
     </div>
   );

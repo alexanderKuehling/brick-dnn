@@ -1,7 +1,8 @@
 """Turn an analysed classical network into a runnable scikit-learn script.
 
 A classical network is an Input layer, one classical model (Gaussian process, support vector
-machine or gradient boosting) and, for a Gaussian process, optionally kernel bricks. The script defines
+machine or gradient boosting) and, for a Gaussian process, optionally kernel bricks; or several
+such models combined by an ensemble (voting or stacking). The script defines
 ``make_model()``, a ``Pipeline`` that standardises the features and then fits the model,
 and (with ``include_main``) a command line: fit it to a CSV file, save it with joblib and
 predict new rows. Like the rest of :mod:`brickdnn`, this module only writes text: it needs
@@ -22,7 +23,7 @@ import textwrap
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from .layers import ClassicalModel, KernelExpr
+from .layers import ClassicalModel, Ensemble, KernelExpr, Member
 from .links import BANNER
 
 if TYPE_CHECKING:
@@ -45,10 +46,22 @@ def num_features(analysis: Analysis) -> int:
     """The length of the feature vector: the shape of the Input that feeds the model."""
     model = analysis.model
     assert model is not None
+    if isinstance(model.layer, Ensemble):  # its models share the Input
+        model = analysis.nodes[model.layer.members[0].node]
     source = next(s for s in model.inputs if analysis.nodes[s].type == "Input")
     shape = analysis.nodes[source].shape
     assert shape is not None
     return shape[0]
+
+
+def members(layer: ClassicalModel) -> list[Member]:
+    """The models of an ensemble (none for a single model)."""
+    return layer.members if isinstance(layer, Ensemble) else []
+
+
+def hard_voting(layer: ClassicalModel) -> bool:
+    """A VotingClassifier with hard voting: it predicts classes, but no probabilities."""
+    return layer.type == "VotingClassifier" and layer.p["voting"] == "hard"
 
 
 def boosted(layer: ClassicalModel) -> bool:
@@ -83,33 +96,45 @@ def _import(module: str, names: list[str]) -> list[str]:
     return [f"from {module} import (", *[f"    {name}," for name in names], ")"]
 
 
-def _variable_names(leaves: list[KernelExpr]) -> list[str]:
+def _variable_names(
+    leaves: list[KernelExpr], prefix: str = "", taken: set[str] | None = None
+) -> list[str]:
     counts = Counter(leaf.hint for leaf in leaves)
     seen: Counter[str] = Counter()
     names = []
     for leaf in leaves:
         base = leaf.hint if leaf.hint not in MAKE_MODEL_NAMES else f"{leaf.hint}_kernel"
         seen[leaf.hint] += 1
-        names.append(base if counts[leaf.hint] == 1 else f"{base}_{seen[leaf.hint]}")
+        name = prefix + (base if counts[leaf.hint] == 1 else f"{base}_{seen[leaf.hint]}")
+        while taken is not None and name in taken:
+            name += "_k"
+        names.append(name)
     return names
 
 
-def kernel_lines(kernel: KernelExpr) -> list[str]:
-    """``kernel = ...`` inside make_model(); long kernels get a variable per brick."""
-    inline = f"    kernel = {kernel.code()}"
+def kernel_lines(
+    kernel: KernelExpr, target: str = "kernel", prefix: str = "", taken: set[str] | None = None
+) -> list[str]:
+    """``kernel = ...`` inside make_model(); long kernels get a variable per brick.
+    ``target`` names the kernel, ``prefix`` starts the names of those variables, which avoid
+    the names in ``taken`` (the models of an ensemble each have a kernel of their own)."""
+    inline = f"    {target} = {kernel.code()}"
     if len(inline) <= LINE_LENGTH:
         return [inline]
     leaves = kernel.leaves()
     if len(leaves) == 1:
-        return _call("kernel", kernel.name, list(kernel.args))
-    names = _variable_names(leaves)
+        return _call(target, kernel.name, list(kernel.args))
+    names = _variable_names(leaves, prefix, taken)
+    if taken is not None:
+        taken.update(names)
     lines: list[str] = []
     for name, leaf in zip(names, leaves, strict=True):
         lines += _call(name, leaf.name, list(leaf.args))
-    combined = f"    kernel = {kernel.code(names)}"
+    combined = f"    {target} = {kernel.code(names)}"
     if len(combined) <= LINE_LENGTH:
         return [*lines, combined]
-    return [*lines, "    kernel = (", *[f"        {part}" for part in kernel.split(names)], "    )"]
+    parts = [f"        {part}" for part in kernel.split(names)]
+    return [*lines, f"    {target} = (", *parts, "    )"]
 
 
 def kernel_text(kernel: KernelExpr, indent: str = "    ") -> list[str]:
@@ -141,9 +166,12 @@ class _ClassicalGenerator:
         self.a = analysis
         self.opt = options
         self.layer = model_of(analysis)
+        self.members = members(self.layer)
         self.n_features = num_features(analysis)
         self.classification = self.layer.task == "classification"
         self.gp = self.layer.takes_kernel
+        # The models of the network: the members of an ensemble, or the model itself.
+        self.models = [m.layer for m in self.members] or [self.layer]
 
     def render(self) -> str:
         main = self.opt.include_main
@@ -166,12 +194,21 @@ class _ClassicalGenerator:
     def _docstring(self, main: bool, training: bool) -> str:
         layer = self.layer
         what = "the class of each row" if self.classification else "one number per row"
-        about = (
-            f"A scikit-learn model for {self.n_features} numeric "
-            f"feature{'s' if self.n_features != 1 else ''}: they are standardised, then "
-            f"{layer.estimator} predicts {what}."
-        )
-        if calibrated(layer):
+        features = f"{self.n_features} numeric feature{'s' if self.n_features != 1 else ''}"
+        if self.members:
+            about = (
+                f"A scikit-learn ensemble for {features}: they are standardised, then "
+                f"{layer.estimator} combines {len(self.members)} models ("
+                + ", ".join(f"{m.name}: {m.layer.estimator}" for m in self.members)
+                + f") and predicts {what}. "
+                + self._combination()
+            )
+        else:
+            about = (
+                f"A scikit-learn model for {features}: they are standardised, then "
+                f"{layer.estimator} predicts {what}."
+            )
+        if any(calibrated(model) for model in self.models):
             about += (
                 " Platt scaling (5-fold cross-validation) turns the SVM's scores into class "
                 "probabilities."
@@ -189,6 +226,13 @@ class _ClassicalGenerator:
         if layer.kernel is not None:
             lines += ["", "Kernel (the starting point; fitting optimises its hyperparameters):"]
             lines += kernel_text(layer.kernel)
+        for member in self.members:
+            if member.layer.kernel is not None:
+                lines += [
+                    "",
+                    f"Kernel of {member.name} (the starting point; fitting optimises it):",
+                ]
+                lines += kernel_text(member.layer.kernel)
         if main:
             lines += [
                 "",
@@ -215,6 +259,29 @@ class _ClassicalGenerator:
         lines.append('"""')
         return "\n".join(lines)
 
+    def _combination(self) -> str:
+        """How an ensemble combines its models, in words."""
+        layer = self.layer
+        if layer.type == "VotingClassifier":
+            how = (
+                "Soft voting averages their class probabilities"
+                if layer.p["voting"] == "soft"
+                else "Hard voting takes the class most of them predict"
+            )
+        elif layer.type == "VotingRegressor":
+            how = "It averages their predictions"
+        else:
+            final = layer.final_estimator  # type: ignore[attr-defined]
+            how = (
+                f"{final} learns from their predictions for rows they were not fitted on "
+                f"({layer.p['cv']}-fold cross-validation) how to combine them"
+            )
+            if layer.p["passthrough"]:
+                how += ", together with the features"
+        if layer.p.get("weights"):
+            how += ", weighted " + ":".join(str(w) for w in layer.p["weights"])
+        return how + "."
+
     def _imports(self, main: bool, training: bool) -> str:
         lines = []
         if main:
@@ -223,10 +290,15 @@ class _ClassicalGenerator:
             lines += ["import joblib", "import numpy as np"]
         layer = self.layer
         modules: dict[str, list[str]] = {layer.module: [layer.estimator]}
-        if calibrated(layer):
-            modules["sklearn.calibration"] = ["CalibratedClassifierCV"]
-        if layer.kernel is not None:
-            modules["sklearn.gaussian_process.kernels"] = layer.kernel.classes()
+        for model in self.models:
+            modules.setdefault(model.module, []).append(model.estimator)
+            if calibrated(model):
+                modules["sklearn.calibration"] = ["CalibratedClassifierCV"]
+            if model.kernel is not None:
+                kernels = modules.setdefault("sklearn.gaussian_process.kernels", [])
+                kernels += model.kernel.classes()
+        if isinstance(layer, Ensemble) and layer.combines == "stacking":
+            modules[layer.final_module] = [layer.final_estimator]  # type: ignore[attr-defined]
         modules["sklearn.pipeline"] = ["Pipeline"]
         modules["sklearn.preprocessing"] = ["StandardScaler"]
         for module in sorted(modules):
@@ -237,6 +309,8 @@ class _ClassicalGenerator:
 
     def _make_model(self) -> str:
         layer = self.layer
+        if self.members:
+            return self._make_ensemble()
         lines = [
             "def make_model() -> Pipeline:",
             '    """Standardise the features (with the mean and standard deviation of the data',
@@ -255,6 +329,54 @@ class _ClassicalGenerator:
         lines.append('    return Pipeline([("scale", StandardScaler()), ("model", model)])')
         return "\n".join(lines)
 
+    def _make_ensemble(self) -> str:
+        """make_model() of an ensemble: a variable per model (named like the model in the
+        ensemble), then the ensemble."""
+        layer = self.layer
+        lines = [
+            "def make_model() -> Pipeline:",
+            '    """Standardise the features (with the mean and standard deviation of the data',
+            f"    it is fitted to), then fit {layer.estimator} with its "
+            f'{len(self.members)} models."""',
+        ]
+        taken = {member.name for member in self.members} | MAKE_MODEL_NAMES
+
+        def free(base: str) -> str:
+            name = base
+            while name in taken:
+                name += "_"
+            taken.add(name)
+            return name
+
+        for member in self.members:
+            model, name = member.layer, member.name
+            args = model.estimator_args()
+            if model.kernel is not None:
+                kernel = free(f"{name}_kernel")
+                lines += kernel_lines(model.kernel, kernel, f"{name}_", taken)
+                args = [f"kernel={kernel}" if arg == "kernel=kernel" else arg for arg in args]
+            if calibrated(model):
+                svm = free(f"{name}_svm")
+                lines += _call(svm, model.estimator, args)
+                lines += [
+                    "    # Platt scaling: 5-fold cross-validation turns the scores into "
+                    "probabilities.",
+                    f"    {name} = CalibratedClassifierCV({svm}, ensemble=False)",
+                ]
+            else:
+                lines += _call(name, model.estimator, args)
+        pairs = [f'("{m.name}", {m.name})' for m in self.members]
+        estimators = f"        estimators=[{', '.join(pairs)}],"
+        lines.append(f"    model = {layer.estimator}(")
+        if len(estimators) <= LINE_LENGTH:
+            lines.append(estimators)
+        else:
+            lines += ["        estimators=[", *[f"            {p}," for p in pairs], "        ],"]
+        lines += [f"        {arg}," for arg in layer.estimator_args()]
+        lines += ["    )"]
+        lines.append('    return Pipeline([("scale", StandardScaler()), ("model", model)])')
+        return "\n".join(lines)
+
     # -- CSV training ------------------------------------------------------ #
 
     def _load_csv(self) -> str:
@@ -266,7 +388,11 @@ class _ClassicalGenerator:
 
     def _fit(self) -> str:
         report = _CLASSIFICATION_REPORT if self.classification else _REGRESSION_REPORT
-        if self.gp:
+        if self.members:
+            report += _ENSEMBLE_REPORT
+            if isinstance(self.layer, Ensemble) and self.layer.combines == "stacking":
+                report += _STACKING_REPORT
+        elif self.gp:
             report += _GP_REPORT
         elif calibrated(self.layer):
             report += _SVC_REPORT
@@ -288,7 +414,9 @@ class _ClassicalGenerator:
         return _SAVE_MODEL.replace("[[FORMAT]]", MODEL_FORMAT).replace("[[TASK]]", task)
 
     def _predict(self) -> str:
-        if self.classification:
+        if hard_voting(self.layer):
+            output = _PREDICT_LABELS
+        elif self.classification:
             output = _PREDICT_CLASSES
         elif self.gp:
             output = _PREDICT_WITH_STD
@@ -305,12 +433,13 @@ class _ClassicalGenerator:
 
     def _main(self, training: bool) -> str:
         name = self.layer.label
-        lines = [
-            "def main() -> None:",
-            "    parser = argparse.ArgumentParser(",
-            f'        description="{name}, generated with Brick DNN"',
-            "    )",
-        ]
+        description = f'description="{name}, generated with Brick DNN"'
+        parser = f"    parser = argparse.ArgumentParser({description})"
+        lines = ["def main() -> None:"]
+        if len(parser) <= LINE_LENGTH:
+            lines.append(parser)
+        else:
+            lines += ["    parser = argparse.ArgumentParser(", f"        {description}", "    )"]
         if training:
             lines.append(
                 '    parser.add_argument("--csv", help="fit the model to this CSV file '
@@ -432,6 +561,13 @@ _SVC_REPORT = """
     svc = model.named_steps["model"].calibrated_classifiers_[0].estimator
     print(f"Support vectors: {int(svc.n_support_.sum())}")"""
 
+_ENSEMBLE_REPORT = """
+    ensemble = model.named_steps["model"]
+    print(f"Models: {', '.join(ensemble.named_estimators_)}")"""
+
+_STACKING_REPORT = """
+    print(f"Final estimator: {ensemble.final_estimator_}")"""
+
 _BOOSTING_REPORT = """
     boosting = model.named_steps["model"]
     # Early stopping may end before max_iter.
@@ -493,6 +629,13 @@ _PREDICT_CLASSES = """\
     for row in probabilities:
         best = int(np.argmax(row))
         print(f"{names[best]},{row[best]:.4f}")"""
+
+_PREDICT_LABELS = """\
+    # Hard voting predicts a class, but no probabilities.
+    names = dict(zip(model.classes_, bundle["class_names"]))
+    print(bundle["target"])
+    for label in model.predict(features):
+        print(names[label])"""
 
 _DEMO = '''\
 def demo(model: Pipeline) -> None:

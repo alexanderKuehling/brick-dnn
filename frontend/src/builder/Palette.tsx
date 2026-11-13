@@ -19,7 +19,7 @@ const SECTIONS: Record<Section, { title: string; icon: React.ReactNode; hint: st
   classical: {
     title: 'Classical · scikit-learn',
     icon: <IconChartDots3 size={14} aria-hidden />,
-    hint: 'For tabular data: connect the Input straight to a model. Kernels (dashed connections) shape a Gaussian process.',
+    hint: 'For tabular data: connect the Input straight to a model. Kernels (dashed connections) shape a Gaussian process, ensembles (dotted connections) combine models.',
   },
 };
 
@@ -28,6 +28,8 @@ const CATEGORY_HINTS: Record<string, string> = {
   Kernels:
     'Combine them with Kernel sum and Kernel product, then connect them to a Gaussian process.',
   'Classical models': 'Fitted once on the training rows; their output is the prediction.',
+  Ensembles:
+    'Connect the Input to two or more models of the same task, and the models to the ensemble: it combines their predictions.',
 };
 
 interface PaletteProps {

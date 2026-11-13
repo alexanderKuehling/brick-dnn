@@ -3,7 +3,7 @@ import { render, screen, userEvent } from '@test-utils';
 import { vi } from 'vitest';
 import type { Analysis, LayerSpec, Params } from '@/api/types';
 import { BuilderContext, type BuilderContextValue, type InputFit } from './BuilderContext';
-import { GP_ANALYSIS, SPECS } from './classicalFixtures';
+import { GP_ANALYSIS, SPECS, VOTING_ANALYSIS } from './classicalFixtures';
 import type { LayerFlowNode } from './graph';
 import { Inspector } from './Inspector';
 
@@ -106,7 +106,8 @@ describe('Inspector of classical bricks', () => {
   function renderBrick(
     node: LayerFlowNode | null,
     analysis: Analysis | null = GP_ANALYSIS,
-    updateNode = vi.fn()
+    updateNode = vi.fn(),
+    focusNode = vi.fn()
   ) {
     const context: BuilderContextValue = {
       specs: SPECS,
@@ -117,7 +118,7 @@ describe('Inspector of classical bricks', () => {
       updateNode,
       deleteNode: vi.fn(),
       duplicateNode: vi.fn(),
-      focusNode: vi.fn(),
+      focusNode,
     };
     const nodes = Object.entries(analysis?.nodes ?? {}).map(([id, info]) => ({
       id,
@@ -296,6 +297,43 @@ describe('Inspector of classical bricks', () => {
     expect(screen.getByLabelText('Kernel of the model')).toHaveTextContent('WhiteKernel');
     expect(screen.queryByText('Trainable parameters')).not.toBeInTheDocument();
     expect(screen.getByText(/Kernels flow along the dashed/)).toBeInTheDocument();
+  });
+
+  it('lists the models of an ensemble in the order of their weights', async () => {
+    const updateNode = vi.fn();
+    const focusNode = vi.fn();
+    const vote: LayerFlowNode = {
+      id: 'vote',
+      type: 'layer',
+      position: { x: 0, y: 0 },
+      data: { type: 'VotingClassifier', params: { voting: 'soft', weights: [2, 1] } },
+    };
+    renderBrick(vote, VOTING_ANALYSIS, updateNode, focusNode);
+    expect(screen.getByText('Models').nextSibling).toHaveTextContent('2');
+    expect(screen.getByText('Models, in the order of their connections and weights')).toBeVisible();
+    const models = screen.getByLabelText('Models of the ensemble');
+    expect(models).toHaveTextContent('gb Gradient boosting classification · weight 2');
+    expect(models).toHaveTextContent('svc Support vector classification · weight 1');
+    await userEvent.click(screen.getByText('svc'));
+    expect(focusNode).toHaveBeenCalledWith('svc');
+
+    // Its settings: soft or hard voting, and the weights as a list of whole numbers.
+    expect(screen.getByLabelText('Weights')).toHaveValue('2, 1');
+    await userEvent.clear(screen.getByLabelText('Weights'));
+    expect(updateNode).toHaveBeenLastCalledWith('vote', {
+      params: { voting: 'soft', weights: null },
+    });
+    expect(screen.getByRole('combobox', { name: 'Voting' })).toHaveValue(
+      'Soft (average the probabilities)'
+    );
+  });
+
+  it('summarises an ensemble', () => {
+    renderBrick(null, VOTING_ANALYSIS);
+    expect(screen.getByText('Voting classifier')).toBeInTheDocument();
+    expect(screen.getByText('2 models').nextSibling).toHaveTextContent('gb, svc');
+    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
+    expect(screen.getByText(/the dotted connections carry the models/)).toBeInTheDocument();
   });
 
   it('shows why neural layers and classical models cannot be mixed', () => {

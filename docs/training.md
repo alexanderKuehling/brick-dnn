@@ -806,6 +806,43 @@ history and API, but **fitted once instead of epoch by epoch**:
 - **Predictions** on the server (REST and MCP) work like for neural networks; classifiers
   return their own probabilities, a Gaussian process regressor also its standard deviation.
 
+### Ensembles of classical models in the graph
+
+Two or more classical models of the same task can be combined by an ensemble brick (palette
+category *Ensembles*): `VotingClassifier` (soft voting averages the class probabilities,
+hard voting counts the predicted classes; optional weights), `VotingRegressor` (the
+optionally weighted average), `StackingClassifier` and `StackingRegressor` (a logistic or
+ridge regression learns from the models' predictions for rows they were not fitted on how
+much to trust each one; *Cross-validation folds* 5, *Pass the features through* off).
+Connect the Input to every model and every model to the ensemble; those connections are
+dotted and carry the model, not its prediction (see
+[graph-format.md](graph-format.md#ensembles)). The examples *Voting ensemble classifier*
+(gradient boosting, an SVM and a Gaussian process with soft voting) and *Stacking ensemble
+regression* are good starting points. The canvas summarises an ensemble with its models in
+the order of their connections, which is also the order of the weights, and the inspector
+lists them (a click selects one).
+
+An ensemble trains like a single classical model, with the same checks, metrics, final
+evaluation (also the confusion matrix and the threshold analysis), predictions on raw rows,
+explanations (permutation importance and Shapley values only need predictions), download
+and generated script:
+
+- **Fitting**: scikit-learn fits every model on the training rows; stacking fits each model
+  once per fold and once more on all rows, so it takes about *folds + 1* times as long. The
+  compute estimate adds up the models (times *folds + 1* for stacking).
+- **Row limit**: the strictest limit of its models applies, e.g. 2,000 training rows with a
+  Gaussian process classifier among them (`BRICKDNN_GPC_MAX_ROWS`). Demo data has as many
+  rows as the slowest model gets.
+- **Results**: the run lists the models with their own scores on the validation rows (the
+  training rows without them) next to the ensemble's (`state.classical.members`, each with
+  `metrics`), so it shows whether the ensemble beats its best model.
+- **Hard voting** predicts classes without probabilities: Brick DNN uses the share of the
+  (weighted) votes as the probability of each class, in the loss, the evaluation, the
+  threshold analysis and predictions. The generated script's `--predict` prints the class
+  only.
+- **Stacking classifiers** need at least as many training rows of some class as folds; the
+  run says so otherwise.
+
 ## Command line
 
 The `brickdnn` package trains without the web UI:

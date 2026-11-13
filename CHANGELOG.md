@@ -3,6 +3,22 @@
 ## Unreleased
 
 ### Added
+- **Ensembles of classical models in the graph**: the bricks `VotingClassifier` (soft or hard
+  voting, optional weights), `VotingRegressor` (optional weights), `StackingClassifier` and
+  `StackingRegressor` (a logistic or ridge regression on the cross-validated predictions;
+  *Cross-validation folds* 5, *Pass the features through*) combine two or more classical
+  models of the same task. The Input feeds every model and every model is connected to the
+  ensemble; those connections carry the model (a new `output_kind` `estimator`, dotted on
+  the canvas), not its prediction. The analysis explains what is wrong (fewer than two
+  models, mixed tasks, different Inputs, weights that do not fit, neural layers, nesting).
+  Ensembles train like the other classical models (metrics, evaluation, threshold analysis,
+  predictions also from raw rows, explanations, `.joblib` download), under the strictest row
+  limit of their models and with a compute estimate that adds up the models (times folds + 1
+  for stacking); the run shows every model's own score next to the ensemble's. Hard voting
+  uses the share of the votes as probabilities. The generated scikit-learn script builds the
+  ensemble with the models named after their bricks. New examples *Voting ensemble
+  classifier* and *Stacking ensemble regression*; the MCP tools describe the bricks. See
+  docs/training.md and docs/graph-format.md.
 - **Ensembles of finished runs.** 2 to 10 finished runs of one dataset made in the Data tab
   (the same task and classes; neural networks and classical models mixed) combine into one
   model: the **weighted average** of their class probabilities or values (equal weights by

@@ -93,7 +93,12 @@ strong baseline for large tables; class_weight "balanced" for rare classes). Con
 Input (shape [number of features]) straight to the model; a Gaussian
 process can also take a kernel built from kernel bricks (RBF, Matern, RationalQuadratic,
 ExpSineSquared, DotProduct, WhiteKernel, ConstantKernel, combined with KernelSum and
-KernelProduct), whose edges carry a kernel instead of a tensor. Classical models and neural
+KernelProduct), whose edges carry a kernel instead of a tensor. Ensembles combine two or
+more classical models of the same task: VotingClassifier (voting "soft" or "hard", optional
+weights), VotingRegressor, StackingClassifier and StackingRegressor (a logistic or ridge
+regression learns from the cross-validated predictions; cv, passthrough). Connect the Input
+to every model and every model to the ensemble: those edges carry an estimator, and the
+ensemble ends the network (example voting_ensemble_classifier). Classical models and neural
 layers cannot be mixed in one network yet. Their code is a scikit-learn script, and they
 are trained on CSV data or demo data (fitted once, no epochs).
 
@@ -1225,10 +1230,12 @@ TOOLS: dict[str, Tool] = {
             "List layer types",
             "All layer types (Input, Linear, Conv2d, LSTM, …, kernel bricks such as RBF and "
             "classical models such as GaussianProcessRegressor, SVC or "
-            "HistGradientBoostingClassifier) with their parameters: "
+            "HistGradientBoostingClassifier, ensembles such as VotingClassifier and "
+            "StackingRegressor) with their parameters: "
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
-            "output_kind whether it puts out a tensor or a kernel, input_slots what it takes. "
+            "output_kind whether it puts out a tensor, a kernel or an estimator (a classical "
+            "model, for an ensemble), input_slots what it takes. "
             "Compact by default (one line per parameter); types gives the full specs with "
             "help texts of some types.",
             list_layer_types,
@@ -1244,7 +1251,8 @@ TOOLS: dict[str, Tool] = {
             "list_examples",
             "List example networks",
             "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
-            "regression, SVM classifier, gradient boosting classifier, …): good starting "
+            "regression, SVM classifier, gradient boosting classifier, voting and stacking "
+            "ensembles, …): good starting "
             "points. Lists names and "
             "descriptions; id gives one example with its graph.",
             list_examples,
@@ -1256,7 +1264,8 @@ TOOLS: dict[str, Tool] = {
             "Validate a graph and infer the output shape, dtype and parameter count of every "
             "layer. Returns valid, errors (with the node they belong to), warnings, nodes and "
             "total_params. Kernel bricks and Gaussian processes report their kernel as "
-            "scikit-learn code (kernel); family and classical describe a classical model. "
+            "scikit-learn code (kernel); family and classical describe a classical model "
+            "(an ensemble lists its models in members, in the order of its weights). "
             "Use it after every change.",
             analyze_network,
             {"graph": GRAPH_SCHEMA},
@@ -1331,7 +1340,8 @@ TOOLS: dict[str, Tool] = {
             "get_training_options",
             "Show training options",
             "Whether training is available on this server (available: neural networks with "
-            "PyTorch; classical: Gaussian processes, SVMs and gradient boosting with "
+            "PyTorch; classical: Gaussian processes, SVMs, gradient boosting and their "
+            "ensembles with "
             "scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "
@@ -1883,7 +1893,8 @@ TOOLS: dict[str, Tool] = {
             "and the metrics at the run's decision_threshold; MAE, RMSE, R², MAPE, median "
             "and max error, residual quantiles), "
             "the rows per split, tuning (trials and the best one), classical (the fitted "
-            "kernel, log marginal likelihood, support vectors or boosting iterations) and "
+            "kernel, log marginal likelihood, support vectors or boosting iterations; an "
+            "ensemble's members with their own metrics) and "
             "the end of the log if "
             "it failed. include adds history (metrics per epoch, at most 50 evenly spaced "
             "epochs plus the best and the last), graph, plan, log (the last log_lines "

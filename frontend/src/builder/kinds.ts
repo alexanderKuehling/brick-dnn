@@ -1,8 +1,9 @@
 /**
- * What flows along a connection: a tensor (data) or, from a kernel brick, the kernel of a
- * Gaussian process. Bricks say what they put out (`output_kind`) and take (`input_slots`);
- * the canvas draws a handle per slot and refuses connections of the wrong kind. The analysis
- * on the server stays the judge of everything else (see docs/graph-format.md).
+ * What flows along a connection: a tensor (data), from a kernel brick the kernel of a
+ * Gaussian process, or from a classical model the model itself (an estimator, into an
+ * ensemble). Bricks say what they put out (`output_kind`) and take (`input_slots`); the
+ * canvas draws a handle per slot and refuses connections of the wrong kind. The analysis on
+ * the server stays the judge of everything else (see docs/graph-format.md).
  */
 import type { Edge } from '@xyflow/react';
 import type { Analysis, InputSlot, LayerSpec, NodeAnalysis, OutputKind } from '@/api/types';
@@ -35,6 +36,25 @@ export function isClassicalSpec(spec: LayerSpec | undefined): boolean {
 export function isBoosting(type: string | null | undefined): boolean {
   return Boolean(type?.startsWith('HistGradientBoosting'));
 }
+
+/** Ensembles of classical models (VotingClassifier, StackingRegressor, …). */
+export const ENSEMBLE_TYPES = [
+  'VotingClassifier',
+  'VotingRegressor',
+  'StackingClassifier',
+  'StackingRegressor',
+];
+
+export function isEnsemble(type: string | null | undefined): boolean {
+  return ENSEMBLE_TYPES.includes(type ?? '');
+}
+
+/** What a connection of `kind` carries, in words: "data", "a kernel", "a model". */
+const KIND_WORDS: Record<OutputKind, string> = {
+  tensor: 'data',
+  kernel: 'a kernel',
+  estimator: 'a model',
+};
 
 /** Handle id of a slot: only bricks with several slots name their handles. */
 export function slotHandle(slots: InputSlot[], slot: InputSlot): string | undefined {
@@ -76,14 +96,22 @@ export function connectionProblem(
   const kind = outputKind(source);
   const slot = slotFor(slots, kind, slots.length > 1 ? targetHandle : null);
   if (!slot) {
-    return kind === 'kernel'
-      ? `${target.label} cannot take a kernel.`
+    if (kind === 'estimator') {
+      // A classical model ends the network, unless an ensemble combines it.
+      return `Nothing can follow ${source.label} except an ensemble (voting or stacking).`;
+    }
+    if (kind === 'kernel') {
+      return `${target.label} cannot take a kernel.`;
+    }
+    return slots.every((s) => s.kind === 'estimator')
+      ? `${target.label} only takes classical models: connect the Input to the models.`
       : `${target.label} only takes kernels.`;
   }
   if (slot.kind !== kind) {
-    return kind === 'kernel'
-      ? `The ${slot.label.toLowerCase()} input of ${target.label} takes data, not a kernel.`
-      : `The ${slot.label.toLowerCase()} input of ${target.label} only takes a kernel.`;
+    const input = `The ${slot.label.toLowerCase()} input of ${target.label}`;
+    return slot.kind === 'tensor'
+      ? `${input} takes data, not ${KIND_WORDS[kind]}.`
+      : `${input} only takes ${KIND_WORDS[slot.kind]}.`;
   }
   return null;
 }
@@ -96,6 +124,11 @@ export function edgesInSlot(
   kindOf: (id: string) => OutputKind
 ): Edge[] {
   return edges.filter((edge) => edge.target === target && kindOf(edge.source) === slot.kind);
+}
+
+/** Whether a connection from `spec` carries a classical model (into an ensemble). */
+export function isEstimatorSpec(spec: LayerSpec | undefined): boolean {
+  return outputKind(spec) === 'estimator';
 }
 
 /** Whether the analysis says the node puts out a kernel (or its spec does, before it). */

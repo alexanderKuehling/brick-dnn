@@ -370,7 +370,12 @@ def _classical_snippet(plan: dict[str, Any], preprocessing: dict[str, Any], path
         rows,
     ]
     target = preprocessing.get("target") or "target"
-    if class_names(plan, preprocessing) is not None:
+    if classical.get("voting") == "hard":  # predicts classes, but no probabilities
+        lines += [
+            'names = dict(zip(model.classes_, bundle["class_names"]))',
+            "print([names[label] for label in model.predict(rows)])",
+        ]
+    elif class_names(plan, preprocessing) is not None:
         lines += [
             "probabilities = model.predict_proba(rows)  # one column per bundle['class_names']",
             'print([bundle["class_names"][i] for i in probabilities.argmax(axis=1)])',

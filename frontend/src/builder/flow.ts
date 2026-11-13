@@ -24,6 +24,20 @@ const KERNEL_MARKER = {
   color: 'var(--mantine-color-pink-5)',
 } as const;
 
+/** The arrow of connections that carry a classical model into an ensemble. */
+const ESTIMATOR_MARKER = {
+  type: MarkerType.ArrowClosed,
+  width: 18,
+  height: 18,
+  color: 'var(--mantine-color-grape-6)',
+} as const;
+
+/** How connections that carry something else than data look: class and arrow. */
+const EDGE_LOOKS = {
+  kernel: { className: classes.kernelEdge, markerEnd: KERNEL_MARKER },
+  estimator: { className: classes.estimatorEdge, markerEnd: ESTIMATOR_MARKER },
+} as const;
+
 export function makeEdge(source: string, target: string): Edge {
   return { id: edgeId(source, target), source, target, ...EDGE_DEFAULTS };
 }
@@ -35,8 +49,9 @@ export function withEdgeStyle(edges: Edge[]): Edge[] {
 /**
  * Edges as the canvas draws them: a connection into a brick with several inputs (a Gaussian
  * process: features and kernel) ends at the handle of the input that takes what its source
- * puts out, and kernel connections are dashed. The graph document has no handles; they
- * follow from the bricks (see kinds.ts). Unchanged edges keep their identity.
+ * puts out; kernel connections are dashed, connections that carry a classical model into an
+ * ensemble dotted. The graph document has no handles; they follow from the bricks (see
+ * kinds.ts). Unchanged edges keep their identity.
  */
 export function decorateEdges(
   edges: Edge[],
@@ -47,18 +62,18 @@ export function decorateEdges(
     const kind = outputKind(specs[typeOf(edge.source) ?? '']);
     const slots = inputSlots(specs[typeOf(edge.target) ?? '']);
     const handle = slots.length > 1 ? (slotFor(slots, kind) ?? slots[0]).name : undefined;
-    const kernel = kind === 'kernel';
+    const look = kind === 'tensor' ? null : EDGE_LOOKS[kind];
     if (
       (edge.targetHandle ?? undefined) === handle &&
-      (edge.className === classes.kernelEdge) === kernel
+      (edge.className ?? undefined) === look?.className
     ) {
       return edge;
     }
     return {
       ...edge,
       targetHandle: handle,
-      className: kernel ? classes.kernelEdge : undefined,
-      markerEnd: kernel ? KERNEL_MARKER : EDGE_DEFAULTS.markerEnd,
+      className: look?.className,
+      markerEnd: look?.markerEnd ?? EDGE_DEFAULTS.markerEnd,
     };
   });
 }

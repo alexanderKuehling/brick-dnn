@@ -16,6 +16,11 @@ features are standardised by the pipeline with the statistics of the training ro
 training sets than the row limit of the model (see :func:`.config.classical_max_rows`) are
 subsampled like with ``max_samples``.
 
+An ensemble (voting or stacking) is fitted like a single model: the pipeline's last step is
+the scikit-learn ensemble with its models. The run also measures each model on its own
+(``classical.members`` of the state). Hard voting predicts no probabilities: the share of
+the (weighted) votes stands in for them (:func:`class_probabilities`).
+
 scikit-learn cannot be interrupted while it fits. The fit runs in a thread and the stop
 request is checked meanwhile: the runner (``hard_stop``) then ends its process at once,
 other callers wait for the fit and discard it.
@@ -41,7 +46,7 @@ import numpy as np
 from ..classical import MODEL_FORMAT
 from ..codegen import generate_code
 from ..graph import analyze
-from ..layers import ClassicalModel
+from ..layers import ClassicalModel, Ensemble
 from .compat import TrainingPlan, check_compatibility
 from .config import TrainingConfig
 from .datasets import DatasetInfo
@@ -80,6 +85,10 @@ WHAT = {
     "svm": "support vector machine",
     "gradient_boosting": "gradient boosting model",
 }
+STACKING_FOLDS = (
+    "Stacking splits the training rows into {cv} folds with every class in proportion, but "
+    "no class has {cv} training rows. Lower Cross-validation folds, or use more rows."
+)
 
 
 def _seconds(seconds: float) -> str:
@@ -96,6 +105,31 @@ def build_pipeline(graph: Any) -> Any:
     namespace: dict[str, Any] = {"__name__": "brickdnn_model"}
     exec(compile(code, "<brickdnn model>", "exec"), namespace)
     return namespace["make_model"]()
+
+
+def models_of(layer: ClassicalModel) -> list[ClassicalModel]:
+    """The models that are fitted: the members of an ensemble, or the model itself."""
+    return [m.layer for m in layer.members] if isinstance(layer, Ensemble) else [layer]
+
+
+def demo_rows(layer: ClassicalModel) -> int:
+    """Rows of demo data: as many as the slowest model fits in reasonable time."""
+    return min(DEMO_ROWS[model.scale] for model in models_of(layer))
+
+
+def class_probabilities(model: Any, x: np.ndarray) -> np.ndarray:
+    """``model.predict_proba(x)`` of a fitted pipeline (or of the part after its scaler).
+    Hard voting has no probabilities: the share of the (weighted) votes of its models for
+    each class instead, whose largest one is the class it predicts."""
+    voting = model[-1] if hasattr(model, "steps") else model
+    if getattr(voting, "voting", None) != "hard":
+        return model.predict_proba(x)
+    votes = np.asarray(model.transform(x), dtype=np.int64)  # (rows, models): class indices
+    weights = np.ones(votes.shape[1]) if voting.weights is None else np.asarray(voting.weights)
+    shares = np.zeros((len(votes), len(voting.classes_)))
+    for column, weight in zip(votes.T, weights, strict=True):
+        shares[np.arange(len(votes)), column] += weight
+    return shares / weights.sum()
 
 
 def final_estimator(pipeline: Any) -> Any:
@@ -188,7 +222,10 @@ class _ClassicalRun:
             )
         text = f"Fitting failed: {short_error(exc)}"
         layer = getattr(self, "layer", None)
-        if isinstance(exc, np.linalg.LinAlgError) and layer and layer.scale == "gaussian_process":
+        gaussian = layer is not None and any(
+            model.scale == "gaussian_process" for model in models_of(layer)
+        )
+        if isinstance(exc, np.linalg.LinAlgError) and gaussian:
             text += " Try a larger alpha, or add a WhiteKernel to the kernel."
         return text
 
@@ -217,6 +254,7 @@ class _ClassicalRun:
         model = analysis.model
         assert model is not None and isinstance(model.layer, ClassicalModel)
         self.layer: ClassicalModel = model.layer
+        self.models = models_of(self.layer)
         self.classification = self.layer.task == "classification"
         self.num_classes = self.plan.num_classes or 0
 
@@ -250,6 +288,20 @@ class _ClassicalRun:
             "max_iterations": None,
             "train": None,
         }
+        if isinstance(self.layer, Ensemble):
+            # The models of the ensemble; after the fit also their own metrics.
+            self.details["ensemble"] = self.layer.combines
+            self.details["members"] = [
+                {
+                    "node": m.node,
+                    "name": m.name,
+                    "type": m.layer.type,
+                    "estimator": m.layer.estimator,
+                    "label": m.layer.label,
+                    "metrics": None,
+                }
+                for m in self.layer.members
+            ]
         reporter.setup(
             {
                 "device": "cpu",
@@ -269,7 +321,7 @@ class _ClassicalRun:
         )
         self._check_stop()
 
-        what = WHAT[self.layer.scale]
+        what = self._what()
         reporter.status("running", f"Fitting the {what} on {len(data.train):,} rows …")
         started = time.perf_counter()
         self._fit(data.x[data.train], data.y[data.train])
@@ -303,6 +355,8 @@ class _ClassicalRun:
             else None
         )
         self.details.update(fit_seconds=round(fit_seconds, 3), train=trained, **self._learned())
+        if isinstance(self.layer, Ensemble):
+            self._measure_members(data.val if len(data.val) else data.train)
         if self.layer.scale == "gaussian_process":
             self.details["at_bounds"] = self._at_bounds(analysis)
         iterations, most = self.details["iterations"], self.details["max_iterations"]
@@ -377,6 +431,35 @@ class _ClassicalRun:
         except Exception as exc:
             traceback.print_exc()
             self.reporter.log(f"The final evaluation failed: {short_error(exc)}")
+
+    def _what(self) -> str:
+        if isinstance(self.layer, Ensemble):
+            return f"{self.layer.combines} ensemble of {len(self.models)} models"
+        return WHAT[self.layer.scale]
+
+    def _measure_members(self, rows: np.ndarray) -> None:
+        """The metrics of every model of the ensemble on its own (validation rows, or the
+        training rows without them), to compare them with the ensemble. Never fails the
+        run."""
+        try:
+            ensemble = self.pipeline.named_steps["model"]
+            x = self.pipeline.named_steps["scale"].transform(self.data.x[rows])
+            # The models learned the classes as indices into the ensemble's classes.
+            classes = np.asarray(getattr(ensemble, "classes_", []), dtype=np.int64)
+            for entry, fitted in zip(
+                self.details["members"], ensemble.named_estimators_.values(), strict=True
+            ):
+                with self._threads():
+                    if self.classification:
+                        proba = fitted.predict_proba(x)
+                        predictions = np.zeros((len(x), self.num_classes))
+                        predictions[:, classes[np.asarray(fitted.classes_, dtype=np.int64)]] = proba
+                    else:
+                        predictions = np.asarray(fitted.predict(x), dtype=np.float64)
+                entry["metrics"] = self._metrics(rows, predictions)
+        except Exception as exc:
+            traceback.print_exc()
+            self.reporter.log(f"Measuring the models of the ensemble failed: {short_error(exc)}")
 
     def _summary(self) -> str:
         parts = []
@@ -533,7 +616,7 @@ class _ClassicalRun:
     def _demo(self, n_features: int) -> tuple[np.ndarray, np.ndarray]:
         """Random features and a hidden smooth rule (regression) or class boundaries."""
         rng = self._rng(0)
-        rows = DEMO_ROWS[self.layer.scale]
+        rows = demo_rows(self.layer)
         x = rng.normal(size=(rows, n_features))
         direction = rng.normal(size=n_features) / math.sqrt(n_features)
         z = x @ direction
@@ -556,11 +639,18 @@ class _ClassicalRun:
                 f"The training rows only hold one class ('{only}'). Classification needs at "
                 "least two."
             )
-        if self.layer.type == "SVC" and (present < CALIBRATION_FOLDS).all():
+        if (
+            any(model.type == "SVC" for model in self.models)
+            and (present < CALIBRATION_FOLDS).all()
+        ):
             raise TrainingError(
                 f"SVC needs at least {CALIBRATION_FOLDS} training rows of some class to turn "
                 f"its scores into probabilities ({CALIBRATION_FOLDS}-fold cross-validation)."
             )
+        if isinstance(self.layer, Ensemble) and self.layer.combines == "stacking":
+            folds = int(self.layer.p["cv"])
+            if (present < folds).all():
+                raise TrainingError(STACKING_FOLDS.format(cv=folds))
         if self._early_stopping(len(y)):
             # The held-out rows are stratified: every class needs a row on both sides.
             rare = [names[i] if i < len(names) else str(i) for i in np.flatnonzero(counts == 1)]
@@ -577,11 +667,15 @@ class _ClassicalRun:
                 )
 
     def _early_stopping(self, rows: int) -> bool:
-        """Whether gradient boosting holds out rows for its early stopping."""
-        if self.layer.scale != "gradient_boosting":
-            return False
-        setting = self.layer.p["early_stopping"]
-        return setting == "on" or (setting == "auto" and rows > AUTO_EARLY_STOPPING_ROWS)
+        """Whether gradient boosting (a model of an ensemble, too) holds out rows for its
+        early stopping."""
+        for model in self.models:
+            if model.scale != "gradient_boosting":
+                continue
+            setting = model.p["early_stopping"]
+            if setting == "on" or (setting == "auto" and rows > AUTO_EARLY_STOPPING_ROWS):
+                return True
+        return False
 
     # -- fitting ------------------------------------------------------------- #
 
@@ -620,7 +714,10 @@ class _ClassicalRun:
 
     def _learned(self) -> dict[str, Any]:
         """What the fit found: the kernel of a Gaussian process, the support vectors of an
-        SVM, the boosting iterations of gradient boosting (early stopping may end sooner)."""
+        SVM, the boosting iterations of gradient boosting (early stopping may end sooner).
+        Nothing for an ensemble (its models are measured by :meth:`_measure_members`)."""
+        if isinstance(self.layer, Ensemble):
+            return {}
         model = final_estimator(self.pipeline)
         if self.layer.scale == "gradient_boosting":
             return {"iterations": int(model.n_iter_), "max_iterations": int(model.max_iter)}
@@ -657,25 +754,30 @@ class _ClassicalRun:
     # -- measuring ----------------------------------------------------------- #
 
     def _threads(self) -> contextlib.AbstractContextManager[Any]:
-        """One OpenMP thread for gradient boosting on small data (SINGLE_THREAD_CELLS), in
-        the calling thread; otherwise no limit."""
+        """One OpenMP thread for gradient boosting (also in an ensemble) on small data
+        (SINGLE_THREAD_CELLS), in the calling thread; otherwise no limit."""
         data = self.data
-        if self.layer.scale != "gradient_boosting" or len(data.train) * data.x.shape[1] >= (
-            SINGLE_THREAD_CELLS
-        ):
+        boosting = any(model.scale == "gradient_boosting" for model in self.models)
+        if not boosting or len(data.train) * data.x.shape[1] >= SINGLE_THREAD_CELLS:
             return contextlib.nullcontext()
         from threadpoolctl import threadpool_limits
 
         return threadpool_limits(limits=1, user_api="openmp")
 
     def _chunks(self, x: np.ndarray, method: str) -> np.ndarray:
-        call = getattr(self.pipeline, method)
+        if method == "predict_proba":
+
+            def call(rows: np.ndarray) -> np.ndarray:
+                return class_probabilities(self.pipeline, rows)
+        else:
+            call = getattr(self.pipeline, method)
         with self._threads():
             parts = [call(x[i : i + PREDICT_CHUNK]) for i in range(0, len(x), PREDICT_CHUNK)]
         return np.concatenate(parts) if parts else np.empty(0)
 
     def probabilities(self, x: np.ndarray) -> np.ndarray:
-        """One column per class of the plan (classes missing from the training rows: 0)."""
+        """One column per class of the plan (classes missing from the training rows: 0).
+        Hard voting: the share of the votes (see :func:`class_probabilities`)."""
         proba = self._chunks(x, "predict_proba")
         full = np.zeros((len(x), self.num_classes))
         full[:, np.asarray(self.pipeline.classes_, dtype=np.int64)] = proba

@@ -16,14 +16,16 @@ import sys
 from pathlib import Path
 
 from . import EXAMPLES, GeneratorOptions, GraphValidationError, analyze, generate_code, get_example
-from .layers import REGISTRY, fmt_shape
+from .layers import REGISTRY, Ensemble, fmt_shape
 
 
 def _output(info) -> str:
-    if info.shape is not None:
-        return fmt_shape(info.shape)
     if info.output_kind == "kernel" and info.resolved:
         return "kernel"
+    if info.output_kind == "estimator" and info.outputs and info.resolved:
+        return "estimator"  # a model of an ensemble
+    if info.shape is not None:
+        return fmt_shape(info.shape)
     if info.resolved:  # a classifier: one class per sample
         return "class"
     return "?"
@@ -47,6 +49,13 @@ def _print_analysis(graph: dict) -> int:
         return 1
     if result.family == "classical":
         total = result.total_params
+        layer = result.model.layer if result.model else None
+        if isinstance(layer, Ensemble):
+            print(
+                f"OK - a {layer.combines} ensemble of {len(layer.members)} classical models "
+                "(scikit-learn)"
+            )
+            return 0
         if total is not None:
             fitted = f"{total:,} kernel hyperparameters"
         elif result.model and getattr(result.model.layer, "scale", None) == "gradient_boosting":

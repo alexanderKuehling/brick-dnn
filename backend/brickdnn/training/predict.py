@@ -283,7 +283,9 @@ def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
     try:
         with _thread_limit():
             if bundle.get("task") == "classification":
-                proba = model.predict_proba(x)
+                from .classical_engine import class_probabilities  # hard voting: vote shares
+
+                proba = class_probabilities(model, x)
                 indices = bundle.get("class_indices") or list(range(proba.shape[1]))
                 full = np.zeros((len(x), int(bundle.get("num_classes") or proba.shape[1])))
                 full[:, indices] = proba

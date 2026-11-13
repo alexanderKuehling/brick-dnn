@@ -8,3 +8,15 @@
     stroke-width: 1.5;
   }
 }
+
+/* A connection that carries a classical model into an ensemble: dotted, in the model colour. */
+.estimatorEdge {
+  --xy-edge-stroke: var(--mantine-color-grape-6);
+  --xy-edge-stroke-selected: var(--mantine-color-grape-8);
+
+  :global(.react-flow__edge-path) {
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    stroke-width: 2.5;
+  }
+}

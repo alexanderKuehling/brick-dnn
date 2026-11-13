@@ -35,6 +35,7 @@ import { notifications } from '@mantine/notifications';
 import {
   api,
   type ClassicalMetrics,
+  type ClassicalRunState,
   type GraphDocument,
   type HistoryEntry,
   type RunDetail,
@@ -849,10 +850,76 @@ function RunProgress({
 
 /** What the server says about a run by default while it waits. */
 /**
+ * The models of an ensemble, each measured on its own (on the validation rows, or the
+ * training rows without them), to compare them with the ensemble.
+ */
+function EnsembleMembers({
+  members,
+  classification,
+  validation,
+}: {
+  members: NonNullable<ClassicalRunState['members']>;
+  classification: boolean;
+  validation: boolean;
+}) {
+  return (
+    <Stack gap={4}>
+      <Table fz="sm" aria-label="Models of the ensemble" style={{ whiteSpace: 'nowrap' }}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Model</Table.Th>
+            {classification ? (
+              <>
+                <Table.Th>Accuracy</Table.Th>
+                <Table.Th>Loss</Table.Th>
+              </>
+            ) : (
+              <>
+                <Table.Th>RMSE</Table.Th>
+                <Table.Th>R²</Table.Th>
+              </>
+            )}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {members.map((member) => (
+            <Table.Tr key={member.node}>
+              <Table.Td>
+                <Text span size="sm" ff="monospace">
+                  {member.name}
+                </Text>
+                <Text span size="xs" c="dimmed">
+                  {' '}
+                  · {member.label}
+                </Text>
+              </Table.Td>
+              {classification ? (
+                <>
+                  <Table.Td>{formatPercent(member.metrics?.accuracy)}</Table.Td>
+                  <Table.Td>{formatMetric(member.metrics?.loss)}</Table.Td>
+                </>
+              ) : (
+                <>
+                  <Table.Td>{formatMetric(member.metrics?.rmse)}</Table.Td>
+                  <Table.Td>{formatR2(member.metrics?.r2)}</Table.Td>
+                </>
+              )}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Text size="xs" c="dimmed" mt={-6}>
+        Each model of the ensemble on its own, on the {validation ? 'validation' : 'training'} rows.
+      </Text>
+    </Stack>
+  );
+}
+
+/**
  * The results of a classical model, fitted once: how long the fit took and on how many
  * rows, what it found (the kernel and log marginal likelihood of a Gaussian process, the
- * support vectors of an SVM, the boosting iterations of gradient boosting) and its scores on
- * the training, validation and test rows.
+ * support vectors of an SVM, the boosting iterations of gradient boosting, the models of an
+ * ensemble) and its scores on the training, validation and test rows.
  */
 function ClassicalResults({
   run,
@@ -924,6 +991,7 @@ function ClassicalResults({
   const boosting = Boolean(fit && (fit.iterations != null || isBoosting(fit.estimator)));
   const iterations = fit?.iterations ?? null;
   const maxIterations = fit?.max_iterations ?? null;
+  const members = fit?.members?.length ? fit.members : null;
 
   return (
     <Stack gap="sm">
@@ -940,7 +1008,13 @@ function ClassicalResults({
                 : undefined
           }
         />
-        {gaussianProcess ? (
+        {members ? (
+          <Tile
+            label="Ensemble"
+            value={`${members.length} models`}
+            hint={fit?.ensemble === 'stacking' ? 'stacking' : 'voting'}
+          />
+        ) : gaussianProcess ? (
           <Tile
             label="Log marginal likelihood"
             value={formatMetric(fit?.log_marginal_likelihood)}
@@ -1026,6 +1100,14 @@ function ClassicalResults({
             : 'RMSE in the units of the target; R² = 1 is a perfect fit, 0 is no better than the mean.'}
           {test ? ' The test rows were measured once, after the fit.' : ''}
         </Text>
+      )}
+
+      {members && members.some((member) => member.metrics) && (
+        <EnsembleMembers
+          members={members}
+          classification={classification}
+          validation={state?.val_size !== 0}
+        />
       )}
 
       {!active && (

@@ -1,0 +1,160 @@
+{
+  "id": "stacking_ensemble_regression",
+  "name": "Stacking ensemble regression",
+  "description": "An ensemble of classical models (scikit-learn) that predicts a number from 8 numeric features (e.g. house prices): gradient boosting, a support vector machine and a Gaussian process with an RBF + noise kernel, combined by stacking. A ridge regression learns from their predictions for rows they were not fitted on (5-fold cross-validation) how to weigh them. The dotted connections into the stacking brick carry the models themselves.",
+  "order": 14,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            8
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 190
+        }
+      },
+      {
+        "id": "boosting",
+        "type": "HistGradientBoostingRegressor",
+        "params": {
+          "learning_rate": 0.1,
+          "max_iter": 200,
+          "max_leaf_nodes": 31,
+          "min_samples_leaf": 20,
+          "l2_regularization": 0.0,
+          "early_stopping": "auto",
+          "random_state": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 0
+        }
+      },
+      {
+        "id": "svr",
+        "type": "SVR",
+        "params": {
+          "kernel": "rbf",
+          "C": 1.0,
+          "gamma": "scale",
+          "epsilon": 0.1
+        },
+        "position": {
+          "x": 300,
+          "y": 190
+        }
+      },
+      {
+        "id": "rbf",
+        "type": "RBF",
+        "params": {
+          "length_scale": 1.0,
+          "hyperparameters": "optimize"
+        },
+        "position": {
+          "x": 0,
+          "y": 420
+        }
+      },
+      {
+        "id": "noise",
+        "type": "WhiteKernel",
+        "params": {
+          "noise_level": 0.1,
+          "hyperparameters": "optimize"
+        },
+        "position": {
+          "x": 0,
+          "y": 560
+        }
+      },
+      {
+        "id": "kernel",
+        "type": "KernelSum",
+        "params": {},
+        "position": {
+          "x": 300,
+          "y": 500
+        }
+      },
+      {
+        "id": "gp",
+        "type": "GaussianProcessRegressor",
+        "params": {
+          "alpha": 1e-10,
+          "normalize_y": true,
+          "n_restarts_optimizer": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 340
+        }
+      },
+      {
+        "id": "stack",
+        "type": "StackingRegressor",
+        "params": {
+          "cv": 5,
+          "passthrough": false
+        },
+        "position": {
+          "x": 600,
+          "y": 190
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-boosting",
+        "source": "features",
+        "target": "boosting"
+      },
+      {
+        "id": "e-features-svr",
+        "source": "features",
+        "target": "svr"
+      },
+      {
+        "id": "e-features-gp",
+        "source": "features",
+        "target": "gp"
+      },
+      {
+        "id": "e-rbf-kernel",
+        "source": "rbf",
+        "target": "kernel"
+      },
+      {
+        "id": "e-noise-kernel",
+        "source": "noise",
+        "target": "kernel"
+      },
+      {
+        "id": "e-kernel-gp",
+        "source": "kernel",
+        "target": "gp"
+      },
+      {
+        "id": "e-boosting-stack",
+        "source": "boosting",
+        "target": "stack"
+      },
+      {
+        "id": "e-svr-stack",
+        "source": "svr",
+        "target": "stack"
+      },
+      {
+        "id": "e-gp-stack",
+        "source": "gp",
+        "target": "stack"
+      }
+    ]
+  }
+}

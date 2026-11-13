@@ -199,6 +199,22 @@ apply, no `tuning`; without validation rows the fit is measured on the test rows
 training rows); `get_training_run` shows the fitted kernel, the support vectors or the
 boosting iterations in
 `state.classical` (see [training.md](training.md#classical-models)).
+
+**Ensembles of classical models.** `VotingClassifier`, `VotingRegressor`,
+`StackingClassifier` and `StackingRegressor` combine two or more classical models of the
+same task: connect the Input to every model and every model to the ensemble (those edges
+carry an `estimator`, see [graph-format.md](graph-format.md#ensembles)). `list_layer_types`
+describes them (`output_kind` `estimator`), `list_examples` has `voting_ensemble_classifier`
+(gradient boosting, SVC and a Gaussian process with soft voting) and
+`stacking_ensemble_regression`, `analyze_network` lists the models in `classical.members`
+(in the order of the edges, which is that of `weights`) and explains what is wrong, e.g.
+*"Voting classifier combines classifiers, but Support vector regression is a regression
+model."* `get_training_run` shows every model's own metrics in `state.classical.members`.
+
+```text
+list_examples {id: "voting_ensemble_classifier"} → graph · analyze_network {graph} → valid, classical.members
+start_training {graph, dataset, config: {test_split: 0.2}} · get_training_run {id} → val_accuracy, members with their own accuracy
+```
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and
 validation as the web app (see "Sharing" in [api.md](api.md#saved-networks-login-required)).
