@@ -1,7 +1,7 @@
 """The public code generation endpoints as plain functions: JSON-like data in and out.
 
-The Django API (``brick_dnn_core.views``) and the online demo, which runs this package in
-the browser with Pyodide, both use these functions, so they always answer the same way.
+The Django API (``brick_dnn_core.views``) uses these functions; they need no Django and no
+database.
 """
 
 from __future__ import annotations

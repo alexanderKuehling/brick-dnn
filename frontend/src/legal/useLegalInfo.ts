@@ -1,17 +1,16 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, type Api, type LegalInfo, type LegalPageName } from '@/api';
-import { DEMO } from '@/demo';
 
-/** undefined while loading; null if there is nothing to show (the demo, or no answer). */
+/** undefined while loading; null if there is nothing to show (no answer). */
 type State = LegalInfo | null | undefined;
 
 let state: State;
 let loading = false;
 const listeners = new Set<() => void>();
 
-/** The API, unless this build or test has none: the demo has no server. */
+/** The API, unless this test has none. */
 function legalApi(): Api['legal'] | undefined {
-  const legal = DEMO ? undefined : (api as { legal?: Api['legal'] }).legal;
+  const legal = (api as { legal?: Api['legal'] }).legal;
   return typeof legal?.info === 'function' ? legal : undefined;
 }
 

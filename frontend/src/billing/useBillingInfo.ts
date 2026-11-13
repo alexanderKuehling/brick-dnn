@@ -1,6 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, type Api, type BillingEnabled, type BillingInfo } from '@/api';
-import { DEMO } from '@/demo';
 
 /** undefined while loading; null if the server sells no plans (or did not answer). */
 type State = BillingEnabled | null | undefined;
@@ -9,9 +8,9 @@ let state: State;
 let loading = false;
 const listeners = new Set<() => void>();
 
-/** The API, unless this build or test has none: the demo has no server. */
+/** The API, unless this test has none. */
 function billingApi(): Api['billing'] | undefined {
-  const billing = DEMO ? undefined : (api as { billing?: Api['billing'] }).billing;
+  const billing = (api as { billing?: Api['billing'] }).billing;
   return typeof billing?.info === 'function' ? billing : undefined;
 }
 

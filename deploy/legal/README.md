@@ -158,6 +158,3 @@ er beschreibt, was die Software tut:
   können Nutzer selbst auslösen.
 - Entscheiden, ob und nach wie vielen Tagen ungenutzte Uploads und inaktive Konten gelöscht
   werden, und die Zeiträume in Datenschutzerklärung und Nutzungsbedingungen nennen.
-- Die Online-Demo (Hugging Face) läuft ohne Konto im Browser und lädt Pyodide von
-  cdn.jsdelivr.net; für sie gelten die Bedingungen von Hugging Face. Bei Bedarf dort ein
-  Impressum ergänzen (README des Space).

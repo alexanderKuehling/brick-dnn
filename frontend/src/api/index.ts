@@ -1,6 +1,4 @@
-import { DEMO } from '@/demo';
 import { request, requestFile, type UploadOptions } from './client';
-import { createDemoApi } from './demoApi';
 import type {
   Account,
   AgentActivityPage,
@@ -712,5 +710,4 @@ const serverApi = {
 
 export type Api = typeof serverApi;
 
-/** In the online demo, the code generator runs in the browser instead of on a server. */
-export const api: Api = DEMO ? createDemoApi(serverApi) : serverApi;
+export const api: Api = serverApi;

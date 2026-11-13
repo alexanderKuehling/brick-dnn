@@ -6,7 +6,7 @@ browser app, each with the request, release and code line that caused it, plus a
 traces (how long page loads and API requests took) and the server's log messages.
 
 **It is off unless a DSN is set.** Without one nothing is loaded in the browser and nothing is
-sent; the online demo and local builds never send anything.
+sent; local builds never send anything.
 
 ## What is sent, and what is not
 
