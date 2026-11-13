@@ -1,9 +1,12 @@
-import { IconTrash } from '@tabler/icons-react';
+import { useState } from 'react';
+import { IconStack2, IconTrash } from '@tabler/icons-react';
 import {
   ActionIcon,
   Alert,
+  Badge,
   Button,
   Center,
+  Checkbox,
   Group,
   Loader,
   SegmentedControl,
@@ -12,7 +15,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import type { RunSummary } from '@/api';
+import type { RunDetail, RunSummary } from '@/api';
 import {
   canDeleteRun,
   canTrain,
@@ -21,6 +24,8 @@ import {
   type RunFilter,
   type TrainingScope,
 } from './access';
+import { CombineDialog } from './CombineDialog';
+import { canBeMember, combineProblem, isEnsemble } from './ensemble';
 import {
   formatDate,
   formatDuration,
@@ -45,6 +50,10 @@ interface HistoryViewProps {
   /** With an open network: its runs (from everyone) or all of the user's own. */
   filter: RunFilter;
   onFilterChange: (filter: RunFilter) => void;
+  /** Finished runs can be combined into an ensemble (missing: not offered). */
+  onCombined?: (run: RunDetail) => void;
+  /** The network a new ensemble belongs to (one the user owns or edits). */
+  combineProject?: number | null;
 }
 
 const FILTERS: { value: RunFilter; label: string }[] = [
@@ -77,7 +86,13 @@ export function HistoryView({
   scope,
   filter,
   onFilterChange,
+  onCombined,
+  combineProject = null,
 }: HistoryViewProps) {
+  // Selecting runs to combine: their ids, in the order they were picked.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [combining, setCombining] = useState(false);
   if (error && !runs) {
     return (
       <Alert color="red">
@@ -131,17 +146,76 @@ export function HistoryView({
     );
   }
 
+  const members = shown.filter(canBeMember);
+  const picked = selected
+    .map((id) => members.find((run) => run.id === id))
+    .filter((run): run is RunSummary => run !== undefined);
+  const problem = combineProblem(picked);
+  const offerCombine = onCombined !== undefined && members.length >= 2;
+  const toggleRun = (id: string) =>
+    setSelected((current) =>
+      current.includes(id) ? current.filter((other) => other !== id) : [...current, id]
+    );
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected([]);
+  };
+
   return (
     <Stack gap={4}>
       {toggle}
+      {offerCombine && (
+        <Group justify="space-between" gap="xs" mb={4} wrap="nowrap">
+          <Text size="xs" c="dimmed">
+            {selecting
+              ? (problem ?? `${picked.length} runs selected.`)
+              : 'Finished runs of one dataset can be combined into an ensemble.'}
+          </Text>
+          {selecting ? (
+            <Group gap={4} wrap="nowrap">
+              <Button size="compact-xs" variant="subtle" color="gray" onClick={stopSelecting}>
+                Cancel
+              </Button>
+              <Button
+                size="compact-xs"
+                leftSection={<IconStack2 size={14} />}
+                disabled={problem !== null}
+                onClick={() => setCombining(true)}
+              >
+                Combine into an ensemble
+              </Button>
+            </Group>
+          ) : (
+            <Button
+              size="compact-xs"
+              variant="light"
+              leftSection={<IconStack2 size={14} />}
+              onClick={() => setSelecting(true)}
+            >
+              Combine runs
+            </Button>
+          )}
+        </Group>
+      )}
       {shown.map((run) => {
         const by = otherStarter(run, scope);
         const result = headline(run);
         const duration = run.finished_at
           ? formatDuration((Date.parse(run.finished_at) - Date.parse(run.created_at)) / 1000)
           : null;
+        const selectable = selecting && canBeMember(run);
         return (
           <Group key={run.id} wrap="nowrap" gap={4}>
+            {selecting &&
+              (selectable ? (
+                <Checkbox
+                  aria-label={`Select ${run.name}`}
+                  checked={selected.includes(run.id)}
+                  onChange={() => toggleRun(run.id)}
+                />
+              ) : (
+                <span style={{ width: 20, flexShrink: 0 }} aria-hidden />
+              ))}
             <UnstyledButton
               className={classes.row}
               onClick={() => onOpen(run.id)}
@@ -153,6 +227,11 @@ export function HistoryView({
                     <Text size="sm" fw={600} truncate>
                       {run.name}
                     </Text>
+                    {isEnsemble(run) && (
+                      <Badge variant="outline" color="grape" tt="none" style={{ flexShrink: 0 }}>
+                        Ensemble
+                      </Badge>
+                    )}
                     <StatusBadge status={run.status} />
                   </Group>
                   <Text size="xs" c="dimmed" truncate>
@@ -197,6 +276,18 @@ export function HistoryView({
           </Group>
         );
       })}
+      {onCombined && (
+        <CombineDialog
+          opened={combining}
+          runs={picked}
+          project={combineProject}
+          onClose={() => setCombining(false)}
+          onCreated={(run) => {
+            stopSelecting();
+            onCombined(run);
+          }}
+        />
+      )}
     </Stack>
   );
 }

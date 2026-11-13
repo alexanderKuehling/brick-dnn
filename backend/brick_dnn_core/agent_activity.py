@@ -338,6 +338,7 @@ PAST_TENSE = {
     "call": "Called",
     "change": "Changed",
     "check": "Checked",
+    "combine": "Combined",
     "comment": "Commented",
     "create": "Created",
     "delete": "Deleted",
@@ -765,6 +766,30 @@ def _set_threshold(user, args, result) -> Described:
     )
 
 
+def _create_ensemble(user, args, result) -> Described:
+    run = result if isinstance(result, Mapping) else {}
+    ref = run_ref(user, run.get("id"), run.get("name")) if run.get("id") else None
+    given = args.get("members") if isinstance(args.get("members"), list) else []
+    members = [ref for ref in (run_ref(user, m) for m in given[:10]) if ref]
+    if ref is None:
+        name = (
+            args.get("name") if isinstance(args.get("name"), str) and args["name"].strip() else None
+        )
+        what = f"ensemble “{clean_text(name, MAX_NAME)}”" if name else "an ensemble"
+    else:
+        what = f"ensemble {_quoted(ref)}" if ref.get("name") else "an ensemble"
+    method = args.get("method") if args.get("method") in ("average", "stacking") else "average"
+    targets = [item for item in (ref, *members) if item]
+    project = project_ref(user, run.get("project", args.get("project_id")))
+    if project:
+        targets.append(project)
+    phrase = f"combine {count(len(given), 'run')} into {what}"
+    done = None
+    if run.get("status") == "queued":
+        done = f"Queued {what} of {count(len(given), 'run')}{_queue_place(run)}"
+    return Described(phrase, result=f" ({method})", targets=targets, done=done)
+
+
 def _delete_run(user, args, result) -> Described:
     data = result if isinstance(result, Mapping) else {}
     ref = run_ref(user, data.get("id", args.get("id")), data.get("name"))
@@ -810,6 +835,7 @@ TOOL_DESCRIPTIONS: dict[str, Callable[[Any, Mapping, Any], Described]] = {
     "get_weights_download": _weights_download,
     "predict": _predict,
     "set_decision_threshold": _set_threshold,
+    "create_ensemble": _create_ensemble,
     "delete_training_run": _delete_run,
     "delete_dataset": _delete_dataset,
     "get_approval": _get_approval,
@@ -871,6 +897,10 @@ REST_AS_TOOL: dict[tuple[str, str], tuple[str, Callable[[Mapping, Mapping], dict
         "delete_dataset",
         lambda kw, body: {"id": kw.get("pk")},
     ),
+    ("training-ensembles", "POST"): (
+        "create_ensemble",
+        lambda kw, body: {**body, "project_id": body.get("project")},
+    ),
 }
 
 # The other routes: (route, method) -> phrase; {object} is the network, run, dataset, data
@@ -887,6 +917,7 @@ REST_PHRASES: dict[tuple[str, str], str] = {
     ("training-dataset-list", "POST"): "upload {object}",
     ("training-dataset-detail", "GET"): "open {object}",
     ("training-run-weights", "GET"): "download the weights of {object}",
+    ("training-run-ensemble", "PATCH"): "change the weights of {object}",
     ("training-run-previews", "GET"): "look at the predicted masks of {object}",
     ("training-run-preview-file", "GET"): "open a predicted mask of {object}",
     ("data-source-list", "GET"): "list the data files",

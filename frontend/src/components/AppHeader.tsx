@@ -36,7 +36,6 @@ import { usePendingApprovals } from '@/approvals/pending';
 import { useAuth } from '@/auth/AuthContext';
 import { useBillingInfo } from '@/billing/useBillingInfo';
 import { relativeTime } from '@/collab/time';
-import { DEMO } from '@/demo';
 import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
@@ -61,7 +60,7 @@ export function AppHeader() {
   const navVariant = (path: string) =>
     pathname === path || pathname.startsWith(`${path}/`) ? 'light' : 'subtle';
   // Requests of agents that wait for the user's approval (a badge on the account menu).
-  const pending = usePendingApprovals(Boolean(user) && !DEMO);
+  const pending = usePendingApprovals(Boolean(user));
   // When an agent last did something: asked for when the account menu opens.
   const [latestActivity, setLatestActivity] = useState<string | null>(null);
   const checkActivity = () => {
@@ -90,13 +89,6 @@ export function AppHeader() {
           >
             Data
           </Button>
-          {DEMO && (
-            <Tooltip label="Runs in your browser. Install Brick DNN locally to train networks.">
-              <Badge variant="light" color="gray">
-                Online demo
-              </Badge>
-            </Tooltip>
-          )}
           {user && (
             <Button
               component={Link}
@@ -182,7 +174,7 @@ export function AppHeader() {
           </Box>
         )}
         <ColorSchemeToggle />
-        {!DEMO && ready && !user && (
+        {ready && !user && (
           <>
             <Button component={Link} to="/login" variant="default">
               Log in
@@ -331,7 +323,6 @@ function PhoneMenu({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          {DEMO && <Menu.Label>Online demo: runs in your browser</Menu.Label>}
           {item('/', 'Builder', <IconTopologyStar3 size={16} />)}
           {item('/data', 'Data', <IconTable size={16} />)}
           {loggedIn && item('/projects', 'My networks', <IconFolder size={16} />)}

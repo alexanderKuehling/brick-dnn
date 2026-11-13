@@ -65,6 +65,7 @@ const TOOL_ICONS: Record<string, Icon> = {
   get_weights_download: IconDownload,
   predict: IconWand,
   set_decision_threshold: IconAdjustmentsHorizontal,
+  create_ensemble: IconStack2,
   delete_training_run: IconTrash,
   delete_dataset: IconTrash,
 };

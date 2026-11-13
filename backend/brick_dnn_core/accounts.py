@@ -194,7 +194,8 @@ approvals.json           what your tokens and apps may do without asking you, an
 data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
-training_runs.json       your trainings: network, settings, status and metrics
+training_runs.json       your trainings: network, settings, status and metrics; ensembles
+                         with the runs they combine
 usage.json               the compute (CPU time) your trainings and predictions used, per
                          month, with the API token or app that caused it, and your limits
 {billing}files.json               the uploaded files: where they are in this ZIP file, or why not
@@ -388,11 +389,26 @@ def _datasets(user) -> list[dict[str, Any]]:
     ]
 
 
+def _ensemble(run: TrainingRun) -> dict[str, Any] | None:
+    """What an ensemble combines: its method and members (ids, names, weights)."""
+    if run.kind != "ensemble":
+        return None
+    return {
+        "method": (run.config or {}).get("method"),
+        "members": [
+            {"id": str(m.run_id) if m.run_id else None, "name": m.name, "weight": m.weight}
+            for m in run.ensemble_members.order_by("position")
+        ],
+    }
+
+
 def _runs(user) -> list[dict[str, Any]]:
     return [
         {
             "id": str(run.pk),
             "name": run.name,
+            "kind": run.kind,
+            "ensemble": _ensemble(run),
             "status": run.status,
             "message": run.message,
             "project": run.project_id,

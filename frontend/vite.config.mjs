@@ -1,6 +1,5 @@
-import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -11,14 +10,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // The online demo (`--mode demo`) uses relative URLs, so it works under any path.
-    base: mode === 'demo' ? './' : '/',
     resolve: {
       tsconfigPaths: true,
-    },
-    // The demo's worker loads Pyodide with a dynamic import, which needs an ES module worker.
-    worker: {
-      format: 'es',
     },
     server: {
       port: 5173,
@@ -31,13 +24,6 @@ export default defineConfig(({ mode }) => {
         // OAuth metadata for MCP clients (docs/mcp.md).
         '/.well-known/oauth-protected-resource': backend,
         '/.well-known/oauth-authorization-server': backend,
-      },
-      fs: {
-        // The demo bundles the Python sources of the code generator from ../backend.
-        allow: [
-          searchForWorkspaceRoot(process.cwd()),
-          fileURLToPath(new URL('../backend/brickdnn', import.meta.url)),
-        ],
       },
     },
     build: {

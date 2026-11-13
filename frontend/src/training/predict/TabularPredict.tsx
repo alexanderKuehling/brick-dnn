@@ -10,13 +10,14 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   Textarea,
   TextInput,
 } from '@mantine/core';
 import type { Prediction, PredictionForm, PredictionResult, PredictionSample } from '@/api';
 import { downloadText } from '@/builder/download';
-import { Messages, ResultCard, ResultsTable } from './PredictionResults';
+import { MemberResults, Messages, ResultCard, ResultsTable } from './PredictionResults';
 import { isProblem, predictAll, type PredictionProblem } from './requests';
 import {
   cellText,
@@ -35,6 +36,8 @@ interface TabularPredictProps {
   form: PredictionForm;
   /** "Sales net" -> "sales-net-predictions.csv" */
   fileBase: string;
+  /** An ensemble: offer what each member predicts. */
+  ensemble?: boolean;
 }
 
 /** The input columns of a mode (raw: the columns of the source the model uses). */
@@ -125,7 +128,7 @@ function Field({
 }
 
 /** The prediction form of a run trained on a table: one row by hand, or many from CSV text. */
-export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
+export function TabularPredict({ runId, form, fileBase, ensemble = false }: TabularPredictProps) {
   const [mode, setMode] = useState<Mode>(form.raw ? 'raw' : 'prepared');
   const columns = useMemo(() => columnsOf(form, mode), [form, mode]);
   const samples = samplesOf(form, mode);
@@ -138,6 +141,7 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
   const [problem, setProblem] = useState<PredictionProblem | null>(null);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState('');
+  const [withMembers, setWithMembers] = useState(ensemble);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [many, setMany] = useState<{
     rows: CsvRows;
@@ -189,6 +193,7 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
       {
         input_format: form.raw ? mode : undefined,
         top_k: form.task === 'classification' ? topK : undefined,
+        ...(ensemble && withMembers ? { members: true } : {}),
       },
       form.max_rows,
       rows.length > 1 ? (done) => setProgress({ done, total: rows.length }) : undefined
@@ -283,6 +288,15 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
           Not needed: {unused.map((c) => c.name).join(', ')} (the preparation drops{' '}
           {unused.length === 1 ? 'it' : 'them'}).
         </Text>
+      )}
+
+      {ensemble && (
+        <Switch
+          size="xs"
+          label="Show what each member predicts"
+          checked={withMembers}
+          onChange={(event) => setWithMembers(event.currentTarget.checked)}
+        />
       )}
 
       <SimpleGrid cols={{ base: 1, xs: 2, sm: 3 }} spacing="xs" verticalSpacing={6}>
@@ -399,12 +413,16 @@ export function TabularPredict({ runId, form, fileBase }: TabularPredictProps) {
           actual={actual}
         />
       )}
+      {single?.result.members && (
+        <MemberResults members={single.result.members} index={0} task={single.result.task} />
+      )}
       {many && (
         <ResultsTable
           predictions={many.result.predictions}
           task={many.result.task}
           actual={many.rows.actual}
           onDownload={download}
+          members={many.result.members}
         />
       )}
       {many && many.rows.ignored.length > 0 && (

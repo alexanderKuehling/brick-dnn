@@ -1413,8 +1413,11 @@ export interface RunSummary {
   project: number | null;
   /** Username of who started it. */
   started_by: string;
-  /** classical: a scikit-learn model, fitted once (epochs 1). Missing on older servers. */
-  family?: 'neural' | 'classical';
+  /**
+   * classical: a scikit-learn model, fitted once (epochs 1); ensemble: finished runs combined.
+   * Missing on older servers.
+   */
+  family?: 'neural' | 'classical' | 'ensemble';
   /** The API token or connected app that started it (null: the web app). */
   started_via?: { source: 'token' | 'app'; name: string | null } | null;
   usage?: RunUsage;
@@ -1425,6 +1428,90 @@ export interface RunSummary {
    * this (default 0.5). Null for other runs; missing on older servers.
    */
   decision_threshold?: number | null;
+  /** "ensemble": finished runs combined into one model (see `ensemble`). */
+  kind?: RunKind;
+  /** An ensemble's method and members; null for other runs. */
+  ensemble?: EnsembleInfo | null;
+}
+
+export type RunKind = 'training' | 'ensemble';
+
+/** average: the weighted average of the members' predictions; stacking: a fitted model. */
+export type EnsembleMethod = 'average' | 'stacking';
+
+/** A run an ensemble combines. */
+export interface EnsembleMember {
+  /** Null once the run was deleted. */
+  id: string | null;
+  name: string;
+  /** Its share of the weighted average (the weights add up to 1); null for stacking. */
+  weight: number | null;
+  family: 'neural' | 'classical' | null;
+  /** "Neural network" or the classical model's name. */
+  model: string | null;
+  status: RunStatus | null;
+  /** The user can open its run. */
+  visible: boolean;
+  deleted: boolean;
+}
+
+export interface EnsembleInfo {
+  method: EnsembleMethod;
+  method_label: string;
+  members: EnsembleMember[];
+  /** Why it cannot predict any more (a member was deleted); null if it can. */
+  broken: string | null;
+}
+
+/** Headline metrics of one split, for the comparison of the members with the ensemble. */
+export interface EnsembleSplitMetrics {
+  size: number;
+  accuracy?: number | null;
+  balanced_accuracy?: number | null;
+  macro_f1?: number | null;
+  log_loss?: number | null;
+  /** Two classes only. */
+  roc_auc?: number | null;
+  pr_auc?: number | null;
+  rmse?: number | null;
+  mae?: number | null;
+  r2?: number | null;
+}
+
+export type EnsembleSplit = 'val' | 'test' | 'training';
+
+/** One row of the comparison: a member (`member`: its index) or the ensemble (null). */
+export interface EnsembleComparisonRow {
+  name: string;
+  member: number | null;
+  val?: EnsembleSplitMetrics | null;
+  test?: EnsembleSplitMetrics | null;
+  training?: EnsembleSplitMetrics | null;
+}
+
+/** What an ensemble's state.json says about the combination. */
+export interface EnsembleState {
+  method: EnsembleMethod;
+  weights: number[] | null;
+  /** Stacking: the fitted model as numbers. */
+  meta: Record<string, unknown> | null;
+  /** Stacking: the split its model was fitted on. */
+  fitted_on: 'val' | null;
+  /** Measured on rows it was fitted on: stacking without test rows, or training rows. */
+  optimistic: boolean;
+  splits: EnsembleSplit[];
+  rows: Partial<Record<EnsembleSplit, number>>;
+  comparison: EnsembleComparisonRow[];
+}
+
+export interface EnsembleInput {
+  members: string[];
+  method?: EnsembleMethod;
+  /** Average only: one weight per member (scaled to add up to 1). */
+  weights?: number[];
+  name?: string;
+  /** A network the user owns or edits: its members see the ensemble. */
+  project?: number | null;
 }
 
 /** Why a stopped run stopped: the user, a used-up budget or the limit per training. */
@@ -1511,7 +1598,9 @@ export interface RunState {
   /** Every started trial, in order. */
   trials?: TrialEntry[];
   best_trial?: number | null;
-  family?: 'neural' | 'classical';
+  family?: 'neural' | 'classical' | 'ensemble';
+  /** An ensemble: its method, weights and the comparison with its members. */
+  ensemble?: EnsembleState | null;
   /** What the fit of a classical model found (null for neural networks). */
   classical?: ClassicalRunState | null;
   /** Segmentation: the results per class and the preview images, once the weights are saved. */
@@ -1888,6 +1977,15 @@ export interface PredictionRequest {
   /** Images: 'raw' for pixels 0–255. */
   input_scale?: 'raw' | 'unit' | 'normalized';
   top_k?: number;
+  /** Ensembles: also return what each member predicts. */
+  members?: boolean;
+}
+
+/** What one member of an ensemble predicted (`members: true`). */
+export interface MemberPredictions {
+  id: string;
+  name: string;
+  predictions: Prediction[];
 }
 
 export interface PredictionResult {
@@ -1903,6 +2001,13 @@ export interface PredictionResult {
   decision_threshold?: number;
   positive_class?: string;
   threshold_note?: string;
+  /** Ensembles: the method and the members that predicted. */
+  ensemble?: {
+    method: EnsembleMethod;
+    members: { id: string; name: string; weight: number | null }[];
+  };
+  /** Ensembles, with `members: true`: what each member predicted, in the same order. */
+  members?: MemberPredictions[];
 }
 
 /** The answer when inputs are invalid (HTTP 400). */

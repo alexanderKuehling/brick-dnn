@@ -247,6 +247,10 @@ class PredictionFailed(Exception):
     """The prediction process failed or took too long. The message is shown to the user."""
 
 
+class RunInUse(Exception):
+    """The run cannot be deleted: an ensemble predicts with it (see ensembles.py)."""
+
+
 class IncompatibleNetwork(Exception):
     """The network cannot be trained on the chosen dataset."""
 
@@ -354,6 +358,8 @@ def unavailable_reason(family: str = "neural") -> str | None:
     be started right now (cheap: does not run the probe)."""
     if not settings.TRAINING_ENABLED:
         return DISABLED_REASON
+    if family == "ensemble":  # its members need what they need (ensembles.py checks it)
+        return None
     if family == "classical":
         return None if sklearn_installed() else NO_SKLEARN_REASON
     if not torch_installed():
@@ -362,7 +368,10 @@ def unavailable_reason(family: str = "neural") -> str | None:
 
 
 def run_family(run: TrainingRun) -> str:
-    """``classical`` for a run of a classical model (scikit-learn), else ``neural``."""
+    """``classical`` for a run of a classical model (scikit-learn), ``ensemble`` for an
+    ensemble of runs (ensembles.py), else ``neural``."""
+    if run.kind == "ensemble":
+        return "ensemble"
     plan = run.plan if isinstance(run.plan, dict) else {}
     return "classical" if isinstance(plan.get("classical"), dict) else "neural"
 
@@ -809,23 +818,9 @@ def start_run(
     if reason:
         raise TrainingUnavailable(reason)
 
-    if name is None:
-        name = ""
-    if not isinstance(name, str):
-        raise TrainingInputError("The name must be text.")
-    name = name.strip() or "Training run"
-    if len(name) > 120:
-        raise TrainingInputError("The name can be at most 120 characters long.")
+    name = clean_name(name)
     validate_graph(graph)
-    project = None
-    if project_id is not None:
-        from .shared_data import editable_projects
-
-        if isinstance(project_id, bool) or not isinstance(project_id, int):
-            raise TrainingInputError("'project' must be the id of a project.")
-        project = editable_projects(user).filter(pk=project_id).first()
-        if project is None:
-            raise TrainingInputError("You can only train in projects you own or can edit.")
+    project = run_project(user, project_id)
     try:
         training_config = TrainingConfig.from_dict(config)
     except ConfigError as exc:
@@ -861,6 +856,46 @@ def start_run(
             **fields,
         )
 
+    return start_new(user, actor, estimate, create, dataset.info, dataset.path)
+
+
+def clean_name(name: Any, default: str = "Training run") -> str:
+    """The name of a new run. Raises :class:`TrainingInputError`."""
+    if name is None:
+        name = ""
+    if not isinstance(name, str):
+        raise TrainingInputError("The name must be text.")
+    name = name.strip() or default
+    if len(name) > 120:
+        raise TrainingInputError("The name can be at most 120 characters long.")
+    return name
+
+
+def run_project(user, project_id: Any):
+    """The project a new run belongs to (one the user owns or edits), or None. Raises
+    :class:`TrainingInputError`."""
+    if project_id is None:
+        return None
+    from .shared_data import editable_projects
+
+    if isinstance(project_id, bool) or not isinstance(project_id, int):
+        raise TrainingInputError("'project' must be the id of a project.")
+    project = editable_projects(user).filter(pk=project_id).first()
+    if project is None:
+        raise TrainingInputError("You can only train in projects you own or can edit.")
+    return project
+
+
+def start_new(
+    user,
+    actor: Actor,
+    estimate: Estimate | None,
+    create: Any,
+    info: DatasetInfo,
+    path: Path | None,
+) -> TrainingRun:
+    """Create a run with ``create(limit, **fields)`` and start it, or queue it with a
+    training worker (see :func:`start_run`, which also says what it raises)."""
     # Under the start lock: two starts cannot both use what is left of a budget.
     with _start_lock():
         if queue.enabled():
@@ -890,7 +925,7 @@ def start_run(
             if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
                 raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
             run = create(limit, message="Starting …")
-            _launch(run, _job(run, dataset.info, dataset.path, limit))
+            _launch(run, _job(run, info, path, limit))
     run.budget_warning = warning  # type: ignore[attr-defined]
     return run
 
@@ -899,6 +934,10 @@ def _job(
     run: TrainingRun, info: DatasetInfo, path: Path | None, limit: budgets.RunLimit
 ) -> dict[str, Any]:
     """job.json of ``run`` (see brickdnn.training.state)."""
+    if run.kind == "ensemble":
+        from .ensembles import ensemble_job
+
+        return ensemble_job(run, info, path, limit)
     return {
         "name": run.name,
         "graph": run.graph,
@@ -1435,9 +1474,17 @@ def terminate_run(run: TrainingRun) -> None:
         _kill(run, wait=3.0)
 
 
-def delete_run(run: TrainingRun) -> None:
+def delete_run(run: TrainingRun, user=None) -> None:
     """Delete a run with its files, killing its process first if it is still active. The
-    caller checks that the user may delete it (``shared_data.can_delete_run``)."""
+    caller checks that the user may delete it (``shared_data.can_delete_run``). With
+    ``user`` (who deletes it), a run that an ensemble the user can see predicts with is
+    kept: :class:`RunInUse` (see ensembles.deletion_refusal)."""
+    if user is not None:
+        from .ensembles import deletion_refusal
+
+        refusal = deletion_refusal(user, run)
+        if refusal is not None:
+            raise RunInUse(refusal)
     terminate_run(run)
     run.delete()  # the run directory is removed by a post_delete signal
 
@@ -1533,6 +1580,10 @@ def _weights_file(run: TrainingRun) -> Path:
 
 
 def weights_path(run: TrainingRun) -> Path | None:
+    """The file of the trained weights (or fitted model), if the run has one. Ensembles
+    have none of their own: they predict with their members' (see ensembles.py)."""
+    if run.kind == "ensemble":
+        return None
     path = _weights_file(run)
     return path if run.has_weights and path.is_file() else None
 
@@ -1588,6 +1639,11 @@ def preview_file(run: TrainingRun, name: Any) -> Path | None:
 
 def no_weights_reason(run: TrainingRun) -> str:
     """Why a run has no weights to download or predict with (for the user)."""
+    if run.kind == "ensemble" and run.has_weights:
+        return (
+            "An ensemble has no weights of its own: it predicts with its members. Their runs "
+            "have the weights, explanations and code."
+        )
     if run.status == QUEUED:
         return "This run still waits in the queue: it has not trained anything yet."
     if run.status in ACTIVE_STATUSES:
@@ -1650,6 +1706,8 @@ class Prediction:
     warnings: list[str] = dataclass_field(default_factory=list)
     prepare_seconds: float = 0.0
     mask_format: str = "png"  # segmentation: how the class maps are returned
+    # An ensemble: the prepared inputs of every member (ensembles.EnsembleInputs).
+    ensemble: Any = None
 
 
 def prepare_prediction(
@@ -1660,16 +1718,24 @@ def prepare_prediction(
     image: Any = None,
     mask: Any = None,
     input_format: Any = None,
+    members: Any = False,
 ) -> Prediction:
     """Check that ``run`` can predict and prepare ``inputs`` like its training data (cheap:
     no process is started). ``input_format`` "raw": rows of the source table of a data
     preparation, prepared first (see raw_predictions.py). Image networks also take ``image``
     instead: image files as base64 text, which the prediction process decodes. ``mask``: how
-    a segmentation returns its class maps (inference.MASK_FORMATS). Raises
-    :class:`TrainingUnavailable`,
+    a segmentation returns its class maps (inference.MASK_FORMATS). An ensemble prepares
+    the inputs for each of its members (ensembles.py; ``members``: also return what each
+    member predicts). Raises :class:`TrainingUnavailable`,
     :class:`PredictionUnavailable` or :class:`TrainingInputError`."""
     from . import raw_predictions
 
+    if run.kind == "ensemble":
+        from . import ensembles
+
+        return ensembles.prepare_prediction(
+            run, inputs, input_scale, top_k, image, input_format, members
+        )
     reason = unavailable_reason(run_family(run))
     if reason:
         raise TrainingUnavailable(reason)
@@ -1730,6 +1796,10 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
     Raises :class:`budgets.BudgetExceeded` (no compute left), :class:`TrainingBusy` (too
     many predictions at once) or :class:`PredictionFailed`.
     """
+    if prediction.ensemble is not None:
+        from . import ensembles
+
+        return ensembles.run_prediction(prediction, actor)
     run, prepared = prediction.run, prediction.inputs
     budgets.check_compute(actor)
     if prediction.prepare_seconds > 0:  # preparing raw rows (in this process)
@@ -1830,9 +1900,25 @@ def _prediction_slot():
     raise TrainingBusy(PREDICT_BUSY_MESSAGE)
 
 
-def _predict_process(run: TrainingRun, request: dict[str, Any], actor: Actor) -> dict[str, Any]:
+def predict_process(
+    run: TrainingRun, request: dict[str, Any], actor: Actor, usage_run: TrainingRun | None = None
+) -> dict[str, Any]:
+    """Run ``run`` on a prepared ``request`` in a prediction process (for ensembles, whose
+    members predict one after the other; their CPU time counts for ``usage_run``)."""
+    return _predict_process(run, request, actor, usage_run)
+
+
+def prediction_slot():
+    """One of the TRAINING_MAX_PREDICTIONS slots for predictions (see _prediction_slot)."""
+    return _prediction_slot()
+
+
+def _predict_process(
+    run: TrainingRun, request: dict[str, Any], actor: Actor, usage_run: TrainingRun | None = None
+) -> dict[str, Any]:
     """Start ``python -m brickdnn.training.predict <run dir>``, count its CPU time and return
-    its answer."""
+    its answer. The CPU time is recorded for ``usage_run`` (default: ``run``)."""
+    counted = usage_run or run
     directory = run_dir(run.pk)
     command = [*predict_command(), str(directory)]
     started = time.monotonic()
@@ -1851,7 +1937,7 @@ def _predict_process(run: TrainingRun, request: dict[str, Any], actor: Actor) ->
     except subprocess.TimeoutExpired:
         # Killed before it could report: count its wall time on all its threads.
         threads = max(1, min(PREDICT_THREADS, os.cpu_count() or 1))
-        budgets.record_prediction(actor, run, (time.monotonic() - started) * threads)
+        budgets.record_prediction(actor, counted, (time.monotonic() - started) * threads)
         raise PredictionFailed(
             f"The prediction took longer than {PREDICT_TIMEOUT_SECONDS} seconds and was stopped."
         ) from None
@@ -1869,7 +1955,7 @@ def _predict_process(run: TrainingRun, request: dict[str, Any], actor: Actor) ->
     spent = answer.get("cpu_seconds") if isinstance(answer, dict) else None
     if isinstance(spent, bool) or not isinstance(spent, (int, float)) or spent < 0:
         spent = time.monotonic() - started  # it did not report: at least its wall time
-    budgets.record_prediction(actor, run, float(spent))
+    budgets.record_prediction(actor, counted, float(spent))
     if isinstance(answer, dict) and isinstance(answer.get("error"), str):
         raise PredictionFailed(answer["error"][:500])
     if (
