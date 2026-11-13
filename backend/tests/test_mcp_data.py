@@ -790,6 +790,12 @@ def test_list_prep_steps(ada):
     detail = ok(ada, "list_prep_steps", type="extract_text")
     assert detail["example"]["params"]["mapping"]["T"] == 8
     assert detail["example"]["params"]["column"] == "Cabin"
+    assert "map(upper(left(`Cabin`, 1))" in steps["formula"]["description"]
+    detail = ok(ada, "list_prep_steps", type="formula")
+    assert detail["example"]["params"]["name"] == "Deck"
+    assert detail["example"]["params"]["expression"].startswith("map(upper(left(`Cabin`, 1)), {")
+    expression = next(p for p in detail["params"] if p["name"] == "expression")
+    assert "split_part(x" in expression["help"] and "extract(x" in expression["help"]
     text = error_of(ada, "list_prep_steps", type="impute_all")
     assert "Unknown step type 'impute_all'" in text and "impute" in text
 

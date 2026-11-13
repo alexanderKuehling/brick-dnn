@@ -151,7 +151,7 @@ The exported dataset carries this split in `split.bin`, so training uses it unch
 | Group | Steps |
 | ----- | ----- |
 | **Combine data** | *Join another table* (match key columns; left, inner, outer or right join) · *Append rows* (stack another table with the same columns) |
-| **Columns** | Drop · Keep only · Rename · Change type · *Formula* (new column from an expression, e.g. `log1p(income) / household_size`) · Replace values · *Extract from text* (a part of a text column, e.g. the deck letter of a cabin, optionally mapped to numbers – see below) |
+| **Columns** | Drop · Keep only · Rename · Change type · *Formula* (new column from an expression, e.g. `log1p(income) / household_size` or `map(upper(left(Cabin, 1)), {"A": 1, …})` – see below) · Replace values · *Extract from text* (a part of a text column, e.g. the deck letter of a cabin, optionally mapped to numbers – see below) |
 | **Rows** | Remove duplicates · Filter rows (=, <, between, is one of, contains, is missing …) · Drop rows with missing values · Sort · *Drop rows* (picked by hand: by the values of an ID column, or by row number) · *Remove atypical rows* and *Find near-duplicate groups* (before the split, see *Rows* below) |
 | **Missing values** | *Mark as missing* (sentinel values like `-999` or `unknown`) · Drop sparse columns · *Fill missing values*: mean, median, most frequent, fixed value, nearest neighbours (KNN), forward/backward fill, interpolation, optionally with an indicator column |
 | **Outliers & clipping** | *Outliers*: IQR rule, z-score, robust z-score (MAD) or quantiles; clip, remove, set missing or flag · *Clip values*: fixed bounds, quantiles (e.g. 1st–99th percentile) or mean ± k standard deviations |
@@ -170,6 +170,61 @@ it.
 The training engine standardises all features again (mean 0, standard deviation 1, from the
 training rows), so a *Scale* step is optional for training in Brick DNN; it is useful for the
 exported files.
+
+### Formula
+
+*Formula* computes a new column (an existing column of that name is replaced) from an
+expression. Columns are written by name, in backticks if the name has spaces or symbols
+(`` `my column` ``); text is written in quotes. Numbers: `+ - * / // % **`, `log`, `log1p`,
+`exp`, `sqrt`, `abs`, `round(x, digits)`, `floor`, `ceil`, `min(a, b)`, `max(a, b)`,
+`clip(x, lo, hi)`. Comparisons (`== != < <= > >=`, text only with `==` and `!=`), `and`, `or`
+and `not` give true/false. `where(condition, a, b)` takes `a` where the condition holds, else
+`b` (both numbers or both text); `isnull(x)` is 1 for a missing value.
+
+Text functions work on text and category columns (a number is turned into text like
+`to_text`). A missing input gives a missing result, and so does an empty text:
+
+| Function | Result |
+| -------- | ------ |
+| `left(x, n)`, `right(x, n)` | the first / last `n` characters (`n` a whole number ≥ 0) |
+| `mid(x, start, length)` | `length` characters from character number `start` (1 is the first) |
+| `upper(x)`, `lower(x)`, `strip(x)` | upper case, lower case, without spaces at the start and the end |
+| `len(x)` | the number of characters (a number) |
+| `contains(x, "text")`, `startswith(x, "text")`, `endswith(x, "text")` | true/false; plain text, not a pattern. `ignore_case=1` (or a third argument 1) ignores upper and lower case |
+| `replace(x, "old", "new")` | every `old` replaced by `new` (plain text, not a pattern) |
+| `extract(x, "pattern")` | the first group of a regular expression (Python `re`, at most 200 characters), else the whole match; missing without a match |
+| `split_part(x, "separator", k)` | part number `k` (1 the first, -1 the last); missing if there is no such part |
+| `concat(a, b, …)` | the texts joined (numbers as text); missing if one of them is missing |
+| `to_number(x)` | the text as a number; missing if it is none |
+| `to_text(x)` | a number as text: `3.0` → `"3"`, `2.5` → `"2.5"` |
+| `map(x, {"A": 1, …}, default)` | the value for each key: numbers if every value (and the default) is a number, else text. Values not in the dictionary give `default`, or missing without one (a missing `x` stays missing). At most 500 entries |
+| `coalesce(a, b, …)` | the first value that is not missing, from left to right |
+
+Examples on the Titanic data:
+
+- deck as a number: `map(upper(left(Cabin, 1)), {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5,
+  "F": 6, "G": 7, "T": 8})` – `C85` gives 3, `X1` and a missing cabin are missing;
+- title: `extract(Name, ",\s*([^.]+)\.")` – `Mr` from `Braund, Mr. Owen Harris`;
+- family size: `SibSp + Parch + 1`;
+- married: `contains(Name, "mrs.", ignore_case=1)`;
+- ticket number: `to_number(split_part(Ticket, " ", -1))`.
+
+The report counts the values that could not be computed (division by zero, no match, no such
+part, a value not in the dictionary).
+
+**Safety.** A formula is never run as Python. It is checked against a list of what is allowed
+(the operators and functions above), and is turned into pandas code that calls only these
+functions. Attribute access (`a.b`), indexing, lambdas, comprehensions, f-strings, `*args` and
+other functions (`open`, `__import__` …) are refused with a message that says what is allowed.
+The lengths, positions, texts to find, separators, patterns, flags and `map` dictionaries
+must be written in the formula (not computed from columns). A formula has at most 2,000
+characters (`map` dictionaries not counted, at most 20,000 with them), 300 parts and 100
+levels of nesting. Patterns that repeat a part that repeats itself, like `(a+)+`, are refused,
+because they can take very long on some texts (also in *Extract from text*).
+
+The functions behind the text functions are copied into the pandas script, which runs the
+same code as the step, and predictions from raw rows run it too, so all three give the
+training values exactly.
 
 ### Extract from text
 

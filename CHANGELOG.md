@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **Text functions in the *Formula* step.** `left`, `right`, `mid`, `upper`, `lower`,
+  `strip`, `len`, `contains` / `startswith` / `endswith` (plain text, optionally ignoring
+  case; true/false), `replace` (plain text), `extract` (the first group of a regular
+  expression, else the whole match), `split_part` (1-based, -1 the last part), `concat`,
+  `to_number`, `to_text`, `map(x, {"A": 1, …}, default)` (numbers if every value is a number;
+  unmapped values become missing without a default) and `coalesce`; text compares with `==`
+  and `!=`, and `where` takes text branches. A missing input gives a missing result. E.g. the
+  Titanic deck as a number: `map(upper(left(Cabin, 1)), {"A": 1, …, "T": 8})`. The formula
+  text is never run as Python: it is checked against an allowlist, and attribute access,
+  indexing, lambdas, comprehensions, f-strings, starred arguments and other functions are
+  refused while compiling, with a message naming what is allowed; lengths, texts to find, separators,
+  patterns, flags and `map` dictionaries (at most 500 entries) must be written in the
+  formula. A formula has at most 2,000 characters (`map` dictionaries not counted, at most
+  20,000 with them), limited nesting and size. Regular expressions with nested repetition
+  like `(a+)+` are refused, here and in *Extract from text*. The helper functions are copied
+  into the pandas script, and predictions from raw rows run the same code, so both give
+  exactly the training values. `list_prep_steps` describes the functions and shows the deck
+  as the formula example. See docs/data-preparation.md.
 - **Data preparation step *Extract from text*** (`extract_text`, group *Columns*): takes a
   part of a text or category column into a new column: the first or last characters, the
   first group (or the whole match) of a regular expression, or the n-th word (-1 the last).
