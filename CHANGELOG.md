@@ -638,6 +638,12 @@
   no effect with the other settings, such as `padding_size` when `padding` is `same` or
   `valid`, and lists the resolved `inputs` and `outputs` also for graphs with errors.
 
+### Removed
+- **The online demo is gone.** The static demo build on Hugging Face (code generator in the
+  browser with Pyodide, no accounts) is no longer needed now that brickdnn.com is live: the
+  *Deploy demo* workflow, `deploy/huggingface/`, `npm run build:demo` / `dev:demo`, the
+  in-browser engine and every demo branch in the app are removed.
+
 ## 1.1.0 (2026-11-09)
 
 Highlights: connect AI assistants such as Claude to Brick DNN (MCP server with OAuth sign-in

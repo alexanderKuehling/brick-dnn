@@ -21,7 +21,7 @@ dialog on the matching tab. When a method does not work for a run, the section s
 on demo data only offer a look inside the network. With the training panel at full width,
 the section sits in a second column beside the charts and metrics.
 
-The builder also has two aids that need no training at all (and work in the online demo):
+The builder also has two aids that need no training at all:
 **How data flows** and the **parameter formula and receptive field** in the inspector, see
 [Learning aids in the builder](#learning-aids-in-the-builder).
 
@@ -165,8 +165,7 @@ cache take milliseconds.
   stride *s* it grows as *rf' = rf + (k − 1)·jump* and *jump' = jump·s*. Bricks after a
   Flatten, Linear or recurrent brick depend on the whole input.
 
-Both only use the analysis of the network (shapes and settings), so they need no server: they
-also work in the online demo, where the analysis runs in the browser.
+Both only use the analysis of the network (shapes and settings), so they need no training.
 
 ## API
 
