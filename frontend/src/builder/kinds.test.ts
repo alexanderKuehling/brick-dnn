@@ -7,6 +7,7 @@ import {
   inputSlots,
   isBoosting,
   isEnsemble,
+  isFeatureEdge,
   kernelLines,
   kernelTerms,
   outputKind,
@@ -99,6 +100,20 @@ describe('connections of the wrong kind', () => {
     );
   });
 
+  it('connects a neural layer into a classical model: a hybrid network', () => {
+    // The layers learn the features of the model; the features input takes their data.
+    expect(connectionProblem(SPECS.Linear, SPECS.HistGradientBoostingClassifier)).toBeNull();
+    expect(connectionProblem(SPECS.Linear, SPECS.SVC)).toBeNull();
+    expect(connectionProblem(SPECS.Linear, SPECS.GaussianProcessRegressor, 'features')).toBeNull();
+    expect(connectionProblem(SPECS.Linear, SPECS.GaussianProcessRegressor, 'kernel')).toBe(
+      'The kernel input of Gaussian process regression only takes a kernel.'
+    );
+    expect(isFeatureEdge(SPECS.Linear, SPECS.SVC)).toBe(true);
+    expect(isFeatureEdge(SPECS.Input, SPECS.SVC)).toBe(false);
+    expect(isFeatureEdge(SPECS.Linear, SPECS.Linear)).toBe(false);
+    expect(isFeatureEdge(SPECS.SVC, SPECS.VotingClassifier)).toBe(false);
+  });
+
   it('leaves neural layers and unknown types alone', () => {
     expect(connectionProblem(SPECS.Input, SPECS.Linear)).toBeNull();
     expect(connectionProblem(SPECS.Linear, SPECS.Linear, 'whatever')).toBeNull();
@@ -143,6 +158,21 @@ describe('edges on the canvas', () => {
     expect(model.markerEnd).toMatchObject({ color: 'var(--mantine-color-grape-6)' });
     // Unchanged edges keep their identity.
     expect(decorateEdges([model], (id) => kinds[id], SPECS)[0]).toBe(model);
+  });
+
+  it('mark the boundary of a hybrid network: the features into a classical model', () => {
+    const kinds: Record<string, string> = { ...types, svc: 'SVC', fc2: 'Linear' };
+    const edges = [edge('in', 'fc'), edge('fc', 'fc2'), edge('fc2', 'svc')];
+    const [first, between, features] = decorateEdges(edges, (id) => kinds[id], SPECS);
+    expect(first).toBe(edges[0]);
+    expect(between).toBe(edges[1]);
+    expect(features.className).toMatch(/featuresEdge/);
+    expect(features.label).toBe('features');
+    expect(features.markerEnd).toMatchObject({ color: 'var(--mantine-color-teal-6)' });
+    expect(decorateEdges([features], (id) => kinds[id], SPECS)[0]).toBe(features);
+    // A classical model fed straight by the Input has no boundary.
+    const [direct] = decorateEdges([edge('in', 'svc')], (id) => kinds[id], SPECS);
+    expect(direct.className).toBeUndefined();
   });
 });
 

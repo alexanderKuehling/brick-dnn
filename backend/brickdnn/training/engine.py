@@ -119,12 +119,19 @@ def train(
     :mod:`.previews`) once the weights are saved.
 
     Classical models (scikit-learn) are handed to :mod:`.classical_engine`, which saves
-    the fitted model with joblib instead.
+    the fitted model with joblib instead; hybrid networks (neural layers before a classical
+    model) to :mod:`.hybrid_engine`, which saves both (``weights_path`` is then the joblib
+    file).
     """
-    if job.family == "classical":
+    family = job.family
+    if family == "classical":
         from . import classical_engine
 
         return classical_engine.train(job, reporter, weights_path)
+    if family == "hybrid":
+        from . import hybrid_engine
+
+        return hybrid_engine.train(job, reporter, weights_path)
     if job.tuning is not None:
         return _Search(job, reporter, weights_path, previews_dir).run()
     return _Run(job, reporter, weights_path, previews_dir).run()

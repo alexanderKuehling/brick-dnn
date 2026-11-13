@@ -15,7 +15,7 @@ import {
   useMantineTheme,
 } from '@mantine/core';
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
-import { api, type GenerateOptions, type GraphDocument } from '@/api';
+import { api, type GenerateOptions, type GraphDocument, type NetworkFamily } from '@/api';
 import { CodeView } from './CodeView';
 import { downloadText } from './download';
 import { semanticKey } from './graph';
@@ -27,8 +27,11 @@ interface CodeModalProps {
   filename: string;
   options: GenerateOptions;
   onOptionsChange: (options: GenerateOptions) => void;
-  /** classical: the network is a scikit-learn model (Gaussian process, SVM, gradient boosting). */
-  family?: 'neural' | 'classical';
+  /**
+   * classical: the network is a scikit-learn model (Gaussian process, SVM, gradient boosting);
+   * hybrid: neural layers learn the features of one (PyTorch and scikit-learn).
+   */
+  family?: NetworkFamily;
 }
 
 export default function CodeModal({
@@ -41,6 +44,7 @@ export default function CodeModal({
   family = 'neural',
 }: CodeModalProps) {
   const classical = family === 'classical';
+  const hybrid = family === 'hybrid';
   const [debounced] = useDebouncedValue(options, 300);
   const key = useMemo(() => semanticKey(doc), [doc]);
   const [code, setCode] = useState<string | null>(null);
@@ -75,7 +79,9 @@ export default function CodeModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={classical ? 'scikit-learn code' : 'PyTorch code'}
+      title={
+        classical ? 'scikit-learn code' : hybrid ? 'PyTorch and scikit-learn code' : 'PyTorch code'
+      }
       size="xl"
       fullScreen={fullScreen}
       styles={
@@ -118,7 +124,9 @@ export default function CodeModal({
       <Text size="xs" c="dimmed" mb="xs">
         {classical
           ? 'make_model() returns a scikit-learn pipeline that standardises the features. The script fits it to a CSV file, saves it with joblib (--save) and predicts new rows (--predict), also with a model trained in Brick DNN.'
-          : 'The training loop is added for models with one flat input and one flat output (tabular data).'}
+          : hybrid
+            ? 'The neural layers (FeatureExtractor) learn the features with a temporary linear head on the target, then make_model() is fitted on them. --csv trains both phases and saves the neural layers (--weights) and the classical model (--save); --predict uses both, also those of a model trained in Brick DNN.'
+            : 'The training loop is added for models with one flat input and one flat output (tabular data).'}
       </Text>
 
       {error && (

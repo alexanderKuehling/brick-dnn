@@ -60,6 +60,7 @@ def test_config_defaults():
         "patience": None,
         "restore_best": True,
         "loss": "cross_entropy",
+        "feature_training": "pretrain",
     }
     assert TrainingConfig.from_dict(config.to_dict()) == config
     assert not config.has_test

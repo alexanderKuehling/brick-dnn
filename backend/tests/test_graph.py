@@ -6,7 +6,7 @@ import pytest
 
 from brickdnn import EXAMPLES, analyze
 
-from .helpers import CLASSICAL_EXAMPLES, chain
+from .helpers import CLASSICAL_EXAMPLES, HYBRID_EXAMPLES, chain
 
 
 def graph(nodes, edges):
@@ -23,6 +23,9 @@ def test_examples_are_valid(example_id):
     if example_id in CLASSICAL_EXAMPLES:
         assert result.family == "classical"
         assert result.to_dict()["classical"]["node"] == result.outputs[0]
+    elif example_id in HYBRID_EXAMPLES:
+        assert result.family == "hybrid"
+        assert result.to_dict()["hybrid"]["features"] > 0
     else:
         assert result.family == "neural"
         assert result.total_params > 0

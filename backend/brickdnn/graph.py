@@ -20,7 +20,12 @@ Gaussian processes) or an estimator (a classical model connected to an ensemble)
 process, SVM or gradient boosting) that takes the features straight from it and, for a
 Gaussian process, optionally kernel bricks that feed its kernel. Or of several such models,
 all fed by the same Input, that are connected to one ensemble (voting or stacking), which
-then ends the network. Classical models and neural layers cannot be mixed (yet).
+then ends the network.
+
+A *hybrid* network puts neural layers between the Input and the classical model: they turn
+the input into the features that the model is fitted on. There is exactly one *boundary*:
+the last neural layer, whose flat output (shape ``[n]``) feeds the model (or every model of
+the ensemble). Every neural layer leads to it, and nothing neural follows a classical model.
 """
 
 from __future__ import annotations
@@ -50,7 +55,9 @@ KERNEL_TARGETS = (
     "Kernel bricks only connect to a Gaussian process (GaussianProcessRegressor or "
     "GaussianProcessClassifier) or to KernelSum and KernelProduct."
 )
-NOT_MIXED = "Classical models and neural layers can't be mixed yet"
+FEATURES_ROLE = (
+    "In a network with a classical model, the neural layers turn the input into its features"
+)
 ENSEMBLE_TYPES = "VotingClassifier, VotingRegressor, StackingClassifier or StackingRegressor"
 # Names that the models of an ensemble do not get (variables of the generated make_model()).
 RESERVED_NAMES = frozenset({"kernel", "model", "make_model", "pipeline"}) | ENSEMBLE_ARGUMENTS
@@ -162,12 +169,52 @@ class Analysis:
 
     @property
     def family(self) -> str:
-        """``classical`` if the graph contains kernels or a classical model, else ``neural``."""
-        classical = any(
-            info.layer is not None and info.layer.family == "classical"
+        """``hybrid`` if the graph has a classical model and neural layers (they learn its
+        features), ``classical`` if it contains kernels or a classical model, else
+        ``neural``."""
+        layers = [info.layer for info in self.nodes.values() if info.layer is not None]
+        if not any(layer.family == "classical" for layer in layers):
+            return "neural"
+        model = any(isinstance(layer, ClassicalModel) for layer in layers)
+        neural = any(layer.family == "neural" for layer in layers)
+        return "hybrid" if model and neural else "classical"
+
+    @property
+    def boundary(self) -> NodeInfo | None:
+        """Hybrid networks: the last neural layer, whose output is the feature vector of the
+        classical model (of every model of an ensemble). None otherwise."""
+        model = self.model
+        if model is None or self.family != "hybrid":
+            return None
+        layer = model.layer
+        nodes = [self.nodes[m.node] for m in layer.members] if isinstance(layer, Ensemble) else []
+        if isinstance(layer, Ensemble) and not nodes:  # not resolved: its direct models
+            nodes = [self.nodes[s] for s in model.inputs]
+        for info in nodes or [model]:
+            for source in info.inputs:
+                found = self.nodes[source]
+                if found.output_kind == "tensor" and found.type != "Input":
+                    return found
+        return None
+
+    def hybrid_dict(self) -> dict[str, Any] | None:
+        """``{"boundary", "features", "neural_params"}`` of a hybrid network, else None:
+        the last neural layer, the length of the feature vector it puts out and the
+        trainable parameters of the neural layers."""
+        boundary = self.boundary
+        if boundary is None:
+            return None
+        counts = [
+            info.num_params
             for info in self.nodes.values()
-        )
-        return "classical" if classical else "neural"
+            if info.layer is not None and info.layer.family != "classical"
+        ]
+        shape = boundary.shape
+        return {
+            "boundary": boundary.id,
+            "features": shape[0] if shape is not None and len(shape) == 1 else None,
+            "neural_params": None if any(c is None for c in counts) else sum(counts),  # type: ignore[arg-type]
+        }
 
     @property
     def model(self) -> NodeInfo | None:
@@ -217,8 +264,11 @@ class Analysis:
             "outputs": self.outputs,
             "total_params": self.total_params if self.valid else None,
             "family": self.family,
-            # Classical networks: {"node", "type", "estimator", "task", "kernel", "members"}
+            # Classical and hybrid networks: {"node", "type", "estimator", "task", "kernel",
+            # "members"}
             "classical": self.classical_dict(),
+            # Hybrid networks: {"boundary", "features", "neural_params"}
+            "hybrid": self.hybrid_dict(),
         }
 
 
@@ -448,9 +498,9 @@ def _infer_classical(
     if estimators:
         other = estimators[0].layer.label if estimators[0].layer else estimators[0].type
         result.error(
-            f"{layer.label} takes its features from the Input layer, not the predictions of "
-            f"{other}. To combine models, connect each of them to an ensemble "
-            f"({ENSEMBLE_TYPES}).",
+            f"{layer.label} takes its features from the Input layer (or from neural layers), "
+            f"not the predictions of {other}. To combine models, connect each of them to an "
+            f"ensemble ({ENSEMBLE_TYPES}).",
             nid,
         )
         return
@@ -472,26 +522,37 @@ def _infer_classical(
         )
         return
     if not tensors:
-        result.error(f"{layer.label} has no features: connect the Input layer to it.", nid)
-        return
-    if len(tensors) > 1:
-        result.error(f"{layer.label} takes its features from one Input layer.", nid)
-        return
-    source = tensors[0]
-    if source.type != "Input":
         result.error(
-            f"{layer.label} must take its features straight from the Input layer. "
-            f"{NOT_MIXED}: remove the layers between the Input and {layer.label}.",
+            f"{layer.label} has no features: connect the Input layer (or the last of the "
+            "neural layers that learn its features) to it.",
             nid,
         )
         return
+    if len(tensors) > 1:
+        result.error(
+            f"{layer.label} takes its features from one connection: the Input layer, or the "
+            "last of the neural layers that learn them. Merge branches with Concat first.",
+            nid,
+        )
+        return
+    source = tensors[0]
     if not source.resolved or any(not k.resolved for k in kernels):
         return
     assert source.shape is not None
-    if len(source.shape) != 1:
+    if len(source.shape) != 1 and source.type == "Input":
         result.error(
             f"{layer.label} needs a flat feature vector: set the Input shape to the number of "
-            f"features, e.g. 8 (it is {fmt_shape(source.shape)}).",
+            f"features, e.g. 8 (it is {fmt_shape(source.shape)}), or put neural layers that "
+            "end in a flat vector (Flatten, Linear) in between.",
+            nid,
+        )
+        return
+    if len(source.shape) != 1:
+        other = source.layer.label if source.layer is not None else source.type
+        result.error(
+            f"{layer.label} needs a flat feature vector, but {other} outputs "
+            f"{fmt_shape(source.shape)}. Add Flatten (or a Linear layer) before "
+            f"{layer.label}: its output, shape [n], is the feature vector.",
             nid,
         )
         return
@@ -563,8 +624,8 @@ def _infer_ensemble(
     }
     if len(features) > 1:
         result.error(
-            "The models of an ensemble take their features from the same Input layer: "
-            "scikit-learn hands every model the same rows.",
+            "The models of an ensemble take their features from the same Input layer (or the "
+            "same last neural layer): scikit-learn hands every model the same rows.",
             nid,
         )
         return
@@ -612,8 +673,8 @@ def _member_names(sources: list[NodeInfo]) -> list[str]:
 
 def _check_classical(result: Analysis) -> None:
     """Rules for the network as a whole: every kernel is used exactly once, one classical
-    model at most (or one ensemble and the models it combines), nothing after it and no
-    neural layers besides it."""
+    model at most (or one ensemble and the models it combines), nothing after it, and
+    neural layers only before it (see :func:`_check_hybrid`)."""
     models: list[NodeInfo] = []
     ensembles: list[NodeInfo] = []
     neural: list[NodeInfo] = []
@@ -658,22 +719,60 @@ def _check_classical(result: Analysis) -> None:
     if model.outputs:
         result.error(
             f"Nothing can follow {label}: a classical model ends the network, its output is "
-            f"the prediction. {NOT_MIXED}.",
+            "the prediction. Neural layers go before it, where they learn its features.",
             model.id,
         )
-    elif neural and not any(issue.node == model.id for issue in result.errors):
-        names = sorted({n.layer.label for n in neural if n.layer is not None})
-        shown = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
-        takes = (
-            f"the models of {label} take their"
-            if isinstance(model.layer, Ensemble)
-            else f"{label} takes its"
-        )
+    elif neural:
+        _check_hybrid(result, model, models if ensembles else [model], neural)
+
+
+def _check_hybrid(
+    result: Analysis, model: NodeInfo, fitted: list[NodeInfo], neural: list[NodeInfo]
+) -> None:
+    """Neural layers and a classical model: there is exactly one boundary (the layer that
+    feeds the model, or every model of the ensemble), every neural layer leads to it, and
+    the network has one Input."""
+    label = model.layer.label  # type: ignore[union-attr]
+    sources = {
+        source
+        for info in fitted
+        for source in info.inputs
+        if result.nodes[source].output_kind == "tensor"
+    }
+    if len(sources) != 1:
+        return  # the model or the ensemble already reported it
+    boundary = result.nodes[next(iter(sources))]
+    if len(result.inputs) > 1:
         result.error(
-            f"{NOT_MIXED}, but this network also contains {shown}. Remove the neural layers: "
-            f"{takes} features straight from the Input layer.",
-            model.id,
+            f"{FEATURES_ROLE}, from one Input layer: remove the other Input layers.", model.id
         )
+        return
+    feeds: set[str] = set()
+    stack = [boundary.id]
+    while stack:
+        nid = stack.pop()
+        if nid not in feeds:
+            feeds.add(nid)
+            stack += result.nodes[nid].inputs
+    for info in neural:
+        if info.id in feeds:
+            continue
+        name = info.layer.label if info.layer is not None else info.type
+        if boundary.type == "Input":
+            text = (
+                f"{name} does not lead to {label}, which takes its features straight from the "
+                f"Input layer. {FEATURES_ROLE}: connect the last of them to {label} instead "
+                "of the Input, or remove this layer."
+            )
+        else:
+            kind = boundary.layer.label if boundary.layer is not None else boundary.type
+            last = f"{kind} '{boundary.name or boundary.id}'"
+            text = (
+                f"{name} does not lead to {label}. {FEATURES_ROLE}, and {last} passes them "
+                "on: every neural layer must lead to it (its output is the only boundary), so "
+                "connect this layer into that path or remove it."
+            )
+        result.error(text, info.id)
 
 
 def _check_members(result: Analysis, ensemble: NodeInfo, models: list[NodeInfo]) -> None:
@@ -690,7 +789,8 @@ def _check_members(result: Analysis, ensemble: NodeInfo, models: list[NodeInfo])
         elif any(target != ensemble.id for target in info.outputs):
             result.error(
                 f"{name} can only be connected to {label}: what it passes on is the model "
-                f"itself, which the ensemble combines. {NOT_MIXED}.",
+                "itself, which the ensemble combines. Nothing else can follow a classical "
+                "model.",
                 info.id,
             )
 

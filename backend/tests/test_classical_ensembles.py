@@ -179,7 +179,7 @@ def test_names_of_the_models():
                 [("in2", "svc2"), ("svc2", "ens")],
             ),
             "ens",
-            "take their features from the same Input layer",
+            "take their features from the same Input layer (or the same last neural layer)",
         ),
         (
             ensemble_graph(params={"weights": [1, 2]}),
@@ -203,9 +203,9 @@ def test_names_of_the_models():
         ),
         (
             with_nodes(ensemble_graph(), [("fc", "Linear", {})], [("in", "fc")]),
-            "ens",
-            "this network also contains Linear. Remove the neural layers: the models of "
-            "Voting classifier take their features",
+            "fc",
+            "Linear does not lead to Voting classifier, which takes its features straight "
+            "from the Input layer",
         ),
         (
             with_nodes(ensemble_graph(), [("fc", "Linear", {})], [("ens", "fc")]),
@@ -231,8 +231,9 @@ def test_names_of_the_models():
                 "edges": [{"source": "in", "target": "a"}, {"source": "a", "target": "b"}],
             },
             "b",
-            "takes its features from the Input layer, not the predictions of Support vector "
-            "classification. To combine models, connect each of them to an ensemble",
+            "takes its features from the Input layer (or from neural layers), not the "
+            "predictions of Support vector classification. To combine models, connect each "
+            "of them to an ensemble",
         ),
     ],
 )

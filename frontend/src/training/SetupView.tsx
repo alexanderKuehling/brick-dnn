@@ -41,7 +41,7 @@ import {
   type SettingsValues,
   type SourceChoice,
 } from './settings';
-import { SettingsForm, type ClassicalSettings } from './SettingsForm';
+import { SettingsForm, type ClassicalSettings, type HybridSettings } from './SettingsForm';
 import { useCompatibility, type CompatibilityState } from './useCompatibility';
 import type { DatasetFitController } from './useDatasetFit';
 import type { DataController } from './useDatasets';
@@ -136,27 +136,41 @@ export function SetupView({
   const check = compatibility.result;
 
   // A classical model (scikit-learn) is fitted once: fewer settings; its search varies the
-  // parameters of the model brick (if the server offers it).
-  const model = trainingFamily(analysis) === 'classical' ? (analysis?.classical ?? null) : null;
+  // parameters of the model brick (if the server offers it). A hybrid network has the
+  // settings of a network for its features, and the search of its classical model.
+  const family = trainingFamily(analysis);
+  const model = family !== 'neural' ? (analysis?.classical ?? null) : null;
   const maxRows = classicalMaxRows(status, analysis);
   const classicalSearch = Boolean(
     model && status.classical?.tuning && CLASSICAL_TUNABLES[model.type]
   );
-  const classical: ClassicalSettings | null = model && {
-    model: MODEL_KINDS[model.type] ?? model.estimator,
-    maxRows,
-    optimisesKernel: model.kernel !== null,
-    type: classicalSearch ? model.type : null,
-  };
-  const searchType = classical?.type ?? null;
-  const search = settings.search && (!classical || searchType !== null);
+  const classical: ClassicalSettings | null =
+    model && family === 'classical'
+      ? {
+          model: MODEL_KINDS[model.type] ?? model.estimator,
+          maxRows,
+          optimisesKernel: model.kernel !== null,
+          type: classicalSearch ? model.type : null,
+        }
+      : null;
+  const hybrid: HybridSettings | null =
+    model && family === 'hybrid'
+      ? {
+          model: MODEL_KINDS[model.type] ?? model.estimator,
+          features: analysis?.hybrid?.features ?? null,
+          maxRows,
+          type: classicalSearch ? model.type : null,
+        }
+      : null;
+  const searchType = classical?.type ?? hybrid?.type ?? null;
+  const search = settings.search && ((!classical && !hybrid) || searchType !== null);
   // The objective metrics the data allows (from the check; null while it is not known).
   const metrics = compatibility.fresh ? planMetrics(check?.plan) : null;
 
   const builtinSource = choice.tab === 'builtin';
   // A class for every pixel: the batch size is limited by the memory a batch needs, which the
   // check of the network reports (plan.segmentation) for the limit of this server.
-  const segmentationSource = !classical && isSegmentationSource(source);
+  const segmentationSource = !classical && !hybrid && isSegmentationSource(source);
   const maxBatch = segmentationSource
     ? maxSegmentationBatch(
         compatibility.fresh ? check?.plan?.segmentation : null,
@@ -171,6 +185,7 @@ export function SetupView({
   const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
   const errors = validateSettings(settings, {
     classical: classical && { maxRows, model: searchType },
+    hybrid: hybrid && { model: searchType },
     segmentation,
     validationRows: predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit[1] : null,
     metrics: metrics && metrics.map((metric) => metric.name),
@@ -192,18 +207,24 @@ export function SetupView({
   // The settings as they are sent: for the start and for the estimate of its CPU time.
   const knownDevice = status.devices.some((d) => d.id === settings.device);
   const isClassical = classical !== null;
+  const isHybrid = hybrid !== null;
   const config = useMemo(
     () =>
       // A remembered device may not exist on this server (any more).
       toConfig(
         { ...settings, device: knownDevice ? settings.device : 'auto' },
-        { builtin: builtinSource, classical: isClassical, segmentation: segmentationSource }
+        {
+          builtin: builtinSource,
+          classical: isClassical,
+          hybrid: isHybrid,
+          segmentation: segmentationSource,
+        }
       ),
-    [settings, knownDevice, builtinSource, isClassical, segmentationSource]
+    [settings, knownDevice, builtinSource, isClassical, isHybrid, segmentationSource]
   );
   const tuning = useMemo(
-    () => (isClassical && !searchType ? null : toTuning(settings, searchType)),
-    [settings, isClassical, searchType]
+    () => ((isClassical || isHybrid) && !searchType ? null : toTuning(settings, searchType)),
+    [settings, isClassical, isHybrid, searchType]
   );
   const cost = useCostEstimate(
     doc,
@@ -355,6 +376,7 @@ export function SetupView({
         builtin={builtinSource}
         predefinedSplit={predefinedSplit}
         classical={classical}
+        hybrid={hybrid}
         segmentation={segmentation}
         metrics={metrics}
       />

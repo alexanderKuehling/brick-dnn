@@ -20,3 +20,23 @@
     stroke-width: 2.5;
   }
 }
+
+/* The boundary of a hybrid network: the features from the last neural layer into a classical
+   model. A wider line in teal, labelled "features". */
+.featuresEdge {
+  --xy-edge-stroke: var(--mantine-color-teal-6);
+  --xy-edge-stroke-selected: var(--mantine-color-teal-8);
+
+  :global(.react-flow__edge-path) {
+    stroke-width: 2.5;
+  }
+
+  :global(.react-flow__edge-textbg) {
+    fill: var(--mantine-color-body);
+  }
+
+  :global(.react-flow__edge-text) {
+    fill: var(--mantine-color-teal-7);
+    font-size: 11px;
+  }
+}

@@ -21,6 +21,11 @@ ensemble costs what its models cost together; stacking fits every model once per
 cross-validation fold and once more, about cv + 1 times. A hyperparameter search multiplies
 the fits: one per trial, or one per trial and fold (plus the final fit) with
 cross-validation.
+
+A hybrid network costs both: its neural layers are trained like a network (with the head,
+which adds little; frozen features are not trained), then they compute the features of all
+rows once, and the classical model is fitted on the features (a search multiplies only that
+part).
 """
 
 from __future__ import annotations
@@ -194,6 +199,8 @@ def estimate_training(
         return None
     config = config or TrainingConfig()
     n_train, n_val, n_test = sample_counts(info, config, plan)
+    if analysis.family == "hybrid":
+        return _hybrid(analysis, info, config, plan, trials, folds)
     if analysis.family == "classical":
         single = _classical(analysis, info, config, plan, n_train, n_val + n_test)
         if single is not None and (trials > 1 or folds):
@@ -230,6 +237,72 @@ def estimate_training(
     return _estimate(seconds, basis, details)
 
 
+def _hybrid(
+    analysis: Analysis,
+    info: DatasetInfo,
+    config: TrainingConfig,
+    plan: dict[str, Any] | None,
+    trials: int,
+    folds: int | None,
+) -> Estimate | None:
+    """The neural layers (trained, or frozen: only the feature pass) plus the classical
+    model on their features; ``trials`` and ``folds`` are those of a search of the
+    classical model."""
+    from ..graph import analyze
+    from ..hybrid import split_graph
+
+    parts = split_graph(_document(analysis), analysis)
+    features = analyze(parts.feature_graph)
+    frozen = config.feature_training == "frozen"
+    neural = estimate_training(
+        features, info, TrainingConfig(**{**config.to_dict(), "epochs": 1}), plan
+    )
+    if neural is None:
+        return None
+    n_train, n_val, n_test = sample_counts(info, config, plan)
+    flops = forward_flops(features)
+    # The pass that computes the features of every row.
+    extract = (n_train + n_val + n_test) * flops / FLOPS_PER_CPU_SECOND
+    if frozen:
+        neural_seconds = STARTUP_CPU_SECONDS + extract
+    else:
+        per_epoch = max(0.0, neural.cpu_seconds - STARTUP_CPU_SECONDS)
+        neural_seconds = STARTUP_CPU_SECONDS + per_epoch * config.epochs + extract
+    classical = _classical(
+        analyze(parts.classical_graph), info, config, plan, n_train, n_val + n_test, demo=False
+    )
+    if classical is None:
+        return None
+    if trials > 1 or folds:
+        classical = _classical_search(classical, trials, folds)
+    fit = max(0.0, classical.cpu_seconds - CLASSICAL_STARTUP_CPU_SECONDS)
+    phase = "frozen random features" if frozen else f"{config.epochs} epochs"
+    basis = (
+        f"neural layers ({phase}, about {_amount(flops)} operations per sample and pass) on "
+        f"{n_train:,} training and {n_val + n_test:,} validation/test samples, then "
+        f"{classical.basis}"
+    )
+    details = {
+        "family": "hybrid",
+        "neural_cpu_seconds": round(neural_seconds, 1),
+        "classical_cpu_seconds": round(fit, 1),
+        "train_samples": n_train,
+        "val_samples": n_val,
+        "test_samples": n_test,
+        "epochs": 0 if frozen else config.epochs,
+        "features": parts.features,
+        "forward_flops_per_sample": round(flops),
+        "classical": classical.details,
+    }
+    return _estimate(neural_seconds + fit, basis, details)
+
+
+def _document(analysis: Analysis) -> dict[str, Any]:
+    from ..hybrid import document_of
+
+    return document_of(analysis)
+
+
 def _classical(
     analysis: Analysis,
     info: DatasetInfo,
@@ -237,6 +310,7 @@ def _classical(
     plan: dict[str, Any] | None,
     n_train: int,
     n_held_out: int,
+    demo: bool = True,
 ) -> Estimate | None:
     node = analysis.model
     if node is None or not isinstance(node.layer, ClassicalModel):
@@ -247,7 +321,7 @@ def _classical(
         return None  # an ensemble without (valid) models
     # An ensemble: the strictest row limit of its models.
     max_rows = min(classical_max_rows(limit) for limit in layer.row_limits())
-    if info.kind == "random":
+    if info.kind == "random" and demo:
         n_train = min(CLASSICAL_DEMO_ROWS.get(model.scale, 1000) for model in models)
     n = max(1, min(n_train, max_rows))
     features = max(1, _prod(analysis.nodes[analysis.inputs[0]].shape or (1,)))

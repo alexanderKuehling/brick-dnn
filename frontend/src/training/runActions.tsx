@@ -2,7 +2,7 @@ import { Badge, Loader, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunStatus, type RunSummary } from '@/api';
-import { isClassicalRun } from './classical';
+import { isClassicalRun, isHybridRun } from './classical';
 import { isActive, STATUS_COLORS, STATUS_LABELS } from './format';
 
 export function StatusBadge({ status }: { status: RunStatus }) {
@@ -36,7 +36,9 @@ export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => v
           ? `“${run.name}” leaves the queue without having trained. It uses no compute.`
           : isClassicalRun(run)
             ? `scikit-learn cannot pause a fit: “${run.name}” stops at once and nothing is saved.`
-            : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
+            : isHybridRun(run)
+              ? `“${run.name}” stops at once. A hybrid network is only kept once its classical model is fitted (a search keeps its best trial): stopped while its features are learned, nothing is saved.`
+              : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
       </Text>
     ),
     labels: queued

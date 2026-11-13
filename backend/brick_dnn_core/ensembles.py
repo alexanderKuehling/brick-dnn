@@ -414,7 +414,8 @@ def _model_label(run: TrainingRun) -> str | None:
     plan = run.plan if isinstance(run.plan, dict) else {}
     classical = plan.get("classical")
     if isinstance(classical, dict):
-        return str(classical.get("label") or classical.get("type") or "Classical model")
+        label = str(classical.get("label") or classical.get("type") or "Classical model")
+        return f"{label} on learned features" if isinstance(plan.get("hybrid"), dict) else label
     return "Neural network"
 
 

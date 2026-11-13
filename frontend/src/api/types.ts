@@ -141,9 +141,26 @@ export interface Analysis {
   outputs: string[];
   /** Null when a layer has an unknown count (SVR, SVC, gradient boosting) or on errors. */
   total_params: number | null;
-  /** classical: the network contains kernels or a classical model (missing: neural). */
-  family?: 'neural' | 'classical';
+  /**
+   * classical: the network contains kernels or a classical model; hybrid: neural layers learn
+   * the features of a classical model (missing: neural).
+   */
+  family?: NetworkFamily;
   classical?: ClassicalModelInfo | null;
+  /** Hybrid networks: where the neural layers end (missing on older servers). */
+  hybrid?: HybridInfo | null;
+}
+
+export type NetworkFamily = 'neural' | 'classical' | 'hybrid';
+
+/** The boundary of a hybrid network: its last neural layer feeds the classical model. */
+export interface HybridInfo {
+  /** The id of the last neural layer. */
+  boundary: string;
+  /** The length of the feature vector it puts out (null if unknown). */
+  features: number | null;
+  /** Trainable parameters of the neural layers (null if unknown). */
+  neural_params: number | null;
 }
 
 export interface Example {
@@ -1102,6 +1119,14 @@ export interface TrainingPlan {
   notes: string[];
   /** Classical models: what is fitted (missing for neural networks and older runs). */
   classical?: ClassicalPlan | null;
+  /** Hybrid networks: the boundary, the learned features and how they are trained. */
+  hybrid?: {
+    boundary: string;
+    features: number;
+    head_outputs: number;
+    feature_training: FeatureTraining;
+    neural_params: number | null;
+  } | null;
   /**
    * Segmentation: a training step needs about `fixed_bytes + batch size × sample_bytes` of
    * memory (null otherwise).
@@ -1189,7 +1214,12 @@ export interface TrainingConfig {
   restore_best?: boolean;
   /** Segmentation only (missing in older runs). */
   loss?: SegmentationLoss;
+  /** Hybrid networks only: learn the features first, or keep random ones. */
+  feature_training?: FeatureTraining;
 }
+
+/** How a hybrid network's neural layers get their weights before the classical fit. */
+export type FeatureTraining = 'pretrain' | 'frozen';
 
 // --------------------------------------------------------------------------
 // Hyperparameter search
@@ -1438,10 +1468,11 @@ export interface RunSummary {
   /** Username of who started it. */
   started_by: string;
   /**
-   * classical: a scikit-learn model, fitted once (epochs 1); ensemble: finished runs combined.
-   * Missing on older servers.
+   * classical: a scikit-learn model, fitted once (epochs 1); hybrid: neural layers learn the
+   * features, a classical model is fitted on them; ensemble: finished runs combined. Missing
+   * on older servers.
    */
-  family?: 'neural' | 'classical' | 'ensemble';
+  family?: RunFamily;
   /** The API token or connected app that started it (null: the web app). */
   started_via?: { source: 'token' | 'app'; name: string | null } | null;
   usage?: RunUsage;
@@ -1460,6 +1491,8 @@ export interface RunSummary {
 
 export type RunKind = 'training' | 'ensemble';
 
+export type RunFamily = 'neural' | 'classical' | 'hybrid' | 'ensemble';
+
 /** average: the weighted average of the members' predictions; stacking: a fitted model. */
 export type EnsembleMethod = 'average' | 'stacking';
 
@@ -1470,7 +1503,7 @@ export interface EnsembleMember {
   name: string;
   /** Its share of the weighted average (the weights add up to 1); null for stacking. */
   weight: number | null;
-  family: 'neural' | 'classical' | null;
+  family: Exclude<RunFamily, 'ensemble'> | null;
   /** "Neural network" or the classical model's name. */
   model: string | null;
   status: RunStatus | null;
@@ -1622,7 +1655,7 @@ export interface RunState {
   /** Every started trial, in order. */
   trials?: TrialEntry[];
   best_trial?: number | null;
-  family?: 'neural' | 'classical' | 'ensemble';
+  family?: RunFamily;
   /** An ensemble: its method, weights and the comparison with its members. */
   ensemble?: EnsembleState | null;
   /** What the fit of a classical model found (null for neural networks). */
@@ -1876,6 +1909,16 @@ export interface ClassicalRunState {
   ensemble?: 'voting' | 'stacking';
   /** Ensembles: their models, after the fit each with its own metrics (on the validation rows, or the training rows without them). */
   members?: (ModelMember & { metrics: ClassicalMetrics | null })[];
+  /** Hybrid networks: the features the neural layers learned (phase 1). */
+  hybrid?: {
+    boundary: string;
+    features: number;
+    feature_training: FeatureTraining;
+    /** Epochs of the feature training (0: frozen features). */
+    epochs: number;
+  } | null;
+  /** Hybrid networks: the fitted model on the validation rows (null without them). */
+  validation?: ClassicalMetrics | null;
 }
 
 /** A kernel hyperparameter that ended at (or very near) one of its bounds after the fit. */

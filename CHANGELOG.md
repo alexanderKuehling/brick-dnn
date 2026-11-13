@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **Hybrid networks: neural layers as the feature extractor of a classical model.** Connect
+  neural layers between the Input and a classical model (or an ensemble brick), e.g. Input →
+  Linear → ReLU → Linear(32) → gradient boosting, or a CNN ending in Flatten/Linear → SVC.
+  The analysis reports `family` `hybrid` with the boundary (the last neural layer, whose
+  output must be a flat vector) and explains a boundary that is not flat, neural branches
+  that do not lead to the model and layers after it at the brick concerned. Training has two
+  phases in one run: the neural layers learn the features with a temporary linear head on
+  the target (classification or regression, from the classical model; the usual epochs,
+  optimizer and early stopping), or keep their random weights (*Features: frozen*,
+  `feature_training: "frozen"`, `--frozen-features`); then the classical model is fitted on
+  the features of the training rows and evaluated like a classical model (metrics, threshold
+  analysis, a search over its parameters). Runs keep both parts (`weights.pt` with the
+  preprocessing and `model.joblib`) and download as a ZIP file with the generated script,
+  which trains both phases on a CSV file and predicts with both files. Predictions (also raw
+  rows), ensembles of runs, the compute estimate (both phases), the queue, MCP and
+  explanations (permutation importance and Shapley values on the whole pipeline, activations
+  and weights of the neural layers) handle them. The canvas draws the boundary teal with a
+  *features* label; the training panel shows the network settings, *Features* and the search
+  of the classical model; the run view the curves of the features and the classical results.
+  New example *MLP features for gradient boosting (hybrid)*. See docs/training.md.
 - **Hyperparameter search for classical models.** Gradient boosting, SVMs and Gaussian
   processes search over the parameters of their brick: e.g. learning rate, iterations, leaves,
   depth, rows per leaf, L2 regularisation and class weights of gradient boosting; C, gamma,

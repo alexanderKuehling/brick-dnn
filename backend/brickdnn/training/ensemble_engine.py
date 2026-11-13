@@ -189,7 +189,41 @@ def _predict(
         raise TrainingError(f"'{member['name']}' takes other columns than this dataset.")
     if member.get("family") == "classical":
         return _predict_classical(member, directory, x, task)
+    if member.get("family") == "hybrid":
+        return _predict_hybrid(member, directory, preprocessing, x, task)
     return _predict_neural(member, directory, preprocessing, x, task)
+
+
+def _predict_hybrid(
+    member: dict[str, Any],
+    directory: Path,
+    preprocessing: dict[str, Any],
+    x: np.ndarray,
+    task: str,
+) -> np.ndarray:
+    """A hybrid network: its neural layers compute the features of the standardised rows,
+    its classical model predicts from them."""
+    try:
+        import torch
+
+        from .hybrid_engine import features_of, load_extractor
+    except ImportError as exc:
+        raise TrainingError(
+            f"PyTorch is not installed on the server, which '{member['name']}' needs."
+        ) from exc
+    job = read_job(directory)
+    if job is None or not isinstance(job.get("graph"), dict):
+        raise TrainingError(f"The network of '{member['name']}' is missing.")
+    try:
+        extractor, _ = load_extractor(directory, job["graph"])
+    except FileNotFoundError:
+        raise TrainingError(f"'{member['name']}' has no trained neural layers.") from None
+    mean = np.asarray(preprocessing["mean"], dtype=np.float64)
+    std = np.asarray(preprocessing["std"], dtype=np.float64)
+    prepared = torch.from_numpy(((x - mean) / std).astype(np.float32))
+    features = features_of(extractor, [prepared])
+    # The classical model's pipeline standardises the features itself.
+    return _predict_classical(member, directory, features, task)
 
 
 def _predict_classical(

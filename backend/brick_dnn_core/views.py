@@ -594,7 +594,8 @@ class TrainingRunViewSet(
     )
     def weights(self, request: Request, pk=None) -> Response | FileResponse:
         """The trained weights (``model.state_dict()``) as a ``.pt`` file; for a classical
-        model the fitted scikit-learn pipeline as a ``.joblib`` file.
+        model the fitted scikit-learn pipeline as a ``.joblib`` file; for a hybrid network a
+        ``.zip`` file with both parts and the script (training_service.weights_archive).
 
         Logged in, or with ``?sig=`` from a download link (see downloads.py), which works
         without logging in until it expires.
@@ -613,12 +614,21 @@ class TrainingRunViewSet(
                 {"detail": "No weights available for this run."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        response = FileResponse(
-            path.open("rb"),
-            as_attachment=True,
-            filename=training.weights_filename(run),
-            content_type="application/octet-stream",
-        )
+        if training.run_family(run) == "hybrid":
+            # Two models (the neural layers and the classical one) and the script: a ZIP file.
+            response = FileResponse(
+                training.weights_archive(run),
+                as_attachment=True,
+                filename=training.weights_filename(run),
+                content_type="application/zip",
+            )
+        else:
+            response = FileResponse(
+                path.open("rb"),
+                as_attachment=True,
+                filename=training.weights_filename(run),
+                content_type="application/octet-stream",
+            )
         if signature is not None:
             response["Cache-Control"] = "private, no-store"
             response["Referrer-Policy"] = "no-referrer"

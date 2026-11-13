@@ -76,14 +76,25 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
     assert path is not None
     filename = training.weights_filename(run)
     module = inference.module_name(run.name)
-    classical = training.run_family(run) == "classical"
+    family = training.run_family(run)
+    classical = family == "classical"
+    hybrid = family == "hybrid"
+    size = path.stat().st_size
+    if hybrid:
+        size += (path.parent / "weights.pt").stat().st_size  # the ZIP file is about as large
     info: dict[str, Any] = {
         "run": {"id": str(run.pk), "name": run.name, "status": run.status},
         **weights_link(request, run, user),
         "filename": filename,
-        "size_bytes": path.stat().st_size,
+        "size_bytes": size,
         "format": (
-            "The fitted scikit-learn model saved with joblib: a dict with the Pipeline "
+            "A ZIP file with both parts of the hybrid network: <name>.features.pt (the neural "
+            'layers, torch.save({"state_dict", "preprocessing"}), for the class '
+            "FeatureExtractor of the script), <name>.joblib (the scikit-learn Pipeline fitted "
+            "on the learned features, a pickle: only load files you trust), "
+            "<name>.preprocessing.json and the script with --predict."
+            if hybrid
+            else "The fitted scikit-learn model saved with joblib: a dict with the Pipeline "
             '(StandardScaler, then the model) under "model", and "columns", "target", '
             '"task" and "class_names" (one per column of predict_proba). Load it with '
             "joblib.load(path); it is a pickle, so only load files you trust."
@@ -117,7 +128,13 @@ def weights_info(request: Request, run: TrainingRun, user) -> dict[str, Any]:
         info["how_to_use"] = inference.usage_snippet(run.plan, preprocessing, module, filename)
     except inference.UnknownPreprocessing as exc:
         info["notes"].append(str(exc))
-    if code is not None and classical:
+    if hybrid:
+        info["notes"].append(
+            f"Unzip it; the script ({module}.py in the ZIP file) predicts the rows of a CSV "
+            f"file with both parts: python {module}.py --predict new.csv --weights "
+            "<name>.features.pt --save <name>.joblib."
+        )
+    elif code is not None and classical:
         info["notes"].append(
             "The joblib file holds the whole fitted pipeline: model_code (make_model) is "
             "only needed to fit it again. generate_pytorch_code gives the full scikit-learn "

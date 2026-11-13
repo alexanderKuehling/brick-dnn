@@ -387,6 +387,10 @@ class _ClassicalGenerator:
         return _LOAD_CSV.replace("[[TARGET]]", target)
 
     def _fit(self) -> str:
+        return _FIT.replace("[[REPORT]]", self._report())
+
+    def _report(self) -> str:
+        """What the fitted ``model`` did on ``features[val_rows]`` and what it learned."""
         report = _CLASSIFICATION_REPORT if self.classification else _REGRESSION_REPORT
         if self.members:
             report += _ENSEMBLE_REPORT
@@ -400,7 +404,7 @@ class _ClassicalGenerator:
             report += _BOOSTING_REPORT
         else:
             report += _SVR_REPORT
-        return _FIT.replace("[[REPORT]]", report)
+        return report
 
     def _save_model(self) -> str:
         if self.classification:
@@ -414,15 +418,17 @@ class _ClassicalGenerator:
         return _SAVE_MODEL.replace("[[FORMAT]]", MODEL_FORMAT).replace("[[TASK]]", task)
 
     def _predict(self) -> str:
+        return _PREDICT.replace("[[OUTPUT]]", self._output())
+
+    def _output(self) -> str:
+        """Print the predictions of the fitted ``model`` for ``features``."""
         if hard_voting(self.layer):
-            output = _PREDICT_LABELS
-        elif self.classification:
-            output = _PREDICT_CLASSES
-        elif self.gp:
-            output = _PREDICT_WITH_STD
-        else:
-            output = _PREDICT_VALUES
-        return _PREDICT.replace("[[OUTPUT]]", output)
+            return _PREDICT_LABELS
+        if self.classification:
+            return _PREDICT_CLASSES
+        if self.gp:
+            return _PREDICT_WITH_STD
+        return _PREDICT_VALUES
 
     def _demo(self) -> str:
         if self.classification:

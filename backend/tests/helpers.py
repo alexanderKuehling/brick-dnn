@@ -4,9 +4,12 @@ from typing import Any
 
 from brickdnn import EXAMPLES, analyze
 
-# Examples by family: neural networks (PyTorch) and classical models (scikit-learn).
-NEURAL_EXAMPLES = sorted(k for k, v in EXAMPLES.items() if analyze(v["graph"]).family == "neural")
-CLASSICAL_EXAMPLES = sorted(set(EXAMPLES) - set(NEURAL_EXAMPLES))
+# Examples by family: neural networks (PyTorch), classical models (scikit-learn) and hybrid
+# networks (neural layers that learn the features of a classical model).
+FAMILIES = {key: analyze(example["graph"]).family for key, example in EXAMPLES.items()}
+NEURAL_EXAMPLES = sorted(k for k, family in FAMILIES.items() if family == "neural")
+CLASSICAL_EXAMPLES = sorted(k for k, family in FAMILIES.items() if family == "classical")
+HYBRID_EXAMPLES = sorted(k for k, family in FAMILIES.items() if family == "hybrid")
 
 
 def chain(*layers: tuple[str, dict[str, Any]]) -> dict[str, Any]:

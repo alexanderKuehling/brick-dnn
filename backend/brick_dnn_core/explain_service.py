@@ -127,6 +127,11 @@ def _why_not(
 ) -> str | None:
     if family == "classical" and name in NEURAL_ONLY:
         return "A classical model (scikit-learn) has no layers to look into."
+    if family == "hybrid" and (name == "image" or (name == "samples" and kind == "image")):
+        return (
+            "Not for hybrid networks yet: their prediction comes from the classical model "
+            "after the neural layers, which the network's gradients and scores do not reach."
+        )
     if kind is None:
         if name == "weights":
             return None
