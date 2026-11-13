@@ -119,6 +119,7 @@ class _Context:
         self.demo = self.kind == "demo"
         self._pool: dict[str, Any] | None = None
         self._model: Any = None
+        self._bundle: Any = None  # the classical model (classical and hybrid runs)
 
     # ------------------------------------------------------------------ helpers
 
@@ -145,10 +146,20 @@ class _Context:
         return value
 
     def require(self, *, family: str | None = None, kinds: tuple[str, ...] = ()) -> None:
-        if family == "neural" and self.family != "neural":
+        """``family`` "neural": the method needs the network's layers (a hybrid network's
+        neural layers count), "network": it needs a neural network that predicts itself
+        (gradients and outputs of the network, not of a classical model after it)."""
+        if family in ("neural", "network") and self.family == "classical":
             raise ExplainError(
                 "This works with neural networks only: a classical model (scikit-learn) "
                 "has no layers."
+            )
+        if family == "network" and self.family == "hybrid":
+            raise ExplainError(
+                "This is not available for hybrid networks yet: their prediction comes from "
+                "the classical model after the neural layers, which gradients and scores of "
+                "the network do not reach. Permutation importance, feature attributions, "
+                "activations and weights work."
             )
         if kinds and self.kind not in kinds:
             what = {"image": "image models", "tabular": "models trained on a CSV file"}
@@ -171,8 +182,13 @@ class _Context:
             from .neural import build_traced_model
 
             torch.set_num_threads(max(1, min(THREADS, _cpus())))
+            graph = self.job.graph
+            if self.family == "hybrid":  # its neural layers, up to the boundary
+                from ...hybrid import split_graph
+
+                graph = split_graph(graph).feature_graph
             try:
-                model, analysis = build_traced_model(self.job.graph)
+                model, analysis = build_traced_model(graph)
             except Exception as exc:
                 raise ExplainError(f"The network cannot be built: {short_error(exc)}") from exc
             weights = self.run_dir / "weights.pt"
@@ -180,6 +196,8 @@ class _Context:
                 raise ExplainError("This run has no trained weights.")
             try:
                 state = torch.load(weights, map_location="cpu", weights_only=True)
+                if self.family == "hybrid":
+                    state = state["state_dict"]  # saved with the preprocessing
                 model.load_state_dict(state)
             except Exception as exc:
                 raise ExplainError(
@@ -193,21 +211,25 @@ class _Context:
 
     def classical(self) -> Any:
         """The fitted scikit-learn bundle (see classical_engine.py)."""
-        if self._model is None:
+        if self._bundle is None:
             import joblib
 
             path = self.run_dir / "model.joblib"
             if not path.is_file():
                 raise ExplainError("This run has no fitted model.")
             try:
-                self._model = joblib.load(path)
+                self._bundle = joblib.load(path)
             except Exception as exc:
                 raise ExplainError(f"The fitted model cannot be loaded: {exc}") from exc
-        return self._model
+        return self._bundle
 
     def tabular_predict(self) -> Any:
         """``predict(rows) -> outputs``: rows of standardised features (raw for classical
-        demo runs), outputs are class probabilities or values in the units of the target."""
+        demo runs), outputs are class probabilities or values in the units of the target. A
+        hybrid network: its neural layers compute the features, its classical model
+        predicts (the whole pipeline)."""
+        if self.family == "hybrid":
+            return self._hybrid_predict()
         if self.family == "classical":
             bundle = self.classical()
             pipeline = bundle["model"]
@@ -251,6 +273,41 @@ class _Context:
             return out
 
         return predict_neural
+
+    def _hybrid_predict(self) -> Any:
+        import torch
+
+        from ..classical_engine import class_probabilities
+        from .neural import forward
+
+        model, _, _ = self.neural()
+        bundle = self.classical()
+        pipeline = bundle["model"]  # standardises the features itself
+
+        def features(rows: np.ndarray) -> np.ndarray:
+            with torch.no_grad():
+                out = forward(model, torch.as_tensor(rows, dtype=torch.float32))
+            return out.double().reshape(len(rows), -1).numpy()
+
+        if bundle.get("task") == "classification":
+            indices = bundle.get("class_indices") or []
+            k = int(bundle.get("num_classes") or len(indices))
+
+            def predict(rows: np.ndarray) -> np.ndarray:
+                with _thread_limit():
+                    proba = class_probabilities(pipeline, features(rows))
+                full = np.zeros((len(rows), k))
+                full[:, indices or list(range(proba.shape[1]))] = proba
+                return full
+
+            return predict
+
+        def predict_value(rows: np.ndarray) -> np.ndarray:
+            with _thread_limit():
+                out = pipeline.predict(features(rows))
+            return np.asarray(out, dtype=np.float64).reshape(-1, 1)
+
+        return predict_value
 
     def gp_std(self) -> Any:
         """The predictive standard deviation of a Gaussian process regressor, else None."""
@@ -437,9 +494,9 @@ class _Context:
 
     def method_samples(self) -> dict[str, Any]:
         if self.kind == "image":
-            self.require(family="neural")
+            self.require(family="network")
             return self._image_samples()
-        self.require(kinds=("tabular",) if self.family == "neural" else ("tabular", "demo"))
+        self.require(kinds=("tabular", "demo") if self.family == "classical" else ("tabular",))
         return self._tabular_samples()
 
     def _image_samples(self) -> dict[str, Any]:
@@ -535,7 +592,7 @@ class _Context:
 
         from . import neural
 
-        self.require(family="neural", kinds=("image",))
+        self.require(family="network", kinds=("image",))
         if not self.classification:
             raise ExplainError("Image explanations need a classification network.")
         model, analysis, _ = self.neural()
@@ -618,7 +675,7 @@ class _Context:
         return answer
 
     def method_tabular(self) -> dict[str, Any]:
-        self.require(kinds=("tabular",) if self.family == "neural" else ("tabular", "demo"))
+        self.require(kinds=("tabular", "demo") if self.family == "classical" else ("tabular",))
         if not (self.classification or self.regression):
             raise ExplainError("This works with models that have one output.")
         predict = self.tabular_predict()
@@ -694,7 +751,7 @@ class _Context:
         )
 
     def method_permutation(self) -> dict[str, Any]:
-        self.require(kinds=("tabular",) if self.family == "neural" else ("tabular", "demo"))
+        self.require(kinds=("tabular", "demo") if self.family == "classical" else ("tabular",))
         if not (self.classification or self.regression):
             raise ExplainError("This works with models that have one output.")
         pool = self.pool()
@@ -736,7 +793,7 @@ class _Context:
         }
 
     def method_boundary(self) -> dict[str, Any]:
-        self.require(kinds=("tabular",) if self.family == "neural" else ("tabular", "demo"))
+        self.require(kinds=("tabular", "demo") if self.family == "classical" else ("tabular",))
         columns = self.columns()
         if len(columns) != 2:
             raise ExplainError(
@@ -839,7 +896,13 @@ class _Context:
             answer["image"] = render.data_url(
                 render.shrink(render.unit_to_uint8(picked["unit"]), SHOW_SIDE)
             )
-        if self.classification or self.regression:
+        if self.family == "hybrid":
+            # The bricks up to the boundary; the classical model has no activations.
+            self.notes.append(
+                "The neural layers of a hybrid network: the last one's output is the feature "
+                "vector of the classical model, which is not shown."
+            )
+        elif self.classification or self.regression:
             with torch.no_grad():
                 out = neural.forward(model, x)
             if self.classification:

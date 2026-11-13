@@ -2,6 +2,7 @@ import type {
   BuiltinDataset,
   Dataset,
   DatasetRef,
+  FeatureTraining,
   Optimizer,
   SegmentationLoss,
   TrainingConfig,
@@ -64,6 +65,11 @@ export interface SettingsValues {
   segmentation_batch_size: NumberField;
   /** Segmentation: the cross-entropy per pixel, or that plus a Dice term. */
   loss: SegmentationLoss;
+  /**
+   * Hybrid networks: the neural layers learn the features with a temporary head first
+   * ('pretrain'), or keep their random weights ('frozen', a quick baseline).
+   */
+  feature_training: FeatureTraining;
 
   /** Hyperparameter search instead of a single training. */
   search: boolean;
@@ -143,6 +149,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   restore_best: true,
   segmentation_batch_size: 8,
   loss: 'cross_entropy',
+  feature_training: 'pretrain',
   search: false,
   search_method: 'random',
   search_trials: 10,
@@ -184,6 +191,11 @@ export const OPTIMIZERS: { value: Optimizer; label: string }[] = [
   { value: 'adam', label: 'Adam' },
   { value: 'adamw', label: 'AdamW' },
   { value: 'sgd', label: 'SGD' },
+];
+
+export const FEATURE_TRAININGS: { value: FeatureTraining; label: string }[] = [
+  { value: 'pretrain', label: 'Learn them (temporary head on the target)' },
+  { value: 'frozen', label: 'Frozen random features (no training)' },
 ];
 
 export const LOSSES: { value: SegmentationLoss; label: string }[] = [
@@ -470,17 +482,31 @@ export function validateSettings(
   values: SettingsValues,
   {
     classical = null,
+    hybrid = null,
     segmentation = null,
     validationRows = null,
     metrics = null,
   }: {
     classical?: ClassicalScope | null;
+    /**
+     * A hybrid network: the neural settings apply to its features, a search varies the
+     * parameters of its classical `model` (a classical search, which may cross-validate).
+     */
+    hybrid?: { model: string | null } | null;
     segmentation?: SegmentationScope | null;
     validationRows?: number | null;
     /** The objective metrics the data allows (null: not known yet, not checked). */
     metrics?: TuningMetric[] | null;
   } = {}
 ): SettingsErrors {
+  if (hybrid) {
+    const errors = validateSettings({ ...values, search: false }, { segmentation, validationRows });
+    if (values.search && hybrid.model) {
+      validateClassicalSearch(values, hybrid.model, errors);
+      checkMetric(values, metrics, errors);
+    }
+    return errors;
+  }
   if (classical) {
     const errors = validateClassical(values, classical);
     if (values.search && classical.model) {
@@ -606,9 +632,17 @@ export function toConfig(
   {
     builtin = false,
     classical = false,
+    hybrid = false,
     segmentation = false,
-  }: { builtin?: boolean; classical?: boolean; segmentation?: boolean } = {}
+  }: { builtin?: boolean; classical?: boolean; hybrid?: boolean; segmentation?: boolean } = {}
 ): Partial<TrainingConfig> {
+  if (hybrid) {
+    // The neural settings learn the features (a search varies the classical model only).
+    return {
+      ...toConfig({ ...values, search: false }, { builtin, segmentation }),
+      feature_training: values.feature_training,
+    };
+  }
   const number = (field: NumberField) => {
     const value = parseField(field);
     return value === '' || value === null ? null : value;
@@ -823,6 +857,9 @@ export function loadSettings(): SettingsValues {
   }
   if (!LOSSES.some((option) => option.value === values.loss)) {
     values.loss = DEFAULT_SETTINGS.loss;
+  }
+  if (!FEATURE_TRAININGS.some((option) => option.value === values.feature_training)) {
+    values.feature_training = DEFAULT_SETTINGS.feature_training;
   }
   for (const key of BOOLEAN_FIELDS) {
     if (typeof values[key] !== 'boolean') {

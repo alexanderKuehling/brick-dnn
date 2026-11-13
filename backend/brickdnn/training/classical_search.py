@@ -247,7 +247,7 @@ class ClassicalSearch(_ClassicalRun):
 
     def _trial_pipeline(self, params: dict[str, Any]) -> Any:
         """The unfitted model with the values of a trial on the model brick."""
-        graph = trial_graph(self.job.graph, self.classical["node"], params)
+        graph = trial_graph(self.model_graph, self.classical["node"], params)
         analysis = analyze(graph)
         if not analysis.valid:
             raise TrainingError(

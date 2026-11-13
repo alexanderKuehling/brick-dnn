@@ -13,6 +13,12 @@ DEVICES = ("auto", "cpu", "cuda", "mps")
 # minus the overlap of the predicted and the true area of each class), which helps when a
 # class covers only a few pixels. Other tasks do not use the setting.
 LOSSES = ("cross_entropy", "cross_entropy_dice")
+# Hybrid networks (neural layers before a classical model): how the neural layers learn the
+# features before the classical model is fitted on them. "pretrain": like a network of their
+# own, with a temporary linear head on the target (the normal epochs, optimizer, early
+# stopping …); "frozen": not at all (random features, a quick baseline). Other networks do
+# not use the setting.
+FEATURE_TRAINING = ("pretrain", "frozen")
 # Segmentation keeps every layer's output for a whole batch of images in memory. A batch
 # may need at most this much (MB): the default leaves room for PyTorch and the data in a
 # training process that may use about 1.8 GB.
@@ -158,6 +164,8 @@ class TrainingConfig:
     restore_best: bool = True
     # Segmentation only (see LOSSES).
     loss: str = "cross_entropy"
+    # Hybrid networks only (see FEATURE_TRAINING).
+    feature_training: str = "pretrain"
 
     @property
     def has_test(self) -> bool:
@@ -195,6 +203,13 @@ class TrainingConfig:
             patience=_int(data, "patience", "Patience", None, 1, 1000),
             restore_best=_bool(data, "restore_best", "Restore best weights", cls.restore_best),
             loss=_choice(data, "loss", "Loss", cls.loss, LOSSES),
+            feature_training=_choice(
+                data,
+                "feature_training",
+                "Feature training",
+                cls.feature_training,
+                FEATURE_TRAINING,
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:

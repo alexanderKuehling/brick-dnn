@@ -2,11 +2,13 @@
  * Classical models (Gaussian processes, SVMs, gradient boosting and ensembles of them) train
  * with scikit-learn instead of PyTorch:
  * fitted once, without epochs, on tabular data (see docs/training.md#classical-models).
+ * Hybrid networks need both: neural layers learn the features (PyTorch, with epochs), then a
+ * classical model is fitted on them (see docs/training.md#hybrid-networks).
  */
 import type { Analysis, RunSummary, TrainingStatus } from '@/api/types';
 import { networkFamily } from '@/builder/kinds';
 
-export type Family = 'neural' | 'classical';
+export type Family = 'neural' | 'classical' | 'hybrid';
 
 /** What the open network needs to train: PyTorch, or scikit-learn for a classical model. */
 export function trainingFamily(analysis: Analysis | null | undefined): Family {
@@ -21,6 +23,9 @@ export function canStartTraining(status: TrainingStatus, family: Family): boolea
   if (!status.enabled) {
     return false;
   }
+  if (family === 'hybrid') {
+    return status.available && Boolean(status.classical?.available);
+  }
   return family === 'classical' ? Boolean(status.classical?.available) : status.available;
 }
 
@@ -28,6 +33,9 @@ export function canStartTraining(status: TrainingStatus, family: Family): boolea
 export function unavailableReason(status: TrainingStatus, family: Family): string | null {
   if (family === 'classical') {
     return status.classical?.reason ?? null;
+  }
+  if (family === 'hybrid') {
+    return status.reason ?? status.classical?.reason ?? null;
   }
   return status.reason;
 }
@@ -42,7 +50,7 @@ export function classicalMaxRows(
   analysis: Analysis | null
 ): number | null {
   const classical = analysis?.classical;
-  if (!status || !classical || networkFamily(analysis) !== 'classical') {
+  if (!status || !classical || networkFamily(analysis) === 'neural') {
     return null;
   }
   const types = classical.members ? classical.members.map((m) => m.type) : [classical.type];
@@ -51,6 +59,12 @@ export function classicalMaxRows(
     return null;
   }
   return Math.min(...(limits as number[]));
+}
+
+/** A hybrid run: neural layers learned the features, a classical model was fitted on them. */
+export function isHybridRun(run: Pick<RunSummary, 'family'> & { state?: unknown }): boolean {
+  const state = run.state as { family?: string } | null | undefined;
+  return (run.family ?? state?.family) === 'hybrid';
 }
 
 /** A run of a classical model (fitted once with scikit-learn). */

@@ -4,7 +4,7 @@ import type { MantineTheme } from '@mantine/core';
 import type { LayerSpec } from '@/api/types';
 import { categoryColor } from '@/theme';
 import { edgeId, type LayerFlowNode, type LayerNodeData } from './graph';
-import { inputSlots, outputKind, slotFor } from './kinds';
+import { inputSlots, isFeatureEdge, outputKind, slotFor } from './kinds';
 import { LayerNode } from './LayerNode';
 import classes from './Flow.module.css';
 
@@ -38,6 +38,21 @@ const EDGE_LOOKS = {
   estimator: { className: classes.estimatorEdge, markerEnd: ESTIMATOR_MARKER },
 } as const;
 
+/** The arrow of the boundary of a hybrid network: the features into a classical model. */
+const FEATURES_MARKER = {
+  type: MarkerType.ArrowClosed,
+  width: 18,
+  height: 18,
+  color: 'var(--mantine-color-teal-6)',
+} as const;
+
+/** The boundary of a hybrid network: neural layers hand their features to a classical model. */
+const FEATURES_LOOK = {
+  className: classes.featuresEdge,
+  markerEnd: FEATURES_MARKER,
+  label: 'features',
+} as const;
+
 export function makeEdge(source: string, target: string): Edge {
   return { id: edgeId(source, target), source, target, ...EDGE_DEFAULTS };
 }
@@ -50,7 +65,9 @@ export function withEdgeStyle(edges: Edge[]): Edge[] {
  * Edges as the canvas draws them: a connection into a brick with several inputs (a Gaussian
  * process: features and kernel) ends at the handle of the input that takes what its source
  * puts out; kernel connections are dashed, connections that carry a classical model into an
- * ensemble dotted. The graph document has no handles; they follow from the bricks (see
+ * ensemble dotted, and the features from the last neural layer into a classical model (the
+ * boundary of a hybrid network) teal and labelled. The graph document has no handles; they
+ * follow from the bricks (see
  * kinds.ts). Unchanged edges keep their identity.
  */
 export function decorateEdges(
@@ -59,10 +76,16 @@ export function decorateEdges(
   specs: Record<string, LayerSpec>
 ): Edge[] {
   return edges.map((edge) => {
-    const kind = outputKind(specs[typeOf(edge.source) ?? '']);
-    const slots = inputSlots(specs[typeOf(edge.target) ?? '']);
+    const source = specs[typeOf(edge.source) ?? ''];
+    const target = specs[typeOf(edge.target) ?? ''];
+    const kind = outputKind(source);
+    const slots = inputSlots(target);
     const handle = slots.length > 1 ? (slotFor(slots, kind) ?? slots[0]).name : undefined;
-    const look = kind === 'tensor' ? null : EDGE_LOOKS[kind];
+    const look = isFeatureEdge(source, target)
+      ? FEATURES_LOOK
+      : kind === 'tensor'
+        ? null
+        : EDGE_LOOKS[kind];
     if (
       (edge.targetHandle ?? undefined) === handle &&
       (edge.className ?? undefined) === look?.className
@@ -74,6 +97,7 @@ export function decorateEdges(
       targetHandle: handle,
       className: look?.className,
       markerEnd: look?.markerEnd ?? EDGE_DEFAULTS.markerEnd,
+      label: look && 'label' in look ? look.label : undefined,
     };
   });
 }

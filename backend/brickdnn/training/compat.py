@@ -77,6 +77,12 @@ class TrainingPlan:
     ``segmentation`` for segmentation, else None: ``{"binary": bool, "ignore_index": 255 |
                 None, "sample_bytes": int, "fixed_bytes": int}`` (the estimated memory of a
                 training step is ``fixed_bytes + batch size × sample_bytes``)
+    ``hybrid``  for hybrid networks (neural layers that learn the features of a classical
+                model), else None: ``{"boundary", "features", "head_outputs",
+                "feature_training", "neural_params"}``. ``inputs``, ``targets`` and ``image``
+                are those of the neural layers with their temporary head (``head_outputs``:
+                one per class, or 1); ``classical`` describes the model fitted on the
+                ``features`` of the ``boundary`` layer.
     """
 
     task: str  # classification | regression | segmentation | demo
@@ -89,6 +95,7 @@ class TrainingPlan:
     notes: list[str] = field(default_factory=list)
     classical: dict[str, Any] | None = None
     segmentation: dict[str, Any] | None = None
+    hybrid: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -188,6 +195,8 @@ def _check_validation(
         measured = "the test rows" if test else "its training rows (optimistic)"
         result.warnings.append(f"{where}: the fitted model is measured on {measured} only.")
         return
+    # A hybrid network searches over its classical part, which cross-validates instead.
+    tuning = tuning and analysis.family != "hybrid"
     measured = (
         "the test data, once, after training"
         if test
@@ -218,6 +227,11 @@ def _check(
     inputs = _input_specs(analysis)
     if analysis.family == "classical":
         _check_classical(result, analysis, dataset, inputs, config)
+        if result.errors:
+            result.plan = None
+        return result
+    if analysis.family == "hybrid":
+        _check_hybrid(result, analysis, dataset, config)
         if result.errors:
             result.plan = None
         return result
@@ -861,7 +875,8 @@ def suggest_fixes(
     analysis = analysis or analyze(graph)
     if not analysis.valid or len(analysis.inputs) != 1 or len(analysis.outputs) != 1:
         return []
-    classical = analysis.family == "classical"
+    # A classical model's output follows the data, as does the head of a hybrid network.
+    classical = analysis.family in ("classical", "hybrid")
     if is_segmentation(dataset) and not classical:
         return _segmentation_fixes(graph, dataset, analysis, result)
     if result is not None and result.ok and (classical or _outputs_fit(analysis, dataset)):
@@ -1149,20 +1164,15 @@ def _models_for(task: str) -> str:
     return ", ".join(names[:-1]) + f" or {names[-1]}" if len(names) > 1 else "".join(names)
 
 
-def _check_classical(
-    result: Compatibility,
-    analysis: Analysis,
-    info: DatasetInfo,
-    inputs: list[dict[str, Any]],
-    config: TrainingConfig | None,
-) -> None:
+def classical_info(analysis: Analysis) -> tuple[dict[str, Any], str]:
+    """``plan.classical`` of the classical model of ``analysis`` (also of a hybrid
+    network), and the key of its row limit (see config.CLASSICAL_MAX_ROWS)."""
     node = analysis.model
     assert node is not None and isinstance(node.layer, ClassicalModel)
     layer = node.layer
     # An ensemble: the strictest row limit of its models.
     limit = min(layer.row_limits(), key=classical_max_rows)
     max_rows = classical_max_rows(limit)
-    models, variable, cost = LIMITS[limit]
     classical: dict[str, Any] = {
         "node": node.id,
         "type": node.type,
@@ -1187,6 +1197,22 @@ def _check_classical(
         ]
         if layer.type == "VotingClassifier":
             classical["voting"] = layer.p["voting"]
+    return classical, limit
+
+
+def _check_classical(
+    result: Compatibility,
+    analysis: Analysis,
+    info: DatasetInfo,
+    inputs: list[dict[str, Any]],
+    config: TrainingConfig | None,
+) -> None:
+    node = analysis.model
+    assert node is not None and isinstance(node.layer, ClassicalModel)
+    layer = node.layer
+    classical, limit = classical_info(analysis)
+    max_rows = int(classical["max_rows"])
+    models, variable, cost = LIMITS[limit]
     max_samples = config.max_samples if config is not None else None
     if max_samples is not None and max_samples > max_rows:
         result.errors.append(
@@ -1368,3 +1394,146 @@ def _classical_demo_plan(
         notes=notes,
         classical={**classical, "class_targets": "indices"},
     )
+
+
+# --------------------------------------------------------------------------- #
+# Hybrid networks: neural layers that learn the features of a classical model
+# --------------------------------------------------------------------------- #
+
+HYBRID_NOTE = (
+    "Two phases: the neural layers learn {features} features with a temporary linear head on "
+    "the target (the epochs, optimizer, early stopping … of the settings), then the head is "
+    "dropped and {estimator} is fitted on the features of the training rows."
+)
+HYBRID_FROZEN_NOTE = (
+    "Frozen features: the neural layers keep their random initial weights (no training); "
+    "{estimator} is fitted on the {features} random features they put out. A quick baseline."
+)
+
+
+def _check_hybrid(
+    result: Compatibility,
+    analysis: Analysis,
+    info: DatasetInfo,
+    config: TrainingConfig | None,
+) -> None:
+    """A hybrid network: the neural layers with a temporary head (one output per class, or
+    one value) must fit the data like a neural network, and the classical model's task must
+    fit the target. The plan is that of the neural layers with the head, plus ``classical``
+    and ``hybrid``."""
+    from ..hybrid import document_of, head_graph, split_graph
+
+    node = analysis.model
+    assert node is not None and isinstance(node.layer, ClassicalModel)
+    layer = node.layer
+    classification = layer.task == "classification"
+    name = info.name
+    target = info.columns[-1] if info.columns else "target"
+    if is_segmentation(info):
+        result.errors.append(
+            f"{layer.label} predicts one {'class' if classification else 'value'} per sample, "
+            f"but {name} has a class for every pixel. A segmentation needs a neural network "
+            "that outputs a class per pixel, e.g. the example U-Net."
+        )
+        return
+    if info.kind == "random":
+        outputs = CLASSICAL_DEMO_CLASSES if classification else 1
+    elif info.kind in ("builtin", "images"):
+        if not classification:
+            result.errors.append(
+                f"{layer.label} predicts a number, but {name} has classes: use "
+                f"{_models_for('classification')} on the learned features."
+            )
+            return
+        outputs = info.num_classes or 0
+    elif info.kind == "csv":
+        prepared = info.predefined_split is not None
+        if classification:
+            if info.target_kind == "number":
+                result.errors.append(
+                    f"The target column '{target}' contains decimal numbers, which is a "
+                    f"regression task: use {_models_for('regression')} instead of {layer.label}."
+                )
+                return
+            if prepared and not info.class_names:
+                result.errors.append(
+                    f"This dataset was prepared for regression: its target '{target}' has no "
+                    "classes. Prepare it for classification in the Data tab, or use "
+                    f"{_models_for('regression')}."
+                )
+                return
+            if info.target_kind == "integer" and not prepared:
+                low, _ = info.target_range or [0, 0]
+                if low < 0:
+                    result.errors.append(
+                        f"The target column '{target}' holds negative whole numbers. The neural "
+                        "layers learn the features from class indices 0, 1, 2 …: relabel the "
+                        "classes (e.g. in the Data tab), or use text labels."
+                    )
+                    return
+            outputs = _wanted_outputs(info, 2)
+            if outputs < 2:
+                result.errors.append(
+                    f"The target column '{target}' has more than {MAX_CLASSES:,} different "
+                    "values or only one: it cannot be used for classification."
+                )
+                return
+        else:
+            if info.target_kind == "text":
+                result.errors.append(
+                    f"The target column '{target}' contains text labels ({info.num_classes or 0} "
+                    f"classes), so this is a classification task: use "
+                    f"{_models_for('classification')} instead of {layer.label}."
+                )
+                return
+            outputs = 1
+    else:
+        result.errors.append(f"Unknown dataset kind '{info.kind}'.")
+        return
+
+    parts = split_graph(document_of(analysis), analysis)
+    trial = analyze(head_graph(parts, outputs))
+    neural = _check(trial, info, config)
+    result.errors += neural.errors
+    # The head is not the user's: hints about "the last layer" do not apply.
+    result.warnings += [w for w in neural.warnings if "last layer" not in w]
+    plan = neural.plan
+    if result.errors or plan is None:
+        return
+    classical, limit = classical_info(analysis)
+    if classification:
+        classical["class_targets"] = "indices"  # the neural data turns classes into indices
+    max_rows = int(classical["max_rows"])
+    models, variable, cost = LIMITS[limit]
+    config = config or TrainingConfig()
+    training = config.feature_training
+    hybrid = analysis.hybrid_dict() or {}
+    if classification and not plan.class_names:  # demo data: the classes have no names
+        plan.class_names = [f"class {i}" for i in range(outputs)]
+    plan.classical = classical
+    plan.hybrid = {
+        "boundary": parts.boundary,
+        "features": parts.features,
+        "head_outputs": outputs,
+        "feature_training": training,
+        "neural_params": hybrid.get("neural_params"),
+    }
+    plan.summary = (
+        f"{plan.summary.rstrip('.')}: neural layers learn {parts.features} features, "
+        f"{layer.estimator} is fitted on them."
+    )
+    note = HYBRID_FROZEN_NOTE if training == "frozen" else HYBRID_NOTE
+    plan.notes = [
+        *plan.notes,
+        note.format(features=parts.features, estimator=layer.estimator),
+        *_model_notes(layer),
+    ]
+    rows = _training_rows(info, config) if info.kind == "csv" else None
+    if rows is not None and rows > max_rows:
+        result.warnings.append(
+            f"{models} are fitted on at most {max_rows:,} training rows on this server "
+            f"({variable}; the time to fit grows with {cost}): the neural layers learn from "
+            f"all {rows:,} training rows, {layer.estimator} is fitted on the features of "
+            f"{max_rows:,} random ones of them."
+        )
+    result.plan = plan

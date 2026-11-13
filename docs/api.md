@@ -65,9 +65,11 @@ edges carry; classical models and ensembles pass on the model itself), `kernel` 
 bricks and Gaussian processes: the kernel as scikit-learn code, otherwise `null`) and `task`
 (classical models and ensembles: `regression` or `classification`); ensembles also have
 `members` (their models in the order of the edges: `[{"node", "name", "type", "estimator",
-"label"}]`). The top level adds `family` (`neural` or `classical`) and `classical`
-(`{"node", "type", "estimator", "task", "kernel", "members"}` for a network with a classical
-model or an ensemble, else `null`; `members` is `null` for a single model). For example a
+"label"}]`). The top level adds `family` (`neural`, `classical` or `hybrid`: neural
+layers that learn the features of a classical model), `classical` (`{"node", "type",
+"estimator", "task", "kernel", "members"}` for a network with a classical model or an
+ensemble, else `null`; `members` is `null` for a single model) and `hybrid` (`{"boundary",
+"features", "neural_params"}` for a hybrid network, else `null`). For example a
 Gaussian process without a kernel brick:
 
 ```json
@@ -96,7 +98,10 @@ and the catalogue fields `family`, `output_kind` and `input_slots` of `GET /api/
 
 For a classical model the code is a scikit-learn script (`make_model()`, `--csv`, `--save
 model.joblib`, `--predict`); `class_name` does not apply, and without `include_training`
-it keeps `--predict` to use a downloaded `.joblib` file.
+it keeps `--predict` to use a downloaded `.joblib` file. A hybrid network gets both parts
+(`FeatureExtractor`, or `class_name`, and `make_model()`), the two phases of the training
+(`--csv`, `--frozen`) and `--predict` with `--weights features.pt --save model.joblib`; see
+[graph-format.md](graph-format.md#generated-code).
 
 ```bash
 curl -X POST http://localhost:8080/api/generate/?download=1 \
@@ -412,7 +417,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
 | DELETE | `/api/training/runs/<id>/`             | Delete the run (stops it first)                     |
-| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`) or fitted classical model (`.joblib`); with `?sig=…` from a download link without login |
+| GET    | `/api/training/runs/<id>/weights/`     | Download the trained `state_dict` (`.pt`), fitted classical model (`.joblib`) or, for a hybrid network, a `.zip` with both parts, the preprocessing and the script; with `?sig=…` from a download link without login |
 | POST   | `/api/training/runs/<id>/predict/`     | Run the trained network on a few inputs `{inputs, input_format?, input_scale?, top_k?}` or image files `{image, mask?}` |
 | GET    | `/api/training/runs/<id>/predict-form/` | What the prediction panel needs: input columns (prepared and raw) with sample rows, or the image size; `available`/`reason` |
 | POST   | `/api/training/runs/<id>/decision-threshold/` | Binary classification: the threshold its predictions use `{threshold}` (0–1; only who started the run) |
@@ -813,14 +818,24 @@ and, for `VotingClassifier`, `voting`. Only `val_split`, `test_split`, `max_samp
 brick (above; older servers had `"tuning": false`). Their runs have `family` `"classical"` (otherwise `"neural"`) and
 `epochs` 1.
 
+A **hybrid network** (neural layers before a classical model, see
+[training.md](training.md#hybrid-networks)) needs PyTorch and scikit-learn. Its `config`
+has the settings of a network for the neural layers and `feature_training` (`"pretrain"`,
+the default: learn the features with a temporary head; `"frozen"`: keep random ones); its
+`tuning` varies the parameters of the classical model, as above. The check's plan is that of
+the neural layers with their head (`targets`, `class_names`, `image`), plus `classical` and
+`hybrid` (`{"boundary", "features", "head_outputs", "feature_training", "neural_params"}`).
+Its runs have `family` `"hybrid"` and the planned `epochs`; their `metrics` are those of the
+classical model once it is fitted.
+
 A run's `status` is `starting`, `preparing` (loading or downloading data), `running`,
 `completed`, `stopped` or `failed`. `GET /api/training/runs/<id>/` includes `state` with the
 per-epoch `history` (`train_loss`, `val_loss`, `train_accuracy`, `val_accuracy`, `val_rmse`),
 the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weights are tested
 and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
 and the last log lines. Poll it about once per second while a run is active. `state.family`
-is `neural` or `classical`; a classical run is fitted once: it has no `progress`, a single
-`history` entry when the fit is done, and
+is `neural`, `classical` or `hybrid`; a classical run is fitted once: it has no `progress`, a
+single `history` entry when the fit is done, and
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,
 `fit_seconds`, `initial_kernel`, `kernel` (fitted), `log_marginal_likelihood`,
 `support_vectors`, `iterations` and `max_iterations` (gradient boosting) and `train` (the
@@ -828,7 +843,11 @@ metrics on the training rows); an ensemble adds `ensemble` (`voting` or `stackin
 `members` (`[{"node", "name", "type", "estimator", "label", "metrics"}]`, `metrics` being
 each model's own `loss`, `accuracy`, `rmse` and `r2` on the validation rows, or on the
 training rows without them), see
-[training.md](training.md#ensembles-of-classical-models-in-the-graph).
+[training.md](training.md#ensembles-of-classical-models-in-the-graph). A hybrid run's
+`history` has the epochs of its neural layers (with their temporary head), and
+`state.classical` the fitted classical model as above plus `hybrid` (`{"boundary",
+"features", "feature_training", "epochs"}`) and `validation` (its `loss`, `accuracy`, `rmse`
+and `r2` on the validation rows, `null` without them).
 
 Every run also has `metrics` (the last epoch while it runs, then the kept epoch, plus
 `test_loss`, `test_accuracy`, `test_rmse` and `test_r2`; RMSE and R² for regressions, `null`

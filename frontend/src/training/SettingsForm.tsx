@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import type {
+  FeatureTraining,
   Optimizer,
   SegmentationLoss,
   TrainingDevice,
@@ -38,6 +39,7 @@ import {
 import {
   BATCH_SIZE_PRESETS,
   classicalParams,
+  FEATURE_TRAININGS,
   hasValidation,
   LIMITS,
   LOSSES,
@@ -84,6 +86,11 @@ interface SettingsFormProps {
    */
   classical?: ClassicalSettings | null;
   /**
+   * A hybrid network: the network settings apply to its neural layers, which learn the
+   * features; the search varies the parameters of its classical model.
+   */
+  hybrid?: HybridSettings | null;
+  /**
    * The objective metrics a search can rank by on this data (from the training check; null
    * while it is not known: all are offered and the server checks).
    */
@@ -103,6 +110,17 @@ export interface ClassicalSettings {
   type?: string | null;
 }
 
+export interface HybridSettings {
+  /** The classical model, e.g. "Gradient boosting classification". */
+  model: string;
+  /** The length of the feature vector the neural layers learn (null if unknown). */
+  features: number | null;
+  /** The most training rows the classical model is fitted on on this server. */
+  maxRows: number | null;
+  /** The type of the classical model brick when its search is possible (null: not). */
+  type?: string | null;
+}
+
 /** Shown in the fixed fields while the search varies them. */
 const SEARCHED = 'Set by the search';
 
@@ -118,6 +136,7 @@ export function SettingsForm({
   builtin,
   predefinedSplit = null,
   classical = null,
+  hybrid = null,
   segmentation = null,
   metrics = null,
 }: SettingsFormProps) {
@@ -129,7 +148,9 @@ export function SettingsForm({
   // Keep unfinished input ("0.00") as typed; converting it would reset the field.
   const setNumber = (key: keyof SettingsValues) => (value: number | string) =>
     onChange({ ...values, [key]: value });
-  const tuned = tunedSettings(values);
+  // A hybrid network's search varies its classical model, not the training settings.
+  const tuned = tunedSettings(hybrid ? { ...values, search: false } : values);
+  const frozen = hybrid !== null && values.feature_training === 'frozen';
   const maxBatch = segmentation?.maxBatch ?? null;
 
   const automatic = devices.find((device) => device.id === defaultDevice)?.label;
@@ -296,10 +317,38 @@ export function SettingsForm({
   return (
     <Stack gap="sm">
       {nameField}
+      {hybrid && (
+        <>
+          <Text size="xs" c="dimmed">
+            Two phases: the neural layers learn{' '}
+            {hybrid.features !== null ? `${hybrid.features} features` : 'the features'} with a
+            temporary linear head on the target (the settings below), then {hybrid.model} is fitted
+            on the features of the training rows
+            {hybrid.maxRows !== null
+              ? ` (at most ${hybrid.maxRows.toLocaleString('en-US')} on this server)`
+              : ''}
+            .
+          </Text>
+          <Select
+            label="Features"
+            data={FEATURE_TRAININGS}
+            value={values.feature_training}
+            onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
+            allowDeselect={false}
+          />
+        </>
+      )}
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
         <NumberInput
           label="Epochs"
-          description={values.search ? 'Per trial of the search' : 'Passes over the training data'}
+          description={
+            frozen
+              ? 'Not used: the features stay random'
+              : values.search && !hybrid
+                ? 'Per trial of the search'
+                : 'Passes over the training data'
+          }
+          disabled={frozen}
           value={values.epochs}
           onChange={setNumber('epochs')}
           min={LIMITS.epochs.min}
@@ -385,17 +434,40 @@ export function SettingsForm({
 
       {testFields}
 
-      <div>
-        <Switch
-          label="Hyperparameter search"
-          description="Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss)."
-          checked={values.search}
-          onChange={(event) => set('search')(event.currentTarget.checked)}
-        />
-        {values.search && (
-          <SearchFields values={values} onChange={onChange} errors={errors} metrics={metrics} />
-        )}
-      </div>
+      {hybrid ? (
+        hybrid.type && (
+          <div>
+            <Switch
+              label={`Hyperparameter search of ${hybrid.model}`}
+              description="Learns the features once, then fits the classical model several times with other values of its parameters and keeps the best one."
+              checked={values.search}
+              onChange={(event) => set('search')(event.currentTarget.checked)}
+            />
+            {values.search && (
+              <ClassicalSearchFields
+                values={values}
+                onChange={onChange}
+                errors={errors}
+                model={hybrid.type}
+                validates={validates}
+                metrics={metrics}
+              />
+            )}
+          </div>
+        )
+      ) : (
+        <div>
+          <Switch
+            label="Hyperparameter search"
+            description="Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss)."
+            checked={values.search}
+            onChange={(event) => set('search')(event.currentTarget.checked)}
+          />
+          {values.search && (
+            <SearchFields values={values} onChange={onChange} errors={errors} metrics={metrics} />
+          )}
+        </div>
+      )}
 
       <Button
         variant="subtle"

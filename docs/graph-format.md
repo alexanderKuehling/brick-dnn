@@ -112,9 +112,8 @@ data. Its bricks are in three categories of the catalogue:
 Rules (the analysis explains every violation at the brick concerned):
 
 - The model takes a flat `float` feature vector **straight from the `Input`** (shape
-  `[number of features]`). Classical models and neural layers can't be mixed yet: no layers
-  between the Input and the model, none after it, and no neural layers elsewhere in the
-  network.
+  `[number of features]`), or from neural layers in between, which learn the features (a
+  [hybrid network](#hybrid-networks)). Nothing follows the model.
 - One classical model per network. It ends the network; its output is the prediction: one
   value for regression (`output_shape` `[1]`), one class for classification
   (`output_shape` `null`: the classes come from the data).
@@ -191,6 +190,52 @@ the features. Rules:
 A model connected anywhere else than to an ensemble ends the network as before; the
 analysis says that only an ensemble can follow it.
 
+## Hybrid networks
+
+Neural layers can turn the input into the features of a classical model: the layers learn
+them, the model (or an ensemble) is fitted on them. For example an MLP before gradient
+boosting for a table, or a small CNN before an SVM for images:
+
+```json
+{
+  "version": 1,
+  "nodes": [
+    { "id": "in", "type": "Input", "params": { "shape": [8] } },
+    { "id": "fc1", "type": "Linear", "params": { "out_features": 64 } },
+    { "id": "relu", "type": "Activation", "params": { "function": "relu" } },
+    { "id": "fc2", "type": "Linear", "params": { "out_features": 32 } },
+    { "id": "boosting", "type": "HistGradientBoostingClassifier", "params": {} }
+  ],
+  "edges": [
+    { "source": "in", "target": "fc1" },
+    { "source": "fc1", "target": "relu" },
+    { "source": "relu", "target": "fc2" },
+    { "source": "fc2", "target": "boosting" }
+  ]
+}
+```
+
+The connection from the last neural layer into the model is the **boundary**: it carries the
+features (a tensor, drawn teal and labelled *features* on the canvas). Rules (the analysis
+explains every violation at the brick concerned):
+
+- **Exactly one boundary.** The model takes a flat feature vector, shape `[n]`: a layer whose
+  output has more dimensions (a convolution, say) needs `Flatten` or a `Linear` layer before
+  the model (*"Support vector classification needs a flat feature vector, but Conv2d outputs
+  (32, 8, 8). Add Flatten (or a Linear layer) before …"*). The models of an ensemble all take
+  the same features (the same last layer).
+- **Every neural layer leads to the boundary.** A branch that ends anywhere else is an error
+  at its layer (*"Linear does not lead to Gradient boosting classification …"*); so are
+  neural layers after a classical model (*"Nothing can follow …"*). One Input layer.
+- Kernel bricks and estimator connections keep their rules.
+
+The analysis reports `family: "hybrid"` and `hybrid: {"boundary", "features",
+"neural_params"}` (the last neural layer, the length of its feature vector and the trainable
+parameters of the neural layers); `classical` describes the model as for a classical
+network. `total_params` stays `null` when the model's size is only known after the fit.
+How such a network is trained (two phases) is described in
+[training.md](training.md#hybrid-networks).
+
 ## Analysis
 
 `analyze(graph).to_dict()` (`POST /api/analyze/`) returns `valid`, `errors`, `warnings`,
@@ -206,8 +251,9 @@ analysis says that only an ensemble can follow it.
 
 | Field (top level) | Meaning |
 | ----------------- | ------- |
-| `family`          | `classical` if the graph contains kernels or a classical model, else `neural` |
+| `family`          | `hybrid` if neural layers learn the features of a classical model, `classical` if the graph contains kernels or a classical model (and no neural layers), else `neural` |
 | `classical`       | The classical model (the ensemble, if there is one): `{"node", "type", "estimator", "task", "kernel", "members"}` (`members` as above, `null` for a single model), or `null` |
+| `hybrid`          | Hybrid networks: `{"boundary", "features", "neural_params"}` (see [Hybrid networks](#hybrid-networks)), else `null` |
 
 `num_params` counts what is fitted to the data: for kernel bricks the hyperparameters the
 Gaussian process optimises (none when `fixed`), for a Gaussian process those of its default
@@ -275,3 +321,18 @@ For a classical model the script uses scikit-learn instead of PyTorch:
   class only), the value, or for a Gaussian process the value and its standard deviation. It is also there without
   `include_training`, to predict with a downloaded model.
 - `class_name` does not apply. The script needs `scikit-learn` (with NumPy and joblib).
+
+For a hybrid network the script has both parts and needs PyTorch and scikit-learn:
+
+- `FeatureExtractor(nn.Module)` (or `class_name`): the neural layers up to the boundary, and
+  `make_model()`: the classical pipeline on their features;
+- `--csv data.csv` splits the rows 80/20 (`--seed`), standardises the input columns with the
+  training rows, trains the neural layers with a temporary linear head on the target
+  (`learn_features`, `--epochs`, `--batch-size`, `--lr`; `--frozen` keeps the random
+  weights), computes the features of all rows (`extract`), fits the model on those of the
+  training rows and reports the validation result;
+- it saves `--weights features.pt` (`{"state_dict", "preprocessing": {"columns", "target",
+  "mean", "std"}}`) and `--save model.joblib` (the classical format with `"columns":
+  ["feature_1", …]` and `"hybrid": {"features", "input_columns"}`); `--predict new.csv`
+  reads both. A hybrid network trained in Brick DNN saves its files in the same formats.
+- Networks on images (a non-flat Input) get the classes and a demo with random inputs.

@@ -22,6 +22,14 @@ export interface LiveState {
 
 const OFF: LiveState = { status: 'off', endReason: null, pendingCount: 0, role: null };
 
+/**
+ * A connection that drops is only shown as offline once it has stayed down this long. Short
+ * drops (a proxy or the server restarting, a phone switching networks, a slow answer) are
+ * reconnected at once and should not make the badge flicker; changes made meanwhile show as
+ * "Saving…" and are sent after the reconnect.
+ */
+export const OFFLINE_GRACE_MS = 8000;
+
 export interface LiveProject extends LiveState {
   /** The connection of the open project; null while live editing is off. */
   client: LiveClient | null;
@@ -71,10 +79,32 @@ export function useLiveProject(
       getToken: freshAccessToken,
       pending: seedRef.current?.ops,
     });
+    // What the badge shows: "offline" only after OFFLINE_GRACE_MS without a connection.
+    let shown: LiveStatus = live.status;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+    const shownStatus = (): LiveStatus => {
+      const actual = live.status;
+      if (actual === 'offline' && shown === 'live') {
+        if (graceTimer === null) {
+          graceTimer = setTimeout(() => {
+            graceTimer = null;
+            shown = 'offline';
+            update();
+          }, OFFLINE_GRACE_MS);
+        }
+        return 'live';
+      }
+      if (graceTimer !== null) {
+        clearTimeout(graceTimer);
+        graceTimer = null;
+      }
+      shown = actual;
+      return actual;
+    };
     const update = () => {
       presence.update(live.peers);
       const next: LiveState = {
-        status: live.status,
+        status: shownStatus(),
         endReason: live.endReason,
         pendingCount: live.pendingCount,
         role: live.role,
@@ -97,6 +127,9 @@ export function useLiveProject(
     update();
     live.start();
     return () => {
+      if (graceTimer !== null) {
+        clearTimeout(graceTimer);
+      }
       offChange();
       offMessages();
       live.stop();
