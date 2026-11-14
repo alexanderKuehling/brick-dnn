@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- **Readable browser stack traces in Sentry.** When the frontend image is built with a Sentry
+  token (`SENTRY_AUTH_TOKEN`, organization token with the scope `org:ci`), the build uploads
+  its source maps to Sentry (`@sentry/vite-plugin`) under the release the app reports
+  (`brick-dnn@<commit>`), so browser errors show the original files and lines. The maps are
+  hidden and removed from the build after the upload, so the site never serves them, and a
+  failed upload only warns. The token is a Docker build secret (not a build argument), so it
+  is in no image layer; it can be kept in the server's `.env` or as the repository secret
+  `SENTRY_AUTH_TOKEN` for the *Deploy server* workflow. Without it the build is unchanged
+  (local builds and CI need no token). The workflow now asks the server's deploy script which
+  settings it takes (`ssh deploy@SERVER settings-names`) and leaves out newer names with a
+  warning, instead of a deploy that an older script refuses. See docs/monitoring.md.
 - **Text functions in the *Formula* step.** `left`, `right`, `mid`, `upper`, `lower`,
   `strip`, `len`, `contains` / `startswith` / `endswith` (plain text, optionally ignoring
   case; true/false), `replace` (plain text), `extract` (the first group of a regular
@@ -725,6 +736,13 @@
   without one keep working.
 
 ### Fixed
+- **"Object.hasOwn is not a function" in older browsers** (reported by Sentry): Mantine calls
+  `Object.hasOwn`, which Safari before 15.4 and Chrome before 93 lack, so the app failed while
+  rendering. A small polyfill (`frontend/src/polyfills.ts`) now runs first, before Sentry and
+  the app. The build targets the supported browsers explicitly (Chrome and Edge 105+, Firefox
+  121+, Safari 15.4+; README, "Supported browsers") instead of Vite's default (Safari 16.4+):
+  media queries such as Mantine's breakpoints were written in a range syntax that Safari only
+  knows from 16.4, so layouts for small screens did not apply on Safari 15.4 to 16.3.
 - **Live badge flickering "Offline".** A live connection that drops is reconnected at once and
   is only shown as offline once it has stayed down for 8 seconds; changes made meanwhile show
   as *Saving…* and are sent after the reconnect. The agent activity page says *Reconnecting…*

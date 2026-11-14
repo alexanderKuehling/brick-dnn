@@ -37,6 +37,7 @@ EU data region when you create the organization (`de.sentry.io`), as for brickdn
 | `BRICKDNN_SENTRY_ENVIRONMENT` | `production` (`development` with `DJANGO_DEBUG`) | Environment the events are filed under |
 | `BRICKDNN_SENTRY_TRACES_SAMPLE_RATE` | `0.1` (`1.0` in development) | Share of requests and page loads that are traced (0 to 1) |
 | `BRICKDNN_SENTRY_RELEASE` | – | Release of the events; every deploy sets it to `brick-dnn@<commit>` |
+| `SENTRY_AUTH_TOKEN` | – (no upload) | **Secret.** Lets the frontend build upload its source maps ([below](#readable-stack-traces-in-the-browser)); only used while the image is built |
 
 A DSN is not a secret (the browser app contains it anyway): it only allows sending events to
 the project. With the *Deploy server* workflow, set them as repository **variables**
@@ -64,8 +65,55 @@ For the browser app, open the site, then in the browser's console:
 
 ## Readable stack traces in the browser
 
-The production build of the app is minified, so browser errors show minified frames until
-source maps are uploaded to Sentry at build time. That needs a Sentry auth token on the
-server during the build; it is not set up yet (see the Sentry docs on
-[source maps for Vite](https://docs.sentry.io/platforms/javascript/guides/react/sourcemaps/)).
-Server errors are readable as they are.
+The production build of the app is minified. So that Sentry shows browser errors with the
+original file, line and code, the image build uploads the app's source maps to Sentry
+(`@sentry/vite-plugin`, `frontend/vite.config.mjs`), to the organization `brickdnn` in the EU
+region (`https://de.sentry.io`), project `brickdnn-frontend`, under the same release as the
+events (`brick-dnn@<commit>`).
+
+- **Only with a token.** The upload needs `SENTRY_AUTH_TOKEN` and a release
+  (`BRICKDNN_SENTRY_RELEASE`, written by every deploy) while the frontend image is built.
+  Without them the build makes no source maps and talks to nobody: local builds, CI and
+  servers without the token need nothing.
+- **Never served.** The maps are *hidden* (the bundles have no `sourceMappingURL` comment) and
+  are taken out of `dist` after the upload, so nginx has none to hand out.
+- **A failed upload does not stop the deploy:** the build warns
+  (`Sentry: source maps not uploaded: …`) and the site goes up with stack traces as before.
+- **The token stays out of the image.** Docker Compose passes it as the build secret
+  `sentry_auth_token` (`docker-compose.yml`, from the variable `SENTRY_AUTH_TOKEN`), which
+  `frontend/Dockerfile` mounts for the build command only: it is not a build argument and is in
+  no layer or image history.
+
+### Creating the token
+
+The token only needs to create releases and upload files to them:
+
+1. In Sentry, *Settings → Developer Settings → Organization Tokens* (of `brickdnn`), *Create
+   New Token*, named after the server (e.g. `brickdnn.com deploy`). Organization tokens have
+   one fixed scope, `org:ci`, made for exactly this: creating releases and uploading source
+   maps. They cannot read events or change settings.
+2. Copy it (`sntrys_…`); Sentry shows it once.
+
+A personal token works too (*User settings → Personal Tokens*), with the scope
+`project:releases` and nothing else, but it belongs to your account and ends with it, so the
+organization token is the better choice.
+
+### Where to put it
+
+- **With the *Deploy server* workflow:** as the repository **secret** `SENTRY_AUTH_TOKEN`
+  (*Settings → Secrets and variables → Actions*, tab *Secrets*). Every deploy writes it into
+  the server's `.env` ([Settings from GitHub](../deploy/server/README.md#settings-from-github)),
+  so the next deploy already uploads. The deploy script on the server has to be the current
+  one: an older copy does not take this name, and the workflow then leaves it out with a
+  warning instead of sending it (the deploy goes on, without the upload).
+- **By hand:** in the server's `.env` (`SENTRY_AUTH_TOKEN=sntrys_…`), then
+  `docker compose -f docker-compose.yml -f deploy/server/compose.yml up -d --build`.
+
+To check: after a deploy, the project's source maps in Sentry (*Settings → Projects →
+brickdnn-frontend → Source Maps*) list a bundle for the new release, and the next browser
+error shows the original code. If not, the build log says why
+(`docker compose -f docker-compose.yml -f deploy/server/compose.yml build --progress=plain frontend`,
+look for `Sentry:`). Server errors are readable as they are.
+
+To revoke the token, delete it in Sentry and remove it from GitHub and `.env`: builds then go
+on without uploading.
