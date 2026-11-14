@@ -184,11 +184,21 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # Live editing (WebSockets under /api/ws/): the same image, served by Daphne.
+  # Live editing (WebSockets under /api/ws/): the same image, served by Daphne. Clients ping
+  # every 25 seconds; Daphne pings a connection only when it has been quiet for 30 seconds
+  # (a suspended tab, a dead network) and drops it when that ping is not answered within 30
+  # more. Each connection is closed after a day at the latest (--websocket_timeout, the
+  # default); the client reconnects.
   realtime:
     image: brick-dnn-backend:local
     pull_policy: never
-    command: ["daphne", "--bind", "0.0.0.0", "--port", "8001", "brick_dnn_site.asgi:application"]
+    command:
+      - daphne
+      - --bind=0.0.0.0
+      - --port=8001
+      - --ping-interval=30
+      - --ping-timeout=30
+      - brick_dnn_site.asgi:application
     environment:
       <<: *sentry
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
