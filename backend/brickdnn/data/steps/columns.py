@@ -442,6 +442,19 @@ DATE_FORMATS = (
 MAX_EPOCH_SECONDS = 9.2e9
 
 
+def epoch_seconds_to_dates(series: pd.Series) -> pd.Series:
+    """Seconds since 1970 to dates; missing and out-of-range values become missing (NaT).
+
+    pandas is never given a missing value here: for float input, ``pd.to_datetime(...,
+    unit=...)`` leaves the fraction of NaN entries uninitialised and rounds it under its own
+    ``np.errstate(over="raise")``, so leftover memory can raise ``FloatingPointError`` at
+    random (pandas 2.x), whatever numpy's error state outside is. Missing and out-of-range
+    values are converted as 0 and masked afterwards."""
+    in_range = series.abs() < MAX_EPOCH_SECONDS
+    dates = pd.to_datetime(series.where(in_range, 0.0), unit="s")
+    return dates.where(in_range).astype("datetime64[ns]")
+
+
 def parse_dates(series: pd.Series, fmt: str) -> pd.Series:
     """Strings to dates with the format ``fmt`` (unreadable values become missing)."""
     result = pd.to_datetime(series, format=fmt, errors="coerce", utc=True)
@@ -538,8 +551,7 @@ def _cast(
         if source == "boolean":
             raise DataError(f"'{column}' holds true/false values, which cannot be dates.")
         if source == "numeric":
-            limited = series.where(series.abs() < MAX_EPOCH_SECONDS)
-            return pd.to_datetime(limited, unit="s").astype("datetime64[ns]"), None
+            return epoch_seconds_to_dates(series), None
         fmt = params["datetime_format"] or _date_format(series)
         return parse_dates(series, fmt), fmt
     return values_as_text(series, source), None
@@ -564,9 +576,12 @@ def _cast_code(column: str, source: str, to: str, params: dict[str, Any], fmt: s
         return f"{ref} = {ref}.str.strip().str.lower().map({BOOL_WORDS!r}).astype(float)"
     if to == "datetime":
         if source == "numeric":
+            # Missing and out-of-range values go in as 0 and come out missing (pandas may
+            # fail at random on missing values with unit=, see epoch_seconds_to_dates).
             return (
-                f"{ref} = pd.to_datetime({ref}.where({ref}.abs() < {MAX_EPOCH_SECONDS!r}), "
-                "unit='s').astype('datetime64[ns]')"
+                f"_in_range = {ref}.abs() < {MAX_EPOCH_SECONDS!r}\n"
+                f"{ref} = pd.to_datetime({ref}.where(_in_range, 0.0), unit='s')"
+                ".where(_in_range).astype('datetime64[ns]')"
             )
         return (
             f"{ref} = pd.to_datetime({ref}, format={fmt!r}, errors='coerce', utc=True)"

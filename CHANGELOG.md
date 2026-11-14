@@ -729,6 +729,12 @@
   is only shown as offline once it has stayed down for 8 seconds; changes made meanwhile show
   as *Saving…* and are sent after the reconnect. The agent activity page says *Reconnecting…*
   only after two failed polls in a row.
+- **Numbers to dates no longer fail at random.** *Change type* to date from seconds since 1970
+  (and its pandas script) could raise `FloatingPointError: overflow encountered in multiply`
+  when the column had missing or out-of-range values: pandas 2.x rounds the fractions of
+  missing values from uninitialised memory under its own `np.errstate(over="raise")`. Missing
+  and out-of-range values are now converted as 0 and set to missing afterwards, so they always
+  become missing dates, whatever numpy's error settings are.
 - **Worker errors during a deploy.** The training worker started with the new code while the
   web server was still migrating the database and failed on columns that did not exist yet
   (e.g. `column ... does not exist`, reported to Sentry). It now waits until the database has
