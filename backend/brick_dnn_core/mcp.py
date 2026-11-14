@@ -109,8 +109,10 @@ flat vector (shape [n]), every neural layer leads to it, nothing neural follows 
 Training has two phases: the layers learn with a temporary linear head on the target
 (epochs, optimizer, early stopping as usual; config feature_training "frozen" skips this for
 random features), then the model is fitted on the features of the training rows. A search
-(tuning) varies the classical model's parameters. Family "hybrid"; the download is a ZIP
-file with both parts and the script.
+(tuning) varies the classical model's parameters (space) and/or the neural training settings
+(neural_space: every trial learns the features again and is ranked by the classical model on
+the validation rows). Family "hybrid"; the download is a ZIP file with both parts and the
+script.
 
 Typical workflow: look up layer types with list_layer_types (or start from list_examples),
 build the graph, call analyze_network until it is valid (it infers shapes and parameter
@@ -1858,7 +1860,10 @@ TOOLS: dict[str, Tool] = {
             "without validation rows). A hybrid network takes the neural settings (epochs, "
             "learning rate, patience …) for its features and feature_training ('pretrain', "
             "default, or 'frozen': random features, a quick baseline); its tuning searches the "
-            "classical model like above. "
+            "classical model like above in space, and/or the neural training settings in "
+            "neural_space (like a network's space; every trial learns the features again and is "
+            "ranked by the classical model on the validation rows, so no cv_folds; the trials' "
+            "params name them neural.learning_rate …). "
             "Refused when a compute budget is used up (get_usage); the run stops by itself, "
             "keeping its weights, when it has used what is left (budget_warning says if that "
             "is likely).",

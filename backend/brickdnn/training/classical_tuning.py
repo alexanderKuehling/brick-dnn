@@ -36,6 +36,19 @@ from .tuning import MAX_VALUES, Range, TuningConfig, Values, _number
 DEFAULT_FOLDS = 5
 # A cross-validation needs at least this many training rows per fold.
 MIN_ROWS_PER_FOLD = 2
+# A hybrid network that searches the training settings of its neural layers (tuning.py).
+NEURAL_SEARCH_NO_VALIDATION = (
+    "Searching the training settings of the neural layers needs validation rows: every trial "
+    "learns its features and is ranked by the classical model fitted on them, on the "
+    "validation rows (the features of the training rows were learned from those rows). Set a "
+    "validation split above 0 (for a dataset from the Data tab: a validation share above 0 "
+    "there), or search only the classical model."
+)
+NEURAL_SEARCH_FROZEN = (
+    "Frozen features are not trained, so a search has no training settings of the neural "
+    "layers to vary: let the neural layers learn the features, or search only the classical "
+    "model."
+)
 
 
 @dataclass(frozen=True)
@@ -371,7 +384,20 @@ def trial_graph(graph: dict[str, Any], node: str, params: dict[str, Any]) -> dic
 
 def search_folds(tuning: TuningConfig, info: DatasetInfo, config: TrainingConfig) -> int | None:
     """The folds of the cross-validation a classical search uses (None: it compares the
-    trials on the validation rows). Without validation rows it always cross-validates."""
+    trials on the validation rows). Without validation rows it always cross-validates; a
+    hybrid network that searches its neural settings never does (see tuning.py)."""
+    if tuning.searches_neural:
+        return None
     if tuning.cv_folds is not None:
         return tuning.cv_folds
     return None if has_validation(info, config.val_split) else DEFAULT_FOLDS
+
+
+def neural_search_error(info: DatasetInfo, config: TrainingConfig) -> str | None:
+    """Why a hybrid network cannot search the training settings of its neural layers with
+    ``config`` on ``info`` (None: it can)."""
+    if config.feature_training == "frozen":
+        return NEURAL_SEARCH_FROZEN
+    if not has_validation(info, config.val_split):
+        return NEURAL_SEARCH_NO_VALIDATION
+    return None

@@ -956,17 +956,49 @@ boosting (hybrid)* is a good start. Such a network needs PyTorch and scikit-lear
    It is measured, evaluated (with the threshold analysis of two classes) and saved like a
    classical model.
 
-**Settings.** The training panel shows the settings of a network (they learn the features),
-*Features* (learn them, or keep random ones) and the **hyperparameter search of the
-classical model**: it varies the parameters of the model brick like for a
-[classical model](#searching-a-classical-model), on the learned features (which are learned
-once), compared on the validation rows or by cross-validation. A search of the training
-settings of the neural layers is not available yet. Data: CSV files, datasets from the
-*Data* tab, image folders, the built-in image datasets and demo data; not segmentation data.
+**Settings.** The training panel shows the settings of a network (they learn the features)
+and *Features* (learn them, or keep random ones; frozen features use none of the training
+settings, so epochs, batch size, learning rate, optimizer, weight decay, early stopping and
+the kept weights are switched off then). Data: CSV files, datasets from the *Data* tab,
+image folders, the built-in image datasets and demo data; not segmentation data.
 The task follows the classical model: a classifier needs classes, a regression model a
 number (*"The target column 'species' contains text labels (3 classes), so this is a
 classification task: use … instead of Support vector regression."*). Only the Input's shape
 is adapted to a dataset: the head follows the data.
+
+**Hyperparameter search.** A search of a hybrid network varies the parameters of its
+classical model, the training settings of its neural layers, or both:
+
+- **The classical model only** (the default, `space` of the `tuning`): the features are
+  learned once, then the model brick's parameters are searched like for a
+  [classical model](#searching-a-classical-model) on those features, compared on the
+  validation rows or by cross-validation.
+- **The neural settings** (*Search the training settings of the neural layers*,
+  `neural_space`: learning rate, batch size, optimizer and weight decay, given like for a
+  [network](#hyperparameter-search)): every trial learns the features again with its
+  settings (the data is prepared once and every trial starts from the same initial weights),
+  fits the classical model on them with the trial's parameters (those of the brick if
+  `space` searches none) and is ranked by the objective metric of that model on the
+  validation rows. Such a search needs validation rows and learned features (not frozen
+  ones), and it cannot cross-validate: the features of the training rows were learned from
+  those rows, so a cross-validation on them would favour the settings that memorise them.
+- **Both**: each trial combines neural settings and parameters of the model (a grid tries
+  every combination of both, at most 100).
+
+```json
+{"method": "random", "trials": 12, "metric": "accuracy",
+ "neural_space": {"learning_rate": {"min": 0.0001, "max": 0.01}, "batch_size": [32, 64]},
+ "space": {"C": {"min": 0.1, "max": 100}}}
+```
+
+The trial table lists the neural settings with the prefix `neural.` (`"params":
+{"neural.learning_rate": 0.0031, "neural.batch_size": 64, "C": 3.2}`; the gradient boosting
+brick has a `learning_rate` of its own), the classical model's validation scores and the
+score, and the run keeps the best trial: its curves, neural layers and fitted model, tested
+and evaluated like a single run (`evaluation.trial`). The compute estimate counts both
+phases per trial. On the command line the options of a network's search (`--tune-lr`,
+`--tune-batch-size`, `--tune-optimizer`, `--tune-weight-decay`) search the neural settings
+of a hybrid network, `--tune-param` its classical model.
 
 **Results.** The run view shows *Phase 1 · The neural layers learn the features* (the curves
 of the head, and the epoch whose weights are kept) and *Phase 2 · … on the learned features*
@@ -978,11 +1010,23 @@ the validation rows), while `history` and `best` keep the curves of phase 1.
 
 **Compute.** The estimate adds both phases: the epochs of the neural layers (none for frozen
 features), one pass that computes the features of every row, and the fit of the classical
-model on them (times the trials and folds of a search).
+model on them (times the trials and folds of a search). A search of the neural settings
+counts both phases for every trial.
 
-**Stopping.** While the features are learned, a stop ends the run without saving anything
-(there is no classical model yet). While the classical model is fitted, it stops like a
-classical run (a search keeps its best trial).
+**Stopping.** A stop while the features are learned keeps what the neural layers have
+learned so far (the best epoch so far with *Keep the weights of the best epoch*, as a
+network does) and fits the classical model on those features, with the parameters
+of its brick; the model is measured on the training and validation rows and both parts are
+saved, but not tested or evaluated (*"Stopped after 3 of 50 epochs. Kept the weights of
+epoch 3 (lowest validation loss). Kept the 6 features learned so far with SVC fitted on them
+(not tested): validation accuracy 84.0% …"*). That fit cannot be stopped, so it only runs
+when it is estimated to take at most 10 CPU seconds (with the pass that computes the
+features): the server ends a run that has not stopped 30 seconds after a stop request, and a
+run stopped by its budget should not use much more. Otherwise, and before the first epoch
+has finished, nothing is saved, and the message says why. A search of the neural settings
+keeps its best trial (its model is already fitted), or during its first trial what that
+trial has learned. While the classical model is fitted, the run stops like a classical run
+(a search of the classical model keeps its best trial).
 
 **The model** is two files in the run directory: `weights.pt` with the neural layers and
 their preprocessing (`{"state_dict", "preprocessing"}`, the format of the generated

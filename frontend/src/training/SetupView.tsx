@@ -137,7 +137,8 @@ export function SetupView({
 
   // A classical model (scikit-learn) is fitted once: fewer settings; its search varies the
   // parameters of the model brick (if the server offers it). A hybrid network has the
-  // settings of a network for its features, and the search of its classical model.
+  // settings of a network for its features, and a search of its classical model that can
+  // vary the training settings of the neural layers too.
   const family = trainingFamily(analysis);
   const model = family !== 'neural' ? (analysis?.classical ?? null) : null;
   const maxRows = classicalMaxRows(status, analysis);
@@ -223,7 +224,10 @@ export function SetupView({
     [settings, knownDevice, builtinSource, isClassical, isHybrid, segmentationSource]
   );
   const tuning = useMemo(
-    () => ((isClassical || isHybrid) && !searchType ? null : toTuning(settings, searchType)),
+    () =>
+      (isClassical || isHybrid) && !searchType
+        ? null
+        : toTuning(settings, searchType, { hybrid: isHybrid }),
     [settings, isClassical, isHybrid, searchType]
   );
   const cost = useCostEstimate(

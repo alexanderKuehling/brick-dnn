@@ -244,6 +244,26 @@ export function formatSetting(name: TunableSetting, value: number | string | und
   return name === 'batch_size' ? String(value) : String(Number(value.toPrecision(3)));
 }
 
+/**
+ * The prefix of the training settings of a hybrid network's neural layers in the params of a
+ * trial ("neural.learning_rate"), as the backend names them.
+ */
+export const NEURAL_PREFIX = 'neural.';
+
+/** The params of a hybrid network's trial: its neural settings and its brick parameters. */
+function splitParams(params: TrialParams): [TrialParams, TrialParams] {
+  const neural: TrialParams = {};
+  const rest: TrialParams = {};
+  for (const [name, value] of Object.entries(params)) {
+    if (name.startsWith(NEURAL_PREFIX)) {
+      neural[name.slice(NEURAL_PREFIX.length)] = value;
+    } else {
+      rest[name] = value;
+    }
+  }
+  return [neural, rest];
+}
+
 /** Whether the parameters are brick parameters of a classical model (not training settings). */
 function isBrickParams(names: string[]): boolean {
   return names.some((name) => !(TUNABLE_SETTINGS as string[]).includes(name));
@@ -258,6 +278,12 @@ const inSentence = (label: string) =>
  * model "C 3.16, gamma scale".
  */
 export function describeParams(params: TrialParams): string {
+  const [neural, rest] = splitParams(params);
+  if (Object.keys(neural).length > 0) {
+    // A hybrid network that searched its neural settings too.
+    const text = `neural layers: ${describeParams(neural)}`;
+    return Object.keys(rest).length > 0 ? `${text}; ${describeParams(rest)}` : text;
+  }
   const names = Object.keys(params).filter((name) => params[name] !== undefined);
   if (isBrickParams(names)) {
     return names
@@ -290,16 +316,29 @@ export function searchedParams(tuning: TuningConfig | null | undefined): string[
     return [];
   }
   const names = Object.keys(tuning.space);
+  if (tuning.neural_space) {
+    // A hybrid network: the neural settings first, then the brick parameters (maybe none).
+    const neural = tuning.neural_space as Record<string, unknown>;
+    const settings = TUNABLE_SETTINGS.filter((name) => neural[name] !== undefined);
+    return [...settings.map((name) => `${NEURAL_PREFIX}${name}`), ...names];
+  }
   return isBrickParams(names) ? names : searchedSettings(tuning);
 }
 
-/** "Learning rate", "Max. leaves per tree", "C". */
+/** "Learning rate", "Max. leaves per tree", "C"; "Neural batch size" for a hybrid network. */
 export function paramLabel(name: string): string {
+  if (name.startsWith(NEURAL_PREFIX)) {
+    const setting = name.slice(NEURAL_PREFIX.length) as TunableSetting;
+    return `Neural ${(SETTING_LABELS[setting] ?? setting).toLowerCase()}`;
+  }
   return SETTING_LABELS[name as TunableSetting] ?? PARAM_LABELS[name] ?? name;
 }
 
 /** A searched value as people write it: 0.00312, 64, "Adam", "balanced", "none". */
 export function formatParam(name: string, value: unknown): string {
+  if (name.startsWith(NEURAL_PREFIX)) {
+    return formatParam(name.slice(NEURAL_PREFIX.length), value);
+  }
   if ((TUNABLE_SETTINGS as string[]).includes(name)) {
     return formatSetting(name as TunableSetting, value as number | string | undefined);
   }
@@ -370,9 +409,19 @@ export function progressLabel(run: RunSummary): string {
     return 'Fitting';
   }
   if (run.status === 'running' && isHybridRun(run)) {
-    // The epochs learn the features, then the classical model is fitted (or searched).
-    const learning = run.epochs_done < run.epochs && run.config.feature_training !== 'frozen';
-    return learning ? `Epoch ${run.epochs_done + 1}/${run.epochs}` : 'Fitting';
+    // The epochs learn the features, then the classical model is fitted, or its search runs
+    // its trials. A search of the neural settings learns them in every trial.
+    const search = run.tuning && run.tuning.trials > 0 ? run.tuning : null;
+    const trial =
+      search && `Trial ${Math.min(run.trials_done + 1, search.trials)}/${search.trials}`;
+    if (search?.neural_space && trial) {
+      return trial;
+    }
+    const learning =
+      run.trials_done === 0 &&
+      run.epochs_done < run.epochs &&
+      run.config.feature_training !== 'frozen';
+    return learning ? `Epoch ${run.epochs_done + 1}/${run.epochs}` : (trial ?? 'Fitting');
   }
   if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
     const total = run.tuning.trials;

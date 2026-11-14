@@ -14,6 +14,7 @@ brickdnn train graph.json --data mnist --tune --metric balanced_accuracy  # rank
 brickdnn train --example gp_regression --data houses.csv     # a classical model (scikit-learn)
 brickdnn train svm.json --data iris.csv --tune-param C=0.1:100 --tune-param kernel=rbf,linear
 brickdnn train gb.json --data fraud.csv --tune --metric pr_auc --cv-folds 5
+brickdnn train hybrid.json --data mail.csv --tune-lr 1e-4:1e-2 --tune-param C=1:100  # both parts
 
 Press Ctrl+C to stop after the current batch; the weights are saved anyway. Classical
 models (Gaussian processes, SVMs, gradient boosting) are fitted once with scikit-learn and
@@ -123,6 +124,7 @@ class ConsoleReporter(Reporter):
         # A search: the classical model brick whose parameters it tunes, and its metric.
         self.model: str | None = None
         self.metric = DEFAULT_METRIC
+        self.hybrid = False
 
     def _print(self, text: str, err: bool = False) -> None:
         self._clear()
@@ -160,7 +162,8 @@ class ConsoleReporter(Reporter):
             self._setup_classical(info)
             return
         if "train_size" not in info:
-            self._print(f"Now training on {info.get('device_label')}.")
+            if info.get("device_label"):
+                self._print(f"Now training on {info['device_label']}.")
             return
         val = f"{info['val_size']:,} validation" if info.get("val_size") else "no validation"
         if info.get("test_size"):
@@ -170,7 +173,7 @@ class ConsoleReporter(Reporter):
         else:
             samples = f"{info['train_size']:,} training and {val} samples"
         if info.get("tuning"):
-            tuning = TuningConfig.from_dict(info["tuning"])
+            tuning = TuningConfig.from_dict(info["tuning"], self.model, hybrid=self.hybrid)
             self._print(
                 f"Training on {info['device_label']}: {samples}, "
                 f"{info['total_params']:,} parameters."
@@ -580,7 +583,10 @@ def build_parser() -> argparse.ArgumentParser:
         "learning rate and weight decay, sampled log-uniformly. Without --tune-* options, "
         "the learning rate (1e-4:1e-2) and the batch size (32,64,128) are tuned. A classical "
         "model tunes the parameters of its brick instead (--tune-param; ranges MIN:MAX or "
-        "MIN:MAX:linear); without --tune-param it tunes a default set per model.",
+        "MIN:MAX:linear); without --tune-param it tunes a default set per model. A hybrid "
+        "network tunes its classical model like that, and with --tune-lr, --tune-batch-size, "
+        "--tune-optimizer or --tune-weight-decay the training settings of its neural layers "
+        "(every trial learns the features again; then --tune-param is optional).",
     )
     search.add_argument("--tune", action="store_true", help="run a hyperparameter search")
     search.add_argument("--search", choices=METHODS, help="random (default) or grid")
@@ -621,9 +627,13 @@ TUNE_OPTIONS = {
 }
 
 
-def tuning_from_args(args: argparse.Namespace, model: str | None = None) -> TuningConfig | None:
+def tuning_from_args(
+    args: argparse.Namespace, model: str | None = None, hybrid: bool = False
+) -> TuningConfig | None:
     """The search settings from the command line, or None for a normal training.
-    ``model``: the type of the classical model brick (None: a neural network)."""
+    ``model``: the type of the classical model brick (None: a neural network); ``hybrid``:
+    neural layers learn its features, and the --tune-* options of networks search their
+    training settings."""
     given = {
         name: getattr(args, option)
         for name, option in TUNE_OPTIONS.items()
@@ -635,7 +645,7 @@ def tuning_from_args(args: argparse.Namespace, model: str | None = None) -> Tuni
     started = given or params or metric or folds is not None
     if not (started or args.tune or args.search or args.trials is not None):
         return None
-    if model is not None and given:
+    if model is not None and given and not hybrid:
         raise ConfigError(NEURAL_OPTIONS_FOR_CLASSICAL)
     if model is None and params:
         raise ConfigError(PARAM_OPTION_FOR_NEURAL)
@@ -644,9 +654,11 @@ def tuning_from_args(args: argparse.Namespace, model: str | None = None) -> Tuni
     else:
         space = {name: parse_values(text, name) for name, text in given.items()} or None
     data = {"method": args.search, "trials": args.trials, "space": space, "metric": metric}
+    if model is not None and hybrid and given:
+        data["neural_space"] = {name: parse_values(text, name) for name, text in given.items()}
     if folds is not None:
         data["cv_folds"] = folds
-    return TuningConfig.from_dict(data, model)
+    return TuningConfig.from_dict(data, model, hybrid=hybrid)
 
 
 def resolve_data(value: str, workdir: Path) -> tuple[DatasetInfo, str | None]:
@@ -729,7 +741,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         fitted = (classical or hybrid) and analysis.model is not None
         model = analysis.model.type if fitted and analysis.model is not None else None
-        tuning = tuning_from_args(args, model)
+        tuning = tuning_from_args(args, model, hybrid)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -769,6 +781,7 @@ def main(argv: list[str] | None = None) -> int:
         reporter = ConsoleReporter(config.epochs, save)
         if hybrid:
             reporter.features = save.with_name(f"{save.stem}.features.pt")
+            reporter.hybrid = True
         reporter.previews = Path(args.previews) if args.previews else None
         if tuning is not None:
             reporter.model, reporter.metric = tuning.model, tuning.metric

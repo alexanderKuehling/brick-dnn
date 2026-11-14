@@ -1283,6 +1283,13 @@ export interface TuningConfig {
    * the validation rows.
    */
   cv_folds?: number | null;
+  /**
+   * Hybrid networks: the training settings of the neural layers that the search varies as
+   * well (every trial learns the features again); `space` then holds only the classical
+   * model's parameters that are searched, maybe none. Missing: only the classical model is
+   * searched. In the params of a trial they have the prefix "neural.".
+   */
+  neural_space?: TuningSpace | null;
 }
 
 /** Search settings sent to the API (`trials` is ignored by grid search). */
@@ -1291,8 +1298,10 @@ export interface TuningInput {
   trials?: number;
   space: TuningSpace | ClassicalTuningSpace;
   metric?: TuningMetric;
-  /** Classical models only. */
+  /** Classical models only (not with `neural_space`). */
   cv_folds?: number | null;
+  /** Hybrid networks only: the training settings of the neural layers to search. */
+  neural_space?: TuningSpace;
 }
 
 /** One objective metric of GET /api/training/ `tuning.metrics`. */

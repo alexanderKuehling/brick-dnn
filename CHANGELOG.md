@@ -3,6 +3,25 @@
 ## Unreleased
 
 ### Added
+- **Hybrid networks: a search of the neural training settings.** The hyperparameter search
+  of a hybrid network can vary the learning rate, batch size, optimizer and weight decay of
+  its neural layers (`tuning.neural_space`, the space of a network), alone or together with
+  the parameters of its classical model (`space`). Every trial learns the features again
+  with its settings, fits the classical model on them and is ranked by that model's
+  objective metric on the validation rows, so such a search needs validation rows and has no
+  cross-validation (the check, the REST API and the MCP tools explain why). The trial table
+  shows the neural settings with the prefix `neural.`, the best trial's neural layers and
+  model are kept, tested and evaluated, the estimate counts both phases per trial, and a
+  stop keeps the best trial. The search of a hybrid network in the training panel has
+  *Search the training settings of the neural layers*; the command line takes `--tune-lr`
+  and the other options of a network's search for it. Stopping a hybrid network while its
+  features are learned now keeps the features learned so far and fits the classical model
+  on them (measured, not tested), when that fit is estimated to take at most 10 CPU
+  seconds; before, nothing was saved. With frozen features the training panel switches off
+  every training setting of the neural layers and says why; the progress in the toolbar and
+  the run list says *Trial x/y* once the trials of a hybrid search run (not while its
+  features are learned once), and a server without scikit-learn names it for hybrid
+  networks. See docs/training.md.
 - **Text functions in the *Formula* step.** `left`, `right`, `mid`, `upper`, `lower`,
   `strip`, `len`, `contains` / `startswith` / `endswith` (plain text, optionally ignoring
   case; true/false), `replace` (plain text), `extract` (the first group of a regular

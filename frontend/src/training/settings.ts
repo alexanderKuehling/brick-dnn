@@ -73,6 +73,11 @@ export interface SettingsValues {
 
   /** Hyperparameter search instead of a single training. */
   search: boolean;
+  /**
+   * Hybrid networks: the search also varies the training settings of the neural layers (the
+   * `tune_*` fields below); every trial then learns the features again.
+   */
+  search_neural: boolean;
   search_method: TuningMethod;
   /** Random search: number of trials. */
   search_trials: NumberField;
@@ -121,6 +126,7 @@ const BOOLEAN_FIELDS = [
   'test_enabled',
   'restore_best',
   'search',
+  'search_neural',
   'tune_learning_rate',
   'tune_batch_size',
   'tune_optimizer',
@@ -151,6 +157,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   loss: 'cross_entropy',
   feature_training: 'pretrain',
   search: false,
+  search_neural: false,
   search_method: 'random',
   search_trials: 10,
   tune_learning_rate: true,
@@ -288,6 +295,26 @@ export function tunedSettings(values: SettingsValues) {
   };
 }
 
+/**
+ * Whether a hybrid network's search varies the training settings of its neural layers too
+ * (not with frozen features, which are not trained).
+ */
+export function searchesNeural(values: SettingsValues): boolean {
+  return values.search && values.search_neural && values.feature_training !== 'frozen';
+}
+
+/** The training settings of the neural layers, which frozen features do not use. */
+export const FROZEN_UNUSED = [
+  'epochs',
+  'batch_size',
+  'segmentation_batch_size',
+  'learning_rate',
+  'optimizer',
+  'weight_decay',
+  'patience',
+  'restore_best',
+] as const;
+
 /** Number of combinations of the listed values, or null if a range makes it unlimited. */
 function combinations(values: SettingsValues): number | null {
   const tuned = tunedSettings(values);
@@ -358,6 +385,26 @@ export function plannedClassicalTrials(values: SettingsValues, model: string): n
   return combos === null ? trials : Math.min(trials, combos);
 }
 
+/**
+ * How many trials the search of a hybrid network runs: the combinations of its neural
+ * settings (if searched) times those of the parameters of its classical `model`, like the
+ * server. Null if unknown.
+ */
+export function plannedHybridTrials(values: SettingsValues, model: string): number | null {
+  const grid = values.search_method === 'grid';
+  const neural = searchesNeural(values) ? combinations(values) : 1;
+  const classical = classicalCombinations(model, classicalParams(values, model), grid);
+  const combos = neural === null || classical === null ? null : neural * classical;
+  if (grid) {
+    return combos;
+  }
+  const trials = parseField(values.search_trials);
+  if (typeof trials !== 'number' || !Number.isInteger(trials) || trials < 1) {
+    return null;
+  }
+  return combos === null ? trials : Math.min(trials, combos);
+}
+
 /** Shown when a setting needs validation data that the run will not have. */
 export const NO_VALIDATION_PATIENCE =
   'Early stopping needs validation data: set a validation split above 0, or leave this empty.';
@@ -367,6 +414,8 @@ const PREPARED_PATIENCE =
   'Early stopping needs validation data, and this dataset has no validation rows: leave this empty, or give it a validation share in the Data tab.';
 const PREPARED_SEARCH =
   'A hyperparameter search needs validation data to compare its trials, and this dataset has no validation rows: give it a validation share in the Data tab.';
+export const NEURAL_SEARCH_NO_VALIDATION =
+  'Searching the neural settings needs validation data: every trial is ranked by its classical model on the validation rows. Set a validation split above 0, or search only the classical model.';
 
 /**
  * Whether the run gets validation data: the validation rows of a dataset that brings its own
@@ -408,15 +457,22 @@ function validateSplits(values: SettingsValues, errors: SettingsErrors) {
   }
 }
 
-function validateClassicalSearch(values: SettingsValues, model: string, errors: SettingsErrors) {
+function validateClassicalSearch(
+  values: SettingsValues,
+  model: string,
+  errors: SettingsErrors,
+  hybrid = false
+) {
   const grid = values.search_method === 'grid';
+  // A hybrid network may search its neural settings alone, without cross-validation.
+  const neural = hybrid && searchesNeural(values);
   if (!grid) {
     const trials = wholeNumber(values.search_trials, LIMITS.search_trials, true);
     if (trials) {
       errors.search_trials = trials;
     }
   }
-  if (values.cv_enabled) {
+  if (values.cv_enabled && !neural) {
     const folds = wholeNumber(values.cv_folds, LIMITS.cv_folds, true);
     if (folds) {
       errors.cv_folds = folds;
@@ -440,11 +496,37 @@ function validateClassicalSearch(values: SettingsValues, model: string, errors: 
   if (Object.keys(params).length > 0) {
     errors.params = params;
   }
+  if (neural) {
+    validateNeuralSearch(values, errors, ticked);
+    return;
+  }
   const combos = classicalCombinations(model, states, grid);
   if (ticked === 0) {
     errors.search = 'Choose at least one parameter to search.';
   } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
     errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+  }
+}
+
+/**
+ * The search of a hybrid network over its neural settings: they need validation data, and
+ * with the `classicalTicked` parameters of its model at least one thing must be searched;
+ * a grid has at most the most trials.
+ */
+function validateNeuralSearch(
+  values: SettingsValues,
+  errors: SettingsErrors,
+  classicalTicked: number
+) {
+  const set = (key: keyof SettingsValues, message: string | null) => {
+    if (message) {
+      errors[key] = message;
+    }
+  };
+  validateSearchSettings(values, null, set);
+  const neural = Object.values(tunedSettings(values)).filter(Boolean).length;
+  if (neural + classicalTicked === 0) {
+    errors.search = 'Choose at least one setting or parameter to search.';
   }
 }
 
@@ -501,8 +583,23 @@ export function validateSettings(
 ): SettingsErrors {
   if (hybrid) {
     const errors = validateSettings({ ...values, search: false }, { segmentation, validationRows });
+    if (values.feature_training === 'frozen') {
+      // Not used (and not sent): the neural layers keep their random weights.
+      for (const key of FROZEN_UNUSED) {
+        delete errors[key];
+      }
+    }
     if (values.search && hybrid.model) {
-      validateClassicalSearch(values, hybrid.model, errors);
+      validateClassicalSearch(values, hybrid.model, errors, true);
+      if (searchesNeural(values)) {
+        const grid = values.search_method === 'grid';
+        const combos = plannedHybridTrials(values, hybrid.model);
+        if (!errors.search && !hasValidation(values, validationRows)) {
+          errors.search = NEURAL_SEARCH_NO_VALIDATION;
+        } else if (!errors.search && grid && combos !== null && combos > LIMITS.search_trials.max) {
+          errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+        }
+      }
       checkMetric(values, metrics, errors);
     }
     return errors;
@@ -564,36 +661,7 @@ export function validateSettings(
 
   if (values.search) {
     const grid = values.search_method === 'grid';
-    if (!grid) {
-      set('search_trials', wholeNumber(values.search_trials, LIMITS.search_trials, true));
-    }
-    if (tuned.learning_rate && grid && values.lr_values.length === 0) {
-      errors.lr_values = 'Choose at least one';
-    }
-    if (tuned.learning_rate && !grid) {
-      const range = (field: NumberField) =>
-        decimal(field, learningRate, 'Greater than 0, at most 10', true);
-      set('lr_min', range(values.lr_min));
-      set('lr_max', range(values.lr_max));
-      const lo = parseField(values.lr_min);
-      const hi = parseField(values.lr_max);
-      if (!errors.lr_min && !errors.lr_max && typeof lo === 'number' && typeof hi === 'number') {
-        if (lo > hi) {
-          errors.lr_min = 'At most the maximum';
-        }
-      }
-    }
-    if (tuned.batch_size && values.batch_sizes.length === 0) {
-      errors.batch_sizes = 'Choose at least one';
-    } else if (tuned.batch_size && segmentation) {
-      set('batch_sizes', tooLarge(Math.max(...values.batch_sizes)));
-    }
-    if (tuned.optimizer && values.optimizers.length === 0) {
-      errors.optimizers = 'Choose at least one';
-    }
-    if (tuned.weight_decay && values.weight_decays.length === 0) {
-      errors.weight_decays = 'Choose at least one';
-    }
+    validateSearchSettings(values, tooLarge, set);
     const combos = combinations(values);
     if (!validates) {
       errors.search = prepared ? PREPARED_SEARCH : NO_VALIDATION_SEARCH;
@@ -605,6 +673,50 @@ export function validateSettings(
     checkMetric(values, metrics, errors);
   }
   return errors;
+}
+
+/**
+ * The values of the searched training settings (and the trials of a random search).
+ * `tooLarge`: a segmentation's limit of the batch size (null: none).
+ */
+function validateSearchSettings(
+  values: SettingsValues,
+  tooLarge: ((size: number) => string | null) | null,
+  set: (key: keyof SettingsValues, message: string | null) => void
+) {
+  const tuned = tunedSettings(values);
+  const grid = values.search_method === 'grid';
+  const learningRate = (lr: number) => lr > 0 && lr <= LIMITS.learning_rate.max;
+  if (!grid) {
+    set('search_trials', wholeNumber(values.search_trials, LIMITS.search_trials, true));
+  }
+  if (tuned.learning_rate && grid && values.lr_values.length === 0) {
+    set('lr_values', 'Choose at least one');
+  }
+  if (tuned.learning_rate && !grid) {
+    const range = (field: NumberField) =>
+      decimal(field, learningRate, 'Greater than 0, at most 10', true);
+    const lowError = range(values.lr_min);
+    const highError = range(values.lr_max);
+    set('lr_min', lowError);
+    set('lr_max', highError);
+    const lo = parseField(values.lr_min);
+    const hi = parseField(values.lr_max);
+    if (!lowError && !highError && typeof lo === 'number' && typeof hi === 'number' && lo > hi) {
+      set('lr_min', 'At most the maximum');
+    }
+  }
+  if (tuned.batch_size && values.batch_sizes.length === 0) {
+    set('batch_sizes', 'Choose at least one');
+  } else if (tuned.batch_size && tooLarge) {
+    set('batch_sizes', tooLarge(Math.max(...values.batch_sizes)));
+  }
+  if (tuned.optimizer && values.optimizers.length === 0) {
+    set('optimizers', 'Choose at least one');
+  }
+  if (tuned.weight_decay && values.weight_decays.length === 0) {
+    set('weight_decays', 'Choose at least one');
+  }
 }
 
 /** The chosen objective metric must fit the data (e.g. ROC AUC needs two classes). */
@@ -637,11 +749,18 @@ export function toConfig(
   }: { builtin?: boolean; classical?: boolean; hybrid?: boolean; segmentation?: boolean } = {}
 ): Partial<TrainingConfig> {
   if (hybrid) {
-    // The neural settings learn the features (a search varies the classical model only).
-    return {
-      ...toConfig({ ...values, search: false }, { builtin, segmentation }),
+    // The neural settings learn the features; those a search varies are left out, and
+    // frozen features use none of them.
+    const config: Partial<TrainingConfig> = {
+      ...toConfig({ ...values, search: searchesNeural(values) }, { builtin, segmentation }),
       feature_training: values.feature_training,
     };
+    if (values.feature_training === 'frozen') {
+      for (const key of FROZEN_UNUSED) {
+        delete config[key as keyof TrainingConfig];
+      }
+    }
+    return config;
   }
   const number = (field: NumberField) => {
     const value = parseField(field);
@@ -685,7 +804,8 @@ const ascending = (a: number, b: number) => a - b;
  */
 export function toTuning(
   values: SettingsValues,
-  classicalModel: string | null = null
+  classicalModel: string | null = null,
+  { hybrid = false }: { hybrid?: boolean } = {}
 ): TuningInput | null {
   if (!values.search) {
     return null;
@@ -695,15 +815,30 @@ export function toTuning(
     const grid = values.search_method === 'grid';
     const trials = parseField(values.search_trials);
     const folds = parseField(values.cv_folds);
+    // A hybrid network may also search its neural settings (then never cross-validated).
+    const neural = hybrid && searchesNeural(values);
     return {
       method: values.search_method,
       ...(!grid && typeof trials === 'number' ? { trials } : {}),
       ...metric,
-      ...(values.cv_enabled && typeof folds === 'number' ? { cv_folds: folds } : {}),
+      ...(values.cv_enabled && !neural && typeof folds === 'number' ? { cv_folds: folds } : {}),
       space: classicalSpace(classicalModel, classicalParams(values, classicalModel), grid),
+      ...(neural ? { neural_space: settingsSpace(values) } : {}),
     };
   }
-  const tuned = tunedSettings(values);
+  const grid = values.search_method === 'grid';
+  const trials = parseField(values.search_trials);
+  return {
+    method: values.search_method,
+    ...(!grid && typeof trials === 'number' ? { trials } : {}),
+    ...metric,
+    space: settingsSpace(values),
+  };
+}
+
+/** The search space of the ticked training settings. */
+function settingsSpace(values: SettingsValues): TuningSpace {
+  const tuned = tunedSettings({ ...values, search: true });
   const grid = values.search_method === 'grid';
   const space: TuningSpace = {};
   if (tuned.learning_rate) {
@@ -724,13 +859,7 @@ export function toTuning(
   if (tuned.weight_decay) {
     space.weight_decay = [...values.weight_decays].sort(ascending);
   }
-  const trials = parseField(values.search_trials);
-  return {
-    method: values.search_method,
-    ...(!grid && typeof trials === 'number' ? { trials } : {}),
-    ...metric,
-    space,
-  };
+  return space;
 }
 
 // --------------------------------------------------------------------------

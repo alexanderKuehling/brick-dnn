@@ -22,6 +22,24 @@ settings together::
 
     {"method": "random", "trials": 20, "metric": "roc_auc", "cv_folds": 5,
      "space": {"C": {"min": 0.1, "max": 100}, "kernel": ["rbf", "linear"]}}
+
+A hybrid network (neural layers that learn the features of a classical model, see
+hybrid_engine.py) searches the parameters of its classical model in ``space`` and the
+training settings of its neural layers in ``neural_space`` (the space of a network), one of
+them or both::
+
+    {"method": "random", "trials": 10,
+     "neural_space": {"learning_rate": {"min": 1e-4, "max": 1e-2}, "batch_size": [32, 64]},
+     "space": {"C": {"min": 0.1, "max": 100}}}
+
+Without ``neural_space`` the features are learned once and only the classical model is
+searched (``space`` defaults to the model's default space). With it, every trial learns the
+features again with its settings (``space`` then defaults to nothing) and is ranked by the
+classical model fitted on its features, on the validation rows: such a search needs
+validation rows and cannot cross-validate, because the features of the training rows were
+learned from those rows, which favours the settings that memorise them. In the params of a
+trial the neural settings have the prefix ``neural.`` (``{"neural.learning_rate": 0.003,
+"C": 3.2}``): gradient boosting has a learning rate of its own.
 """
 
 from __future__ import annotations
@@ -57,6 +75,18 @@ MIN_FOLDS = 2
 MAX_FOLDS = 10
 # Sampled numbers are rounded to this many significant digits (easier to read and reuse).
 DIGITS = 3
+# Hybrid networks: the prefix of the neural training settings in the params of a trial.
+NEURAL_PREFIX = "neural."
+NEURAL_CV = (
+    "Hyperparameter search: cross-validation (cv_folds) is not available when the neural "
+    "settings are searched: the features of the training rows were learned from them, so "
+    "the trials are compared on the validation rows. Leave out cv_folds, or search only the "
+    "classical model."
+)
+NEURAL_SPACE_FOR_NETWORK = (
+    "Hyperparameter search: neural_space is for hybrid networks (neural layers before a "
+    "classical model). A neural network searches its training settings in space."
+)
 
 
 @dataclass(frozen=True)
@@ -214,11 +244,19 @@ class TuningConfig:
     # The type of the classical model brick whose parameters are searched; None for a
     # neural network (its training settings are searched).
     model: str | None = None
+    # A hybrid network: the training settings of its neural layers to search (None: the
+    # features are learned once and only the classical model is searched). ``space`` may
+    # then be empty.
+    neural_space: dict[str, Range | Values] | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None, model: str | None = None) -> TuningConfig:
+    def from_dict(
+        cls, data: dict[str, Any] | None, model: str | None = None, hybrid: bool = False
+    ) -> TuningConfig:
         """Validate the search settings. ``model``: the type of the classical model brick
-        (None: a neural network). Raises :class:`ConfigError` (shown to the user)."""
+        (None: a neural network); ``hybrid``: neural layers learn its features, whose
+        training settings may be searched as well (``neural_space``). Raises
+        :class:`ConfigError` (shown to the user)."""
         if data is None:
             data = {}
         if not isinstance(data, dict):
@@ -230,6 +268,9 @@ class TuningConfig:
             )
         metric = parse_metric(data.get("metric"))
         folds = _folds(data.get("cv_folds"))
+        neural: dict[str, Range | Values] | None = None
+        if data.get("neural_space") is not None and not (hybrid and model is not None):
+            raise ConfigError(NEURAL_SPACE_FOR_NETWORK)
         if model is None:
             space = _space(data.get("space"))
             if folds is not None:
@@ -238,13 +279,17 @@ class TuningConfig:
                     "classical models; a neural network compares its trials on the "
                     "validation data."
                 )
+        elif data.get("neural_space") is not None:
+            neural = _space(data["neural_space"])
+            if folds is not None:
+                raise ConfigError(NEURAL_CV)
+            space = _classical_space(model, data.get("space"), hybrid, required=False)
         else:
-            from .classical_tuning import parse_space
-
-            space = parse_space(model, data.get("space"))
-        combinations = _combinations(space)
+            space = _classical_space(model, data.get("space"), hybrid, required=True)
+        merged = _merged(space, neural)
+        combinations = _combinations(merged)
         if method == "grid":
-            for name, values in space.items():
+            for name, values in merged.items():
                 if isinstance(values, Range) and values.min != values.max:
                     raise ConfigError(
                         f"Grid search needs a list of values for the {param_label(name, model)}, "
@@ -256,38 +301,45 @@ class TuningConfig:
                     f"The grid has {combinations:,} combinations, at most {MAX_TRIALS} are "
                     "possible. Use fewer values or random search."
                 )
-            return cls(method, combinations, space, metric, folds, model)
+            return cls(method, combinations, space, metric, folds, model, neural)
         trials = data.get("trials")
         if trials is None or trials == "":
             trials = DEFAULT_TRIALS
         trials = int(_number(trials, "the number of trials", 1, MAX_TRIALS, False, True))
         if combinations is not None:
             trials = min(trials, combinations)
-        return cls(method, trials, space, metric, folds, model)
+        return cls(method, trials, space, metric, folds, model, neural)
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
             "method": self.method,
             "trials": self.trials,
-            "space": {
-                name: values.to_dict() if isinstance(values, Range) else list(values)
-                for name, values in self.space.items()
-            },
+            "space": _space_dict(self.space),
             "metric": self.metric,
         }
         if self.model is not None:
             data["cv_folds"] = self.cv_folds
+        if self.neural_space is not None:
+            data["neural_space"] = _space_dict(self.neural_space)
         return data
 
+    @property
+    def searches_neural(self) -> bool:
+        """A hybrid network's search whose trials learn the features with settings of their
+        own (not only the classical model's parameters)."""
+        return self.neural_space is not None
+
     def sample(self, seed: int) -> list[dict[str, Any]]:
-        """The settings of every trial (only the tuned ones), reproducible for a seed."""
-        names = list(self.space)
+        """The settings of every trial (only the tuned ones), reproducible for a seed. The
+        neural settings of a hybrid network have the prefix ``neural.``."""
+        space = _merged(self.space, self.neural_space)
+        names = list(space)
         if self.method == "grid":
-            lists = [self._as_values(self.space[name]) for name in names]
+            lists = [self._as_values(space[name]) for name in names]
             return [dict(zip(names, combo, strict=True)) for combo in itertools.product(*lists)]
         rng = random.Random(seed)
-        if _combinations(self.space) is not None:
-            lists = [self._as_values(self.space[name]) for name in names]
+        if _combinations(space) is not None:
+            lists = [self._as_values(space[name]) for name in names]
             combos = list(itertools.product(*lists))
             chosen = rng.sample(combos, min(self.trials, len(combos)))
             return [dict(zip(names, combo, strict=True)) for combo in chosen]
@@ -295,7 +347,7 @@ class TuningConfig:
         seen: set[tuple[Any, ...]] = set()
         attempts = 0
         while len(trials) < self.trials:
-            params = {name: self._draw(self.space[name], rng) for name in names}
+            params = {name: self._draw(space[name], rng) for name in names}
             key = tuple(params.values())
             attempts += 1
             # A narrow range may not have enough different (rounded) values.
@@ -319,9 +371,65 @@ class TuningConfig:
         return f"{method}, {self.trials} trial{'s' if self.trials != 1 else ''}"
 
 
+def _space_dict(space: dict[str, Range | Values]) -> dict[str, Any]:
+    return {
+        name: values.to_dict() if isinstance(values, Range) else list(values)
+        for name, values in space.items()
+    }
+
+
+def _merged(
+    space: dict[str, Range | Values], neural: dict[str, Range | Values] | None
+) -> dict[str, Range | Values]:
+    """The space of the params of a trial: a hybrid network's neural settings with their
+    prefix first, then the parameters of the classical model."""
+    prefixed = {f"{NEURAL_PREFIX}{name}": values for name, values in (neural or {}).items()}
+    return {**prefixed, **space}
+
+
+def _classical_space(
+    model: str, raw: Any, hybrid: bool, required: bool
+) -> dict[str, Range | Values]:
+    """The space of the classical model brick ``model``. ``required``: it is all that is
+    searched (without ``raw``: the model's default space); otherwise the neural settings of
+    a hybrid network are searched, and without ``raw`` (or with ``{}``) the model keeps the
+    parameters of its brick. A hybrid network's training settings in ``raw`` are
+    explained."""
+    from .classical_tuning import parse_space, tunables
+
+    if not required and (raw is None or raw == {}):
+        return {}
+    if hybrid and isinstance(raw, dict):
+        params = {tunable.name for tunable in tunables(model)}
+        settings = [name for name in raw if name in TUNABLE and name not in params]
+        if settings:
+            raise ConfigError(
+                f"Hyperparameter search: '{settings[0]}' is a training setting of the neural "
+                "layers: put it into neural_space (space holds the parameters of the "
+                "classical model)."
+            )
+    return parse_space(model, raw)
+
+
+def split_params(params: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The params of a hybrid network's trial as ``(neural settings, parameters of the
+    classical model)``, the neural settings without their prefix."""
+    neural = {
+        name.removeprefix(NEURAL_PREFIX): value
+        for name, value in params.items()
+        if name.startswith(NEURAL_PREFIX)
+    }
+    model = {name: value for name, value in params.items() if not name.startswith(NEURAL_PREFIX)}
+    return neural, model
+
+
 def param_label(name: str, model: str | None = None) -> str:
     """``"learning rate"``; for a classical model (``model``: the type of its brick) the
-    label of the brick parameter."""
+    label of the brick parameter; ``"learning rate of the neural layers"`` for a neural
+    setting of a hybrid network (``neural.learning_rate``)."""
+    if name.startswith(NEURAL_PREFIX):
+        setting = name.removeprefix(NEURAL_PREFIX)
+        return f"{LABELS.get(setting, setting)} of the neural layers"
     if model is not None:
         from .classical_tuning import tunable_label
 
@@ -335,6 +443,7 @@ def trial_config(base: TrainingConfig, params: dict[str, Any]) -> TrainingConfig
 
 
 def format_value(name: str, value: Any) -> str:
+    name = name.removeprefix(NEURAL_PREFIX)
     if name == "optimizer":
         return OPTIMIZER_NAMES.get(value, str(value))
     if value is None:
@@ -346,7 +455,12 @@ def format_value(name: str, value: Any) -> str:
 
 def describe_params(params: dict[str, Any], model: str | None = None) -> str:
     """``"learning rate 0.00312, batch size 64, Adam"``; for a classical model (``model``:
-    the type of its brick) ``"C 3.2, gamma 0.01"``."""
+    the type of its brick) ``"C 3.2, gamma 0.01"``; for a hybrid network that searches its
+    neural settings ``"neural layers: learning rate 0.00312; C 3.2"``."""
+    neural, rest = split_params(params)
+    if neural:
+        text = f"neural layers: {describe_params(neural)}"
+        return f"{text}; {describe_params(rest, model)}" if rest else text
     if model is not None:
         return ", ".join(
             f"{param_label(name, model)} {format_value(name, value)}"

@@ -60,8 +60,7 @@ class TrainingJob:
             config = TrainingConfig.from_dict(data.get("config"))
             tuning = data.get("tuning")
             if tuning is not None:
-                # A classical model searches over the parameters of its brick.
-                tuning = TuningConfig.from_dict(tuning, classical_model(graph))
+                tuning = search_config(tuning, graph)
         except ConfigError as exc:
             raise TrainingError(str(exc)) from exc
         path = dataset.get("path")
@@ -104,6 +103,18 @@ def classical_model(graph: Any) -> str | None:
     except Exception:  # pragma: no cover - analyze() reports problems instead of raising
         return None
     return model.type if model is not None else None
+
+
+def search_config(data: Any, graph: Any) -> TuningConfig:
+    """The search settings ``data`` for ``graph`` (a document or an analysis): a classical
+    model searches over the parameters of its brick, a hybrid network also (or instead)
+    over the training settings of its neural layers. Raises :class:`ConfigError`."""
+    try:
+        analysis = graph if isinstance(graph, Analysis) else analyze(graph)
+    except Exception:  # pragma: no cover - analyze() reports problems instead of raising
+        return TuningConfig.from_dict(data)
+    model = analysis.model.type if analysis.model is not None else None
+    return TuningConfig.from_dict(data, model, hybrid=analysis.family == "hybrid")
 
 
 def graph_family(graph: Any) -> str:

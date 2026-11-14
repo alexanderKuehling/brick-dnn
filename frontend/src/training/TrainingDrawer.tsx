@@ -180,6 +180,8 @@ function DrawerContent({
             reason={unavailableReason(status, family)}
             disabled={false}
             family={family}
+            sklearnMissing={!status.classical?.available}
+            torchMissing={!status.available}
             onRetry={training.reloadStatus}
           />
         )}
@@ -247,6 +249,8 @@ function DrawerContent({
             reason={unavailableReason(status, family)}
             disabled={false}
             family={family}
+            sklearnMissing={!status.classical?.available}
+            torchMissing={!status.available}
             onRetry={training.reloadStatus}
           />
         )}
@@ -340,14 +344,22 @@ function Unavailable({
   reason,
   disabled,
   family = 'neural',
+  sklearnMissing = false,
+  torchMissing = true,
   onRetry,
 }: {
   reason: string | null;
   disabled: boolean;
   family?: Family;
+  /** scikit-learn is not installed (classical models and hybrid networks need it). */
+  sklearnMissing?: boolean;
+  /** PyTorch is not installed (or cannot be loaded). */
+  torchMissing?: boolean;
   onRetry: () => void;
 }) {
-  if (family === 'classical' && !disabled) {
+  // A hybrid network needs both: PyTorch for its neural layers, scikit-learn for its model.
+  const hybridWithoutSklearn = family === 'hybrid' && sklearnMissing && !torchMissing;
+  if ((family === 'classical' || hybridWithoutSklearn) && !disabled) {
     return (
       <Stack gap="md">
         <Alert
@@ -358,11 +370,20 @@ function Unavailable({
           {reason ?? 'scikit-learn is not installed on the server.'}
         </Alert>
         <Stack gap="xs">
-          <Text size="sm">
-            Classical models (Gaussian processes, SVMs, gradient boosting) are fitted with
-            scikit-learn on the machine of the Brick DNN backend; they do not need PyTorch. In the{' '}
-            <Code>backend</Code> folder, with the virtual environment active:
-          </Text>
+          {hybridWithoutSklearn ? (
+            <Text size="sm">
+              This network is hybrid: its neural layers learn the features with PyTorch, which is
+              installed, and its classical model is fitted on them with scikit-learn, which is
+              missing on the machine of the Brick DNN backend. In the <Code>backend</Code> folder,
+              with the virtual environment active:
+            </Text>
+          ) : (
+            <Text size="sm">
+              Classical models (Gaussian processes, SVMs, gradient boosting) are fitted with
+              scikit-learn on the machine of the Brick DNN backend; they do not need PyTorch. In the{' '}
+              <Code>backend</Code> folder, with the virtual environment active:
+            </Text>
+          )}
           <Code block>pip install -r requirements.txt</Code>
           <Text size="sm" c="dimmed">
             The Docker image includes scikit-learn. Restart the backend and check again.
@@ -403,6 +424,13 @@ function Unavailable({
             Docker
           </Text>
           <Code block>BRICKDNN_INSTALL_TORCH=true docker compose up -d --build</Code>
+          {family === 'hybrid' && sklearnMissing && (
+            <Text size="sm">
+              This hybrid network also needs scikit-learn for its classical model:{' '}
+              <Code>pip install -r requirements.txt</Code> in the <Code>backend</Code> folder (the
+              Docker image includes it).
+            </Text>
+          )}
           <Text size="sm" c="dimmed">
             Then restart the backend and check again.
           </Text>
