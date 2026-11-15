@@ -14,8 +14,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { checkDist } from './check.ts';
-import { IMAGE_DIR, LOGO, OG_IMAGE, readImage, SCREENSHOTS } from './images.ts';
-import { renderLlms, renderPage, renderRobots, renderSitemap, type Assets } from './render.ts';
+import { IMAGE_DIR, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
+import {
+  CONTENT,
+  renderLlms,
+  renderPage,
+  renderRobots,
+  renderSitemap,
+  shotIds,
+  type Assets,
+} from './render.ts';
 import { EDITOR_PATH, type Lang } from './site.ts';
 
 const CSS_FILE = join(import.meta.dirname, 'landing.css');
@@ -35,20 +43,25 @@ export function minifyCss(css: string): string {
     .trim();
 }
 
-function assets(url: (name: string, data: Buffer | string) => string): Assets {
-  const shots = SCREENSHOTS.map((name) => ({ name, ...readImage(name) }));
+function assets(lang: Lang, url: (name: string, data: Buffer | string) => string): Assets {
   const og = readImage(OG_IMAGE);
   const logo = readImage(LOGO);
   const css = readFileSync(CSS_FILE, 'utf8');
+  const images: Assets['images'] = {};
+  for (const id of shotIds(CONTENT[lang])) {
+    images[id] = {
+      sources: shotFiles(id, lang).map((file) => ({
+        src: url(file.name, readImage(file.name).data),
+        width: file.width,
+        height: file.height,
+      })),
+    };
+  }
   return {
     css: url('landing.css', css),
     favicon: '/favicon.svg',
     logo: { src: url(LOGO, logo.data), ...logo.size },
-    screenshot: {
-      sources: shots.map((shot) => ({ src: url(shot.name, shot.data), width: shot.size.width })),
-      width: shots[0].size.width,
-      height: shots[0].size.height,
-    },
+    images,
     ogImage: { src: url(OG_IMAGE, og.data), ...og.size },
   };
 }
@@ -61,6 +74,7 @@ const TEXT_FILES: Record<string, { type: string; render: () => string }> = {
 
 const CONTENT_TYPES: Record<string, string> = {
   css: 'text/css',
+  jpg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp',
 };
@@ -139,7 +153,7 @@ export function landingPages(): Plugin {
             'text/html',
             renderPage(
               lang,
-              assets((name) => `${DEV_PREFIX}${name}`)
+              assets(lang, (name) => `${DEV_PREFIX}${name}`)
             )
           );
           return;
@@ -177,17 +191,23 @@ export function landingPages(): Plugin {
         delete bundle['index.html'];
         this.emitFile({ type: 'asset', fileName: 'app.html', source: app.source });
 
-        const files = assets((name, data) => {
-          const source = name.endsWith('.css') ? minifyCss(String(data)) : data;
-          const ref = this.emitFile({ type: 'asset', name, source });
-          return `/${this.getFileName(ref)}`;
-        });
-        this.emitFile({ type: 'asset', fileName: 'index.html', source: renderPage('en', files) });
-        this.emitFile({
-          type: 'asset',
-          fileName: 'de/index.html',
-          source: renderPage('de', files),
-        });
+        // Every file once, also when both pages use it.
+        const emitted = new Map<string, string>();
+        const url = (name: string, data: Buffer | string) => {
+          if (!emitted.has(name)) {
+            const source = name.endsWith('.css') ? minifyCss(String(data)) : data;
+            const ref = this.emitFile({ type: 'asset', name, source });
+            emitted.set(name, `/${this.getFileName(ref)}`);
+          }
+          return emitted.get(name)!;
+        };
+        for (const lang of ['en', 'de'] as const) {
+          this.emitFile({
+            type: 'asset',
+            fileName: lang === 'en' ? 'index.html' : 'de/index.html',
+            source: renderPage(lang, assets(lang, url)),
+          });
+        }
         for (const [fileName, text] of Object.entries(TEXT_FILES)) {
           this.emitFile({ type: 'asset', fileName, source: text.render() });
         }

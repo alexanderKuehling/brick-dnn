@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { checkDist, checkLandingHtml, jsonLdTypes } from './check.ts';
-import { imageSize, LOGO, OG_IMAGE, readImage, SCREENSHOTS } from './images.ts';
+import { IMAGE_DIR, imageSize, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
 import { minifyCss } from './plugin.ts';
 import {
   CONTENT,
@@ -11,6 +11,7 @@ import {
   renderPage,
   renderRobots,
   renderSitemap,
+  shotIds,
   type Assets,
 } from './render.ts';
 import {
@@ -30,15 +31,19 @@ const ASSETS: Assets = {
   css: '/assets/landing-abc.css',
   favicon: '/favicon.svg',
   logo: { src: '/assets/logo-512-abc.png', width: 512, height: 512 },
-  screenshot: {
-    sources: [
-      { src: '/assets/editor-1280-abc.webp', width: 1280 },
-      { src: '/assets/editor-2560-abc.webp', width: 2560 },
-    ],
-    width: 1280,
-    height: 764,
-  },
-  ogImage: { src: '/assets/og-image-abc.png', width: 1200, height: 630 },
+  images: Object.fromEntries(
+    [...new Set([...shotIds(CONTENT.en), ...shotIds(CONTENT.de)])].map((id) => [
+      id,
+      {
+        sources: [480, 1056, 2112].map((width) => ({
+          src: `/assets/${id}-${width}-abc.webp`,
+          width,
+          height: Math.round(width / 1.6),
+        })),
+      },
+    ])
+  ),
+  ogImage: { src: '/assets/og-image-abc.jpg', width: 1200, height: 630 },
 };
 
 const LANGS = ['en', 'de'] as const;
@@ -137,13 +142,40 @@ describe.each(LANGS)('landing page %s', (lang) => {
     expect(scripts.filter((s) => s.type && s.type !== 'application/ld+json')).toHaveLength(0);
   });
 
-  test('images have alt text and a size', () => {
+  test('images have alt text and a size; screenshots several widths, lazy below the fold', () => {
     for (const img of doc.querySelectorAll('img')) {
       expect(img.hasAttribute('alt')).toBe(true);
       expect(Number(img.getAttribute('width'))).toBeGreaterThan(0);
       expect(Number(img.getAttribute('height'))).toBeGreaterThan(0);
     }
-    expect(doc.querySelector('.shot img')!.getAttribute('alt')!.length).toBeGreaterThan(40);
+    const shots = [...doc.querySelectorAll('img[srcset]')];
+    expect(shots).toHaveLength(shotIds(c).length);
+    expect(shotIds(c).length).toBeGreaterThanOrEqual(12);
+    for (const [index, img] of shots.entries()) {
+      expect(img.getAttribute('alt')!.length, img.getAttribute('src')!).toBeGreaterThan(60);
+      expect(img.getAttribute('srcset')!.split(',').length).toBeGreaterThanOrEqual(2);
+      expect(img.getAttribute('sizes')).toBeTruthy();
+      expect(img.getAttribute('decoding')).toBe('async');
+      // Only the first (the hero) loads at once and first.
+      expect(img.getAttribute('loading')).toBe(index === 0 ? null : 'lazy');
+      expect(img.getAttribute('fetchpriority')).toBe(index === 0 ? 'high' : null);
+    }
+    expect(doc.querySelectorAll('#use-cases .rows img')).toHaveLength(c.useCases.items.length);
+    expect(doc.querySelectorAll('#how-it-works .steps img')).toHaveLength(c.steps.items.length);
+    expect(doc.querySelectorAll('#features .tiles img').length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('alt texts are written for this language', () => {
+    const otherLang = lang === 'en' ? 'de' : 'en';
+    const alts = (content: typeof c) =>
+      [...content.useCases.items, ...content.steps.items, ...content.features.items]
+        .filter((item) => item.image)
+        .map((item) => item.image!.alt);
+    const mine = alts(c);
+    for (const alt of mine) {
+      expect(alts(CONTENT[otherLang])).not.toContain(alt);
+    }
+    expect(new Set(mine).size).toBe(mine.length);
   });
 
   test('links to the editor, pricing, the legal pages and the other language', () => {
@@ -272,7 +304,7 @@ describe('the build check', () => {
       ASSETS.favicon,
       ASSETS.logo.src,
       ASSETS.ogImage.src,
-      ...ASSETS.screenshot.sources.map((source) => source.src),
+      ...Object.values(ASSETS.images).flatMap((image) => image.sources.map((s) => s.src)),
     ]) {
       write(path);
     }
@@ -340,13 +372,34 @@ test('minifyCss keeps selectors and media queries intact', () => {
   ).toBe('a:hover,.b>.c{color:red}@media (min-width:54rem){.d{margin:0 auto}}');
 });
 
-test('the images exist with the sizes the pages state', () => {
-  const sizes = SCREENSHOTS.map((name) => readImage(name).size);
-  expect(sizes.map((size) => size.width)).toEqual([1280, 2560]);
-  // Both widths of the screenshot have the same proportions.
-  expect(
-    Math.abs(sizes[1].height / sizes[1].width - sizes[0].height / sizes[0].width)
-  ).toBeLessThan(0.002);
+test('every screenshot exists in several widths of the same proportions, and no others', () => {
+  const ids = [...new Set([...shotIds(CONTENT.en), ...shotIds(CONTENT.de)])];
+  for (const lang of LANGS) {
+    for (const id of shotIds(CONTENT[lang])) {
+      const files = shotFiles(id, lang);
+      expect(files.length, id).toBeGreaterThanOrEqual(2);
+      // At least twice the width the page shows it at (1x and 2x screens).
+      expect(files.at(-1)!.width, id).toBeGreaterThanOrEqual(640);
+      for (const file of files) {
+        expect(
+          Math.abs(file.height / file.width - files[0].height / files[0].width),
+          id
+        ).toBeLessThan(0.01);
+        // Optimised: no single file is large.
+        expect(readImage(file.name).data.length, file.name).toBeLessThan(260_000);
+      }
+    }
+  }
+  const unused = readdirSync(IMAGE_DIR).filter(
+    (name) =>
+      name.endsWith('.webp') &&
+      !ids.some((id) => new RegExp(`^${id}(\\.de)?-\\d+\\.webp$`).test(name))
+  );
+  expect(unused).toEqual([]);
+  expect(() => shotFiles('no-such-shot', 'en')).toThrow();
+});
+
+test('the Open Graph image and the logo', () => {
   expect(readImage(OG_IMAGE).size).toEqual({ width: 1200, height: 630 });
   expect(readImage(LOGO).size).toEqual({ width: 512, height: 512 });
   expect(() => imageSize(new Uint8Array(32))).toThrow();
