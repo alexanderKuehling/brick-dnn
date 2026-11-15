@@ -42,6 +42,7 @@ import { legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
+import { EDITOR_PATH } from './RedirectToEditor';
 
 export const HEADER_HEIGHT = 56;
 
@@ -76,11 +77,17 @@ export function AppHeader() {
   return (
     <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
       <Group gap="lg" wrap="nowrap">
-        <UnstyledButton component={Link} to="/" aria-label={t('nav.home')}>
+        <UnstyledButton component={Link} to={EDITOR_PATH} aria-label={t('nav.home')}>
           <Logo />
         </UnstyledButton>
         <Group gap={4} visibleFrom="sm">
-          <Button component={Link} to="/" variant={navVariant('/')} size="compact-md" color="gray">
+          <Button
+            component={Link}
+            to={EDITOR_PATH}
+            variant={navVariant(EDITOR_PATH)}
+            size="compact-md"
+            color="gray"
+          >
             {t('nav.builder')}
           </Button>
           <Button
@@ -330,7 +337,7 @@ function PhoneMenu({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          {item('/', t('nav.builder'), <IconTopologyStar3 size={16} />)}
+          {item(EDITOR_PATH, t('nav.builder'), <IconTopologyStar3 size={16} />)}
           {item('/data', t('nav.data'), <IconTable size={16} />)}
           {loggedIn && item('/projects', t('nav.myNetworks'), <IconFolder size={16} />)}
           {pricing && item('/pricing', t('nav.pricing'), <IconTag size={16} />)}

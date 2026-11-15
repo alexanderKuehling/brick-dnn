@@ -24,6 +24,19 @@
   account, token, activity, approval, sharing, comment and billing pages, and messages the
   server builds from data (network validation, training checks, readiness checks). See
   docs/translations.md.
+- **Landing pages in English and German.** `/` and `/de/` now describe Brick DNN for
+  teaching, research and practice: what it is, use cases, how it works, features, where data
+  is stored, the plans with their prices, an offer for teaching and research and an FAQ. They
+  are static HTML made at build time (`frontend/landing/`), readable without JavaScript, with
+  canonical and `hreflang` links, Open Graph and Twitter meta with a static image, JSON-LD
+  (`SoftwareApplication` with the plans as offers, `FAQPage`, `Organization`), a real
+  screenshot of the editor, no web fonts, no cookies, nothing loaded from elsewhere and a
+  strict Content-Security-Policy. The build also writes `robots.txt`, `sitemap.xml` and
+  `llms.txt`, and fails if a landing page lacks its language links or structured data.
+  **The editor moved to `/app`**; every other page of the app keeps its address. Old links
+  keep working: `/?…` is redirected to `/app?…`, a `#…` that is not a section of the page
+  goes on to `/app#…`, logged-in users who open `/` land in the editor, and links to `/`
+  inside the app open the editor.
 - **Hybrid networks: a search of the neural training settings.** The hyperparameter search
   of a hybrid network can vary the learning rate, batch size, optimizer and weight decay of
   its neural layers (`tuning.neural_space`, the space of a network), alone or together with

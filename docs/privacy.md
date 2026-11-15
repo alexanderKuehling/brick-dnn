@@ -30,7 +30,9 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Access log** (nginx): shortened IP address, time, path without query string, status, size, duration, user agent | Docker's container logs | at most 3 × 10 MB per container |
 
 The browser keeps the login (`brickdnn:tokens`), the builder's draft (`brickdnn:draft`), the
-last training settings and data preparation and the colour scheme in `localStorage`. The app
+last training settings and data preparation and the colour scheme in `localStorage`. The
+landing pages (`/`, `/de/`) only read whether the login there has not expired, in the browser,
+to send logged-in users on to the editor; they store and send nothing. The app
 sets no cookies (the Django admin at `/admin/` does, for the operator), loads nothing from
 other servers and has no analytics. It sends e-mails only if the operator sets up an
 e-mail provider ([email.md](email.md)), and only about the account: links to confirm the

@@ -12,6 +12,11 @@ Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api─
 Trainings: Django queues them in the database ──▶ worker (manage.py training_worker) trains them
 ```
 
+nginx (`frontend/nginx.conf`) serves the static landing pages at `/` and `/de/`, `robots.txt`,
+`sitemap.xml` and `llms.txt`, and the app (`app.html`) for every other page, the editor at
+`/app` included. `/?…` is redirected to `/app?…` (old links into the editor), `/de` to `/de/`.
+Caddy passes everything on unchanged, so it needs no routes of its own.
+
 ## One-time setup
 
 Create the server with your SSH key and point your domain to it (step 1 below). Then one
