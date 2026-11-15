@@ -1,6 +1,7 @@
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
+import { landingPages } from './landing/plugin.ts';
 
 // The oldest browsers the app supports (README.md, "Supported browsers"): the first versions
 // with everything its code and styles use, e.g. structuredClone, Array.at and CSS :has().
@@ -30,6 +31,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      // The static landing pages at / and /de/; the app itself is app.html (landing/plugin.ts).
+      landingPages(),
       uploadSourceMaps &&
         sentryVitePlugin({
           ...SENTRY,

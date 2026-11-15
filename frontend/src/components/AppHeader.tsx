@@ -40,6 +40,7 @@ import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
+import { EDITOR_PATH } from './RedirectToEditor';
 
 export const HEADER_HEIGHT = 56;
 
@@ -73,11 +74,17 @@ export function AppHeader() {
   return (
     <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
       <Group gap="lg" wrap="nowrap">
-        <UnstyledButton component={Link} to="/" aria-label="Brick DNN home">
+        <UnstyledButton component={Link} to={EDITOR_PATH} aria-label="Brick DNN home">
           <Logo />
         </UnstyledButton>
         <Group gap={4} visibleFrom="sm">
-          <Button component={Link} to="/" variant={navVariant('/')} size="compact-md" color="gray">
+          <Button
+            component={Link}
+            to={EDITOR_PATH}
+            variant={navVariant(EDITOR_PATH)}
+            size="compact-md"
+            color="gray"
+          >
             Builder
           </Button>
           <Button
@@ -323,7 +330,7 @@ function PhoneMenu({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          {item('/', 'Builder', <IconTopologyStar3 size={16} />)}
+          {item(EDITOR_PATH, 'Builder', <IconTopologyStar3 size={16} />)}
           {item('/data', 'Data', <IconTable size={16} />)}
           {loggedIn && item('/projects', 'My networks', <IconFolder size={16} />)}
           {pricing && item('/pricing', 'Pricing', <IconTag size={16} />)}

@@ -95,8 +95,8 @@ account with its own ids, tokens and keys, and no real money.
    verification and an approved website; that takes days, the sandbox works at once.
 2. **Website approval** (live, *Checkout → Website approval*): request approval for the
    domain. Paddle looks at the site: it wants to see what is sold and for how much (the
-   pricing page; switch billing on in the sandbox first so `/pricing` is there, or describe
-   the plans on the start page), the terms of use, the privacy policy and a refund policy,
+   pricing page; switch billing on in the sandbox first so `/pricing` is there; brickdnn.com's
+   landing page at `/` also lists the plans, from `frontend/landing/site.ts`), the terms of use, the privacy policy and a refund policy,
    all reachable without logging in. See [Privacy and legal texts](#privacy-and-legal-texts).
 3. **Default payment link** (*Checkout → Checkout settings*): `https://<domain>/pricing`.
    Paddle sends customers there from its e-mails (e.g. to pay an open invoice); the pricing
