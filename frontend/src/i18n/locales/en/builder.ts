@@ -55,7 +55,7 @@ export const builder = {
   palette: {
     search: 'Search layers',
     noMatch: 'No layer matches “{{query}}”.',
-    hint: 'Drag a layer onto the canvas, or tap it to append it after the selected layer.',
+    hint: 'Drag a layer onto the canvas, or tap it (Enter) to append it after the selected layer. Arrow keys move through the list.',
     sections: {
       neural: {
         title: 'Neural network · PyTorch',

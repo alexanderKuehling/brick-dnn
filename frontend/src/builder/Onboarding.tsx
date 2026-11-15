@@ -129,7 +129,6 @@ export function OnboardingGuide({ opened, onClose }: { opened: boolean; onClose:
         next: t('common.next'),
         close: t('common.done'),
       }}
-      aria-label={t('builder.toolbar.guide')}
     >
       {GUIDE_STEPS.map((guideStep, index) => (
         <Tour.Step

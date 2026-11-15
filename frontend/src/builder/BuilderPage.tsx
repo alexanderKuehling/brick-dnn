@@ -29,7 +29,7 @@ import {
   useComputedColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import { useDisclosure, useHotkeys, useMediaQuery } from '@mantine/hooks';
+import { useDisclosure, useHotkeys, useMediaQuery, useReducedMotion } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -53,6 +53,15 @@ import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
 import { useDatasetFit } from '@/training/useDatasetFit';
 import { useTraining } from '@/training/useTraining';
+import {
+  focusLayer,
+  layerName,
+  LiveRegion,
+  useAnnouncer,
+  useCanvasLabels,
+  useLabelledEdges,
+  useLabelledNodes,
+} from './a11y';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { ConflictDialog, type ConflictChoice } from './ConflictDialog';
 import { downloadText } from './download';
@@ -133,6 +142,10 @@ function Builder() {
   const colorScheme = useComputedColorScheme('light');
   const wideScreen = useMediaQuery(`(min-width: ${theme.breakpoints.lg})`);
   const mediumScreen = useMediaQuery(`(min-width: ${theme.breakpoints.md})`);
+  // Without animated zooming when the system asks for less motion.
+  const reduceMotion = useReducedMotion();
+  // What an action changed, for screen readers (a polite live region).
+  const [announcement, announce] = useAnnouncer();
 
   // ---------------------------------------------------------------- state
   const initial = useMemo(() => {
@@ -348,11 +361,11 @@ function Builder() {
       return undefined;
     }
     const timer = window.setTimeout(
-      () => flow.fitView({ padding: 0.15, maxZoom: 1, duration: 300 }),
+      () => flow.fitView({ padding: 0.15, maxZoom: 1, duration: reduceMotion ? 0 : 300 }),
       60
     );
     return () => window.clearTimeout(timer);
-  }, [fitRequest, flow]);
+  }, [fitRequest, flow, reduceMotion]);
 
   /** Replace the canvas. `source` is the saved project it shows (null: a new network). */
   const loadDocument = useCallback(
@@ -551,6 +564,17 @@ function Builder() {
         setEdges((current) => [...current, makeEdge(node.id, anchor.id)]);
       }
       palette.close();
+      if (anchor && appends) {
+        announce(
+          i18n.t('a11y.live.addedAfter', { name: spec.label, after: layerName(anchor, specs) })
+        );
+      } else if (anchor && feeds) {
+        announce(
+          i18n.t('a11y.live.addedInto', { name: spec.label, into: layerName(anchor, specs) })
+        );
+      } else {
+        announce(i18n.t('a11y.live.added', { name: spec.label }));
+      }
 
       // Keep the new layer in view when it was appended outside the visible area.
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -565,12 +589,12 @@ function Builder() {
         if (!visible) {
           flow.setCenter(position.x + 110, position.y + 45, {
             zoom: flow.getZoom(),
-            duration: 300,
+            duration: reduceMotion ? 0 : 300,
           });
         }
       }
     },
-    [nodes, specs, takesAnotherKernel, setNodes, setEdges, palette, flow]
+    [nodes, specs, takesAnotherKernel, setNodes, setEdges, palette, flow, announce, reduceMotion]
   );
 
   const updateNode = useCallback(
@@ -601,6 +625,61 @@ function Builder() {
       setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id));
     },
     [setNodes, setEdges]
+  );
+
+  /**
+   * Deletes a layer the user chose to delete (properties panel), says so and puts the focus
+   * on a neighbour on the canvas, so that it is not lost with the panel's delete button.
+   */
+  const removeLayer = useCallback(
+    (id: string) => {
+      const node = nodes.find((n) => n.id === id);
+      if (!node) {
+        return;
+      }
+      const neighbour =
+        edges.find((edge) => edge.target === id)?.source ??
+        edges.find((edge) => edge.source === id)?.target ??
+        nodes.find((n) => n.id !== id)?.id;
+      deleteNode(id);
+      announce(i18n.t('a11y.live.deleted', { name: layerName(node, specs) }));
+      if (neighbour) {
+        focusLayer(neighbour);
+      }
+    },
+    [nodes, edges, specs, deleteNode, announce]
+  );
+
+  /** Deleted on the canvas (the Delete key, or cut): say what went. */
+  const onCanvasDelete = useCallback(
+    ({ nodes: gone, edges: cut }: { nodes: LayerFlowNode[]; edges: Edge[] }) => {
+      const name = (id: string) =>
+        layerName(
+          nodes.find((n) => n.id === id),
+          specs
+        );
+      if (gone.length === 1) {
+        announce(i18n.t('a11y.live.deleted', { name: layerName(gone[0], specs) }));
+      } else if (gone.length > 1) {
+        announce(i18n.t('a11y.live.deletedMany', { count: gone.length }));
+      } else if (cut.length === 1) {
+        announce(
+          i18n.t('a11y.live.disconnected', {
+            source: name(cut[0].source),
+            target: name(cut[0].target),
+          })
+        );
+      }
+      // The focus was on what is gone: on to a neighbour that stays.
+      const removed = new Set(gone.map((n) => n.id));
+      const neighbour = cut
+        .flatMap((edge) => [edge.source, edge.target])
+        .find((id) => !removed.has(id));
+      if (neighbour) {
+        focusLayer(neighbour);
+      }
+    },
+    [nodes, specs, announce]
   );
 
   const duplicateNode = useCallback(
@@ -713,11 +792,13 @@ function Builder() {
       selectOnly(id);
       flow.setCenter(node.position.x + 110, node.position.y + 45, {
         zoom: Math.max(flow.getZoom(), 1),
-        duration: 400,
+        duration: reduceMotion ? 0 : 400,
       });
       inspector.close();
+      // Keyboard users go on from the layer (the list they came from may be gone).
+      focusLayer(id);
     },
-    [nodes, flow, selectOnly, inspector]
+    [nodes, flow, selectOnly, inspector, reduceMotion]
   );
 
   const onConnect = useCallback(
@@ -742,8 +823,14 @@ function Builder() {
         }
         return [...next, makeEdge(source, target)];
       });
+      const name = (id: string) =>
+        layerName(
+          nodes.find((n) => n.id === id),
+          specs
+        );
+      announce(i18n.t('a11y.live.connected', { source: name(source), target: name(target) }));
     },
-    [setEdges, specs, typeOf]
+    [setEdges, specs, typeOf, nodes, announce]
   );
 
   const isValidConnection = useCallback(
@@ -757,6 +844,42 @@ function Builder() {
         connection.targetHandle
       ) === null,
     [edges, specs, typeOf]
+  );
+
+  /** Whether `source` can be connected to `target` (not yet connected, the right kinds). */
+  const canConnect = useCallback(
+    (source: string, target: string) =>
+      !edges.some((edge) => edge.source === source && edge.target === target) &&
+      isValidConnection({ source, target, sourceHandle: null, targetHandle: null }),
+    [edges, isValidConnection]
+  );
+
+  /** Connect two layers without dragging (the properties panel's "Connections"). */
+  const connectLayers = useCallback(
+    (source: string, target: string) => {
+      if (!readOnly && canConnect(source, target)) {
+        onConnect({ source, target, sourceHandle: null, targetHandle: null });
+      }
+    },
+    [readOnly, canConnect, onConnect]
+  );
+
+  const disconnectLayers = useCallback(
+    (source: string, target: string) => {
+      if (readOnly) {
+        return;
+      }
+      setEdges((current) =>
+        current.filter((edge) => !(edge.source === source && edge.target === target))
+      );
+      const name = (id: string) =>
+        layerName(
+          nodes.find((n) => n.id === id),
+          specs
+        );
+      announce(i18n.t('a11y.live.disconnected', { source: name(source), target: name(target) }));
+    },
+    [readOnly, setEdges, nodes, specs, announce]
   );
 
   /** Says why a connection of the wrong kind was refused. */
@@ -1063,12 +1186,15 @@ function Builder() {
       readOnly,
       updateNode,
       patchParams,
-      deleteNode,
+      deleteNode: removeLayer,
       duplicateNode,
       focusNode,
       presence,
       inputFit: datasetFit.inputFit,
       links: edges,
+      canConnect,
+      connect: connectLayers,
+      disconnect: disconnectLayers,
     }),
     [
       edges,
@@ -1077,13 +1203,19 @@ function Builder() {
       readOnly,
       updateNode,
       patchParams,
-      deleteNode,
+      removeLayer,
       duplicateNode,
       focusNode,
       presence,
       datasetFit.inputFit,
+      canConnect,
+      connectLayers,
+      disconnectLayers,
     ]
   );
+  const canvasNodes = useLabelledNodes(live.displayNodes, specs, context.errorsByNode);
+  const canvasEdges = useLabelledEdges(displayEdges, nodes, specs);
+  const canvasLabels = useCanvasLabels(readOnly);
 
   if (!catalog) {
     return (
@@ -1176,9 +1308,12 @@ function Builder() {
           />
           <Box ref={canvasRef} style={{ flex: 1, position: 'relative' }} data-tour="canvas">
             <ReactFlow<LayerFlowNode, Edge>
-              nodes={live.displayNodes}
-              edges={displayEdges}
+              nodes={canvasNodes}
+              edges={canvasEdges}
               nodeTypes={nodeTypes}
+              aria-label={t('a11y.canvas.label')}
+              ariaLabelConfig={canvasLabels}
+              onDelete={onCanvasDelete}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={readOnly ? undefined : onConnect}
@@ -1288,6 +1423,7 @@ function Builder() {
         </Suspense>
       )}
       <OnboardingGuide opened={guideOpened} onClose={() => setGuideOpened(false)} />
+      <LiveRegion message={announcement} />
       <input
         ref={fileInput}
         type="file"

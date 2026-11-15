@@ -57,7 +57,7 @@ export const builder: Messages<typeof en> = {
   palette: {
     search: 'Schichten suchen',
     noMatch: 'Keine Schicht passt zu „{{query}}“.',
-    hint: 'Ziehen Sie eine Schicht auf die Arbeitsfläche oder tippen Sie sie an, um sie hinter der ausgewählten Schicht anzufügen.',
+    hint: 'Ziehen Sie eine Schicht auf die Arbeitsfläche oder tippen Sie sie an (Eingabetaste), um sie hinter der ausgewählten Schicht anzufügen. Die Pfeiltasten bewegen sich durch die Liste.',
     sections: {
       neural: {
         title: 'Neuronales Netz · PyTorch',

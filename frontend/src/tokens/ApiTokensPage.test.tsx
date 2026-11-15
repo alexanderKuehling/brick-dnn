@@ -482,7 +482,7 @@ test('shows the compute of tokens and apps this month and sets their budgets', a
   const script = screen.getByRole('listitem', { name: SCRIPT.name });
   expect(within(script).getByText('0 CPU min')).toBeInTheDocument();
   await userEvent.click(
-    within(script).getByRole('button', { name: `Set the monthly budget of “${SCRIPT.name}”` })
+    within(script).getByRole('button', { name: `Set budget: “${SCRIPT.name}”` })
   );
   await userEvent.type(await screen.findByLabelText('Monthly budget'), '5');
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -491,9 +491,7 @@ test('shows the compute of tokens and apps this month and sets their budgets', a
 
   const claude = await screen.findByRole('listitem', { name: 'Claude' });
   expect(within(claude).getByText('3.25 CPU min')).toBeInTheDocument();
-  await userEvent.click(
-    within(claude).getByRole('button', { name: 'Set the monthly budget of “Claude”' })
-  );
+  await userEvent.click(within(claude).getByRole('button', { name: 'Set budget: “Claude”' }));
   await userEvent.type(await screen.findByLabelText('Monthly budget'), '20');
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.connections.setBudget).toHaveBeenCalledWith(CLAUDE.id, 20));
@@ -511,7 +509,7 @@ test('removing a budget and errors', async () => {
   renderPage();
   const laptop = await screen.findByRole('listitem', { name: LAPTOP.name });
   await userEvent.click(
-    within(laptop).getByRole('button', { name: `Set the monthly budget of “${LAPTOP.name}”` })
+    within(laptop).getByRole('button', { name: `Change budget: “${LAPTOP.name}”` })
   );
   await userEvent.click(await screen.findByRole('button', { name: 'Remove budget' }));
   expect(await screen.findByText('Change budgets after logging in.')).toBeInTheDocument();

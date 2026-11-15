@@ -3033,7 +3033,6 @@ export const ui: Messages<typeof en> = {
       removeBudget: 'Budget entfernen',
       save: 'Speichern',
       setBudget: 'Budget festlegen',
-      setTheMonthlyBudgetOf: 'Das Monatsbudget von {{label}} festlegen',
     },
     CostEstimate: {
       estimatedCompute: 'Geschätzte Rechenzeit',

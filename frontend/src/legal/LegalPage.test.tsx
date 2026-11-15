@@ -22,7 +22,14 @@ vi.mock('@/api', async (importOriginal) => {
 });
 
 function info(pages: Partial<LegalInfo['pages']>, retention = 0): LegalInfo {
-  const all = { imprint: false, privacy: false, terms: false, refund: false, ...pages };
+  const all = {
+    imprint: false,
+    privacy: false,
+    terms: false,
+    refund: false,
+    accessibility: false,
+    ...pages,
+  };
   return {
     pages: all,
     terms_version: all.terms ? 'abc123' : null,

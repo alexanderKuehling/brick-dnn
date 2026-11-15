@@ -12,8 +12,10 @@ import { AuthProvider } from './auth/AuthContext';
 import { PricingPage } from './billing/PricingPage';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
+import { DocumentTitle } from './components/DocumentTitle';
 import { EDITOR_PATH, RedirectToEditor } from './components/RedirectToEditor';
 import { RequireAuth } from './components/RequireAuth';
+import { MAIN_ID, SkipLink } from './components/SkipLink';
 import { DataPage } from './data/DataPage';
 import { LocalizedMantineProvider, LocalizedModalsProvider } from './i18n/mantine';
 import { LegalPage } from './legal/LegalPage';
@@ -36,11 +38,13 @@ export default function App() {
         <Notifications position="top-right" />
         <AuthProvider>
           <BrowserRouter>
+            <SkipLink />
+            <DocumentTitle />
             <AppShell header={{ height: HEADER_HEIGHT }} padding={0}>
               <AppShell.Header>
                 <AppHeader />
               </AppShell.Header>
-              <AppShell.Main>
+              <AppShell.Main id={MAIN_ID} tabIndex={-1}>
                 <MonitoredRoutes>
                   <Route path={EDITOR_PATH} element={<BuilderPage />} />
                   {/* `/` is the landing page (frontend/landing/); in the app it leads to the editor. */}
@@ -87,6 +91,8 @@ export default function App() {
                   <Route path="/privacy" element={<LegalPage page="privacy" />} />
                   <Route path="/terms" element={<LegalPage page="terms" />} />
                   <Route path="/refund" element={<LegalPage page="refund" />} />
+                  {/* How accessible the app is (docs/accessibility.md). */}
+                  <Route path="/accessibility" element={<LegalPage page="accessibility" />} />
                   {/* Apps (e.g. Claude) send the browser here to connect to the MCP server. */}
                   <Route
                     path="/oauth/authorize"

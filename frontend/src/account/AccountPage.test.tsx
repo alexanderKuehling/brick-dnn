@@ -148,7 +148,7 @@ beforeEach(() => {
   });
   vi.mocked(api.logout).mockResolvedValue(undefined);
   vi.mocked(api.legal.info).mockResolvedValue({
-    pages: { imprint: true, privacy: true, terms: false, refund: false },
+    pages: { imprint: true, privacy: true, terms: false, refund: false, accessibility: false },
     terms_version: null,
     privacy_version: 'def',
     accept_terms_required: false,
@@ -352,9 +352,7 @@ test('shows the usage this month and sets the own budget', async () => {
   expect(within(section).getByText('512 MB of 1.0 GB')).toBeInTheDocument();
   expect(within(section).getByText(/30 CPU min per training/)).toBeInTheDocument();
 
-  await userEvent.click(
-    within(section).getByRole('button', { name: 'Set the monthly budget of your account' })
-  );
+  await userEvent.click(within(section).getByRole('button', { name: 'Set budget: Your account' }));
   const input = await screen.findByLabelText('Monthly budget');
   await userEvent.type(input, '100');
   await userEvent.click(screen.getByRole('button', { name: 'Save' }));

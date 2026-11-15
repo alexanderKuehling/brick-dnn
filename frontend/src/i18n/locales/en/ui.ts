@@ -2956,7 +2956,6 @@ export const ui = {
       removeBudget: 'Remove budget',
       save: 'Save',
       setBudget: 'Set budget',
-      setTheMonthlyBudgetOf: 'Set the monthly budget of {{label}}',
     },
     CostEstimate: {
       estimatedCompute: 'Estimated compute',

@@ -31,7 +31,9 @@ import { LayerComments } from '@/comments/LayerComments';
 import { LayerLearning } from '@/explain/LayerLearning';
 import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { categoryColor } from '@/theme';
+import { layerName } from './a11y';
 import { useBuilder, type InputFit } from './BuilderContext';
+import { Connections } from './Connections';
 import { formatOutput, formatShape } from './format';
 import { isParamVisible, type LayerFlowNode } from './graph';
 import {
@@ -176,10 +178,14 @@ interface InspectorProps {
 }
 
 export function Inspector({ node, nodes, tips }: InspectorProps) {
-  return node ? <LayerInspector node={node} /> : <ModelSummary nodes={nodes} tips={tips} />;
+  return node ? (
+    <LayerInspector node={node} nodes={nodes} />
+  ) : (
+    <ModelSummary nodes={nodes} tips={tips} />
+  );
 }
 
-function LayerInspector({ node }: { node: LayerFlowNode }) {
+function LayerInspector({ node, nodes }: { node: LayerFlowNode; nodes: LayerFlowNode[] }) {
   const { t } = useTranslation();
   const {
     specs,
@@ -301,6 +307,8 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         />
       )}
       {inputFit && inputFit.nodeId === node.id && !readOnly && <DatasetFit fit={inputFit} />}
+      {/* Inputs and outputs in words, and connecting without dragging (keyboard). */}
+      <Connections node={node} nodes={nodes} />
 
       {/* View only: the settings are shown, but every field is disabled. */}
       <Fieldset variant="unstyled" disabled={readOnly} p={0} m={0}>
@@ -528,6 +536,8 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
         </>
       )}
 
+      {nodes.length > 0 && <LayerList nodes={nodes} />}
+
       <Divider label={t('builder.inspector.tips')} labelPosition="left" mt="sm" />
       {tips ? (
         <List size="sm" spacing={4} c="dimmed">
@@ -568,6 +578,51 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
           </List.Item>
         </List>
       )}
+    </Stack>
+  );
+}
+
+/**
+ * The layers of the network as a list, each with where its inputs come from: the canvas in
+ * words for screen readers, and a way to reach any layer from the keyboard (a click selects
+ * it and moves the focus to it on the canvas).
+ */
+function LayerList({ nodes }: { nodes: LayerFlowNode[] }) {
+  const { t } = useTranslation();
+  const { specs, links = [], errorsByNode, focusNode } = useBuilder();
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return (
+    <Stack gap={4}>
+      <Divider label={t('a11y.layers.title')} labelPosition="left" mt="sm" />
+      <List size="sm" spacing={2} type="ordered" aria-label={t('a11y.layers.label')}>
+        {nodes.map((node) => {
+          const sources = links
+            .filter((link) => link.target === node.id)
+            .map((link) => layerName(byId.get(link.source), specs));
+          const type = specs[node.data.type]?.label ?? node.data.type;
+          return (
+            <List.Item key={node.id}>
+              <UnstyledButton onClick={() => focusNode(node.id)} style={{ textAlign: 'start' }}>
+                <Text span size="sm" fw={600} c={errorsByNode[node.id]?.length ? 'red' : undefined}>
+                  {layerName(node, specs)}
+                </Text>
+                {node.data.name && (
+                  <Text span size="sm" c="dimmed">
+                    {` (${type})`}
+                  </Text>
+                )}
+                <Text span size="sm" c="dimmed">
+                  {` · ${
+                    sources.length > 0
+                      ? t('a11y.layers.inputsFrom', { names: sources.join(', ') })
+                      : t('a11y.layers.noInputs')
+                  }`}
+                </Text>
+              </UnstyledButton>
+            </List.Item>
+          );
+        })}
+      </List>
     </Stack>
   );
 }

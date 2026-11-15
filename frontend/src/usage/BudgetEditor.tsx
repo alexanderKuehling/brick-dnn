@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { IconGauge } from '@tabler/icons-react';
-import { Button, Group, NumberInput, Popover, Stack, Text } from '@mantine/core';
+import { Button, Group, NumberInput, Popover, Stack, Text, VisuallyHidden } from '@mantine/core';
 import { i18n, useTranslation } from '@/i18n';
 import { formatCpu } from './format';
 
@@ -57,11 +57,12 @@ export function BudgetEditor({ budget, label, onSave, description }: BudgetEdito
           size="compact-xs"
           leftSection={<IconGauge size={14} />}
           onClick={() => (opened ? setOpened(false) : open())}
-          aria-label={i18n.t('ui.usage.BudgetEditor.setTheMonthlyBudgetOf', { label })}
         >
           {budget === null
             ? i18n.t('ui.usage.BudgetEditor.setBudget')
             : i18n.t('ui.usage.BudgetEditor.changeBudget')}
+          {/* Which budget, for screen readers; the visible text comes first (WCAG 2.5.3). */}
+          <VisuallyHidden>{`: ${label}`}</VisuallyHidden>
         </Button>
       </Popover.Target>
       <Popover.Dropdown maw="min(20rem, calc(100vw - 2rem))">

@@ -31,6 +31,7 @@ import {
   ThemeIcon,
   Title,
   useMantineTheme,
+  VisuallyHidden,
 } from '@mantine/core';
 import { useDisclosure, useHotkeys, useMediaQuery } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -1169,21 +1170,19 @@ function PrepContent(props: PrepContentProps) {
           <Tabs.Tab
             value="readiness"
             leftSection={<IconCircleCheck size={14} />}
-            aria-label={
-              errors
-                ? i18n.t('ui.data.DataPage.readiness2', {
-                    errors,
-                    value:
-                      errors === 1
-                        ? i18n.t('ui.data.DataPage.problem')
-                        : i18n.t('ui.data.DataPage.problems'),
-                  })
-                : undefined
-            }
             rightSection={
               errors ? (
+                // The tab's name is its text and then the count: "Readiness, 2 problems". The
+                // hidden text is one piece (names drop the spaces at the edges of elements).
                 <Badge size="xs" color="red" circle>
-                  {errors}
+                  <span aria-hidden>{errors}</span>
+                  <VisuallyHidden>
+                    {`, ${errors} ${
+                      errors === 1
+                        ? i18n.t('ui.data.DataPage.problem')
+                        : i18n.t('ui.data.DataPage.problems')
+                    }`}
+                  </VisuallyHidden>
                 </Badge>
               ) : result?.readiness.ready && !exportBlocked ? (
                 <IconCircleCheck size={14} color="var(--mantine-color-green-6)" aria-hidden />
