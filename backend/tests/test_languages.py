@@ -10,7 +10,7 @@ from datetime import date
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.utils import timezone
+from django.utils import timezone, translation
 from rest_framework.test import APIClient
 
 from brick_dnn_core import languages, notices, po, translations
@@ -309,3 +309,47 @@ def test_legal_pages_in_the_language_of_the_request(settings, tmp_path):
     # Sign-up stores the version of the page itself.
     info = APIClient().get("/api/legal/", **GERMAN).data
     assert info["privacy_version"] == english.data["version"]
+
+
+# --------------------------------------------------------------------------- #
+# Messages built from data (messages.py)
+# --------------------------------------------------------------------------- #
+
+BAD_GRAPH = {
+    "version": 1,
+    "nodes": [
+        {"id": "in", "type": "Input", "params": {"shape": [784]}},
+        {"id": "reshape", "type": "Reshape", "params": {"shape": [1, 28, 29]}},
+    ],
+    "edges": [{"source": "in", "target": "reshape"}],
+}
+
+
+def test_analysis_errors_in_german():
+    english = APIClient().post("/api/analyze/", {"graph": BAD_GRAPH}, format="json")
+    german = APIClient().post("/api/analyze/", {"graph": BAD_GRAPH}, format="json", **GERMAN)
+    message_en = english.json()["errors"][0]["message"]
+    message_de = german.json()["errors"][0]["message"]
+    assert message_en.startswith("Cannot reshape")
+    assert "lässt sich nicht in" in message_de and "umformen" in message_de
+    # Identifiers stay.
+    assert german.json()["errors"][0]["node"] == english.json()["errors"][0]["node"]
+
+
+def test_message_templates_cover_the_package():
+    from brick_dnn_core import messages
+
+    with translation.override("de"):
+        assert (
+            messages.translate_message("Graphs are limited to 200 layers and 400 connections.")
+            == "Graphen sind auf 200 Schichten und 400 Verbindungen begrenzt."
+        )
+        # Several sentences, one of them unknown: the known ones are translated.
+        mixed = messages.translate_message(
+            "Only one entry of the target shape may be -1. Something new happened."
+        )
+        assert mixed == "Nur ein Eintrag der Zielform darf -1 sein. Something new happened."
+    # English stays as it is.
+    assert messages.translate_message("Only one entry of the target shape may be -1.") == (
+        "Only one entry of the target shape may be -1."
+    )

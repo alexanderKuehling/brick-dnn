@@ -3038,3 +3038,2752 @@ msgid ""
 "The fit optimises the kernel hyperparameters itself; a search can only vary the optimizer restarts."
 msgstr ""
 "Die Anpassung optimiert die Kernel-Hyperparameter selbst; eine Suche kann nur die Neustarts des Optimierers variieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Kernel bricks only connect to a Gaussian process (GaussianProcessRegressor or GaussianProcessClassifier) or to KernelSum and KernelProduct."
+msgstr ""
+"Kernel-Bausteine lassen sich nur mit einem Gauß-Prozess (GaussianProcessRegressor oder GaussianProcessClassifier) oder mit KernelSum und KernelProduct verbinden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"In a network with a classical model, the neural layers turn the input into its features"
+msgstr ""
+"In einem Netz mit klassischem Modell machen die neuronalen Schichten aus der Eingabe dessen Merkmale"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"VotingClassifier, VotingRegressor, StackingClassifier or StackingRegressor"
+msgstr ""
+"VotingClassifier, VotingRegressor, StackingClassifier oder StackingRegressor"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The graph must be a JSON object with 'nodes' and 'edges'."
+msgstr "Der Graph muss ein JSON-Objekt mit 'nodes' und 'edges' sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'nodes' and 'edges' must be lists."
+msgstr "'nodes' und 'edges' müssen Listen sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Graphs are limited to {0} layers and {1} connections."
+msgstr "Graphen sind auf {0} Schichten und {1} Verbindungen begrenzt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The canvas is empty. Add an Input layer to get started."
+msgstr ""
+"Die Arbeitsfläche ist leer. Fügen Sie zum Start eine Input-Schicht hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A Gaussian process takes one kernel. Combine several with KernelSum or KernelProduct."
+msgstr ""
+"Ein Gauß-Prozess nimmt einen Kernel. Kombinieren Sie mehrere mit KernelSum oder KernelProduct."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Ensembles can't be nested yet: connect the models of {0} to {1} directly."
+msgstr ""
+"Ensembles lassen sich noch nicht verschachteln: Verbinden Sie die Modelle von {0} direkt mit {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The models of an ensemble take their features from the same Input layer (or the same last neural layer): scikit-learn hands every model the same rows."
+msgstr ""
+"Die Modelle eines Ensembles nehmen ihre Merkmale von derselben Input-Schicht (oder derselben letzten neuronalen Schicht): scikit-learn gibt jedem Modell dieselben Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Nothing can follow {0}: a classical model ends the network, its output is the prediction. Neural layers go before it, where they learn its features."
+msgstr ""
+"Auf {0} kann nichts folgen: Ein klassisches Modell beendet das Netz, seine Ausgabe ist die Vorhersage. Neuronale Schichten kommen davor, wo sie seine Merkmale lernen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Add an Input layer to define the shape of your data."
+msgstr ""
+"Fügen Sie eine Input-Schicht hinzu, um die Form Ihrer Daten festzulegen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Node #{0} is malformed (missing 'id')."
+msgstr "Knoten #{0} ist fehlerhaft ('id' fehlt)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Duplicate node id '{0}'."
+msgstr "Doppelte Knoten-ID '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Connection #{0} is malformed (needs 'source' and 'target')."
+msgstr "Verbindung #{0} ist fehlerhaft (braucht 'source' und 'target')."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Connection #{0} refers to a layer that does not exist."
+msgstr "Verbindung #{0} verweist auf eine Schicht, die es nicht gibt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "A layer cannot be connected to itself."
+msgstr "Eine Schicht kann nicht mit sich selbst verbunden werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Input layers cannot have incoming connections."
+msgstr "Input-Schichten können keine eingehenden Verbindungen haben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Soft voting averages class probabilities, but {0} predicts none. Choose hard voting, or another model."
+msgstr ""
+"Soft Voting mittelt Klassenwahrscheinlichkeiten, aber {0} liefert keine. Wählen Sie Hard Voting oder ein anderes Modell."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Only one ensemble per network. Remove this one or build it in a network of its own."
+msgstr ""
+"Nur ein Ensemble pro Netz. Entfernen Sie dieses oder bauen Sie es in einem eigenen Netz."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Only one classical model per network. Remove this one, build it in a network of its own, or combine the models with an ensemble ({0})."
+msgstr ""
+"Nur ein klassisches Modell pro Netz. Entfernen Sie dieses, bauen Sie es in einem eigenen Netz oder kombinieren Sie die Modelle mit einem Ensemble ({0})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This Input is not connected to any layer."
+msgstr "Diese Eingabe ist mit keiner Schicht verbunden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network ends with Softmax. If you train with nn.CrossEntropyLoss, remove it: the loss already applies log-softmax to raw logits."
+msgstr ""
+"Das Netz endet mit Softmax. Wenn Sie mit nn.CrossEntropyLoss trainieren, entfernen Sie es: Die Verlustfunktion wendet Log-Softmax bereits auf die rohen Logits an."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The network ends with Dropout, which is unusual."
+msgstr "Das Netz endet mit Dropout, das ist ungewöhnlich."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This layer is part of a cycle. Networks must be acyclic."
+msgstr "Diese Schicht ist Teil eines Zyklus. Netze müssen azyklisch sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This kernel is not connected to a Gaussian process."
+msgstr "Dieser Kernel ist mit keinem Gauß-Prozess verbunden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A kernel brick can only be connected once. Add another kernel brick for each further use."
+msgstr ""
+"Ein Kernel-Baustein kann nur einmal verbunden werden. Fügen Sie für jede weitere Verwendung einen weiteren Kernel-Baustein hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown layer type '{0}'."
+msgstr "Unbekannter Schichttyp '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Parameters must be an object."
+msgstr "Parameter müssen ein Objekt sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Input shape can have at most 4 dimensions (excluding the batch)."
+msgstr "Die Eingabeform kann höchstens 4 Dimensionen haben (ohne Batch)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Target shape entries must be positive (or -1)."
+msgstr "Einträge der Zielform müssen positiv sein (oder -1)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Only one entry of the target shape may be -1."
+msgstr "Nur ein Eintrag der Zielform darf -1 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Cannot reshape {0} ({1} values) into {2} ({3} values)."
+msgstr "{0} ({1} Werte) lässt sich nicht in {2} ({3} Werte) umformen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Sequence length {0} exceeds the maximum length {1}."
+msgstr "Die Sequenzlänge {0} überschreitet die maximale Länge {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Model dimension {0} must be divisible by the number of attention heads ({1})."
+msgstr ""
+"Die Modelldimension {0} muss durch die Anzahl der Attention-Heads ({1}) teilbar sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "SequencePool expects a (sequence, features) input, got {0}."
+msgstr ""
+"SequencePool erwartet eine Eingabe (Sequenz, Merkmale), erhalten: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Add needs inputs of identical shape, got {0}."
+msgstr "Add braucht Eingaben gleicher Form, erhalten: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Dimension {0} is out of range for {1}-D inputs."
+msgstr "Dimension {0} liegt außerhalb des Bereichs für {1}-D-Eingaben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Concat needs inputs with the same number of dimensions."
+msgstr "Concat braucht Eingaben mit derselben Anzahl an Dimensionen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "C must be greater than 0."
+msgstr "C muss größer als 0 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Gamma value must be greater than 0."
+msgstr "Der Gamma-Wert muss größer als 0 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Learning rate must be greater than 0."
+msgstr "Die Lernrate muss größer als 0 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Weights has {0} value{1}, but {2} models are connected (in this order: {3})."
+msgstr ""
+"Gewichte hat {0} Wert{1}, aber {2} Modelle sind verbunden (in dieser Reihenfolge: {3})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "At least one weight must be greater than 0."
+msgstr "Mindestens ein Gewicht muss größer als 0 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Cannot reshape {0} values into {1}."
+msgstr "{0} Werte lassen sich nicht in {1} umformen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'same' padding only works with stride 1. Use custom padding."
+msgstr ""
+"'same'-Padding funktioniert nur mit Stride 1. Verwenden Sie eigenes Padding."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Kernel size {0} is larger than the (padded) input size {1}."
+msgstr "Die Kernelgröße {0} ist größer als die (gepaddete) Eingabegröße {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Output padding {0} must be smaller than the stride {1}."
+msgstr "Das Ausgabe-Padding {0} muss kleiner als der Stride {1} sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Padding {0} removes the whole output (input size {1}, kernel size {2})."
+msgstr ""
+"Padding {0} entfernt die ganze Ausgabe (Eingabegröße {1}, Kernelgröße {2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Kernel size {0} is larger than the input size {1}."
+msgstr "Die Kernelgröße {0} ist größer als die Eingabegröße {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Concat inputs must match in every dimension except {0}, got {1}."
+msgstr ""
+"Concat-Eingaben müssen in jeder Dimension außer {0} übereinstimmen, erhalten: {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The bounds of {0} must be positive, the lower one below the upper one."
+msgstr "Die Grenzen von {0} müssen positiv sein, die untere unter der oberen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A network with one output per pixel is trained on a segmentation dataset (images with masks), e.g. the built-in Shapes."
+msgstr ""
+"Ein Netz mit einer Ausgabe pro Pixel wird auf einem Segmentierungsdatensatz (Bilder mit Masken) trainiert, z. B. dem eingebauten Shapes."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A classical model is fitted once, without epochs: the settings for epochs, batch size, learning rate, optimizer, weight decay, device, early stopping and the kept weights are not used."
+msgstr ""
+"Ein klassisches Modell wird einmal angepasst, ohne Epochen: Die Einstellungen für Epochen, Batchgröße, Lernrate, Optimierer, Weight Decay, Gerät, Early Stopping und die behaltenen Gewichte werden nicht verwendet."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"An ensemble fits each of its models on the training rows (stacking also once per cross-validation fold) and combines their predictions; the strictest row limit of its models applies."
+msgstr ""
+"Ein Ensemble passt jedes seiner Modelle an die Trainingszeilen an (Stacking zusätzlich einmal pro Fold der Kreuzvalidierung) und kombiniert ihre Vorhersagen; es gilt die strengste Zeilengrenze seiner Modelle."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Hard voting predicts classes, not probabilities: the share of the (weighted) votes stands in for the probability of each class, also in the loss and the threshold analysis."
+msgstr ""
+"Hard Voting sagt Klassen voraus, keine Wahrscheinlichkeiten: Der Anteil der (gewichteten) Stimmen steht für die Wahrscheinlichkeit jeder Klasse, auch im Verlust und in der Schwellenwertanalyse."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Gradient boosting has early stopping of its own (a setting of the brick): it holds out 10 % of the training rows and stops adding trees when the loss on them no longer improves."
+msgstr ""
+"Gradient Boosting hat ein eigenes Early Stopping (eine Einstellung des Bausteins): Es hält 10 % der Trainingszeilen zurück und fügt keine Bäume mehr hinzu, wenn sich der Verlust darauf nicht mehr verbessert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Two phases: the neural layers learn {{features}} features with a temporary linear head on the target (the epochs, optimizer, early stopping … of the settings), then the head is dropped and {{estimator}} is fitted on the features of the training rows."
+msgstr ""
+"Zwei Phasen: Die neuronalen Schichten lernen {{features}} Merkmale mit einem temporären linearen Kopf auf der Zielspalte (Epochen, Optimierer, Early Stopping … der Einstellungen), dann wird der Kopf entfernt und {{estimator}} an die Merkmale der Trainingszeilen angepasst."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Frozen features: the neural layers keep their random initial weights (no training); {{estimator}} is fitted on the {{features}} random features they put out. A quick baseline."
+msgstr ""
+"Eingefrorene Merkmale: Die neuronalen Schichten behalten ihre zufälligen Anfangsgewichte (kein Training); {{estimator}} wird an die {{features}} zufälligen Merkmale angepasst, die sie ausgeben. Eine schnelle Baseline."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The last layer should output {0} values (e.g. Linear with {1} outputs)."
+msgstr ""
+"Die letzte Schicht sollte {0} Werte ausgeben (z. B. Linear mit {1} Ausgaben)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Uses the split of the data preparation ({0}); the validation and test split settings are ignored."
+msgstr ""
+"Verwendet die Aufteilung der Datenaufbereitung ({0}); die Einstellungen für Validierungs- und Testanteil werden ignoriert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A batch of {0} images of {1} pixels needs about {2} of memory in this network, but a training may use {3} on this server. "
+msgstr ""
+"Ein Batch von {0} Bildern mit {1} Pixeln braucht in diesem Netz etwa {2} Speicher, ein Training darf auf diesem Server aber {3} verwenden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The last layer should output {0} channels (e.g. Conv2d with {1} output channels and kernel size 1)."
+msgstr ""
+"Die letzte Schicht sollte {0} Kanäle ausgeben (z. B. Conv2d mit {1} Ausgabekanälen und Kernelgröße 1)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The split of this dataset has no validation rows"
+msgstr "Die Aufteilung dieses Datensatzes hat keine Validierungszeilen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The validation split is 0"
+msgstr "Der Validierungsanteil ist 0"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Make the Input smaller or use fewer channels in the layers."
+msgstr ""
+"Verkleinern Sie die Eingabe oder verwenden Sie weniger Kanäle in den Schichten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"After every epoch the validation images are measured: mean IoU and Dice (the mean over the classes that occur) and pixel accuracy. The kept epoch is the one with the lowest validation loss."
+msgstr ""
+"Nach jeder Epoche werden die Validierungsbilder gemessen: Mean IoU und Dice (der Mittelwert über die vorkommenden Klassen) sowie die Pixelgenauigkeit. Behalten wird die Epoche mit dem niedrigsten Validierungsverlust."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Gaussian process classifiers"
+msgstr "Gauß-Prozess-Klassifikatoren"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Support vector machines"
+msgstr "Support Vector Machines"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Gradient boosting models"
+msgstr "Gradient-Boosting-Modelle"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Features are standardised (mean 0, standard deviation 1) with the statistics of the training rows; the scaler is saved as part of the model."
+msgstr ""
+"Die Merkmale werden mit den Statistiken der Trainingszeilen standardisiert (Mittelwert 0, Standardabweichung 1); der Scaler wird als Teil des Modells gespeichert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Demo data checks whether the model can learn at all: random features and a hidden rule. The numbers say nothing about real-world accuracy."
+msgstr ""
+"Demodaten prüfen, ob das Modell überhaupt lernen kann: zufällige Merkmale und eine versteckte Regel. Die Zahlen sagen nichts über die Genauigkeit in der Praxis."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The network has problems. Fix the layers marked in red first."
+msgstr ""
+"Das Netz hat Probleme. Beheben Sie zuerst die rot markierten Schichten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown dataset kind '{0}'."
+msgstr "Unbekannte Datensatzart '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Training on {0} needs a network with exactly one Input layer. Networks with several inputs can only be trained on demo data."
+msgstr ""
+"Training auf {0} braucht ein Netz mit genau einer Input-Schicht. Netze mit mehreren Eingaben lassen sich nur auf Demodaten trainieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Training on {0} needs a network with exactly one output. Networks with several outputs can only be trained on demo data."
+msgstr ""
+"Training auf {0} braucht ein Netz mit genau einer Ausgabe. Netze mit mehreren Ausgaben lassen sich nur auf Demodaten trainieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"This network expects integer token ids (Input data type 'long'). Text models can only be trained on demo data so far."
+msgstr ""
+"Dieses Netz erwartet ganzzahlige Token-IDs (Datentyp der Eingabe 'long'). Textmodelle lassen sich bisher nur auf Demodaten trainieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Demo data: random inputs and a hidden rule to learn ({0})."
+msgstr ""
+"Demodaten: zufällige Eingaben und eine versteckte Regel zum Lernen ({0})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs shape {0}, but {1} needs one score per class. {2}{3}"
+msgstr ""
+"Das Netz gibt die Form {0} aus, aber {1} braucht einen Score pro Klasse. {2}{3}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The network outputs {0}, but {1} has {2} classes. {3}"
+msgstr "Das Netz gibt {0} aus, aber {1} hat {2} Klassen. {3}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs {0} values, but {1} has only {2} classes. The extra outputs are never the right answer."
+msgstr ""
+"Das Netz gibt {0} Werte aus, aber {1} hat nur {2} Klassen. Die zusätzlichen Ausgaben sind nie die richtige Antwort."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The Input expects shape {0}, but the CSV file has {1} ({2}). Set the Input shape to {3}."
+msgstr ""
+"Die Eingabe erwartet die Form {0}, aber die CSV-Datei hat {1} ({2}). Setzen Sie die Eingabeform auf {3}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs shape {0}. For CSV data it must output 1 value (regression) or one value per class (classification).{1}"
+msgstr ""
+"Das Netz gibt die Form {0} aus. Für CSV-Daten muss es 1 Wert (Regression) oder einen Wert pro Klasse (Klassifikation) ausgeben.{1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' contains decimal numbers, which is a regression task. Give the last layer 1 output, or use class indices 0..{1} as targets."
+msgstr ""
+"Die Zielspalte '{0}' enthält Dezimalzahlen, also eine Regressionsaufgabe. Geben Sie der letzten Schicht 1 Ausgabe oder verwenden Sie Klassenindizes 0..{1} als Zielwerte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The target column holds the class index 0..{0}."
+msgstr "Die Zielspalte enthält den Klassenindex 0..{0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Text labels are mapped to class indices in alphabetical order: {0}."
+msgstr ""
+"Textlabels werden in alphabetischer Reihenfolge auf Klassenindizes abgebildet: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Classification into {0} classes from {1} ({2})."
+msgstr "Klassifikation in {0} Klassen aus {1} ({2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown built-in dataset '{0}'."
+msgstr "Unbekannter eingebauter Datensatz '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Images can be at most {0}×{1} pixels."
+msgstr "Bilder dürfen höchstens {0}×{1} Pixel groß sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Validation data is taken from the {0} training images (validation split). The {1} official test images are the test set: the kept weights are measured on them once, after training."
+msgstr ""
+"Validierungsdaten werden aus den {0} Trainingsbildern genommen (Validierungsanteil). Die {1} offiziellen Testbilder sind die Testmenge: Die behaltenen Gewichte werden nach dem Training einmal darauf gemessen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Images are converted to {0} and resized to {1}."
+msgstr "Bilder werden nach {0} umgewandelt und auf {1} skaliert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Classification into {0} classes ({1}, {2})."
+msgstr "Klassifikation in {0} Klassen ({1}, {2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Set the batch size to {0} or less, or make the Input smaller."
+msgstr ""
+"Setzen Sie die Batchgröße auf {0} oder weniger oder verkleinern Sie die Eingabe."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network ends with a {0} activation, but the loss expects raw scores (logits) and applies the sigmoid or softmax itself. Remove the last activation."
+msgstr ""
+"Das Netz endet mit einer {0}-Aktivierung, aber die Verlustfunktion erwartet rohe Scores (Logits) und wendet Sigmoid oder Softmax selbst an. Entfernen Sie die letzte Aktivierung."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Images are converted to {0} and resized to {1}; masks are resized with nearest neighbour."
+msgstr ""
+"Bilder werden nach {0} umgewandelt und auf {1} skaliert; Masken werden mit Nearest Neighbour skaliert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"One output channel: its score says how likely a pixel is '{0}' (binary cross-entropy on logits)."
+msgstr ""
+"Ein Ausgabekanal: Sein Score sagt, wie wahrscheinlich ein Pixel '{0}' ist (binäre Kreuzentropie auf Logits)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Pixels with the mask value {0} are ignored: they count neither for the loss nor for the metrics."
+msgstr ""
+"Pixel mit dem Maskenwert {0} werden ignoriert: Sie zählen weder für den Verlust noch für die Metriken."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Segmentation into {0} classes at {1} pixels ({2}, {3})."
+msgstr "Segmentierung in {0} Klassen bei {1} Pixeln ({2}, {3})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Output channels of the last layer {0} → {1}"
+msgstr "Ausgabekanäle der letzten Schicht {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Outputs of the last layer {0} → {1}"
+msgstr "Ausgaben der letzten Schicht {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Max. samples is {0}, but {1} are fitted on at most {2} training rows on this server ({3}). Lower it, or leave it empty to fit on {4} random training rows."
+msgstr ""
+"Max. Stichproben ist {0}, aber {1} werden auf diesem Server an höchstens {2} Trainingszeilen angepasst ({3}). Senken Sie den Wert oder lassen Sie ihn leer, um an {4} zufälligen Trainingszeilen anzupassen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Text labels are classes in alphabetical order: {0}."
+msgstr "Textlabels sind Klassen in alphabetischer Reihenfolge: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Demo data: random features and a hidden rule to learn ({0} classes)."
+msgstr ""
+"Demodaten: zufällige Merkmale und eine versteckte Regel zum Lernen ({0} Klassen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Demo data checks whether the network can learn at all. The numbers say nothing about real-world accuracy."
+msgstr ""
+"Demodaten prüfen, ob das Netz überhaupt lernen kann. Die Zahlen sagen nichts über die Genauigkeit in der Praxis."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' contains text labels ({1} classes), so this is a classification task: the last layer needs {2} outputs, one per class."
+msgstr ""
+"Die Zielspalte '{0}' enthält Textlabels ({1} Klassen), also eine Klassifikationsaufgabe: Die letzte Schicht braucht {2} Ausgaben, eine pro Klasse."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' holds {1} classes ({2}). With 1 output the network is trained as a regression. For classification, give the last layer {3} outputs instead."
+msgstr ""
+"Die Zielspalte '{0}' enthält {1} Klassen ({2}). Mit 1 Ausgabe wird das Netz als Regression trainiert. Für eine Klassifikation geben Sie der letzten Schicht stattdessen {3} Ausgaben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' holds values from {1} to {2}, but with {3} outputs the class indices must be between 0 and {4}. Set the last layer to {5} outputs or relabel the classes."
+msgstr ""
+"Die Zielspalte '{0}' enthält Werte von {1} bis {2}, aber bei {3} Ausgaben müssen die Klassenindizes zwischen 0 und {4} liegen. Setzen Sie die letzte Schicht auf {5} Ausgaben oder nummerieren Sie die Klassen neu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Classes in index order: {0}."
+msgstr "Klassen in Index-Reihenfolge: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Features are standardised (mean 0, standard deviation 1)."
+msgstr ""
+"Die Merkmale werden standardisiert (Mittelwert 0, Standardabweichung 1)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The Input has {0} channels, but images have 1 (grayscale) or 3 (RGB). Set the Input shape to 1, height, width or 3, height, width."
+msgstr ""
+"Die Eingabe hat {0} Kanäle, aber Bilder haben 1 (Graustufen) oder 3 (RGB). Setzen Sie die Eingabeform auf 1, Höhe, Breite oder 3, Höhe, Breite."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Each image is fed as {0} rows of {1} grayscale pixels."
+msgstr "Jedes Bild wird als {0} Zeilen mit {1} Graustufenpixeln eingespeist."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs {0}×{1} values for an image of {2}×{3} pixels, but segmentation needs one output per pixel: the output must be as high and wide as the Input. {4}"
+msgstr ""
+"Das Netz gibt {0}×{1} Werte für ein Bild mit {2}×{3} Pixeln aus, aber Segmentierung braucht eine Ausgabe pro Pixel: Die Ausgabe muss so hoch und breit sein wie die Eingabe. {4}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs 1 value per pixel, which fits two classes, but {0} has {1} classes. {2}"
+msgstr ""
+"Das Netz gibt 1 Wert pro Pixel aus, was zu zwei Klassen passt, aber {0} hat {1} Klassen. {2}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Uses the split of the folders ({0}); the validation and test split settings are ignored."
+msgstr ""
+"Verwendet die Aufteilung der Ordner ({0}); die Einstellungen für Validierungs- und Testanteil werden ignoriert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Input data type {0} → {1}"
+msgstr "Datentyp der Eingabe {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' contains text labels ({1} classes), so this is a classification task: use {2} instead of {3}."
+msgstr ""
+"Die Zielspalte '{0}' enthält Textlabels ({1} Klassen), also eine Klassifikationsaufgabe: Verwenden Sie {2} statt {3}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' only holds {1} different values or classes ({2}). {3} predicts them as numbers; for classification use {4} instead."
+msgstr ""
+"Die Zielspalte '{0}' enthält nur {1} verschiedene Werte oder Klassen ({2}). {3} sagt sie als Zahlen vorher; für eine Klassifikation verwenden Sie stattdessen {4}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' contains decimal numbers, which is a regression task: use {1} instead of {2}."
+msgstr ""
+"Die Zielspalte '{0}' enthält Dezimalzahlen, also eine Regressionsaufgabe: Verwenden Sie {1} statt {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' holds only one class ('{1}'). Classification needs at least two."
+msgstr ""
+"Die Zielspalte '{0}' enthält nur eine Klasse ('{1}'). Klassifikation braucht mindestens zwei."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The classes are the values of the target column: {0}."
+msgstr "Die Klassen sind die Werte der Zielspalte: {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Classification into {0} classes from {1} ({2}) with {3}."
+msgstr "Klassifikation in {0} Klassen aus {1} ({2}) mit {3}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Demo data: random features and a hidden rule to learn (regression)."
+msgstr ""
+"Demodaten: zufällige Merkmale und eine versteckte Regel zum Lernen (Regression)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' only contains the whole numbers {1}. With 1 output the network is trained as a regression. For classification, give the last layer {2} outputs instead."
+msgstr ""
+"Die Zielspalte '{0}' enthält nur die ganzen Zahlen {1}. Mit 1 Ausgabe wird das Netz als Regression trainiert. Für eine Klassifikation geben Sie der letzten Schicht stattdessen {2} Ausgaben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The grayscale images are copied into 3 channels."
+msgstr "Die Graustufenbilder werden in 3 Kanäle kopiert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Segmentation trains on images of at most {0}×{1} pixels, but the Input is {2}×{3}. Set a smaller Input size: the images and masks are resized to it."
+msgstr ""
+"Segmentierung trainiert auf Bildern von höchstens {0}×{1} Pixeln, aber die Eingabe ist {2}×{3}. Wählen Sie eine kleinere Eingabegröße: Bilder und Masken werden darauf skaliert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The network outputs {0} channels, but {1} has {2} classes. {3}"
+msgstr "Das Netz gibt {0} Kanäle aus, aber {1} hat {2} Klassen. {3}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"This dataset was prepared for regression: its target '{0}' has no classes. Prepare it for classification in the Data tab, or use {1}."
+msgstr ""
+"Dieser Datensatz wurde für Regression aufbereitet: Seine Zielspalte '{0}' hat keine Klassen. Bereiten Sie ihn im Daten-Tab für Klassifikation auf oder verwenden Sie {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' has more than {1} different values: it cannot be used for classification."
+msgstr ""
+"Die Zielspalte '{0}' hat mehr als {1} verschiedene Werte: Sie kann nicht für Klassifikation verwendet werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The Input expects {0} values, but {1} images have {2} ({3}). Set the Input shape to {4} or to {5}."
+msgstr ""
+"Die Eingabe erwartet {0} Werte, aber die Bilder von {1} haben {2} ({3}). Setzen Sie die Eingabeform auf {4} oder auf {5}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Each image is flattened to {0} values."
+msgstr "Jedes Bild wird zu {0} Werten flach gemacht."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Each image is flattened to {0} values ({1})."
+msgstr "Jedes Bild wird zu {0} Werten flach gemacht ({1})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The network outputs {0} channels, but {1} has only {2} classes. The extra channels are never the right answer."
+msgstr ""
+"Das Netz gibt {0} Kanäle aus, aber {1} hat nur {2} Klassen. Die zusätzlichen Kanäle sind nie die richtige Antwort."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"For image data, set the Input shape to channels, height, width, e.g. 3, 64, 64 for RGB images or 1, 28, 28 for grayscale."
+msgstr ""
+"Für Bilddaten setzen Sie die Eingabeform auf Kanäle, Höhe, Breite, z. B. 3, 64, 64 für RGB-Bilder oder 1, 28, 28 für Graustufen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Images cannot be fed into an Input of shape {0}. Use channels, height, width, e.g. 3, 32, 32."
+msgstr ""
+"Bilder können nicht in eine Eingabe der Form {0} eingespeist werden. Verwenden Sie Kanäle, Höhe, Breite, z. B. 3, 32, 32."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' has more than {1} different values or only one: it cannot be used for classification."
+msgstr ""
+"Die Zielspalte '{0}' hat mehr als {1} verschiedene Werte oder nur einen: Sie kann nicht für Klassifikation verwendet werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' holds negative whole numbers. The neural layers learn the features from class indices 0, 1, 2 …: relabel the classes (e.g. in the Data tab), or use text labels."
+msgstr ""
+"Die Zielspalte '{0}' enthält negative ganze Zahlen. Die neuronalen Schichten lernen die Merkmale aus Klassenindizes 0, 1, 2 …: Nummerieren Sie die Klassen neu (z. B. im Daten-Tab) oder verwenden Sie Textlabels."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped after {0} of {1} epochs."
+msgstr "Nach {0} von {1} Epochen gestoppt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped after {0} of {1} trials."
+msgstr "Nach {0} von {1} Versuchen gestoppt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expected more than 1 value per channel"
+msgstr "Pro Kanal wird mehr als 1 Wert erwartet"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped before the training started."
+msgstr "Vor dem Start des Trainings gestoppt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Out of memory on {0}. Try a smaller batch size or a smaller network."
+msgstr ""
+"Kein Speicher mehr auf {0}. Versuchen Sie eine kleinere Batchgröße oder ein kleineres Netz."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Batch normalization needs at least 2 samples per batch. Increase the batch size."
+msgstr ""
+"Batch-Normalisierung braucht mindestens 2 Stichproben pro Batch. Erhöhen Sie die Batchgröße."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Finished {0} epochs: {1}. No validation data, so the weights of the last epoch were kept."
+msgstr ""
+"{0} Epochen abgeschlossen: {1}. Keine Validierungsdaten, daher wurden die Gewichte der letzten Epoche behalten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped early after epoch {0}: no improvement for {1} epochs"
+msgstr "Nach Epoche {0} früh gestoppt: keine Verbesserung seit {1} Epochen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Finished {0} epochs; kept the weights of epoch {1} (lowest validation loss). {2}."
+msgstr ""
+"{0} Epochen abgeschlossen; die Gewichte von Epoche {1} wurden behalten (niedrigster Validierungsverlust). {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Preparing the data …"
+msgstr "Die Daten werden vorbereitet …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The loss became {0} in epoch {1}. Try a lower learning rate."
+msgstr ""
+"Der Verlust wurde in Epoche {1} zu {0}. Versuchen Sie eine niedrigere Lernrate."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Testing the final model …"
+msgstr "Das endgültige Modell wird getestet …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped during trial {0} of {1}."
+msgstr "Während Versuch {0} von {1} gestoppt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No validation data: after every epoch only the training loss is known, and the weights of the last epoch are kept{0}."
+msgstr ""
+"Keine Validierungsdaten: Nach jeder Epoche ist nur der Trainingsverlust bekannt, und die Gewichte der letzten Epoche werden behalten{0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Loss: {0}. The curves, early stopping and the kept epoch use it."
+msgstr ""
+"Verlust: {0}. Die Kurven, Early Stopping und die behaltene Epoche verwenden ihn."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The Apple GPU does not support every operation of this network; training on the CPU instead."
+msgstr ""
+"Die Apple-GPU unterstützt nicht jede Operation dieses Netzes; stattdessen wird auf der CPU trainiert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Evaluating the final model …"
+msgstr "Das endgültige Modell wird ausgewertet …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Preview images need Pillow: pip install pillow"
+msgstr "Vorschaubilder brauchen Pillow: pip install pillow"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "All {0} trials failed. Trial {1}: {2}"
+msgstr "Alle {0} Versuche sind fehlgeschlagen. Versuch {1}: {2}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Trial {0}: the {1} could not be computed: {2}"
+msgstr "Versuch {0}: {1} konnte nicht berechnet werden: {2}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The network cannot be trained."
+msgstr "Das Netz kann nicht trainiert werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The Apple GPU computed wrong gradients for this network (a known problem of PyTorch on some Macs); training on the CPU instead."
+msgstr ""
+"Die Apple-GPU hat für dieses Netz falsche Gradienten berechnet (ein bekanntes Problem von PyTorch auf manchen Macs); stattdessen wird auf der CPU trainiert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Stopping early after epoch {0}: the validation loss has not improved for {1} epochs (best: epoch {2})."
+msgstr ""
+"Früher Stopp nach Epoche {0}: Der Validierungsverlust hat sich seit {1} Epochen nicht verbessert (beste: Epoche {2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The final evaluation failed: {0}"
+msgstr "Die abschließende Auswertung ist fehlgeschlagen: {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The preview images could not be written: {0}"
+msgstr "Die Vorschaubilder konnten nicht geschrieben werden: {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Counting the classes …"
+msgstr "Die Klassen werden gezählt …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped before the model was fitted: nothing was saved."
+msgstr "Vor dem Anpassen des Modells gestoppt: Es wurde nichts gespeichert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Stacking splits the training rows into {{cv}} folds with every class in proportion, but no class has {{cv}} training rows. Lower Cross-validation folds, or use more rows."
+msgstr ""
+"Stacking teilt die Trainingszeilen in {{cv}} Folds mit jeder Klasse anteilig, aber keine Klasse hat {{cv}} Trainingszeilen. Senken Sie die Folds der Kreuzvalidierung oder verwenden Sie mehr Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Out of memory while fitting {0} rows. Set Max. samples to fit on fewer rows."
+msgstr ""
+"Kein Speicher mehr beim Anpassen von {0} Zeilen. Setzen Sie Max. Stichproben, um auf weniger Zeilen anzupassen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Fitting the {0} on {1} rows …"
+msgstr "{0} wird auf {1} Zeilen angepasst …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Fitted the {0} on {1} rows in {2}."
+msgstr "{0} auf {1} Zeilen in {2} angepasst."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Measuring the fitted model …"
+msgstr "Das angepasste Modell wird gemessen …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Boosting iterations: {0} of at most {1}{2}."
+msgstr "Boosting-Iterationen: {0} von höchstens {1}{2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Testing the fitted model …"
+msgstr "Das angepasste Modell wird getestet …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Reading the CSV file …"
+msgstr "Die CSV-Datei wird gelesen …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The training rows only hold one class ('{0}'). Classification needs at least two."
+msgstr ""
+"Die Trainingszeilen enthalten nur eine Klasse ('{0}'). Klassifikation braucht mindestens zwei."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"SVC needs at least {0} training rows of some class to turn its scores into probabilities ({1}-fold cross-validation)."
+msgstr ""
+"SVC braucht von einer Klasse mindestens {0} Trainingszeilen, um seine Scores in Wahrscheinlichkeiten umzuwandeln ({1}-fache Kreuzvalidierung)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The model cannot be trained."
+msgstr "Das Modell kann nicht trainiert werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Measuring the models of the ensemble failed: {0}"
+msgstr "Das Messen der Modelle des Ensembles ist fehlgeschlagen: {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The dataset has no file. Upload it again."
+msgstr "Der Datensatz hat keine Datei. Laden Sie ihn erneut hoch."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The CSV file was not found. Upload it again."
+msgstr "Die CSV-Datei wurde nicht gefunden. Laden Sie sie erneut hoch."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Early stopping holds out 10 % of the training rows with every class in proportion, but {0}. Set Early stopping to off, or use more rows."
+msgstr ""
+"Early Stopping hält 10 % der Trainingszeilen mit jeder Klasse anteilig zurück, aber {0}. Schalten Sie Early Stopping aus oder verwenden Sie mehr Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Line {0}: the target '{1}' is not a number."
+msgstr "Zeile {0}: Der Zielwert '{1}' ist keine Zahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Line {0}: unknown class '{1}'."
+msgstr "Zeile {0}: unbekannte Klasse '{1}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Line {0}: the target '{1}' is not a whole number."
+msgstr "Zeile {0}: Der Zielwert '{1}' ist keine ganze Zahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Line {0}: the target {1} is not a class index between 0 and {2}."
+msgstr "Zeile {0}: Der Zielwert {1} ist kein Klassenindex zwischen 0 und {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Stopped before the neural layers had learned the features: nothing was saved (the classical model was not fitted yet)."
+msgstr ""
+"Gestoppt, bevor die neuronalen Schichten die Merkmale gelernt hatten: Es wurde nichts gespeichert (das klassische Modell war noch nicht angepasst)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Finished: {0}; {1} on them: {2}{3}"
+msgstr "Abgeschlossen: {0}; {1} darauf: {2}{3}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped during trial {0} of {1} ({2}): {3}"
+msgstr "Während Versuch {0} von {1} gestoppt ({2}): {3}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Computing the learned features …"
+msgstr "Die gelernten Merkmale werden berechnet …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped while the frozen random features were computed."
+msgstr "Gestoppt, während die eingefrorenen Zufallsmerkmale berechnet wurden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Phase 2 of 2: fitting {0} on the {1} learned features."
+msgstr "Phase 2 von 2: {0} wird an die {1} gelernten Merkmale angepasst."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Hyperparameter search: {0}, every trial learns {1} features and fits {2} on them, ranked by {3} on the {4} validation rows."
+msgstr ""
+"Hyperparameter-Suche: {0}, jeder Versuch lernt {1} Merkmale und passt {2} daran an, gereiht nach {3} auf den {4} Validierungszeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped after {0} of {1} trials. {2}."
+msgstr "Nach {0} von {1} Versuchen gestoppt. {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Frozen features: the neural layers keep their random initial weights."
+msgstr ""
+"Eingefrorene Merkmale: Die neuronalen Schichten behalten ihre zufälligen Anfangsgewichte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Phase 1 of 2: the neural layers learn {0} features with a temporary linear head on the target."
+msgstr ""
+"Phase 1 von 2: Die neuronalen Schichten lernen {0} Merkmale mit einem temporären linearen Kopf auf der Zielspalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The neural layers put out features that are not finite numbers (NaN or infinity). Try a lower learning rate."
+msgstr ""
+"Die neuronalen Schichten geben Merkmale aus, die keine endlichen Zahlen sind (NaN oder unendlich). Versuchen Sie eine niedrigere Lernrate."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stopped: fitting {0} on the features learned so far …"
+msgstr "Gestoppt: {0} wird an die bisher gelernten Merkmale angepasst …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Out of memory while fitting {0} rows."
+msgstr "Kein Speicher mehr beim Anpassen von {0} Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Yeo-Johnson transform {0}"
+msgstr "Yeo-Johnson-Transformation von {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "In a sample of {0} rows, "
+msgstr "In einer Stichprobe von {0} Zeilen,"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Turn on “Stratified” under Target & split."
+msgstr "Schalten Sie „Stratifiziert“ unter Zielspalte & Aufteilung ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Use larger validation and test shares."
+msgstr "Verwenden Sie größere Validierungs- und Testanteile."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target {0} has classes that differ only in upper/lower case or spaces ({1}); they count as different classes."
+msgstr ""
+"Die Zielspalte {0} hat Klassen, die sich nur in Groß-/Kleinschreibung oder Leerzeichen unterscheiden ({1}); sie zählen als verschiedene Klassen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target {0} is strongly skewed (skewness {1}): the few largest values dominate the loss. Training on {2} of it often works better; the network then predicts transformed values."
+msgstr ""
+"Die Zielspalte {0} ist stark schief (Schiefe {1}): Die wenigen größten Werte dominieren den Verlust. Training auf {2} davon funktioniert oft besser; das Netz sagt dann transformierte Werte vorher."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Possible target leakage: by its name, {0} looks like another form of the target {1}. If it is derived from it, drop it – new data would not have it."
+msgstr ""
+"Mögliches Target Leakage: Dem Namen nach sieht {0} wie eine andere Form der Zielspalte {1} aus. Wenn sie daraus abgeleitet ist, entfernen Sie sie – neue Daten hätten sie nicht."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Only {0}: too few to train a network reliably. Collect more data if you can."
+msgstr ""
+"Nur {0}: zu wenige, um ein Netz zuverlässig zu trainieren. Sammeln Sie mehr Daten, wenn möglich."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"'{0}' decides the split (keep groups together) and is still a feature: group numbers or ids mean nothing for new rows. Drop it after the split."
+msgstr ""
+"'{0}' bestimmt die Aufteilung (Gruppen zusammenhalten) und ist noch ein Merkmal: Gruppennummern oder IDs bedeuten für neue Zeilen nichts. Entfernen Sie sie nach der Aufteilung."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Possible target leakage: {0}. If {1} is derived from {2} or only known after it, drop it – new data would not have it."
+msgstr ""
+"Mögliches Target Leakage: {0}. Wenn {1} aus {2} abgeleitet ist oder erst danach bekannt ist, entfernen Sie sie – neue Daten hätten sie nicht."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Possible target leakage: {0} (and the same for {1}). If {2} is derived from {3} or only known after it, drop these columns – new data would not have them."
+msgstr ""
+"Mögliches Target Leakage: {0} (ebenso für {1}). Wenn {2} aus {3} abgeleitet ist oder erst danach bekannt ist, entfernen Sie diese Spalten – neue Daten hätten sie nicht."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Convert {0} to numbers"
+msgstr "{0} in Zahlen umwandeln"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Convert {0} to dates"
+msgstr "{0} in Datumswerte umwandeln"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unify the spellings in {0}"
+msgstr "Schreibweisen in {0} vereinheitlichen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The features have very different scales (standard deviation of {0}: {1}, of {2}: {3}). Training in Brick DNN standardises them anyway; for the exported data and other tools, scale them."
+msgstr ""
+"Die Merkmale haben sehr unterschiedliche Skalen (Standardabweichung von {0}: {1}, von {2}: {3}). Das Training in Brick DNN standardisiert sie ohnehin; für die exportierten Daten und andere Werkzeuge skalieren Sie sie."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Remove the atypical rows"
+msgstr "Die untypischen Zeilen entfernen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Drop {0} without a strong partner"
+msgstr "{0} ohne starken Partner entfernen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Remove the rows of {0}"
+msgstr "Die Zeilen von {0} entfernen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Remove the rows of {0} rare classes"
+msgstr "Die Zeilen von {0} seltenen Klassen entfernen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Find near-duplicate groups and split by them"
+msgstr "Gruppen fast gleicher Zeilen finden und danach aufteilen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Stratified split: {0} ({1}) {2} fewer than {3} rows, so not every part contains {4}."
+msgstr ""
+"Stratifizierte Aufteilung: {0} ({1}) {2} weniger als {3} Zeilen, daher enthält nicht jeder Teil {4}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The settings must be an object with target, task and split."
+msgstr "Die Einstellungen müssen ein Objekt mit target, task und split sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Task: choose auto, classification or regression."
+msgstr "Aufgabe: Wählen Sie auto, classification oder regression."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Split: expected the validation and test shares, a seed and stratify."
+msgstr ""
+"Aufteilung: Erwartet werden Validierungs- und Testanteil, ein Seed und stratify."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Validation and test shares together can be at most {0} ({1}), so that rows remain for training."
+msgstr ""
+"Validierungs- und Testanteil zusammen dürfen höchstens {0} ({1}) sein, damit Zeilen für das Training bleiben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Seed: enter a whole number between 0 and {0}."
+msgstr "Seed: Geben Sie eine ganze Zahl zwischen 0 und {0} ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Stratify: expected true or false."
+msgstr "Stratify: Erwartet wird true oder false."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The steps must be a list."
+msgstr "Die Schritte müssen eine Liste sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "A preparation can have at most {0} steps ({1} given)."
+msgstr "Eine Aufbereitung kann höchstens {0} Schritte haben ({1} angegeben)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Split by '{0}': the groups are large, so training / validation / test have {1} of the rows instead of {2}."
+msgstr ""
+"Aufteilung nach '{0}': Die Gruppen sind groß, daher haben Training / Validierung / Test {1} der Zeilen statt {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Stratified by the most common class of every group: the class shares of the parts are close to each other, not exactly equal."
+msgstr ""
+"Stratifiziert nach der häufigsten Klasse jeder Gruppe: Die Klassenanteile der Teile liegen nah beieinander, sind aber nicht genau gleich."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Keep groups together: choose a column."
+msgstr "Gruppen zusammenhalten: Wählen Sie eine Spalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Keep groups together: there is no column '{0}' when the split is assigned (after the combine steps and the steps that run before the split)."
+msgstr ""
+"Gruppen zusammenhalten: Es gibt keine Spalte '{0}', wenn die Aufteilung festgelegt wird (nach den Kombinationsschritten und den Schritten vor der Aufteilung)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' combines tables, so it must come before all other steps."
+msgstr ""
+"'{0}' kombiniert Tabellen und muss daher vor allen anderen Schritten kommen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"'{0}' runs before the split, so it must come before all steps except the ones that combine tables."
+msgstr ""
+"'{0}' läuft vor der Aufteilung und muss daher vor allen Schritten kommen außer denen, die Tabellen kombinieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"This step adds {0} columns; at most {1} new columns per step are supported. Use fewer columns or categories (e.g. group rare categories first)."
+msgstr ""
+"Dieser Schritt fügt {0} Spalten hinzu; unterstützt werden höchstens {1} neue Spalten pro Schritt. Verwenden Sie weniger Spalten oder Kategorien (fassen Sie z. B. zuerst seltene Kategorien zusammen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Data preparation step %s (%s) failed"
+msgstr "Datenaufbereitungsschritt %s (%s) fehlgeschlagen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Choose the target column: the column the network should predict."
+msgstr "Wählen Sie die Zielspalte: die Spalte, die das Netz vorhersagen soll."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no feature columns besides the target."
+msgstr "Neben der Zielspalte gibt es keine Merkmalsspalten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"All feature names are numbers ({0}), so the column header of the training file cannot be recognised. Rename at least one column."
+msgstr ""
+"Alle Merkmalsnamen sind Zahlen ({0}), daher lässt sich die Kopfzeile der Trainingsdatei nicht erkennen. Benennen Sie mindestens eine Spalte um."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The data has {0} feature columns; training will be slow and needs much memory. Consider feature selection."
+msgstr ""
+"Die Daten haben {0} Merkmalsspalten; das Training wird langsam und braucht viel Speicher. Erwägen Sie eine Merkmalsauswahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The data has {0}; at least {1} are needed."
+msgstr "Die Daten haben {0}; mindestens {1} werden gebraucht."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The rows have no train/validation/test split."
+msgstr "Die Zeilen haben keine Aufteilung in Training/Validierung/Test."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No validation rows: training keeps the weights of the last epoch, has no early stopping or hyperparameter search, and measures the model only on the test rows."
+msgstr ""
+"Keine Validierungszeilen: Das Training behält die Gewichte der letzten Epoche, hat kein Early Stopping und keine Hyperparameter-Suche und misst das Modell nur auf den Testzeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unexpected error in this step: {0}"
+msgstr "Unerwarteter Fehler in diesem Schritt: {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target column '{0}' does not exist (any more). A step may have renamed or dropped it; choose the target again."
+msgstr ""
+"Die Zielspalte '{0}' existiert nicht (mehr). Ein Schritt hat sie vielleicht umbenannt oder entfernt; wählen Sie die Zielspalte erneut."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "One-hot encode {0}"
+msgstr "{0} One-hot-kodieren"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Split {0} into year, month, weekday"
+msgstr "{0} in Jahr, Monat, Wochentag aufteilen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Rename the columns (x1, x2 …)"
+msgstr "Die Spalten umbenennen (x1, x2 …)"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Nothing is held out: there are no validation and no test rows, so you cannot judge how well the model works on new data. Training keeps the weights of the last epoch, has no early stopping or hyperparameter search, and its scores come from the training rows (optimistic)."
+msgstr ""
+"Nichts wird zurückgehalten: Es gibt keine Validierungs- und keine Testzeilen, daher können Sie nicht beurteilen, wie gut das Modell auf neuen Daten funktioniert. Das Training behält die Gewichte der letzten Epoche, hat kein Early Stopping und keine Hyperparameter-Suche, und seine Bewertungen kommen von den Trainingszeilen (optimistisch)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"This preview stops before the group column exists, so it shows a random split; the split by groups is assigned once the steps before it have run."
+msgstr ""
+"Diese Vorschau endet, bevor die Gruppenspalte existiert, daher zeigt sie eine zufällige Aufteilung; die Aufteilung nach Gruppen wird festgelegt, sobald die Schritte davor gelaufen sind."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target '{0}' is a date. Choose another target, or turn it into numbers or classes first."
+msgstr ""
+"Die Zielspalte '{0}' ist ein Datum. Wählen Sie eine andere Zielspalte oder wandeln Sie sie zuerst in Zahlen oder Klassen um."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no training rows left."
+msgstr "Es sind keine Trainingszeilen mehr übrig."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The target '{0}' has {1}."
+msgstr "Die Zielspalte '{0}' hat {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target '{0}' has {1} different values; classification supports at most {2} classes. Choose regression for numbers."
+msgstr ""
+"Die Zielspalte '{0}' hat {1} verschiedene Werte; Klassifikation unterstützt höchstens {2} Klassen. Wählen Sie Regression für Zahlen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Change {0} to numbers"
+msgstr "{0} in Zahlen ändern"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target '{0}' is {1}, not numeric, so it cannot be used for regression. Choose classification or another target."
+msgstr ""
+"Die Zielspalte '{0}' ist {1}, nicht numerisch, und kann daher nicht für Regression verwendet werden. Wählen Sie Klassifikation oder eine andere Zielspalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target '{0}' has only {1} class{2}. Classification needs at least 2."
+msgstr ""
+"Die Zielspalte '{0}' hat nur {1} Klasse{2}. Klassifikation braucht mindestens 2."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The classes are imbalanced ({0} : 1 in the training rows)."
+msgstr "Die Klassen sind unausgewogen ({0} : 1 in den Trainingszeilen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Balance the classes (oversample)"
+msgstr "Die Klassen ausgleichen (Oversampling)"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown step group '{0}' of {1}."
+msgstr "Unbekannte Schrittgruppe '{0}' von {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Step type '{0}' is registered twice."
+msgstr "Schritttyp '{0}' ist doppelt registriert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown param kind '{0}'."
+msgstr "Unbekannte Parameterart '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown column kinds in {0}."
+msgstr "Unbekannte Spaltenarten in {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown key kind '{0}'."
+msgstr "Unbekannte Schlüsselart '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Other data sources are not available here."
+msgstr "Andere Datenquellen sind hier nicht verfügbar."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown setting '{0}' for '{1}'."
+msgstr "Unbekannte Einstellung '{0}' für '{1}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Unknown step type '{0}'."
+msgstr "Unbekannter Schritttyp '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Attribute access (a.b) is not allowed in formulas."
+msgstr "Attributzugriff (a.b) ist in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Indexing (a[0]) is not allowed in formulas."
+msgstr "Indizierung (a[0]) ist in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Functions (lambda) cannot be defined in formulas."
+msgstr "Funktionen (lambda) können in Formeln nicht definiert werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Use where(condition, a, b) instead of 'a if condition else b'."
+msgstr "Verwenden Sie where(condition, a, b) statt 'a if condition else b'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Comprehensions ([… for …]) are not allowed in formulas."
+msgstr "Comprehensions ([… for …]) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Comprehensions ({{… for …}}) are not allowed in formulas."
+msgstr "Comprehensions ({{… for …}}) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Comprehensions ({{…: … for …}}) are not allowed in formulas."
+msgstr "Comprehensions ({{…: … for …}}) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Comprehensions ((… for …)) are not allowed in formulas."
+msgstr "Comprehensions ((… for …)) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Assignments (:=) are not allowed in formulas."
+msgstr "Zuweisungen (:=) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Starred arguments (*a) are not allowed in formulas."
+msgstr "Argumente mit Stern (*a) sind in Formeln nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A dictionary {{…}} is not allowed here; it can only be the second argument of map(x, {{\"a\": 1, …}})."
+msgstr ""
+"Ein Dictionary {{…}} ist hier nicht erlaubt; es kann nur das zweite Argument von map(x, {{\"a\": 1, …}}) sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Compute a new column from other columns, e.g. weight / height ** 2, or from text, e.g. the deck of a cabin: map(upper(left(`Cabin`, 1)), {{\"A\": 1, …}})."
+msgstr ""
+"Berechnet eine neue Spalte aus anderen Spalten, z. B. weight / height ** 2, oder aus Text, z. B. das Deck einer Kabine: map(upper(left(`Cabin`, 1)), {{\"A\": 1, …}})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Allowed are numbers, text in quotes, column names (`my column` in backticks if needed), + - * / // % **, comparisons, and, or, not, and the functions "
+msgstr ""
+"Erlaubt sind Zahlen, Text in Anführungszeichen, Spaltennamen (`meine Spalte` bei Bedarf in Backticks), + - * / // % **, Vergleiche, and, or, not und die Funktionen"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: at most {0} characters (map(…) dictionaries not counted, up to {1} with them)."
+msgstr ""
+"Ausdruck: höchstens {0} Zeichen (map(…)-Dictionaries nicht mitgezählt, mit ihnen bis zu {1})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The parts are in {0} case, so {1} in the mapping never {2}. Change the mapping or the case."
+msgstr ""
+"Die Teile sind in {0}-Schreibung, daher {1} in der Abbildung nie {2}. Ändern Sie die Abbildung oder die Schreibung."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"This step {0} the target column '{1}'. Choose another target in “Target & split” or change the step."
+msgstr ""
+"Dieser Schritt {0} die Zielspalte '{1}'. Wählen Sie unter „Zielspalte & Aufteilung“ eine andere Zielspalte oder ändern Sie den Schritt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Nothing to change: the columns already hold {0}."
+msgstr "Nichts zu ändern: Die Spalten enthalten bereits {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: '{0}' is not allowed in formulas. {1}"
+msgstr "Ausdruck: '{0}' ist in Formeln nicht erlaubt. {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: the value {0} is not allowed. {1}"
+msgstr "Ausdruck: Der Wert {0} ist nicht erlaubt. {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: '~' is not allowed. {0}"
+msgstr "Ausdruck: '~' ist nicht erlaubt. {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0} needs {1} as a whole number from {2} to {3} written in the formula (not a column)."
+msgstr ""
+"Ausdruck: {0} braucht {1} als ganze Zahl von {2} bis {3}, direkt in der Formel (keine Spalte)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "None of the values were found; nothing changed."
+msgstr "Keiner der Werte wurde gefunden; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "New names: add at least one column to rename."
+msgstr "Neue Namen: Fügen Sie mindestens eine Spalte zum Umbenennen hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The target '{0}' is now called '{1}'. Change the target in “Target & split” to the new name."
+msgstr ""
+"Die Zielspalte '{0}' heißt jetzt '{1}'. Ändern Sie die Zielspalte unter „Zielspalte & Aufteilung“ auf den neuen Namen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Nothing to rename: the new names equal the old ones."
+msgstr "Nichts umzubenennen: Die neuen Namen entsprechen den alten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' holds dates, which cannot be turned into true/false."
+msgstr ""
+"'{0}' enthält Datumswerte, die sich nicht in wahr/falsch umwandeln lassen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' holds true/false values, which cannot be dates."
+msgstr "'{0}' enthält Wahr/falsch-Werte, die keine Datumswerte sein können."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Date format: use codes like %Y-%m-%d or %d.%m.%Y %H:%M."
+msgstr "Datumsformat: Verwenden Sie Codes wie %Y-%m-%d oder %d.%m.%Y %H:%M."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: the formula is too long; split it into several steps."
+msgstr ""
+"Ausdruck: Die Formel ist zu lang; teilen Sie sie auf mehrere Schritte auf."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: the formula is nested too deeply (at most {0} levels); split it into several steps."
+msgstr ""
+"Ausdruck: Die Formel ist zu tief verschachtelt (höchstens {0} Ebenen); teilen Sie sie auf mehrere Schritte auf."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: the formula is too complex; split it into several steps."
+msgstr ""
+"Ausdruck: Die Formel ist zu komplex; teilen Sie sie auf mehrere Schritte auf."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: '{0}' is not allowed."
+msgstr "Ausdruck: '{0}' ist nicht erlaubt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: there is no column '{0}'.{1}"
+msgstr "Ausdruck: Es gibt keine Spalte '{0}'.{1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: '{0}' holds dates, which cannot be used in formulas. Split it into numbers with “Date parts” or change its type first."
+msgstr ""
+"Ausdruck: '{0}' enthält Datumswerte, die in Formeln nicht verwendet werden können. Teilen Sie sie zuerst mit „Datumsbestandteile“ in Zahlen auf oder ändern Sie ihren Typ."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: text ({0}) cannot be used with {1}; only == and != work with text (concat(a, b) joins texts, to_number(x) reads numbers)."
+msgstr ""
+"Ausdruck: Text ({0}) kann nicht mit {1} verwendet werden; mit Text funktionieren nur == und != (concat(a, b) verbindet Texte, to_number(x) liest Zahlen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: cannot compare text with numbers ({0} {1} {2}); use to_number(x) or to_text(x)."
+msgstr ""
+"Ausdruck: Text lässt sich nicht mit Zahlen vergleichen ({0} {1} {2}); verwenden Sie to_number(x) oder to_text(x)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: text can only be compared with == and !=, not {0}."
+msgstr ""
+"Ausdruck: Text lässt sich nur mit == und != vergleichen, nicht mit {0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}(…) is not allowed. {1}"
+msgstr "Ausdruck: {0}(…) ist nicht erlaubt. {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}(…) takes plain arguments only{1}."
+msgstr "Ausdruck: {0}(…) nimmt nur einfache Argumente{1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: where(…, a, b) needs a and b of the same type (both text or both numbers); use to_text(x) or to_number(x)."
+msgstr ""
+"Ausdruck: where(…, a, b) braucht a und b vom selben Typ (beide Text oder beide Zahlen); verwenden Sie to_text(x) oder to_number(x)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}: {1} is empty."
+msgstr "Ausdruck: {0}: {1} ist leer."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0} needs {1} as a text in quotes written in the formula (not a column)."
+msgstr ""
+"Ausdruck: {0} braucht {1} als Text in Anführungszeichen, direkt in der Formel (keine Spalte)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}: {1} has at most {2} characters."
+msgstr "Ausdruck: {0}: {1} hat höchstens {2} Zeichen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0}(x, \"text\", ignore_case=1): ignore_case is 1 (ignore upper and lower case) or 0."
+msgstr ""
+"Ausdruck: {0}(x, \"text\", ignore_case=1): ignore_case ist 1 (Groß-/Kleinschreibung ignorieren) oder 0."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: coalesce(a, b, …) needs values of the same type (all text or all numbers); use to_text(x) or to_number(x)."
+msgstr ""
+"Ausdruck: coalesce(a, b, …) braucht Werte vom selben Typ (alle Text oder alle Zahlen); verwenden Sie to_text(x) oder to_number(x)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0} needs a dictionary of values written in the formula as its second argument, e.g. map(`Embarked`, {{\"S\": 1, \"C\": 2, \"Q\": 3}})."
+msgstr ""
+"Ausdruck: {0} braucht als zweites Argument ein Dictionary mit Werten, direkt in der Formel, z. B. map(`Embarked`, {{\"S\": 1, \"C\": 2, \"Q\": 3}})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}: at most {1} entries."
+msgstr "Ausdruck: {0}: höchstens {1} Einträge."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}: the dictionary is empty."
+msgstr "Ausdruck: {0}: Das Dictionary ist leer."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This step replaces the target column '{0}'."
+msgstr "Dieser Schritt ersetzt die Zielspalte '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Replacements: add at least one value to replace."
+msgstr "Ersetzungen: Fügen Sie mindestens einen zu ersetzenden Wert hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A regular expression (Python), e.g. [A-Z] for the first capital letter or \\d+ for the first number. With a group in brackets the first group is taken, else the whole match. At most {0} characters."
+msgstr ""
+"Ein regulärer Ausdruck (Python), z. B. [A-Z] für den ersten Großbuchstaben oder \\d+ für die erste Zahl. Mit einer Gruppe in Klammern wird die erste Gruppe übernommen, sonst der ganze Treffer. Höchstens {0} Zeichen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Text column: '{0}' holds {1}, not text. Choose a text or category column, or turn it into categories with “Change type” first."
+msgstr ""
+"Textspalte: '{0}' enthält {1}, keinen Text. Wählen Sie eine Text- oder Kategoriespalte oder wandeln Sie sie zuerst mit „Typ ändern“ in Kategorien um."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Word number: use 1 for the first word or -1 for the last one."
+msgstr ""
+"Wortnummer: Verwenden Sie 1 für das erste Wort oder -1 für das letzte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Text column: '{0}' is the target. A column taken from the target gives the model the answer during training and cannot be computed for new rows. Choose another column."
+msgstr ""
+"Textspalte: '{0}' ist die Zielspalte. Eine aus der Zielspalte genommene Spalte verrät dem Modell im Training die Antwort und lässt sich für neue Zeilen nicht berechnen. Wählen Sie eine andere Spalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every value of '{0}' is missing."
+msgstr "Jeder Wert von '{0}' fehlt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "New names: there is no column '{0}'."
+msgstr "Neue Namen: Es gibt keine Spalte '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "New names: enter a new name for '{0}'."
+msgstr "Neue Namen: Geben Sie einen neuen Namen für '{0}' ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "New names: two columns would be called '{0}'."
+msgstr "Neue Namen: Zwei Spalten würden '{0}' heißen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: this is not a valid formula{0}."
+msgstr "Ausdruck: Das ist keine gültige Formel{0}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: the formula is too complex."
+msgstr "Ausdruck: Die Formel ist zu komplex."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: 'in' and 'is' are not allowed; use contains(x, \"text\") or isnull(x). {0}"
+msgstr ""
+"Ausdruck: 'in' und 'is' sind nicht erlaubt; verwenden Sie contains(x, \"text\") oder isnull(x). {0}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0}: keys and values are texts in quotes or numbers written in the formula (no columns or calculations)."
+msgstr ""
+"Ausdruck: {0}: Schlüssel und Werte sind Texte in Anführungszeichen oder Zahlen direkt in der Formel (keine Spalten oder Berechnungen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0}: the default is a text in quotes or a number written in the formula."
+msgstr ""
+"Ausdruck: {0}: Der Standardwert ist ein Text in Anführungszeichen oder eine Zahl direkt in der Formel."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: {0}: the key '{1}' is listed twice."
+msgstr "Ausdruck: {0}: Der Schlüssel '{1}' kommt doppelt vor."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every value of '{0}' is {1}."
+msgstr "Jeder Wert von '{0}' ist {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' cannot be converted to {1}: {2}"
+msgstr "'{0}' lässt sich nicht in {1} umwandeln: {2}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: the formula is nested too deeply; split it into several steps."
+msgstr ""
+"Ausdruck: Die Formel ist zu tief verschachtelt; teilen Sie sie auf mehrere Schritte auf."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: a number is too large."
+msgstr "Ausdruck: Eine Zahl ist zu groß."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: round(x, digits) needs digits from 0 to 15."
+msgstr "Ausdruck: round(x, digits) braucht digits von 0 bis 15."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: a backtick (`) is not closed."
+msgstr "Ausdruck: Ein Backtick (`) ist nicht geschlossen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: there is no column name between the backticks."
+msgstr "Ausdruck: Zwischen den Backticks steht kein Spaltenname."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0}: the key '{1}' is a text, but x holds numbers; use to_text(x) to map texts."
+msgstr ""
+"Ausdruck: {0}: Der Schlüssel '{1}' ist ein Text, aber x enthält Zahlen; verwenden Sie to_text(x), um Texte abzubilden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Expression: the pattern of extract(x, \"pattern\")"
+msgstr "Ausdruck: das Muster von extract(x, \"pattern\")"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: extract(x, \"pattern\") needs the pattern (a regular expression) as a text in quotes written in the formula, e.g. extract(`Name`, \"(\\w+)\\.\")."
+msgstr ""
+"Ausdruck: extract(x, \"pattern\") braucht das Muster (einen regulären Ausdruck) als Text in Anführungszeichen direkt in der Formel, z. B. extract(`Name`, \"(\\w+)\\.\")."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Expression: {0}: k is 1 for the first part, 2 for the second, -1 for the last."
+msgstr ""
+"Ausdruck: {0}: k ist 1 für den ersten Teil, 2 für den zweiten, -1 für den letzten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Joined '{0}' ({1} join on {2}): {3} of {4} rows found a match"
+msgstr ""
+"'{0}' verknüpft ({1} Join über {2}): {3} von {4} Zeilen haben eine Entsprechung gefunden"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Appended {0} of '{1}'; the data has {2} now."
+msgstr "{0} von '{1}' angehängt; die Daten haben jetzt {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Key columns here: choose at least one key column."
+msgstr "Schlüsselspalten hier: Wählen Sie mindestens eine Schlüsselspalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Key columns there: choose as many columns ({0} chosen) as key columns here ({1}), in the same order."
+msgstr ""
+"Schlüsselspalten dort: Wählen Sie so viele Spalten ({0} gewählt) wie Schlüsselspalten hier ({1}), in derselben Reihenfolge."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Key columns there: a column is chosen twice."
+msgstr "Schlüsselspalten dort: Eine Spalte ist doppelt gewählt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Key columns there: '{0}' has no column {1}."
+msgstr "Schlüsselspalten dort: '{0}' hat keine Spalte {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Joins must come before all other steps."
+msgstr "Joins müssen vor allen anderen Schritten kommen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The join would create {0} rows{1}. At most {2} are allowed; check the key columns."
+msgstr ""
+"Der Join würde {0} Zeilen erzeugen{1}. Erlaubt sind höchstens {2}; prüfen Sie die Schlüsselspalten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No row of '{0}' matches, so the join would leave no rows. Check that the key columns hold the same values (spelling, numbers vs. text)."
+msgstr ""
+"Keine Zeile von '{0}' passt, daher würde der Join keine Zeilen übrig lassen. Prüfen Sie, ob die Schlüsselspalten dieselben Werte enthalten (Schreibweise, Zahlen oder Text)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No row found a match. Check that the key columns hold the same values (spelling, numbers vs. text)."
+msgstr ""
+"Keine Zeile hat eine Entsprechung gefunden. Prüfen Sie, ob die Schlüsselspalten dieselben Werte enthalten (Schreibweise, Zahlen oder Text)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Appending rows must come before all other steps."
+msgstr "Das Anhängen von Zeilen muss vor allen anderen Schritten kommen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Together the tables have {0} rows; at most {1} are supported."
+msgstr ""
+"Zusammen haben die Tabellen {0} Zeilen; unterstützt werden höchstens {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Column name: '{0}' has a column '{1}' already; choose another name."
+msgstr ""
+"Spaltenname: '{0}' hat bereits eine Spalte '{1}'; wählen Sie einen anderen Namen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Column name: there is a column '{0}' already; choose another name."
+msgstr ""
+"Spaltenname: Es gibt bereits eine Spalte '{0}'; wählen Sie einen anderen Namen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' holds {1} here but {2} in '{3}'; it is a category column now."
+msgstr ""
+"'{0}' enthält hier {1}, in '{3}' aber {2}; sie ist jetzt eine Kategoriespalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The key '{0}' holds {1} here, but '{2}' holds {3} in '{4}'. Change the type of one of them first."
+msgstr ""
+"Der Schlüssel '{0}' enthält hier {1}, aber '{2}' enthält in '{4}' {3}. Ändern Sie zuerst den Typ einer der beiden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Parts: choose at least one part."
+msgstr "Bestandteile: Wählen Sie mindestens einen Bestandteil."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no date columns; nothing changed."
+msgstr "Es gibt keine Datumsspalten; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Encoded {0} into {1}, one per class of '{2}' (smoothed class shares)."
+msgstr ""
+"{0} in {1} kodiert, eine pro Klasse von '{2}' (geglättete Klassenanteile)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Replaced the categories of {0} by the smoothed mean of '{1}'."
+msgstr ""
+"Die Kategorien von {0} durch den geglätteten Mittelwert von '{1}' ersetzt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "One-hot encoded {0} into {1}."
+msgstr "{0} One-hot-kodiert in {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The target '{0}' has no values in the training rows."
+msgstr "Die Zielspalte '{0}' hat in den Trainingszeilen keine Werte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Target mean encoding needs at least two classes of '{0}' in the training rows."
+msgstr ""
+"Target-Mean-Kodierung braucht mindestens zwei Klassen von '{0}' in den Trainingszeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No category below {0} % in {1}; nothing grouped."
+msgstr "Keine Kategorie unter {0} % in {1}; nichts zusammengefasst."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Replaced the categories of {0} by their index (alphabetical order)."
+msgstr ""
+"Die Kategorien von {0} durch ihren Index ersetzt (alphabetische Reihenfolge)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The regression target '{0}' must be numeric."
+msgstr "Die Regressions-Zielspalte '{0}' muss numerisch sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Target mean encoding needs a target. Choose the target column under 'Target & split' first."
+msgstr ""
+"Target-Mean-Kodierung braucht eine Zielspalte. Wählen Sie die Zielspalte zuerst unter „Zielspalte & Aufteilung“."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The target column '{0}' does not exist (any more)."
+msgstr "Die Zielspalte '{0}' existiert nicht (mehr)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The target '{0}' cannot be encoded with itself."
+msgstr "Die Zielspalte '{0}' kann nicht mit sich selbst kodiert werden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' has no values in the training rows; left unchanged."
+msgstr "'{0}' hat in den Trainingszeilen keine Werte; unverändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Replaced the categories of {0} by their share of the training rows."
+msgstr ""
+"Die Kategorien von {0} durch ihren Anteil an den Trainingszeilen ersetzt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Every category of '{0}' is rarer than {1}, so all became '{2}'. Lower the minimum share."
+msgstr ""
+"Jede Kategorie von '{0}' ist seltener als {1}, daher wurden alle zu '{2}'. Senken Sie den Mindestanteil."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"One-hot encoding '{0}' would add more than {1} columns in this step. Lower “Most categories”, group rare categories first or use another method."
+msgstr ""
+"Die One-hot-Kodierung von '{0}' würde in diesem Schritt mehr als {1} Spalten hinzufügen. Senken Sie „Max. Kategorien“, fassen Sie zuerst seltene Kategorien zusammen oder verwenden Sie eine andere Methode."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Added {0} from {1} of columns ({2})"
+msgstr "{0} aus {1} von Spalten hinzugefügt ({2})"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Added {0}{1} per {2} ({3}; {4} in the training rows)"
+msgstr "{0}{1} pro {2} hinzugefügt ({3}; {4} in den Trainingszeilen)"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every value of '{0}' is {1}: it tells the model nothing."
+msgstr "Jeder Wert von '{0}' ist {1}: Er sagt dem Modell nichts."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every value of {0} is missing."
+msgstr "Jeder Wert von {0} fehlt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Group by: {0} has no values in the training rows, so there are no groups to learn."
+msgstr ""
+"Gruppieren nach: {0} hat in den Trainingszeilen keine Werte, daher gibt es keine Gruppen zu lernen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Group by: the training rows have {0} groups; at most {1} are supported. Group rare categories first or choose a column with fewer values."
+msgstr ""
+"Gruppieren nach: Die Trainingszeilen haben {0} Gruppen; unterstützt werden höchstens {1}. Fassen Sie zuerst seltene Kategorien zusammen oder wählen Sie eine Spalte mit weniger Werten."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Columns: choose at least two columns to combine."
+msgstr "Spalten: Wählen Sie mindestens zwei Spalten zum Kombinieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Operations: choose at least one operation."
+msgstr "Operationen: Wählen Sie mindestens eine Operation."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Columns: choose the columns to combine."
+msgstr "Spalten: Wählen Sie die Spalten zum Kombinieren."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Columns: choose at least two columns (or other columns under “Combine with”)."
+msgstr ""
+"Spalten: Wählen Sie mindestens zwei Spalten (oder andere Spalten unter „Kombinieren mit“)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Most new columns: these settings would add {0} columns ({1} of columns), more than the limit of {2}. Choose fewer columns or operations, or raise the limit (at most {3})."
+msgstr ""
+"Höchstens so viele neue Spalten: Diese Einstellungen würden {0} Spalten hinzufügen ({1} von Spalten), mehr als die Grenze von {2}. Wählen Sie weniger Spalten oder Operationen oder erhöhen Sie die Grenze (höchstens {3})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Group by: choose a category column."
+msgstr "Gruppieren nach: Wählen Sie eine Kategoriespalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Statistics: choose at least one statistic."
+msgstr "Statistiken: Wählen Sie mindestens eine Statistik."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Value column: '{0}' is the target. Its mean per group would give the model the answer of the training rows (target leakage), and new rows have no target. To use the target per category, choose Encode categories → Target mean: it uses out-of-fold values for the training rows."
+msgstr ""
+"Wertespalte: '{0}' ist die Zielspalte. Ihr Mittelwert pro Gruppe würde dem Modell die Antwort der Trainingszeilen verraten (Target Leakage), und neue Zeilen haben keine Zielspalte. Um die Zielspalte pro Kategorie zu nutzen, wählen Sie Kategorien kodieren → Target Mean: Es verwendet Out-of-Fold-Werte für die Trainingszeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Value column: '{0}' is also a group column."
+msgstr "Wertespalte: '{0}' ist auch eine Gruppenspalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Value column: choose the number column for the {0}; only “Rows per group” works without one."
+msgstr ""
+"Wertespalte: Wählen Sie die Zahlenspalte für {0}; nur „Zeilen pro Gruppe“ funktioniert ohne sie."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' holds {1}; {2} only works for numbers."
+msgstr "'{0}' enthält {1}; {2} funktioniert nur für Zahlen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"'{0}' holds {1}; {2} only works for numbers. Use “Most frequent value” or “A fixed value” for categories."
+msgstr ""
+"'{0}' enthält {1}; {2} funktioniert nur für Zahlen. Verwenden Sie für Kategorien „Häufigster Wert“ oder „Ein fester Wert“."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Marked {0} as missing in {1}."
+msgstr "{0} in {1} als fehlend markiert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "None of the placeholder values were found; nothing changed."
+msgstr "Keiner der Platzhalterwerte wurde gefunden; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No column has more than {0} missing values in the training rows."
+msgstr "Keine Spalte hat in den Trainingszeilen mehr als {0} fehlende Werte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Dropped {0} with more than {1} missing values in the training rows: {2}."
+msgstr ""
+"{0} mit mehr als {1} fehlenden Werten in den Trainingszeilen entfernt: {2}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No column with missing values to fill."
+msgstr "Keine Spalte mit fehlenden Werten zum Auffüllen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Placeholder values: add at least one value, e.g. -999 or ?."
+msgstr ""
+"Platzhalterwerte: Fügen Sie mindestens einen Wert hinzu, z. B. -999 oder ?."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no training rows; nothing dropped."
+msgstr "Es gibt keine Trainingszeilen; nichts entfernt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Value: enter the value to fill in."
+msgstr "Wert: Geben Sie den Wert zum Auffüllen ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Skipped {0} with {1} ({2}): {3} does not work for {4}.{5}"
+msgstr "{0} mit {1} übersprungen ({2}): {3} funktioniert nicht für {4}.{5}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No missing values to fill; new data will be filled {0}."
+msgstr ""
+"Keine fehlenden Werte zum Auffüllen; neue Daten werden {0} aufgefüllt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "KNN needs training rows to compare with; there are none."
+msgstr "KNN braucht Trainingszeilen zum Vergleichen; es gibt keine."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' has no values in the training rows, so it was not filled."
+msgstr ""
+"'{0}' hat in den Trainingszeilen keine Werte und wurde daher nicht aufgefüllt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "(no neighbouring value"
+msgstr "(kein benachbarter Wert"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no {0} to work on; nothing changed."
+msgstr "Es gibt keine {0} zum Bearbeiten; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Internal error: a learned value is not a finite number."
+msgstr "Interner Fehler: Ein gelernter Wert ist keine endliche Zahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The lower quantile must be smaller than the upper quantile."
+msgstr "Das untere Quantil muss kleiner als das obere sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Removed {0} ({1}) with outliers in {2} ({3})."
+msgstr "{0} ({1}) mit Ausreißern in {2} entfernt ({3})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No outliers in {0} ({1})."
+msgstr "Keine Ausreißer in {0} ({1})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No values to clip in {0} ({1})."
+msgstr "Keine Werte zum Begrenzen in {0} ({1})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"There is already a column '{0}'. Rename or drop it first, or choose another name."
+msgstr ""
+"Es gibt bereits eine Spalte '{0}'. Benennen Sie sie zuerst um oder entfernen Sie sie, oder wählen Sie einen anderen Namen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Internal error: a new column does not match the number of rows."
+msgstr "Interner Fehler: Eine neue Spalte passt nicht zur Anzahl der Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No outliers in {0} ({1}); no rows removed."
+msgstr "Keine Ausreißer in {0} ({1}); keine Zeilen entfernt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Clipped {0} in {1} to the bounds ({2})."
+msgstr "{0} in {1} auf die Grenzen begrenzt ({2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Rows were also removed from the validation and test data, so the evaluation no longer shows how the model does on unusual values."
+msgstr ""
+"Es wurden auch Zeilen aus den Validierungs- und Testdaten entfernt, daher zeigt die Auswertung nicht mehr, wie sich das Modell bei ungewöhnlichen Werten verhält."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Set {0} in {1} to missing ({2})."
+msgstr "{0} in {1} auf fehlend gesetzt ({2})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Enter a lower bound, an upper bound or both."
+msgstr "Geben Sie eine untere Grenze, eine obere Grenze oder beide ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The lower bound must not be larger than the upper bound."
+msgstr "Die untere Grenze darf nicht größer als die obere sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No row has a {0}; nothing removed."
+msgstr "Keine Zeile hat {0}; nichts entfernt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Found {0} of near twins ({1} rows each, {2} rows in all) on {3}, NN ratio < {4}{5}; every other row is its own group. '{6}' numbers the groups: keep them together in Target & split."
+msgstr ""
+"{0} fast gleicher Zeilen gefunden (je {1} Zeilen, insgesamt {2} Zeilen) anhand von {3}, NN-Verhältnis < {4}{5}; jede andere Zeile ist ihre eigene Gruppe. '{6}' nummeriert die Gruppen: Halten Sie sie unter Zielspalte & Aufteilung zusammen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every row would be removed. Choose another threshold."
+msgstr "Jede Zeile würde entfernt. Wählen Sie einen anderen Schwellenwert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This removes {0} of the rows. Check the threshold in Analysis → Rows."
+msgstr ""
+"Das entfernt {0} der Zeilen. Prüfen Sie den Schwellenwert unter Analyse → Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Finding near twins compares every row with every other row; this works for up to {0} rows with {1} ({2} here). Use fewer columns, or an existing column (e.g. a person id) for the groups."
+msgstr ""
+"Die Suche nach fast gleichen Zeilen vergleicht jede Zeile mit jeder anderen; das funktioniert für bis zu {0} Zeilen mit {1} (hier {2}). Verwenden Sie weniger Spalten oder eine vorhandene Spalte (z. B. eine Personen-ID) für die Gruppen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No clear valley between rows with a near twin and the others, so every row is its own group. Look at the NN ratios in Analysis → Rows and enter a threshold."
+msgstr ""
+"Kein klares Tal zwischen Zeilen mit fast gleichem Zwilling und den übrigen, daher ist jede Zeile ihre eigene Gruppe. Sehen Sie sich die NN-Verhältnisse unter Analyse → Zeilen an und geben Sie einen Schwellenwert ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No two rows are near twins (NN ratio < {0}) on {1}; every row is its own group in '{2}'."
+msgstr ""
+"Keine zwei Zeilen sind fast gleich (NN-Verhältnis < {0}) anhand von {1}; jede Zeile ist ihre eigene Gruppe in '{2}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Every row is its own group in '{0}' (no near twins found)."
+msgstr ""
+"Jede Zeile ist ihre eigene Gruppe in '{0}' (keine fast gleichen Zeilen gefunden)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "This would remove every row."
+msgstr "Das würde jede Zeile entfernen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No row {0}; nothing removed."
+msgstr "Keine Zeile {0}; nichts entfernt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No clear cluster of {0} rows found on {1}; nothing removed. Enter a spread threshold to remove rows anyway."
+msgstr ""
+"Kein klarer Cluster von {0} Zeilen anhand von {1} gefunden; nichts entfernt. Geben Sie einen Schwellenwert der Streuung ein, um trotzdem Zeilen zu entfernen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The largest group has {0} rows: the threshold may link rows that are not near twins (or many rows are nearly identical)."
+msgstr ""
+"Die größte Gruppe hat {0} Zeilen: Der Schwellenwert verbindet vielleicht Zeilen, die nicht fast gleich sind (oder viele Zeilen sind nahezu identisch)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Values: add at least one value."
+msgstr "Werte: Fügen Sie mindestens einen Wert hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Row numbers: add at least one row number."
+msgstr "Zeilennummern: Fügen Sie mindestens eine Zeilennummer hinzu."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Row numbers: '{0}' is not a whole number."
+msgstr "Zeilennummern: '{0}' ist keine ganze Zahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Row numbers: there is no row {0} (the rows are numbered 0 to {1} here)."
+msgstr ""
+"Zeilennummern: Es gibt keine Zeile {0} (die Zeilen sind hier von 0 bis {1} nummeriert)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Removed {0}{1}, {2} of the rows."
+msgstr "{0}{1} entfernt, {2} der Zeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Kept {0} of {1} rows where {2} (removed {3})."
+msgstr "{0} von {1} Zeilen behalten, bei denen {2} (entfernt: {3})."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No duplicate rows found."
+msgstr "Keine doppelten Zeilen gefunden."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"“contains” works on text and category columns; '{0}' holds {1} values."
+msgstr ""
+"„enthält“ funktioniert für Text- und Kategoriespalten; '{0}' enthält {1} Werte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' holds text; use equals, does not equal, is one of or contains."
+msgstr ""
+"'{0}' enthält Text; verwenden Sie „gleich ist“, „ungleich ist“, „einer von ist“ oder „enthält“."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"No row meets the condition ({0}); the filter would remove all {1} rows."
+msgstr ""
+"Keine Zeile erfüllt die Bedingung ({0}); der Filter würde alle {1} Zeilen entfernen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no columns; nothing changed."
+msgstr "Es gibt keine Spalten; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Every row has {0}, so no row would be left. Choose fewer columns or fill the missing values first."
+msgstr ""
+"Jede Zeile hat {0}, daher bliebe keine Zeile übrig. Wählen Sie weniger Spalten oder füllen Sie zuerst die fehlenden Werte auf."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No row has {0}; nothing removed."
+msgstr "Keine Zeile hat {0}; nichts entfernt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Value: enter a value to compare with."
+msgstr "Wert: Geben Sie einen Vergleichswert ein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Value: the first value must not be larger than the second."
+msgstr "Wert: Der erste Wert darf nicht größer als der zweite sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Fewer than two number features vary: there is nothing to compare."
+msgstr ""
+"Weniger als zwei Zahlenmerkmale variieren: Es gibt nichts zu vergleichen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "There are no feature columns; nothing changed."
+msgstr "Es gibt keine Merkmalsspalten; nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Selecting by association with the target needs a target. Choose the target column under 'Target & split' first."
+msgstr ""
+"Die Auswahl nach Zusammenhang mit der Zielspalte braucht eine Zielspalte. Wählen Sie die Zielspalte zuerst unter „Zielspalte & Aufteilung“."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The classes are already balanced ({0} each); nothing changed."
+msgstr "Die Klassen sind bereits ausgeglichen (je {0}); nichts geändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Oversampled the training rows to {0} per class: added {1} of rows of {2}."
+msgstr ""
+"Trainingszeilen auf {0} pro Klasse überabgetastet (Oversampling): {1} von Zeilen von {2} hinzugefügt."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Undersampled the training rows to {0} per class: removed {1} ({2} of the training rows)."
+msgstr ""
+"Trainingszeilen auf {0} pro Klasse unterabgetastet (Undersampling): {1} entfernt ({2} der Trainingszeilen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "The training rows have only one class of '{0}'."
+msgstr "Die Trainingszeilen haben nur eine Klasse von '{0}'."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Training rows without a target value ({0}) were left as they are."
+msgstr "Trainingszeilen ohne Zielwert ({0}) blieben unverändert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Oversampling would add {0} rows. Undersample instead, or merge small classes first."
+msgstr ""
+"Oversampling würde {0} Zeilen hinzufügen. Verwenden Sie stattdessen Undersampling oder fassen Sie zuerst kleine Klassen zusammen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"More than half of the training rows were removed; oversampling keeps all of them."
+msgstr ""
+"Mehr als die Hälfte der Trainingszeilen wurde entfernt; Oversampling behält alle."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Standardised {{cols}} (mean 0, standard deviation 1 on the training rows)."
+msgstr ""
+"{{cols}} standardisiert (Mittelwert 0, Standardabweichung 1 auf den Trainingszeilen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Scaled {{cols}} to {{low}} … {{high}} (minimum and maximum of the training rows)."
+msgstr ""
+"{{cols}} auf {{low}} … {{high}} skaliert (Minimum und Maximum der Trainingszeilen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Scaled {{cols}} robustly (median 0, IQR 1 on the training rows)."
+msgstr "{{cols}} robust skaliert (Median 0, IQR 1 auf den Trainingszeilen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Scaled {{cols}} to -1 … 1 by the largest absolute value in the training rows."
+msgstr ""
+"{{cols}} mit dem größten Betrag in den Trainingszeilen auf -1 … 1 skaliert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The square root is not defined for {{count}} < 0 in '{{column}}'. Use Yeo-Johnson instead."
+msgstr ""
+"Die Quadratwurzel ist für {{count}} < 0 in '{{column}}' nicht definiert. Verwenden Sie stattdessen Yeo-Johnson."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Squaring overflows for {{count}} in '{{column}}'. Scale the column first."
+msgstr ""
+"Das Quadrieren läuft für {{count}} in '{{column}}' über. Skalieren Sie die Spalte zuerst."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "1 / x is not defined for {{count}} equal to 0 in '{{column}}'."
+msgstr "1 / x ist für {{count}} gleich 0 in '{{column}}' nicht definiert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Yeo-Johnson (λ from the training rows)"
+msgstr "Yeo-Johnson (λ aus den Trainingszeilen)"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Box-Cox (λ from the training rows)"
+msgstr "Box-Cox (λ aus den Trainingszeilen)"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Box-Cox needs positive values, but '{{column}}' has {{count}} ≤ 0. Use Yeo-Johnson instead."
+msgstr ""
+"Box-Cox braucht positive Werte, aber '{{column}}' hat {{count}} ≤ 0. Verwenden Sie stattdessen Yeo-Johnson."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Mapped {0} to {1} by their rank in the training rows."
+msgstr "{0} anhand ihres Rangs in den Trainingszeilen auf {1} abgebildet."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Cut points: enter at least one, e.g. 18, 30, 65."
+msgstr "Grenzen: Geben Sie mindestens eine ein, z. B. 18, 30, 65."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Range: the lower end must be smaller than the upper end."
+msgstr "Bereich: Das untere Ende muss kleiner als das obere sein."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "No spread in the training rows of {0}; only shifted."
+msgstr "Keine Streuung in den Trainingszeilen von {0}; nur verschoben."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Columns: choose at least one column."
+msgstr "Spalten: Wählen Sie mindestens eine Spalte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Cut points: '{0}' is not a number."
+msgstr "Grenzen: '{0}' ist keine Zahl."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' has no values in the training rows."
+msgstr "'{0}' hat in den Trainingszeilen keine Werte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Only {0} bins instead of {1}: '{2}' has too few different values in the training rows."
+msgstr ""
+"Nur {0} Klassen statt {1}: '{2}' hat in den Trainingszeilen zu wenige verschiedene Werte."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "'{0}' has fewer than two different training values; left unchanged."
+msgstr "'{0}' hat weniger als zwei verschiedene Trainingswerte; unverändert."

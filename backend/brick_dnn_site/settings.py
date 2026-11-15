@@ -356,7 +356,8 @@ REST_FRAMEWORK = {
     # Number of reverse proxies in front of Django (1 with the bundled nginx). Rate limits
     # then use the address added by the proxy instead of a client-supplied X-Forwarded-For.
     "NUM_PROXIES": int(os.environ.get("BRICKDNN_NUM_PROXIES", "0")),
-    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
+    # JSON, with the messages of the brickdnn package in the request's language (messages.py).
+    "DEFAULT_RENDERER_CLASSES": ["brick_dnn_core.messages.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",

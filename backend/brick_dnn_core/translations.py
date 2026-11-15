@@ -6,7 +6,9 @@ Sources:
 - calls of ``gettext``/``_``, ``gettext_lazy``, ``ngettext`` and ``pgettext`` with literal
   strings in the Python files of ``brick_dnn_core`` (found with :mod:`ast`);
 - ``{% translate "…" %}`` in the e-mail templates;
-- the texts of the layer and step catalogues and the training options (catalog.py).
+- the texts of the layer and step catalogues and the training options (catalog.py);
+- the message templates of the ``brickdnn`` package (messages.py), with the context
+  ``brickdnn``.
 """
 
 from __future__ import annotations
@@ -96,7 +98,17 @@ def collect() -> list[Message]:
     # The e-mails; the admin pages use Django's own translations.
     for path in sorted((APP_DIR / "templates" / "brick_dnn_core" / "email").rglob("*.*")):
         messages.extend(template_messages(path))
-    messages.extend(Message(text, where="catalog") for text in catalog.catalog_texts())
+    catalog_texts = catalog.catalog_texts()
+    messages.extend(Message(text, where="catalog") for text in catalog_texts)
+    # Messages the brickdnn package builds from data (messages.py), unless the catalogue has them.
+    from . import messages as package_messages
+
+    known = set(catalog_texts)
+    messages.extend(
+        Message(template, context=package_messages.CONTEXT, where="brickdnn")
+        for template in package_messages.templates()
+        if template not in known
+    )
     unique: dict[tuple[str | None, str], Message] = {}
     for message in messages:
         unique.setdefault((message.context, message.msgid), message)
