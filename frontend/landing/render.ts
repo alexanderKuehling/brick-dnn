@@ -392,6 +392,7 @@ ${section(
 <li><a href="/privacy">${escapeHtml(legal.privacy)}</a></li>
 <li><a href="/terms">${escapeHtml(legal.terms)}</a></li>
 <li><a href="/refund">${escapeHtml(legal.refund)}</a></li>
+<li><a href="/accessibility">${escapeHtml(legal.accessibility)}</a></li>
 </ul>${c.footer.legalNote ? `<p class="note">${escapeHtml(c.footer.legalNote)}</p>` : ''}</nav>
 <ul class="links">
 <li><a href="${REPOSITORY_URL}">${escapeHtml(c.footer.source)}</a></li>

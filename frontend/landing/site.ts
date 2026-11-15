@@ -21,7 +21,14 @@ export type Lang = 'en' | 'de';
 export const PAGE_PATHS: Record<Lang, string> = { en: '/', de: '/de/' };
 
 /** Pages of the React app that the landing pages link to and the sitemap lists. */
-export const APP_PAGES = ['/pricing', '/imprint', '/privacy', '/terms', '/refund'] as const;
+export const APP_PAGES = [
+  '/pricing',
+  '/imprint',
+  '/privacy',
+  '/terms',
+  '/refund',
+  '/accessibility',
+] as const;
 
 export interface PlanFacts {
   key: string;
