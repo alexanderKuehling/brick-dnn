@@ -489,7 +489,7 @@ My name is Alexander Kühling and I am an MSc Computer Science student at ETHZ. 
 
 However, due to other commitments (school, university, other projects, etc.), I never had the time to finish it. However, as coding agents have improved, I have had the opportunity to complete the project in a reasonable amount of time. I'm now glad to be able to share the working code with you.
 
-If you have any feedback or would like to request additional features, you can either email me at alexander.kuehling@gmx.net or create a GH issue. I hope I can help you save time or get started on a deep learning project you've always wanted to do, but could never find the time to write the code for.
+If you have any feedback or would like to request additional features, you can either email me at alexander.kuehling@brickdnn.com or create a GH issue. I hope I can help you save time or get started on a deep learning project you've always wanted to do, but could never find the time to write the code for.
 
 Have fun!
 

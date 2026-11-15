@@ -1,11 +1,11 @@
 # Datenschutzerklärung
 
-Stand: 13. November 2026
+Stand: 15. November 2026
 
 ## 1. Verantwortlicher
 
 Alexander Kühling
-E-Mail: alexander.kuehling@gmx.net
+E-Mail: alexander.kuehling@brickdnn.com
 
 Anschrift: siehe [Impressum](/imprint).
 
@@ -124,7 +124,7 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 
 Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21).
 
-Vieles können Sie selbst unter **Account** erledigen: E-Mail-Adresse ändern, **alle Ihre Daten als ZIP-Datei herunterladen** (maschinenlesbar, JSON und Ihre Dateien) und das **Konto löschen**. Für alles andere schreiben Sie an alexander.kuehling@gmx.net.
+Vieles können Sie selbst unter **Account** erledigen: E-Mail-Adresse ändern, **alle Ihre Daten als ZIP-Datei herunterladen** (maschinenlesbar, JSON und Ihre Dateien) und das **Konto löschen**. Für alles andere schreiben Sie an alexander.kuehling@brickdnn.com.
 
 Sie haben außerdem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren (Art. 77 DSGVO), insbesondere in dem Mitgliedstaat Ihres Aufenthaltsorts, Ihres Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes.
 
