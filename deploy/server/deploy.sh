@@ -5,21 +5,18 @@
 #
 #   ssh deploy@SERVER <full commit sha>
 #
-# The same works by hand, e.g. to go back to an older commit of main.
+# The same works by hand, e.g. to go back to an older commit of main. Before that, the workflow
+# asks which settings this copy takes (`ssh deploy@SERVER settings-names`, below).
 set -euo pipefail
 
 APP=/opt/brick-dnn
-SHA="${SSH_ORIGINAL_COMMAND:-${1:-}}"
-if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Usage: ssh deploy@SERVER <full commit sha of main>" >&2
-  exit 2
-fi
 
 # Settings from GitHub. The *Deploy server* workflow sends the repository variables and secrets
 # that are set on stdin: a line "brickdnn-settings 1", then one line NAME=<value in base64> each.
 # Only the names below are taken, anything else stops the deploy before something changes. They
 # replace the same names in .env; a name that is not sent keeps its value there. By hand
 # (ssh -n, or brickdnn-deploy on the server) nothing is sent and .env stays as it is.
+# SENTRY_AUTH_TOKEN is only used while the frontend image is built (docs/monitoring.md).
 SETTINGS_FROM_GITHUB=(
   BRICKDNN_PADDLE_ENV BRICKDNN_PADDLE_CLIENT_TOKEN BRICKDNN_PADDLE_PRICES
   BRICKDNN_PADDLE_OVERAGE_PRODUCT BRICKDNN_PADDLE_API_KEY BRICKDNN_PADDLE_WEBHOOK_SECRET
@@ -27,8 +24,23 @@ SETTINGS_FROM_GITHUB=(
   BRICKDNN_EMAIL_FROM BRICKDNN_EMAIL_REPLY_TO BRICKDNN_ADMIN_EMAIL BRICKDNN_PUBLIC_URL
   BRICKDNN_REQUIRE_2FA_FOR_STAFF
   BRICKDNN_SENTRY_DSN BRICKDNN_SENTRY_FRONTEND_DSN BRICKDNN_SENTRY_ENVIRONMENT
-  BRICKDNN_SENTRY_TRACES_SAMPLE_RATE
+  BRICKDNN_SENTRY_TRACES_SAMPLE_RATE SENTRY_AUTH_TOKEN
 )
+
+SHA="${SSH_ORIGINAL_COMMAND:-${1:-}}"
+# `ssh deploy@SERVER settings-names` prints the names above, so that the workflow only sends
+# names this copy of the script takes (older copies answer with the usage line below).
+if [ "$SHA" = "settings-names" ]; then
+  echo "brickdnn-settings-names 1"
+  echo "${SETTINGS_FROM_GITHUB[*]}"
+  exit 0
+fi
+if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Usage: ssh deploy@SERVER <full commit sha of main>" >&2
+  echo "       ssh deploy@SERVER settings-names" >&2
+  exit 2
+fi
+
 declare -A settings=()
 if [ ! -t 0 ] && IFS= read -r -t 10 header && [ "$header" = "brickdnn-settings 1" ]; then
   while IFS= read -r -t 10 line; do
