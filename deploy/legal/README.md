@@ -12,6 +12,7 @@ Hintergründe (auf Englisch) stehen in [docs/privacy.md](../../docs/privacy.md).
 | `privacy.example.md`   | `privacy.md`         | `/privacy` |
 | `terms.example.md`     | `terms.md`           | `/terms`   |
 | –                      | `refund.md`          | `/refund`  |
+| –                      | `accessibility.md`   | `/accessibility` |
 
 ## So kommen die Texte auf den Server
 

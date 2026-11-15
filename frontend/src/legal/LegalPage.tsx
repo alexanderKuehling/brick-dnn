@@ -14,7 +14,10 @@ type State =
   | { status: 'missing' }
   | { status: 'error'; message: string };
 
-/** /imprint, /privacy, /terms and /refund: Markdown files the operator put on the server. */
+/**
+ * /imprint, /privacy, /terms, /refund and /accessibility: Markdown files the operator put on
+ * the server.
+ */
 export function LegalPage({ page }: { page: LegalPageName }) {
   const { t } = useTranslation();
   const language = useLanguage();

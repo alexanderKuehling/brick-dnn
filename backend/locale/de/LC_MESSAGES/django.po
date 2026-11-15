@@ -30,23 +30,27 @@ msgstr "Das Passwort ist falsch."
 msgid "Type your username exactly to confirm."
 msgstr "Geben Sie zur Bestätigung Ihren Benutzernamen genau so ein."
 
-#: brick_dnn_core/legal.py:34
+#: brick_dnn_core/legal.py:35
 msgid "Imprint"
 msgstr "Impressum"
 
-#: brick_dnn_core/legal.py:35
+#: brick_dnn_core/legal.py:36
 msgid "Privacy policy"
 msgstr "Datenschutzerklärung"
 
-#: brick_dnn_core/legal.py:36
+#: brick_dnn_core/legal.py:37
 msgid "Terms of use"
 msgstr "Nutzungsbedingungen"
 
-#: brick_dnn_core/legal.py:37
+#: brick_dnn_core/legal.py:38
 msgid "Refund policy"
 msgstr "Erstattung"
 
-#: brick_dnn_core/legal.py:147
+#: brick_dnn_core/legal.py:40
+msgid "Accessibility statement"
+msgstr "Erklärung zur Barrierefreiheit"
+
+#: brick_dnn_core/legal.py:150
 msgid "This page has not been set up on this server."
 msgstr "Diese Seite ist auf diesem Server nicht eingerichtet."
 

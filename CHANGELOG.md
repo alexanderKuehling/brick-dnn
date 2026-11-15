@@ -3,6 +3,21 @@
 ## Unreleased
 
 ### Added
+- **Accessibility (WCAG 2.2 AA as the aim) and an accessibility statement.** Networks can be
+  built with the keyboard alone: the palette is one Tab stop with arrow keys (Enter adds a
+  layer, Enter in the search the first match); layers and connections on the canvas have
+  names and descriptions in the app's language and are selected with Enter, moved with the
+  arrow keys and removed with Delete, the focus staying on the canvas; the properties panel
+  has a *Connections* section to add and remove inputs and outputs without dragging, and the
+  model summary lists all layers with their inputs. A polite live region says what an action
+  changed. Every page has a skip link, a `nav` landmark, its own window title (announced
+  after a navigation) and a visible focus ring in both themes. New page `/accessibility`
+  (`accessibility.md` in the legal folder, backend page `accessibility`), linked with the
+  other legal pages; brickdnn.com's statement says *teilweise barrierefrei* with the known
+  limits and assumes the BFSG's micro-enterprise exemption. Tests run axe-core on the main
+  pages and components in both languages (`test-utils/axe.ts`) and the editor with the
+  keyboard; `frontend/scripts/axe-smoke.mjs` checks a running app in Chromium (not in CI).
+  See docs/accessibility.md.
 - **The app in German.** The language comes from the browser (German for `de*`, otherwise
   English) and can be switched with *EN | DE* in the header, the phone menu and on the login
   and sign-up pages; the choice is kept in the browser and, when logged in, on the account
@@ -303,6 +318,15 @@
   the charts and metrics.
 
 ### Changed
+- **Contrast and focus for WCAG AA.** Dimmed text, coloured text, outline buttons, light
+  badges and red buttons use darker shades in the light theme (and dimmed text and links
+  lighter ones in the dark theme) so that they reach 4.5:1; filled badges choose black or
+  white text; links in text are underlined; the focus ring has 3:1 in both themes. Notifications
+  are read out politely (`role="status"`). Sign-up errors are shown at their field and focus
+  it. Dialogs return the focus to the button that opened them. With "reduce motion" in the
+  system, transitions and animations are off. The editor's status badge is a button.
+  Accessible names that did not contain the visible text (legal links, account menu, budget
+  buttons, readiness tab) were fixed, and the training panel's close button got a name.
 - **Validation and test data are optional.** In the Data tab (*Target & split*) the validation
   and the test share may each be 0 % (both 0: every row is a training row); the split bar shows
   an empty part as *none*, a note explains the consequences, and the readiness check no longer

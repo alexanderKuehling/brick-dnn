@@ -70,7 +70,13 @@ export interface LandingContent {
     tagline: string;
     /** The name of the legal links' navigation. */
     legalLabel: string;
-    legal: { imprint: string; privacy: string; terms: string; refund: string };
+    legal: {
+      imprint: string;
+      privacy: string;
+      terms: string;
+      refund: string;
+      accessibility: string;
+    };
     /** A line under the legal links if they are in another language (empty: none). */
     legalNote: string;
     source: string;

@@ -14,7 +14,7 @@ import {
   type MantineThemeOverride,
 } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
-import { theme } from '@/theme';
+import { cssVariablesResolver, theme } from '@/theme';
 import { useLanguage, useTranslation, type Language } from './index';
 
 export function numberSeparators(language: Language): {
@@ -43,7 +43,7 @@ export function LocalizedMantineProvider({
   const language = useLanguage();
   const localized = useMemo(() => localizedTheme(language), [language]);
   return (
-    <MantineProvider theme={localized} {...props}>
+    <MantineProvider theme={localized} cssVariablesResolver={cssVariablesResolver} {...props}>
       {children}
     </MantineProvider>
   );

@@ -70,7 +70,7 @@ export function LineChart({
   series,
   xDomain,
   yBounds,
-  xLabel = 'Epoch',
+  xLabel = i18n.t('a11y.charts.epoch'),
   formatValue = defaultFormat,
   formatYTick = formatTick,
   height = 190,
@@ -142,7 +142,7 @@ export function LineChart({
     `${xLabel} ${x[index]}: ${series
       .map((s) => {
         const value = s.values[index];
-        return `${s.label} ${typeof value === 'number' ? formatValue(value) : 'no value'}`;
+        return `${s.label} ${typeof value === 'number' ? formatValue(value) : i18n.t('a11y.charts.noValue')}`;
       })
       .join(', ')}`;
 

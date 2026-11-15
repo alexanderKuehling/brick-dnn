@@ -53,6 +53,7 @@ Put Markdown files into `BRICKDNN_LEGAL_DIR`:
 | `privacy.md` | `/privacy` | privacy policy |
 | `terms.md`   | `/terms`   | terms of use; sign-up then asks to accept them |
 | `refund.md`  | `/refund`  | refund policy for paid plans (payment providers such as Paddle look for it by name) |
+| `accessibility.md` | `/accessibility` | accessibility statement (Erklärung zur Barrierefreiheit, see [accessibility.md](accessibility.md)) |
 
 | Setup | `BRICKDNN_LEGAL_DIR` | How to put the files there |
 | ----- | -------------------- | -------------------------- |

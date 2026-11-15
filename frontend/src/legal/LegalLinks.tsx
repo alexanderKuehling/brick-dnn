@@ -4,8 +4,10 @@ import { useTranslation } from '@/i18n';
 import { legalPages, useLegalInfo } from './useLegalInfo';
 import classes from './Legal.module.css';
 
-/** "Imprint · Privacy · Terms · Refunds · Contact": the legal pages this server has (nothing if
- * it has none). Contact leads to the imprint, which has the operator's address. */
+/** "Imprint · Privacy · Terms · Refunds · Accessibility · Contact": the legal pages this server
+ * has (nothing if it has none). Contact leads to the imprint, which has the operator's address.
+ * The links say their short name (the full one is their title): an accessible name that
+ * differs from the visible text confuses speech input (WCAG 2.5.3). */
 export function LegalLinks({ mt }: { mt?: string | number }) {
   const { t } = useTranslation();
   const pages = legalPages(useLegalInfo());
@@ -22,7 +24,8 @@ export function LegalLinks({ mt }: { mt?: string | number }) {
               to={`/${page}`}
               c="dimmed"
               size="xs"
-              aria-label={t(`legal.labels.${page}`)}
+              underline="hover"
+              title={t(`legal.labels.${page}`)}
             >
               {t(`legal.short.${page}`)}
             </Anchor>
@@ -30,7 +33,7 @@ export function LegalLinks({ mt }: { mt?: string | number }) {
         ))}
         {pages.includes('imprint') && (
           <li>
-            <Anchor component={Link} to="/imprint" c="dimmed" size="xs">
+            <Anchor component={Link} to="/imprint" c="dimmed" size="xs" underline="hover">
               {t('legal.contact')}
             </Anchor>
           </li>

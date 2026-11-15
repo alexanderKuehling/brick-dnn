@@ -112,13 +112,18 @@ function Status({
   if (analysis.valid) {
     const count = networkSize(analysis);
     return (
+      // A button: it opens the model summary (keyboard too). While the network is checked
+      // again a spinner replaces the icon (dimming the badge made its text too faint).
       <Badge
+        component="button"
+        type="button"
         color="green"
         variant="light"
-        leftSection={<IconCircleCheck size={12} />}
+        leftSection={analyzing ? <Loader size={10} color="green" /> : <IconCircleCheck size={12} />}
         tt="none"
-        style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
+        style={{ cursor: 'pointer', flexShrink: 0 }}
         onClick={onShowSummary}
+        aria-busy={analyzing || undefined}
         data-tour="status"
       >
         {/* Phones keep the space for the network name: the check says it is valid. */}
@@ -132,11 +137,15 @@ function Status({
   const count = analysis.errors.length;
   return (
     <Badge
+      component="button"
+      type="button"
       color="red"
       variant="light"
+      leftSection={analyzing ? <Loader size={10} color="red" /> : undefined}
       tt="none"
-      style={{ cursor: 'pointer', flexShrink: 0, opacity: analyzing ? 0.6 : 1 }}
+      style={{ cursor: 'pointer', flexShrink: 0 }}
       onClick={onShowSummary}
+      aria-busy={analyzing || undefined}
       data-tour="status"
     >
       {t('builder.toolbar.problems', { count })}

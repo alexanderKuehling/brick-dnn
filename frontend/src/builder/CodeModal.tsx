@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
 import { api, type GenerateOptions, type GraphDocument, type NetworkFamily } from '@/api';
+import { useReturnFocus } from '@/components/useReturnFocus';
 import { i18n, useTranslation } from '@/i18n';
 import { CodeView } from './CodeView';
 import { downloadText } from './download';
@@ -44,6 +45,8 @@ export default function CodeModal({
   onOptionsChange,
   family = 'neural',
 }: CodeModalProps) {
+  // The builder removes the dialog when it closes: the focus goes back to the Code button.
+  useReturnFocus();
   const { t } = useTranslation();
   const classical = family === 'classical';
   const hybrid = family === 'hybrid';

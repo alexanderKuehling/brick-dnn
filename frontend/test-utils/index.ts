@@ -4,3 +4,4 @@ export * from '@testing-library/react';
 export { render } from './render';
 export { userEvent };
 export { FakeWebSocket } from './fakeWebSocket';
+export { axeViolations } from './axe';

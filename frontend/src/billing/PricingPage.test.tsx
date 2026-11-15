@@ -88,7 +88,7 @@ beforeEach(() => {
   resetBillingInfo();
   setTokens(null);
   vi.mocked(api.legal.info).mockResolvedValue({
-    pages: { imprint: true, privacy: true, terms: true, refund: false },
+    pages: { imprint: true, privacy: true, terms: true, refund: false, accessibility: false },
     terms_version: 'a',
     privacy_version: 'b',
     accept_terms_required: true,
@@ -150,8 +150,8 @@ test('shows the plans with prices, what they include and the overage price', asy
   expect(screen.getByText(/Nothing is deleted when a plan ends/)).toBeInTheDocument();
   expect(screen.queryByText('Test mode')).not.toBeInTheDocument();
   // The terms and the privacy policy are one click away.
-  expect(screen.getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
-  expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', '/privacy');
+  expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
+  expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
   // Looking at prices loads nothing from Paddle.
   expect(paddleScripts()).toHaveLength(0);
   expect(openCheckout).not.toHaveBeenCalled();

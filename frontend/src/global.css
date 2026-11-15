@@ -156,3 +156,90 @@ html {
     max-height: 14px;
   }
 }
+
+/* ---- accessibility (docs/accessibility.md) -------------------------------- */
+
+/*
+ * The keyboard focus ring. Mantine draws it in the filled primary colour, which in the dark
+ * theme (brick-8 on dark-7) has only 1.6:1; this one has 3:1 or more on every surface of the
+ * app in both themes (WCAG 1.4.11, 2.4.7).
+ */
+body {
+  --app-focus-ring: light-dark(var(--mantine-color-brick-6), var(--mantine-color-brick-3));
+}
+
+.mantine-focus-auto:focus-visible,
+.mantine-focus-always:focus,
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Layers on the canvas: React Flow removes the outline of focused nodes. */
+.react-flow__node:focus-visible {
+  outline: none;
+}
+
+.react-flow__node:focus-visible > * {
+  outline: 2px dashed var(--app-focus-ring);
+  outline-offset: 4px;
+}
+
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: var(--app-focus-ring);
+  stroke-width: 3;
+}
+
+/* The canvas's zoom buttons: React Flow gives them no focus ring. */
+.react-flow__controls-button:focus-visible {
+  outline: 2px solid var(--app-focus-ring);
+  outline-offset: -2px;
+}
+
+/* "Skip to content": hidden until it gets the keyboard focus (WCAG 2.4.1). */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10000;
+  padding: 8px 14px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  font-weight: 600;
+  box-shadow: var(--mantine-shadow-md);
+  transform: translateY(-200%);
+
+  &:focus-visible {
+    transform: none;
+  }
+}
+
+/* Text that phones only read out (e.g. the name next to the avatar in the header). */
+@media (max-width: 35.99em) {
+  .sr-only-below-xs {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* The main region gets the focus from the skip link; it needs no ring of its own. */
+#main:focus {
+  outline: none;
+}
+
+/* Less motion when the system asks for it (WCAG 2.3.3): no animations and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,4 +1,5 @@
-"""Imprint, privacy policy and terms of use: Markdown files the operator puts on the server.
+"""Imprint, privacy policy, terms of use, refund policy and accessibility statement: Markdown
+files the operator puts on the server.
 
 The files live in ``settings.LEGAL_DIR`` (``BRICKDNN_LEGAL_DIR``, by default ``legal/`` in the
 data directory) and are read on every request, so a changed file is online at once. It can name
@@ -35,6 +36,8 @@ PAGES = {
     "privacy": gettext_lazy("Privacy policy"),
     "terms": gettext_lazy("Terms of use"),
     "refund": gettext_lazy("Refund policy"),
+    # How accessible the service is (docs/accessibility.md).
+    "accessibility": gettext_lazy("Accessibility statement"),
 }
 # Larger files are ignored (and logged): legal texts are a few dozen kilobytes.
 MAX_BYTES = 512 * 1024

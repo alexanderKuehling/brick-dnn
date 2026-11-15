@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -11,11 +11,16 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { fieldError } from '@/account/fieldError';
 import { useAuth } from '@/auth/AuthContext';
 import { Trans, useTranslation } from '@/i18n';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { AuthLayout } from './AuthLayout';
 import type { ReturnTo } from './LoginPage';
+
+/** The fields the API names in its errors, in the order of the form. */
+const FIELDS = ['username', 'email', 'password'] as const;
+type Field = (typeof FIELDS)[number];
 
 export function RegisterPage() {
   const { t } = useTranslation();
@@ -28,6 +33,10 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Errors of single fields: shown at the field and linked to it (aria-describedby), and the
+  // first one gets the focus, so that a screen reader reads it with the field.
+  const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const inputs = useRef<Partial<Record<Field, HTMLInputElement | null>>>({});
   const [busy, setBusy] = useState(false);
   const legal = useLegalInfo();
   const termsRequired = Boolean(legal?.accept_terms_required);
@@ -40,11 +49,21 @@ export function RegisterPage() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setErrors({});
     try {
       await register(username.trim(), email.trim(), password, termsRequired && accepted);
       navigate(from, { replace: true, state: returnState });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.register.failed'));
+      const found = Object.fromEntries(
+        FIELDS.map((field) => [field, fieldError(err, field)]).filter(([, message]) => message)
+      ) as Partial<Record<Field, string>>;
+      const first = FIELDS.find((field) => found[field]);
+      if (first) {
+        setErrors(found);
+        window.setTimeout(() => inputs.current[first]?.focus(), 0);
+      } else {
+        setError(err instanceof Error ? err.message : t('auth.register.failed'));
+      }
     } finally {
       setBusy(false);
     }
@@ -78,6 +97,10 @@ export function RegisterPage() {
             required
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
+            error={errors.username}
+            ref={(element) => {
+              inputs.current.username = element;
+            }}
           />
           <TextInput
             label={t('auth.email')}
@@ -87,6 +110,10 @@ export function RegisterPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.currentTarget.value)}
+            error={errors.email}
+            ref={(element) => {
+              inputs.current.email = element;
+            }}
           />
           <PasswordInput
             label={t('auth.password')}
@@ -95,6 +122,10 @@ export function RegisterPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
+            error={errors.password}
+            ref={(element) => {
+              inputs.current.password = element;
+            }}
           />
           {termsRequired ? (
             <Checkbox

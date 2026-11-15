@@ -342,7 +342,7 @@ export function UsageSection() {
         </Text>
         <BudgetEditor
           budget={compute.own_budget}
-          label="your account"
+          label={i18n.t('ui.usage.UsageSection.yourAccount')}
           onSave={save}
           description={i18n.t('ui.usage.UsageSection.cpuMinutesPerMonthFor')}
         />

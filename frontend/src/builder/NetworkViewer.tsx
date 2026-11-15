@@ -26,6 +26,7 @@ import {
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import type { GraphDocument } from '@/api';
 import { useTranslation } from '@/i18n';
+import { useCanvasLabels, useLabelledEdges, useLabelledNodes } from './a11y';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { EDGE_DEFAULTS, miniMapColor, nodeTypes, useDecoratedEdges, withEdgeStyle } from './flow';
 import { fromDocument, type LayerFlowNode } from './graph';
@@ -123,6 +124,10 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
     [specs, analysis, focusNode, doc.edges]
   );
 
+  const canvasNodes = useLabelledNodes(nodes, specs, context.errorsByNode);
+  const canvasEdges = useLabelledEdges(edges, nodes, specs);
+  const canvasLabels = useCanvasLabels(true);
+
   if (!catalog) {
     return (
       <Center style={{ flex: 1 }}>
@@ -148,9 +153,11 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
       <Box style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <Box ref={canvasRef} style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           <ReactFlow<LayerFlowNode, Edge>
-            nodes={nodes}
-            edges={edges}
+            nodes={canvasNodes}
+            edges={canvasEdges}
             nodeTypes={nodeTypes}
+            aria-label={t('a11y.canvas.label')}
+            ariaLabelConfig={canvasLabels}
             onNodesChange={onNodesChange}
             nodesDraggable={false}
             nodesConnectable={false}
