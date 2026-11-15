@@ -20,6 +20,7 @@ import {
   type ComboboxLikeRenderOptionInput,
 } from '@mantine/core';
 import type { ColumnInfo, ColumnKind, DataSource, StepParamSpec } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { parseColumnList } from '../analysis/relations';
 import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
@@ -54,6 +55,7 @@ const CODE_PARAMS = ['expression', 'pattern'];
 
 /** One form field of a pipeline step, chosen by the param kind of the step catalog. */
 export function StepParamField(props: StepParamFieldProps) {
+  useTranslation();
   const { param, value, onChange, sources, currentSourceId, params, error } = props;
   // In a preparation of someone else, combine steps name tables the user cannot see.
   const { sharedBy } = usePrepAccess();
@@ -73,7 +75,7 @@ export function StepParamField(props: StepParamFieldProps) {
             description={description}
             data={[]}
             value={[]}
-            placeholder="Choose a table first"
+            placeholder={i18n.t('ui.data.StepParamField.chooseATableFirst')}
             disabled
             error={error}
           />
@@ -86,7 +88,11 @@ export function StepParamField(props: StepParamFieldProps) {
       const others = sources.filter((s) => s.id !== currentSourceId);
       const data = others.map((s) => ({
         value: String(s.id),
-        label: `${s.name} (${formatCount(s.n_rows)} rows × ${s.n_columns} columns)`,
+        label: i18n.t('ui.data.StepParamField.rowsColumns', {
+          name: s.name,
+          n_rows: formatCount(s.n_rows),
+          n_columns: s.n_columns,
+        }),
       }));
       const chosen = value === null || value === undefined || value === '' ? null : String(value);
       let problem: string | null = null;
@@ -98,7 +104,9 @@ export function StepParamField(props: StepParamFieldProps) {
         }
         data.push({
           value: chosen,
-          label: sharedBy ? `A table of ${sharedBy} (#${chosen})` : `Table #${chosen}`,
+          label: sharedBy
+            ? i18n.t('ui.data.StepParamField.aTableOf', { sharedBy, chosen })
+            : i18n.t('ui.data.StepParamField.table', { chosen }),
         });
       }
       return (
@@ -106,10 +114,14 @@ export function StepParamField(props: StepParamFieldProps) {
           label={param.label}
           description={
             others.length === 0
-              ? 'Import another table (a file or a link) to combine it with this one.'
+              ? i18n.t('ui.data.StepParamField.importAnotherTableAFile')
               : description
           }
-          placeholder={others.length === 0 ? 'No other tables' : 'Choose a table'}
+          placeholder={
+            others.length === 0
+              ? i18n.t('ui.data.StepParamField.noOtherTables')
+              : i18n.t('ui.data.StepParamField.chooseATable')
+          }
           data={data}
           value={chosen}
           disabled={others.length === 0 && chosen === null}
@@ -127,7 +139,7 @@ export function StepParamField(props: StepParamFieldProps) {
       const current = value === null || value === undefined ? null : String(value);
       const data = options.map((option) => ({ value: option.value, label: option.label }));
       if (current !== null && !options.some((option) => option.value === current)) {
-        data.push({ value: current, label: `${current} (unknown)` });
+        data.push({ value: current, label: i18n.t('ui.data.StepParamField.unknown', { current }) });
       }
       return (
         <Select
@@ -137,7 +149,7 @@ export function StepParamField(props: StepParamFieldProps) {
           value={current}
           allowDeselect={param.optional}
           clearable={param.optional}
-          placeholder={param.optional ? 'Not set' : undefined}
+          placeholder={param.optional ? i18n.t('ui.data.StepParamField.notSet') : undefined}
           comboboxProps={comboboxProps}
           error={error}
           onChange={(next) => {
@@ -175,7 +187,7 @@ export function StepParamField(props: StepParamFieldProps) {
           label={param.label}
           description={description}
           value={typeof value === 'string' ? value : value == null ? '' : String(value)}
-          placeholder={param.optional ? 'Optional' : undefined}
+          placeholder={param.optional ? i18n.t('ui.data.StepParamField.optional') : undefined}
           styles={
             CODE_PARAMS.includes(param.name)
               ? { input: { fontFamily: 'var(--mantine-font-family-monospace)' } }
@@ -201,7 +213,10 @@ export function StepParamField(props: StepParamFieldProps) {
     default:
       return (
         <Text size="sm" c="red">
-          {param.label}: this setting cannot be edited here (unknown kind “{String(param.kind)}”).
+          {i18n.t('ui.data.StepParamField.thisSettingCannotBeEdited', {
+            label: param.label,
+            String: String(param.kind),
+          })}
         </Text>
       );
   }
@@ -227,6 +242,7 @@ function columnOption(kinds: Map<string, ColumnKind>) {
 }
 
 function ColumnField({ param, value, onChange, columns, error }: StepParamFieldProps) {
+  useTranslation();
   const allowed = allowedColumns(param, columns);
   const kinds = new Map(columns.map((column) => [column.name, column.kind]));
   const data = allowed.map((column) => ({ value: column.name, label: column.name }));
@@ -245,7 +261,7 @@ function ColumnField({ param, value, onChange, columns, error }: StepParamFieldP
       <Select
         label={param.label}
         description={description}
-        placeholder="Choose a column"
+        placeholder={i18n.t('ui.data.StepParamField.chooseAColumn')}
         data={data}
         value={current}
         searchable
@@ -309,6 +325,7 @@ function ColumnsField({
   nothingFound: string;
   error?: string | null;
 }) {
+  useTranslation();
   const [search, setSearch] = useState('');
   const [pasting, setPasting] = useState(false);
   const [pasted, setPasted] = useState('');
@@ -327,10 +344,17 @@ function ColumnsField({
         label={param.label}
         description={
           many
-            ? `${param.help ? `${param.help} ` : ''}${formatCount(selected.length)} columns chosen.`
+            ? i18n.t('ui.data.StepParamField.columnsChosen', {
+                value: param.help ? `${param.help} ` : '',
+                length: formatCount(selected.length),
+              })
             : param.help || undefined
         }
-        placeholder={selected.length === 0 ? (param.empty_means ?? 'Choose columns') : undefined}
+        placeholder={
+          selected.length === 0
+            ? (param.empty_means ?? i18n.t('ui.data.StepParamField.chooseColumns'))
+            : undefined
+        }
         data={data}
         value={selected}
         searchable
@@ -356,7 +380,10 @@ function ColumnsField({
               setSearch('');
             }}
           >
-            Select all {formatCount(newMatches.length)} matching “{search.trim()}”
+            {i18n.t('ui.data.StepParamField.selectAllMatching', {
+              length: formatCount(newMatches.length),
+              search: search.trim(),
+            })}
           </Button>
         )}
         <Button
@@ -368,11 +395,11 @@ function ColumnsField({
             setPasteNote(null);
           }}
         >
-          Paste a list
+          {i18n.t('ui.data.StepParamField.pasteAList')}
         </Button>
         {selected.length > 0 && (
           <Button size="compact-xs" variant="subtle" color="gray" onClick={() => onChange([])}>
-            Clear ({formatCount(selected.length)})
+            {i18n.t('ui.data.StepParamField.clear', { length: formatCount(selected.length) })}
           </Button>
         )}
       </Group>
@@ -380,8 +407,10 @@ function ColumnsField({
         <Stack gap={4}>
           <Textarea
             size="xs"
-            aria-label={`Paste column names for ${param.label}`}
-            placeholder="Column names, separated by commas, spaces or new lines"
+            aria-label={i18n.t('ui.data.StepParamField.pasteColumnNamesFor', {
+              label: param.label,
+            })}
+            placeholder={i18n.t('ui.data.StepParamField.columnNamesSeparatedByCommas')}
             autosize
             minRows={2}
             maxRows={6}
@@ -405,7 +434,7 @@ function ColumnsField({
                 setPasted('');
               }}
             >
-              Add these columns
+              {i18n.t('ui.data.StepParamField.addTheseColumns')}
             </Button>
             <Button
               size="compact-xs"
@@ -416,7 +445,7 @@ function ColumnsField({
                 setPasted('');
               }}
             >
-              Cancel
+              {i18n.t('ui.data.StepParamField.cancel')}
             </Button>
           </Group>
         </Stack>
@@ -476,25 +505,26 @@ function ChipsField({
 
 function numberProblem(param: StepParamSpec, raw: number | string): string | null {
   if (raw === '') {
-    return param.optional ? null : 'Enter a number.';
+    return param.optional ? null : i18n.t('ui.data.StepParamField.enterANumber');
   }
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-    return 'Enter a number.';
+    return i18n.t('ui.data.StepParamField.enterANumber');
   }
   if (param.kind === 'int' && !Number.isInteger(raw)) {
-    return 'Enter a whole number.';
+    return i18n.t('ui.data.StepParamField.enterAWholeNumber');
   }
   if (param.min !== undefined && raw < param.min) {
-    return `Must be at least ${param.min}.`;
+    return i18n.t('ui.data.StepParamField.mustBeAtLeast', { min: param.min });
   }
   if (param.max !== undefined && raw > param.max) {
-    return `Must be at most ${param.max}.`;
+    return i18n.t('ui.data.StepParamField.mustBeAtMost', { max: param.max });
   }
   return null;
 }
 
 /** Keeps unfinished input ("0.", "-") as typed and reports only valid numbers. */
 function NumberField({ param, value, onChange, error }: StepParamFieldProps) {
+  useTranslation();
   const external = typeof value === 'number' ? value : '';
   const [draft, setDraft] = useState<number | string>(external);
   const [synced, setSynced] = useState<number | string>(external);
@@ -521,7 +551,7 @@ function NumberField({ param, value, onChange, error }: StepParamFieldProps) {
       max={param.max}
       step={step}
       allowDecimal={!isInt}
-      placeholder={param.optional ? 'Not set' : undefined}
+      placeholder={param.optional ? i18n.t('ui.data.StepParamField.notSet') : undefined}
       error={error || problem}
       onChange={(raw) => {
         setDraft(raw);
@@ -544,6 +574,7 @@ function NumberField({ param, value, onChange, error }: StepParamFieldProps) {
 // --------------------------------------------------------------------------
 
 function ValueField({ param, value, onChange, error }: StepParamFieldProps) {
+  useTranslation();
   const [draft, setDraft] = useState(() => formatCellValue(value));
   const [synced, setSynced] = useState<unknown>(value);
   if (!Object.is(value, synced)) {
@@ -559,17 +590,19 @@ function ValueField({ param, value, onChange, error }: StepParamFieldProps) {
       label={param.label}
       description={param.help || undefined}
       value={draft}
-      placeholder={param.optional ? 'A number or a text' : undefined}
+      placeholder={param.optional ? i18n.t('ui.data.StepParamField.aNumberOrAText') : undefined}
       rightSection={
         parsed === null ? null : (
           <Text size="xs" c="dimmed" aria-hidden>
-            {typeof parsed === 'number' ? 'number' : 'text'}
+            {typeof parsed === 'number'
+              ? i18n.t('ui.data.StepParamField.number')
+              : i18n.t('ui.data.StepParamField.text')}
           </Text>
         )
       }
       rightSectionWidth={56}
       rightSectionPointerEvents="none"
-      error={error || (missing ? 'Enter a value.' : null)}
+      error={error || (missing ? i18n.t('ui.data.StepParamField.enterAValue') : null)}
       onChange={(event) => {
         const text = event.currentTarget.value;
         setDraft(text);
@@ -580,13 +613,16 @@ function ValueField({ param, value, onChange, error }: StepParamFieldProps) {
 }
 
 function ListField({ param, value, onChange, error }: StepParamFieldProps) {
+  useTranslation();
   const values = Array.isArray(value) ? value : [];
   return (
     <TagsInput
       label={param.label}
-      description={param.help || 'Press Enter after each value.'}
+      description={param.help || i18n.t('ui.data.StepParamField.pressEnterAfterEachValue')}
       value={values.map(formatCellValue)}
-      placeholder={values.length === 0 ? 'Type a value, press Enter' : undefined}
+      placeholder={
+        values.length === 0 ? i18n.t('ui.data.StepParamField.typeAValuePressEnter') : undefined
+      }
       clearable
       error={error}
       onChange={(tags) =>
@@ -636,6 +672,7 @@ function MappingField({
   error,
   mappingKeysAreColumns = false,
 }: StepParamFieldProps) {
+  useTranslation();
   const baseId = useId();
   const [rows, setRows] = useState(() => toRows(value, mappingKeysAreColumns));
   const [synced, setSynced] = useState(() => JSON.stringify(value ?? {}));
@@ -652,8 +689,12 @@ function MappingField({
     onChange(toMapping(next, mappingKeysAreColumns));
   };
   const nextId = rows.reduce((max, row) => Math.max(max, row.id), -1) + 1;
-  const keyLabel = mappingKeysAreColumns ? 'Column' : 'Value';
-  const valueLabel = mappingKeysAreColumns ? 'New name' : 'Replace with';
+  const keyLabel = mappingKeysAreColumns
+    ? i18n.t('ui.data.StepParamField.column')
+    : i18n.t('ui.data.StepParamField.value');
+  const valueLabel = mappingKeysAreColumns
+    ? i18n.t('ui.data.StepParamField.newName')
+    : i18n.t('ui.data.StepParamField.replaceWith');
   const suggestions = mappingKeysAreColumns ? columns.map((column) => column.name) : [];
 
   return (
@@ -712,7 +753,7 @@ function MappingField({
                 variant="subtle"
                 color="gray"
                 mt={4}
-                aria-label={`Remove row ${index + 1}`}
+                aria-label={i18n.t('ui.data.StepParamField.removeRow', { value: index + 1 })}
                 onClick={() => update(rows.filter((r) => r.id !== row.id))}
               >
                 <IconTrash size={16} />
@@ -727,7 +768,11 @@ function MappingField({
           style={{ alignSelf: 'flex-start' }}
           onClick={() => setRows([...rows, { id: nextId, key: '', value: '' }])}
         >
-          Add {mappingKeysAreColumns ? 'column' : 'value'}
+          {i18n.t('ui.data.StepParamField.add', {
+            value: mappingKeysAreColumns
+              ? i18n.t('ui.data.StepParamField.column2')
+              : i18n.t('ui.data.StepParamField.value2'),
+          })}
         </Button>
       </Stack>
     </Input.Wrapper>

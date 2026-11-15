@@ -18,6 +18,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type OAuthRequest, type OAuthRequestError } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { AuthLayout } from '@/pages/AuthLayout';
 import { urlHost } from './url';
 import classes from './AuthorizePage.module.css';
@@ -36,9 +37,15 @@ type PageState =
 type Outcome = 'allowed' | 'denied' | 'error';
 
 const LEAVING_TITLES: Record<Outcome, string> = {
-  allowed: 'Access allowed',
-  denied: 'Access denied',
-  error: 'Returning to the app',
+  get allowed() {
+    return i18n.t('ui.oauth.AuthorizePage.accessAllowed');
+  },
+  get denied() {
+    return i18n.t('ui.oauth.AuthorizePage.accessDenied');
+  },
+  get error() {
+    return i18n.t('ui.oauth.AuthorizePage.returningToTheApp');
+  },
 };
 
 /** The OAuth error of a rejected request (HTTP 400), or null for any other failure. */
@@ -76,7 +83,7 @@ function leave(
   if (!isSafeRedirect(redirectTo)) {
     setState({
       status: 'invalid',
-      description: 'The app wants to return to an address that is not allowed.',
+      description: i18n.t('ui.oauth.AuthorizePage.theAppWantsToReturn'),
     });
     return;
   }
@@ -90,6 +97,7 @@ function leave(
  * and creates the authorization code; this page passes its query string on unchanged.
  */
 export function AuthorizePage() {
+  useTranslation();
   const { user, logout } = useAuth();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
@@ -131,24 +139,21 @@ export function AuthorizePage() {
   if (state.status === 'loading') {
     return (
       <Center h={300}>
-        <Loader aria-label="Checking the sign-in request" />
+        <Loader aria-label={i18n.t('ui.oauth.AuthorizePage.checkingTheSignInRequest')} />
       </Center>
     );
   }
 
   if (state.status === 'invalid') {
     return (
-      <AuthLayout title="This sign-in link is not valid">
+      <AuthLayout title={i18n.t('ui.oauth.AuthorizePage.thisSignInLinkIs')}>
         <Stack>
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
-            {state.description || 'The app sent a sign-in request that Brick DNN cannot accept.'}
+            {state.description || i18n.t('ui.oauth.AuthorizePage.theAppSentASign')}
           </Alert>
-          <Text size="sm">
-            Go back to the app and connect it again. If this keeps happening, the app may not
-            support this Brick DNN server.
-          </Text>
+          <Text size="sm">{i18n.t('ui.oauth.AuthorizePage.goBackToTheApp')}</Text>
           <Button component={Link} to="/" variant="default" fullWidth>
-            Go to Brick DNN
+            {i18n.t('ui.oauth.AuthorizePage.goToBrickDnn')}
           </Button>
         </Stack>
       </AuthLayout>
@@ -157,7 +162,7 @@ export function AuthorizePage() {
 
   if (state.status === 'failed') {
     return (
-      <AuthLayout title="Could not check the sign-in request">
+      <AuthLayout title={i18n.t('ui.oauth.AuthorizePage.couldNotCheckTheSign')}>
         <Stack>
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
             {state.message}
@@ -169,7 +174,7 @@ export function AuthorizePage() {
               setAttempt((count) => count + 1);
             }}
           >
-            Try again
+            {i18n.t('ui.oauth.AuthorizePage.tryAgain')}
           </Button>
         </Stack>
       </AuthLayout>
@@ -183,11 +188,11 @@ export function AuthorizePage() {
         <Stack align="center" ta="center" gap="sm">
           <Loader size="sm" />
           <Text>
-            Taking you back to{' '}
+            {i18n.t('ui.oauth.AuthorizePage.takingYouBackTo')}{' '}
             {state.host ? <strong className={classes.wrap}>{state.host}</strong> : app}…
           </Text>
           <Text size="xs" c="dimmed">
-            If nothing happens, go back to {app}. You can close this page.
+            {i18n.t('ui.oauth.AuthorizePage.ifNothingHappensGoBack', { app })}
           </Text>
         </Stack>
       </AuthLayout>
@@ -213,7 +218,7 @@ export function AuthorizePage() {
       } else {
         notifications.show({
           color: 'red',
-          title: 'Could not send your answer',
+          title: i18n.t('ui.oauth.AuthorizePage.couldNotSendYourAnswer'),
           message: (error as Error).message,
         });
         setBusy(null);
@@ -230,7 +235,8 @@ export function AuthorizePage() {
     <AuthLayout
       title={
         <>
-          Allow <span className={classes.wrap}>{name}</span> to use your Brick DNN account?
+          {i18n.t('ui.oauth.AuthorizePage.allow')} <span className={classes.wrap}>{name}</span>{' '}
+          {i18n.t('ui.oauth.AuthorizePage.toUseYourBrickDnn')}
         </>
       }
       subtitle={clientHost && <span className={classes.wrap}>{clientHost}</span>}
@@ -242,14 +248,20 @@ export function AuthorizePage() {
               {user?.username.slice(0, 1).toUpperCase()}
             </Avatar>
             <Text size="sm" className={classes.wrap}>
-              Signed in as <strong>{user?.username}</strong>
+              <Trans
+                i18nKey="ui.oauth.AuthorizePage.signedInAs"
+                values={{ username: user?.username }}
+                components={[<strong />]}
+              />
             </Text>
           </Group>
           <Text size="sm" c="dimmed">
-            Not you?{' '}
-            <Anchor component="button" type="button" size="sm" onClick={switchAccount}>
-              Log out
-            </Anchor>
+            <Trans
+              i18nKey="ui.oauth.AuthorizePage.notYouLogOut"
+              components={[
+                <Anchor component="button" type="button" size="sm" onClick={switchAccount} />,
+              ]}
+            />
           </Text>
         </Group>
 
@@ -257,16 +269,14 @@ export function AuthorizePage() {
 
         <div>
           <Text size="sm" fw={600} mb="xs">
-            <span className={classes.wrap}>{name}</span> will be able to:
+            <span className={classes.wrap}>{name}</span>{' '}
+            {i18n.t('ui.oauth.AuthorizePage.willBeAbleTo')}
           </Text>
           <Group gap="sm" align="flex-start" wrap="nowrap">
             <ThemeIcon size={20} radius="xl" variant="light" color="teal" mt={1} aria-hidden>
               <IconCheck size={13} />
             </ThemeIcon>
-            <Text size="sm">
-              Look at your networks, layer types and training runs, analyse networks and generate
-              code
-            </Text>
+            <Text size="sm">{i18n.t('ui.oauth.AuthorizePage.lookAtYourNetworksLayer')}</Text>
           </Group>
           {request.write_requested ? (
             <Switch
@@ -274,16 +284,16 @@ export function AuthorizePage() {
               checked={allowWrite}
               onChange={(event) => setAllowWrite(event.currentTarget.checked)}
               disabled={busy !== null}
-              label="Also allow changes: save networks, start and stop trainings"
+              label={i18n.t('ui.oauth.AuthorizePage.alsoAllowChangesSaveNetworks')}
               description={
                 allowWrite
-                  ? 'Turn this off for read-only access.'
-                  : 'Read only: it changes nothing.'
+                  ? i18n.t('ui.oauth.AuthorizePage.turnThisOffForRead')
+                  : i18n.t('ui.oauth.AuthorizePage.readOnlyItChangesNothing')
               }
             />
           ) : (
             <Text size="sm" c="dimmed" mt="xs">
-              It asks for read-only access and cannot change anything.
+              {i18n.t('ui.oauth.AuthorizePage.itAsksForReadOnly')}
             </Text>
           )}
         </div>
@@ -295,24 +305,27 @@ export function AuthorizePage() {
             loading={busy === 'deny'}
             disabled={busy === 'allow'}
           >
-            Deny
+            {i18n.t('ui.oauth.AuthorizePage.deny')}
           </Button>
           <Button
             onClick={() => void decide(true)}
             loading={busy === 'allow'}
             disabled={busy === 'deny'}
           >
-            Allow
+            {i18n.t('ui.oauth.AuthorizePage.allow')}
           </Button>
         </Group>
 
         <Stack gap={4}>
           <Text size="xs" c="dimmed">
-            After you decide, you will return to{' '}
-            <strong className={classes.wrap}>{request.redirect_host}</strong>.
+            <Trans
+              i18nKey="ui.oauth.AuthorizePage.afterYouDecideYouWill"
+              values={{ redirect_host: request.redirect_host }}
+              components={[<strong className={classes.wrap} />]}
+            />
           </Text>
           <Text size="xs" c="dimmed">
-            You can disconnect it at any time on the API tokens page.
+            {i18n.t('ui.oauth.AuthorizePage.youCanDisconnectItAt')}
           </Text>
         </Stack>
       </Stack>

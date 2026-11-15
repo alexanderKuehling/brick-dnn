@@ -14,6 +14,7 @@ import {
 import { Histogram } from '@/components/charts/Histogram';
 import { boxFromStats } from '@/components/charts/stats';
 import { StatTile } from '@/components/charts/StatTile';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { ASSOCIATION_LABELS, SHORT_METHOD } from './ColumnsView';
 import { KeyValueTable } from './DistributionView';
@@ -36,6 +37,7 @@ const LISTED = 8;
 
 /** Class balance or the target's distribution, and the features ranked by association. */
 export function TargetView({ profile, sample, target, onShowColumn, onAddStep }: TargetViewProps) {
+  useTranslation();
   const [allFeatures, setAllFeatures] = useState(false);
   const [minAssociation, setMinAssociation] = useState(DEFAULT_MIN_ASSOCIATION);
   const [added, setAdded] = useState<string[]>([]);
@@ -73,8 +75,8 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
     return (
       <Text size="sm" c="dimmed">
         {target
-          ? `The target column ${target} is not in the data at this point of the pipeline.`
-          : 'Choose a target column in Target & split to see the class balance and which features are related to it.'}
+          ? i18n.t('ui.data.TargetView.theTargetColumnIsNot', { target })
+          : i18n.t('ui.data.TargetView.chooseATargetColumnIn')}
       </Text>
     );
   }
@@ -98,26 +100,34 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
               <>
                 <SimpleGrid type="container" cols={{ base: 2, '520px': 3 }} spacing="xs">
                   <StatTile
-                    label="Classes"
+                    label={i18n.t('ui.data.TargetView.classes')}
                     value={formatCount(info.classes.length)}
                     hint={info.column}
                   />
                   <StatTile
-                    label="Imbalance"
+                    label={i18n.t('ui.data.TargetView.imbalance')}
                     value={
                       info.imbalance_ratio ? `${formatNumber(info.imbalance_ratio, 3)} : 1` : '–'
                     }
-                    hint="largest / smallest class"
+                    hint={i18n.t('ui.data.TargetView.largestSmallestClass')}
                   />
                   <StatTile
-                    label="Majority baseline"
+                    label={i18n.t('ui.data.TargetView.majorityBaseline')}
                     value={largest ? formatPercent(total ? largest.count / total : 0) : '–'}
-                    hint={largest ? `accuracy of always "${className(largest.value)}"` : undefined}
+                    hint={
+                      largest
+                        ? i18n.t('ui.data.TargetView.accuracyOfAlways', {
+                            className: className(largest.value),
+                          })
+                        : undefined
+                    }
                   />
                 </SimpleGrid>
                 <BarChart
-                  title={`Classes of ${info.column}`}
-                  subtitle={`Rows per class, all ${formatCount(profile.n_rows)} rows, in class index order.`}
+                  title={i18n.t('ui.data.TargetView.classesOf', { column: info.column })}
+                  subtitle={i18n.t('ui.data.TargetView.rowsPerClassAllRows', {
+                    n_rows: formatCount(profile.n_rows),
+                  })}
                   rows={info.classes.map((c) => ({
                     key: c.value,
                     label: className(c.value),
@@ -133,8 +143,10 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
           })()}
           {splitMix && groups && splitMix.length > 0 && (
             <BarChart
-              title="Class mix per split"
-              subtitle={`Similar mixes mean the split is representative. ${sampleNote(sample)}`}
+              title={i18n.t('ui.data.TargetView.classMixPerSplit')}
+              subtitle={i18n.t('ui.data.TargetView.similarMixesMeanTheSplit', {
+                sampleNote: sampleNote(sample),
+              })}
               rows={splitMix}
               series={groups.groups.map((g) => ({
                 key: g.key,
@@ -151,8 +163,10 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
         <>
           {info.histogram && (
             <Histogram
-              title={`Distribution of ${info.column}`}
-              subtitle={`Rows per bin, all ${formatCount(profile.n_rows)} rows.`}
+              title={i18n.t('ui.data.TargetView.distributionOf', { column: info.column })}
+              subtitle={i18n.t('ui.data.TargetView.rowsPerBinAllRows', {
+                n_rows: formatCount(profile.n_rows),
+              })}
               edges={info.histogram.edges}
               series={[
                 {
@@ -168,13 +182,13 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
           )}
           {info.stats && boxFromStats(info.stats) && (
             <BoxPlot
-              title="Box plot"
+              title={i18n.t('ui.data.TargetView.boxPlot')}
               groups={[{ key: 'target', label: info.column, box: boxFromStats(info.stats)! }]}
             />
           )}
           {info.stats && (
             <KeyValueTable
-              label={`Statistics of ${info.column}`}
+              label={i18n.t('ui.data.TargetView.statisticsOf', { column: info.column })}
               rows={[
                 ['Mean', formatNumber(info.stats.mean)],
                 ['Standard deviation', formatNumber(info.stats.std)],
@@ -190,8 +204,10 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
       {ranking.length > 0 ? (
         <>
           <BarChart
-            title="Features by association with the target"
-            subtitle={`0 = no relation, 1 = perfect. ${analysisNote(profile)}`}
+            title={i18n.t('ui.data.TargetView.featuresByAssociationWithThe')}
+            subtitle={i18n.t('ui.data.TargetView.text0NoRelation1Perfect', {
+              analysisNote: analysisNote(profile),
+            })}
             rows={shownRanking.map((c) => ({
               key: c.name,
               label: c.name,
@@ -215,8 +231,10 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
               style={{ alignSelf: 'flex-start' }}
             >
               {allFeatures
-                ? `Show the top ${RANKING}`
-                : `Show all ${formatCount(ranking.length)} features`}
+                ? i18n.t('ui.data.TargetView.showTheTop', { RANKING })
+                : i18n.t('ui.data.TargetView.showAllFeatures', {
+                    length: formatCount(ranking.length),
+                  })}
             </Button>
           )}
           <WeakFeatures
@@ -231,14 +249,14 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
             }}
           />
           <Note>
-            Measures:{' '}
+            {i18n.t('ui.data.TargetView.measures')}{' '}
             {methods.map((m) => `${SHORT_METHOD[m]} = ${ASSOCIATION_LABELS[m]}`).join(', ')}.
-            {methods.length > 1 && ' Different measures are only roughly comparable.'} A low value
-            does not rule out a non-linear or combined effect.
+            {methods.length > 1 && i18n.t('ui.data.TargetView.differentMeasuresAreOnlyRoughly')}{' '}
+            {i18n.t('ui.data.TargetView.aLowValueDoesNot')}
           </Note>
         </>
       ) : (
-        <Note>No feature associations yet (they need number or category features).</Note>
+        <Note>{i18n.t('ui.data.TargetView.noFeatureAssociationsYetThey')}</Note>
       )}
     </Stack>
   );
@@ -263,17 +281,18 @@ function WeakFeatures({
   added,
   onAdd,
 }: WeakFeaturesProps) {
+  useTranslation();
   const weak = ranking.filter((c) => c.value < threshold).map((c) => c.name);
   const listed = weak.slice(0, LISTED).join(', ');
   const more = weak.length > LISTED ? ` and ${formatCount(weak.length - LISTED)} more` : '';
   const stepKey = `select:${threshold}`;
   const listKey = `drop:${threshold}:${weak.length}`;
   return (
-    <Stack gap={6} aria-label="Drop weakly associated features">
+    <Stack gap={6} aria-label={i18n.t('ui.data.TargetView.dropWeaklyAssociatedFeatures')}>
       <Group gap="xs" wrap="wrap" align="flex-end">
         <NumberInput
           size="xs"
-          label="Drop below association"
+          label={i18n.t('ui.data.TargetView.dropBelowAssociation')}
           value={threshold}
           min={0}
           max={1}
@@ -300,7 +319,9 @@ function WeakFeatures({
                 })
               }
             >
-              {added.includes(stepKey) ? 'Step added' : 'Add a step: drop below this'}
+              {added.includes(stepKey)
+                ? i18n.t('ui.data.TargetView.stepAdded')
+                : i18n.t('ui.data.TargetView.addAStepDropBelow')}
             </Button>
             <Button
               size="compact-sm"
@@ -309,23 +330,28 @@ function WeakFeatures({
               onClick={() => onAdd(listKey, { type: 'drop_columns', params: { columns: weak } })}
             >
               {added.includes(listKey)
-                ? 'Columns dropped'
-                : `Drop these ${formatCount(weak.length)} columns`}
+                ? i18n.t('ui.data.TargetView.columnsDropped')
+                : i18n.t('ui.data.TargetView.dropTheseColumns', {
+                    length: formatCount(weak.length),
+                  })}
             </Button>
           </>
         )}
       </Group>
       <Text size="sm">
         {weak.length === 0
-          ? `No feature is below ${formatCoefficient(threshold)}.`
-          : `${formatCount(weak.length)} of ${formatCount(ranking.length)} features are below ${formatCoefficient(threshold)}: ${listed}${more}.`}
+          ? i18n.t('ui.data.TargetView.noFeatureIsBelow', {
+              threshold: formatCoefficient(threshold),
+            })
+          : i18n.t('ui.data.TargetView.ofFeaturesAreBelow', {
+              length: formatCount(weak.length),
+              length2: formatCount(ranking.length),
+              threshold: formatCoefficient(threshold),
+              listed,
+              more,
+            })}
       </Text>
-      <Note>
-        “Add a step” adds “Select features: little association with the target”: it measures the
-        association again on the training rows each time the preparation runs, so it adapts when
-        earlier steps or the data change. “Drop these columns” drops exactly the columns listed
-        here, measured on the sample shown. Text and date columns have no association and are kept.
-      </Note>
+      <Note>{i18n.t('ui.data.TargetView.addAStepAddsSelect')}</Note>
     </Stack>
   );
 }

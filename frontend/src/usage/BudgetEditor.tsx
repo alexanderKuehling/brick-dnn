@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { IconGauge } from '@tabler/icons-react';
 import { Button, Group, NumberInput, Popover, Stack, Text } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import { formatCpu } from './format';
 
 interface BudgetEditorProps {
@@ -18,6 +19,7 @@ interface BudgetEditorProps {
  * empty field removes the budget.
  */
 export function BudgetEditor({ budget, label, onSave, description }: BudgetEditorProps) {
+  useTranslation();
   const [opened, setOpened] = useState(false);
   const [value, setValue] = useState<string | number>(budget ?? '');
   const [busy, setBusy] = useState(false);
@@ -55,18 +57,20 @@ export function BudgetEditor({ budget, label, onSave, description }: BudgetEdito
           size="compact-xs"
           leftSection={<IconGauge size={14} />}
           onClick={() => (opened ? setOpened(false) : open())}
-          aria-label={`Set the monthly budget of ${label}`}
+          aria-label={i18n.t('ui.usage.BudgetEditor.setTheMonthlyBudgetOf', { label })}
         >
-          {budget === null ? 'Set budget' : 'Change budget'}
+          {budget === null
+            ? i18n.t('ui.usage.BudgetEditor.setBudget')
+            : i18n.t('ui.usage.BudgetEditor.changeBudget')}
         </Button>
       </Popover.Target>
       <Popover.Dropdown maw="min(20rem, calc(100vw - 2rem))">
         <form onSubmit={submit}>
           <Stack gap="xs">
             <NumberInput
-              label="Monthly budget"
-              description={description ?? 'CPU minutes per month. Empty: no budget.'}
-              placeholder="No budget"
+              label={i18n.t('ui.usage.BudgetEditor.monthlyBudget')}
+              description={description ?? i18n.t('ui.usage.BudgetEditor.cpuMinutesPerMonthEmpty')}
+              placeholder={i18n.t('ui.usage.BudgetEditor.noBudget')}
               min={0}
               max={10_000_000}
               decimalScale={2}
@@ -85,13 +89,13 @@ export function BudgetEditor({ budget, label, onSave, description }: BudgetEdito
                   onClick={() => void save(null)}
                   disabled={busy}
                 >
-                  Remove budget
+                  {i18n.t('ui.usage.BudgetEditor.removeBudget')}
                 </Button>
               ) : (
                 <span />
               )}
               <Button type="submit" size="xs" loading={busy}>
-                Save
+                {i18n.t('ui.usage.BudgetEditor.save')}
               </Button>
             </Group>
           </Stack>
@@ -104,7 +108,9 @@ export function BudgetEditor({ budget, label, onSave, description }: BudgetEdito
 /** "2.5 of 10 CPU min" or "2.5 CPU min" (without a budget). */
 export function usedOfBudget(used: number | undefined, budget: number | null | undefined): string {
   const spent = formatCpu(used ?? 0, budget == null ? 'CPU min' : '');
-  return budget == null ? spent : `${spent} of ${formatCpu(budget)}`;
+  return budget == null
+    ? spent
+    : i18n.t('ui.usage.BudgetEditor.of', { spent, budget: formatCpu(budget) });
 }
 
 /** The usage of a token or app this month, red once its budget is used up. */

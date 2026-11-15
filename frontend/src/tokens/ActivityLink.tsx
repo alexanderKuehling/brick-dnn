@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Anchor, Text } from '@mantine/core';
 import type { ActivityAgent, AgentKey } from '@/api';
 import { relativeTime } from '@/collab/time';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 
 /** "12 actions · 5 min ago" linking to the token's or app's entries of the activity log. */
 export function ActivityLink({
@@ -12,10 +12,11 @@ export function ActivityLink({
   agentKey: AgentKey;
   activity: ActivityAgent | undefined;
 }) {
+  useTranslation();
   if (!activity) {
     return (
       <Text span size="sm">
-        None yet
+        {i18n.t('ui.tokens.ActivityLink.noneYet')}
       </Text>
     );
   }
@@ -28,7 +29,9 @@ export function ActivityLink({
       {activity.errors > 0 && (
         <Text span c="red" size="sm">
           {' '}
-          · {activity.errors.toLocaleString(currentLocale())} failed
+          {i18n.t('ui.tokens.ActivityLink.failed', {
+            errors: activity.errors.toLocaleString(currentLocale()),
+          })}
         </Text>
       )}
     </Anchor>

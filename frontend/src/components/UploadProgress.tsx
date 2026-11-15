@@ -1,4 +1,5 @@
 import { Button, Group, Progress, Stack, Text } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import { formatBytes, formatBytesOf } from '@/training/format';
 import { PROGRESS_INTERVAL, type UploadBytes } from './useUploadProgress';
 
@@ -18,9 +19,10 @@ interface UploadProgressProps {
 export function UploadProgress({
   bytes,
   fileName,
-  processingText = 'Processing the file on the server …',
+  processingText = i18n.t('ui.components.UploadProgress.processingTheFileOnThe'),
   onCancel,
 }: UploadProgressProps) {
+  useTranslation();
   const { sent, total } = bytes;
   const processing = total > 0 && sent >= total;
   const share = total > 0 ? Math.min(sent / total, 1) : 0;
@@ -29,7 +31,9 @@ export function UploadProgress({
     <Stack gap={6}>
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
         <Text size="sm" role="status" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-          {processing ? processingText : `Uploading “${fileName}” …`}
+          {processing
+            ? processingText
+            : i18n.t('ui.components.UploadProgress.uploading', { fileName })}
         </Text>
         {!processing && (
           <Text size="sm" fw={600} style={{ flexShrink: 0 }} aria-hidden>
@@ -45,7 +49,7 @@ export function UploadProgress({
           animated={processing}
           withAria={false}
           role="progressbar"
-          aria-label={`Upload of “${fileName}”`}
+          aria-label={i18n.t('ui.components.UploadProgress.uploadOf', { fileName })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={processing ? undefined : percent}
@@ -56,11 +60,13 @@ export function UploadProgress({
       </Progress.Root>
       <Group justify="space-between" gap="xs" mih={22}>
         <Text size="xs" c="dimmed">
-          {processing ? `${formatBytes(total)} sent` : formatBytesOf(sent, total)}
+          {processing
+            ? i18n.t('ui.components.UploadProgress.sent', { total: formatBytes(total) })
+            : formatBytesOf(sent, total)}
         </Text>
         {onCancel && !processing && (
           <Button variant="subtle" color="gray" size="compact-xs" onClick={onCancel}>
-            Cancel upload
+            {i18n.t('ui.components.UploadProgress.cancelUpload')}
           </Button>
         )}
       </Group>

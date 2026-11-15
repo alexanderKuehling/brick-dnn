@@ -5,7 +5,7 @@
  */
 import type { CompatibilityFix, GraphDocument, LayerSpec, Params } from '@/api/types';
 import { defaultParams, edgeId, LAYER_SPACING_X, newId } from '@/builder/graph';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 import type { EffectiveSource } from './settings';
 
 /** The parameters a fix may change without asking: the Input's data and the last layer's size. */
@@ -52,12 +52,14 @@ export function describeFixes(fixes: CompatibilityFix[], images: boolean): strin
     .out_features as number | undefined;
   const inputText =
     input &&
-    `Input set to ${[
-      Array.isArray(input.shape) ? describeShape(input.shape as number[], images) : null,
-      typeof input.dtype === 'string' ? `data type ${input.dtype}` : null,
-    ]
-      .filter(Boolean)
-      .join(', ')}`;
+    i18n.t('ui.training.fit.inputSetTo', {
+      filter: [
+        Array.isArray(input.shape) ? describeShape(input.shape as number[], images) : null,
+        typeof input.dtype === 'string' ? `data type ${input.dtype}` : null,
+      ]
+        .filter(Boolean)
+        .join(', '),
+    });
   const outputText =
     channels !== undefined
       ? plural(channels, 'output channel')
@@ -65,9 +67,14 @@ export function describeFixes(fixes: CompatibilityFix[], images: boolean): strin
         ? null
         : plural(outputs, 'output');
   if (inputText && outputText) {
-    return `${inputText}, last layer to ${outputText}`;
+    return i18n.t('ui.training.fit.lastLayerTo', { inputText, outputText });
   }
-  return inputText || (outputText ? `Last layer set to ${outputText}` : 'Network adapted');
+  return (
+    inputText ||
+    (outputText
+      ? i18n.t('ui.training.fit.lastLayerSetTo', { outputText })
+      : i18n.t('ui.training.fit.networkAdapted'))
+  );
 }
 
 /** True if `source` holds images (built-in datasets, image folders, images with masks). */

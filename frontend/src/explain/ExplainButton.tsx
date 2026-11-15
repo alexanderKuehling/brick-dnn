@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { IconBulb } from '@tabler/icons-react';
 import { Button, Group, Text, type ButtonProps } from '@mantine/core';
 import type { RunDetail } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import type { ExplainStart } from './ExplainModal';
 
 const ExplainModal = lazy(() =>
@@ -49,6 +50,7 @@ export function ExplainButton({
   /** The tab to open on (default: the first that works). */
   start?: ExplainStart;
 }) {
+  useTranslation();
   const [opened, setOpened] = useState(false);
   return (
     <>
@@ -59,7 +61,7 @@ export function ExplainButton({
         leftSection={<IconBulb size={16} />}
         onClick={() => setOpened(true)}
       >
-        Explain the model
+        {i18n.t('ui.explain.ExplainButton.explainTheModel')}
       </Button>
       <ExplainDialog run={run} start={opened ? start : null} onClose={() => setOpened(false)} />
     </>
@@ -68,11 +70,12 @@ export function ExplainButton({
 
 /** The way into the explanations, under the headline of a finished run. */
 export function ExplainHeadline({ run }: { run: RunDetail }) {
+  useTranslation();
   return (
     <Group gap="xs" mt="xs" wrap="wrap">
       <ExplainButton run={run} size="xs" />
       <Text size="xs" c="dimmed">
-        Why it decides as it does: what matters, where it looks, what happens inside.
+        {i18n.t('ui.explain.ExplainButton.whyItDecidesAsIt')}
       </Text>
     </Group>
   );

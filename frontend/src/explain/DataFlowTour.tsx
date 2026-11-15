@@ -11,7 +11,7 @@ import {
 import { Panel } from '@xyflow/react';
 import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 import type { Analysis, LayerSpec } from '@/api/types';
-import { currentLocale, useTranslation } from '@/i18n';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { formatShape } from './format';
 import { flowSteps, paramFormula, shapeChange, type FlowStep, type Link } from './learning';
 
@@ -89,6 +89,7 @@ function StepCard({
   spec?: LayerSpec;
   analysis: Analysis;
 }) {
+  useTranslation();
   const formula = paramFormula(analysis.nodes[step.id]);
   const change = shapeChange(step);
   return (
@@ -125,13 +126,15 @@ function StepCard({
       <Text size="xs">{spec?.description}</Text>
       {formula ? (
         <Text size="xs" ff="monospace">
-          {formula.formula} parameters
+          {i18n.t('ui.explain.DataFlowTour.parameters', { formula: formula.formula })}
         </Text>
       ) : (
         step.params !== null &&
         step.params > 0 && (
           <Text size="xs" ff="monospace">
-            {step.params.toLocaleString(currentLocale())} parameters
+            {i18n.t('ui.explain.DataFlowTour.parameters2', {
+              params: step.params.toLocaleString(currentLocale()),
+            })}
           </Text>
         )
       )}

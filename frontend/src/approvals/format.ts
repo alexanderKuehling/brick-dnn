@@ -1,4 +1,5 @@
 import type { ApprovalEstimate, ApprovalRule } from '@/api';
+import { i18n } from '@/i18n';
 import { formatCpu, formatMoney } from '@/usage/format';
 
 /** "Asks before trainings above 15 CPU min and publishing" or "Never asks". */
@@ -16,16 +17,20 @@ export function ruleSummary(rule: ApprovalRule): string {
     parts.push('deleting');
   }
   if (parts.length === 0) {
-    return 'Never asks';
+    return i18n.t('ui.approvals.format.neverAsks');
   }
   const last = parts.pop();
-  return `Asks before ${parts.length ? `${parts.join(', ')} and ${last}` : last}`;
+  return i18n.t('ui.approvals.format.asksBefore', {
+    value: parts.length
+      ? i18n.t('ui.approvals.format.and', { parts: parts.join(', '), last })
+      : last,
+  });
 }
 
 /** "42 CPU min (14–126) · €0.70": the estimate of a training that waits. */
 export function estimateText(estimate: ApprovalEstimate | null): string {
   if (!estimate || estimate.cpu_minutes === null) {
-    return 'Cannot be estimated';
+    return i18n.t('ui.approvals.format.cannotBeEstimated');
   }
   let text = formatCpu(estimate.cpu_minutes);
   if (estimate.low_cpu_minutes !== null && estimate.high_cpu_minutes !== null) {
@@ -42,7 +47,7 @@ export function expiresIn(iso: string, now: Date = new Date()): string {
     return 'now';
   }
   if (minutes < 60) {
-    return `in ${minutes} min`;
+    return i18n.t('ui.approvals.format.inMin', { minutes });
   }
-  return `in ${Math.round(minutes / 60)} h`;
+  return i18n.t('ui.approvals.format.inH', { round: Math.round(minutes / 60) });
 }

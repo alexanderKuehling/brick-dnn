@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { formatPercentTick, linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { innerTicks, logAxis, logScale, timeTicks, valueAxis } from './axes';
 import { ChartEmpty, ChartFrame, ChartTooltip, TooltipRow, type LegendItem } from './ChartFrame';
 import { formatCount, formatDate, formatNumber, formatPercent } from './format';
@@ -96,6 +97,7 @@ export function Histogram({
   height = 200,
   width: fixedWidth,
 }: HistogramProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const bins = Math.max(0, edges.length - 1);
@@ -166,7 +168,7 @@ export function Histogram({
 
   const describe = () => {
     if (!hasData) {
-      return `${title}: no values.`;
+      return i18n.t('ui.components.Histogram.noValues', { title });
     }
     const range = `${bins} bins from ${formatX0(lo)} to ${formatX0(hi)}`;
     const parts = data.map((s) => {
@@ -177,12 +179,21 @@ export function Histogram({
         }
       });
       const name = data.length > 1 ? `${s.label}: ` : '';
-      return (
-        `${name}${formatCount(s.total)} ${unit}, most in ${labels[peak]} ` +
-        `(${formatValue(s.values[peak])}${normalize ? '' : `, ${share(s, peak)}`}).`
-      );
+      return i18n.t('ui.components.Histogram.mostIn', {
+        name,
+        total: formatCount(s.total),
+        unit,
+        bin: labels[peak],
+        value: formatValue(s.values[peak]),
+        value2: normalize ? '' : `, ${share(s, peak)}`,
+      });
     });
-    return `${title}. Histogram${xLabel ? ` of ${xLabel}` : ''}, ${range}. ${parts.join(' ')}`;
+    return i18n.t('ui.components.Histogram.histogram', {
+      title,
+      value: xLabel ? i18n.t('ui.components.Histogram.of', { xLabel }) : '',
+      range,
+      parts: parts.join(' '),
+    });
   };
 
   const binText = (i: number) =>
@@ -337,7 +348,7 @@ export function Histogram({
             className={classes.overlay}
             role="slider"
             tabIndex={0}
-            aria-label={`${title}: use the arrow keys to read the bins`}
+            aria-label={i18n.t('ui.components.Histogram.useTheArrowKeysTo', { title })}
             aria-valuemin={1}
             aria-valuemax={bins}
             aria-valuenow={(active ?? 0) + 1}

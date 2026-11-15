@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type ApiToken, type ApiTokenExpiry, type NewApiToken } from '@/api';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { McpSetup } from './McpSetup';
 import classes from './Tokens.module.css';
 
@@ -27,7 +27,12 @@ const EXPIRY_OPTIONS: { value: string; label: string }[] = [
   { value: '30', label: '30 days' },
   { value: '90', label: '90 days' },
   { value: '365', label: '1 year' },
-  { value: 'never', label: 'Never' },
+  {
+    value: 'never',
+    get label() {
+      return i18n.t('ui.tokens.CreateTokenModal.never');
+    },
+  },
 ];
 
 const DEFAULT_EXPIRY = '90';
@@ -46,10 +51,12 @@ function expiryDays(value: string): ApiTokenExpiry | null {
 function expiryHint(value: string): string {
   const days = expiryDays(value);
   if (days === null) {
-    return 'The token works until you revoke it.';
+    return i18n.t('ui.tokens.CreateTokenModal.theTokenWorksUntilYou');
   }
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return `Expires on ${date.toLocaleDateString(currentLocale(), { dateStyle: 'medium' })}.`;
+  return i18n.t('ui.tokens.CreateTokenModal.expiresOn', {
+    date: date.toLocaleDateString(currentLocale(), { dateStyle: 'medium' }),
+  });
 }
 
 /** Splits a 400 answer into messages for the form fields and the rest (if any). */
@@ -85,6 +92,7 @@ interface CreateTokenModalProps {
  * setup snippets filled in. Mount it with a new `key` for each token, so the form starts empty.
  */
 export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModalProps) {
+  useTranslation();
   const [name, setName] = useState('');
   const [access, setAccess] = useState<Access>('full');
   const [expiry, setExpiry] = useState(DEFAULT_EXPIRY);
@@ -95,7 +103,7 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setErrors({ name: 'Give the token a name.' });
+      setErrors({ name: i18n.t('ui.tokens.CreateTokenModal.giveTheTokenAName') });
       return;
     }
     setBusy(true);
@@ -113,7 +121,11 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
       const { fields, other } = splitErrors(error);
       setErrors(fields);
       if (other) {
-        notifications.show({ color: 'red', title: 'Could not create the token', message: other });
+        notifications.show({
+          color: 'red',
+          title: i18n.t('ui.tokens.CreateTokenModal.couldNotCreateTheToken'),
+          message: other,
+        });
       }
     } finally {
       setBusy(false);
@@ -124,7 +136,11 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
     <Modal
       opened={opened}
       onClose={onClose}
-      title={created ? 'Token created' : 'Create an API token'}
+      title={
+        created
+          ? i18n.t('ui.tokens.CreateTokenModal.tokenCreated')
+          : i18n.t('ui.tokens.CreateTokenModal.createAnApiToken')
+      }
       // Wider for the token and the setup snippets.
       size={created ? 'xl' : 'lg'}
       // Once the token is shown, only the buttons close it, so it is not lost by a stray click.
@@ -136,10 +152,9 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
           <Alert
             color="yellow"
             icon={<IconAlertTriangle size={18} />}
-            title="Copy your token now. It will not be shown again."
+            title={i18n.t('ui.tokens.CreateTokenModal.copyYourTokenNowIt')}
           >
-            Store it somewhere safe, like a password manager. If you lose it, revoke it and create a
-            new one.
+            {i18n.t('ui.tokens.CreateTokenModal.storeItSomewhereSafeLike')}
           </Alert>
           <div className={classes.secret}>
             <Text className={classes.secretValue} data-testid="new-token">
@@ -153,17 +168,19 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
                   leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                   className={classes.secretCopy}
                 >
-                  {copied ? 'Copied' : 'Copy token'}
+                  {copied
+                    ? i18n.t('ui.tokens.CreateTokenModal.copied')
+                    : i18n.t('ui.tokens.CreateTokenModal.copyToken')}
                 </Button>
               )}
             </CopyButton>
           </div>
           <Divider />
-          <Title order={4}>Connect an AI assistant with it</Title>
+          <Title order={4}>{i18n.t('ui.tokens.CreateTokenModal.connectAnAiAssistantWith')}</Title>
           <McpSetup token={created.token} />
           <Group justify="flex-end">
             <Button variant="default" onClick={onClose}>
-              Done
+              {i18n.t('ui.tokens.CreateTokenModal.done')}
             </Button>
           </Group>
         </Stack>
@@ -177,9 +194,9 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
           <Stack gap="md">
             <TextInput
               data-autofocus
-              label="Name"
-              description="So that you can recognise the token later."
-              placeholder="e.g. Claude on my laptop"
+              label={i18n.t('ui.tokens.CreateTokenModal.name')}
+              description={i18n.t('ui.tokens.CreateTokenModal.soThatYouCanRecognise')}
+              placeholder={i18n.t('ui.tokens.CreateTokenModal.eGClaudeOnMy')}
               required
               maxLength={NAME_MAX_LENGTH}
               value={name}
@@ -188,7 +205,7 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
               disabled={busy}
             />
             <Radio.Group
-              label="Access"
+              label={i18n.t('ui.tokens.CreateTokenModal.access')}
               value={access}
               onChange={(value) => setAccess(value as Access)}
               error={errors.read_only}
@@ -196,20 +213,20 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
               <Stack gap="sm" mt={6}>
                 <Radio
                   value="full"
-                  label="Full access"
-                  description="Read and change your networks, start and stop trainings."
+                  label={i18n.t('ui.tokens.CreateTokenModal.fullAccess')}
+                  description={i18n.t('ui.tokens.CreateTokenModal.readAndChangeYourNetworks')}
                   disabled={busy}
                 />
                 <Radio
                   value="read"
-                  label="Read only"
-                  description="Read your networks and training runs, analyse networks and generate code. Changes nothing."
+                  label={i18n.t('ui.tokens.CreateTokenModal.readOnly')}
+                  description={i18n.t('ui.tokens.CreateTokenModal.readYourNetworksAndTraining')}
                   disabled={busy}
                 />
               </Stack>
             </Radio.Group>
             <Select
-              label="Expires after"
+              label={i18n.t('ui.tokens.CreateTokenModal.expiresAfter')}
               data={EXPIRY_OPTIONS}
               value={expiry}
               onChange={(value) => setExpiry(value ?? DEFAULT_EXPIRY)}
@@ -221,10 +238,10 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
             />
             <Group justify="flex-end" mt="xs">
               <Button variant="default" onClick={onClose} disabled={busy}>
-                Cancel
+                {i18n.t('ui.tokens.CreateTokenModal.cancel')}
               </Button>
               <Button type="submit" loading={busy}>
-                Create token
+                {i18n.t('ui.tokens.CreateTokenModal.createToken')}
               </Button>
             </Group>
           </Stack>

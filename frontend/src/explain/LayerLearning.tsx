@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Code, Stack, Text } from '@mantine/core';
 import type { Analysis } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { coversInput, describeField, paramFormula, receptiveFields, type Link } from './learning';
 
 /**
@@ -16,6 +17,7 @@ export function LayerLearning({
   analysis: Analysis | null;
   links: Link[] | undefined;
 }) {
+  useTranslation();
   const info = analysis?.nodes[nodeId];
   const formula = paramFormula(info);
   const fields = useMemo(
@@ -31,9 +33,11 @@ export function LayerLearning({
       {formula && (
         <div>
           <Text size="xs" c="dimmed">
-            How the parameters add up
+            {i18n.t('ui.explain.LayerLearning.howTheParametersAddUp')}
           </Text>
-          <Code aria-label="Parameter formula">{formula.formula}</Code>
+          <Code aria-label={i18n.t('ui.explain.LayerLearning.parameterFormula')}>
+            {formula.formula}
+          </Code>
           <Text size="xs" c="dimmed" mt={2}>
             {formula.parts}.
           </Text>
@@ -42,20 +46,24 @@ export function LayerLearning({
       {field && (
         <div>
           <Text size="xs" c="dimmed">
-            Receptive field
+            {i18n.t('ui.explain.LayerLearning.receptiveField')}
           </Text>
           <Text size="sm" fw={600}>
-            {field.approximate ? 'about ' : ''}
+            {field.approximate ? i18n.t('ui.explain.LayerLearning.about') : ''}
             {describeField(field)}
-            {coversInput(field) && ' (the whole input)'}
+            {coversInput(field) && i18n.t('ui.explain.LayerLearning.theWholeInput')}
           </Text>
           <Text size="xs" c="dimmed">
-            Each output value depends on {field.approximate ? 'about ' : ''}this much of the input{' '}
-            {field.input.join('×')}
-            {field.jump.some((j) => j !== 1)
-              ? `; neighbouring outputs are ${field.jump.map((j) => Number(j.toFixed(2))).join('×')} input ${field.size.length === 2 ? 'pixels' : 'steps'} apart`
-              : ''}
-            . Deeper convolutions and pooling see larger parts.
+            {i18n.t('ui.explain.LayerLearning.eachOutputValueDependsOn', {
+              value: field.approximate ? i18n.t('ui.explain.LayerLearning.about') : '',
+              input: field.input.join('×'),
+              value2: field.jump.some((j) => j !== 1)
+                ? i18n.t('ui.explain.LayerLearning.neighbouringOutputsAreInputApart', {
+                    map: field.jump.map((j) => Number(j.toFixed(2))).join('×'),
+                    value: field.size.length === 2 ? 'pixels' : 'steps',
+                  })
+                : '',
+            })}
           </Text>
         </div>
       )}

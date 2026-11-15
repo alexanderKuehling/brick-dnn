@@ -4,7 +4,7 @@
  * the analysis (shapes and filled-in settings).
  */
 import type { Analysis, NodeAnalysis, Params } from '@/api/types';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 
 export interface Link {
   source: string;
@@ -304,11 +304,11 @@ export function shapeChange(step: FlowStep): string | null {
   }
   if (step.inputs.length > 1) {
     return step.type === 'Concat'
-      ? 'joins its inputs along the channels or features'
-      : 'combines its inputs';
+      ? i18n.t('ui.explain.learning.joinsItsInputsAlongThe')
+      : i18n.t('ui.explain.learning.combinesItsInputs');
   }
   if (before.join() === after.join()) {
-    return 'keeps the shape';
+    return i18n.t('ui.explain.learning.keepsTheShape');
   }
   if (before.length === 3 && after.length === 3) {
     const notes = [];
@@ -322,7 +322,7 @@ export function shapeChange(step: FlowStep): string | null {
   }
   const total = (shape: number[]) => shape.reduce((a, b) => a * b, 1);
   if (after.length === 1 && before.length > 1 && total(before) === after[0]) {
-    return `lays out all ${n(after[0])} numbers in one row`;
+    return i18n.t('ui.explain.learning.laysOutAllNumbersIn', { n: n(after[0]) });
   }
   return `${before.join('×')} → ${after.join('×')}`;
 }

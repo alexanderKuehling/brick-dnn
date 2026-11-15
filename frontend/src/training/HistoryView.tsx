@@ -16,6 +16,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import type { RunDetail, RunSummary } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
   canTrain,
@@ -57,8 +58,18 @@ interface HistoryViewProps {
 }
 
 const FILTERS: { value: RunFilter; label: string }[] = [
-  { value: 'network', label: 'This network' },
-  { value: 'mine', label: 'All my runs' },
+  {
+    value: 'network',
+    get label() {
+      return i18n.t('ui.training.HistoryView.thisNetwork');
+    },
+  },
+  {
+    value: 'mine',
+    get label() {
+      return i18n.t('ui.training.HistoryView.allMyRuns');
+    },
+  },
 ];
 
 /** The headline number of a run and what it is (the test result if there is one). */
@@ -89,6 +100,7 @@ export function HistoryView({
   onCombined,
   combineProject = null,
 }: HistoryViewProps) {
+  useTranslation();
   // Selecting runs to combine: their ids, in the order they were picked.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -98,7 +110,7 @@ export function HistoryView({
       <Alert color="red">
         {error}{' '}
         <Button size="compact-xs" variant="light" color="red" onClick={onRetry}>
-          Try again
+          {i18n.t('ui.training.HistoryView.tryAgain')}
         </Button>
       </Alert>
     );
@@ -118,7 +130,7 @@ export function HistoryView({
     <SegmentedControl
       size="xs"
       fullWidth
-      aria-label="Show runs"
+      aria-label={i18n.t('ui.training.HistoryView.showRuns')}
       data={FILTERS}
       value={shownFilter}
       onChange={(value) => onFilterChange(value as RunFilter)}
@@ -133,12 +145,12 @@ export function HistoryView({
         <Stack align="center" gap="xs" py="xl">
           <Text c="dimmed" size="sm" ta="center">
             {shownFilter === 'network'
-              ? 'Nobody has trained this network yet.'
-              : 'No trainings yet.'}
+              ? i18n.t('ui.training.HistoryView.nobodyHasTrainedThisNetwork')
+              : i18n.t('ui.training.HistoryView.noTrainingsYet')}
           </Text>
           {trainable && (
             <Button variant="light" onClick={onNewTraining}>
-              Set up a training
+              {i18n.t('ui.training.HistoryView.setUpATraining')}
             </Button>
           )}
         </Stack>
@@ -168,13 +180,14 @@ export function HistoryView({
         <Group justify="space-between" gap="xs" mb={4} wrap="nowrap">
           <Text size="xs" c="dimmed">
             {selecting
-              ? (problem ?? `${picked.length} runs selected.`)
-              : 'Finished runs of one dataset can be combined into an ensemble.'}
+              ? (problem ??
+                i18n.t('ui.training.HistoryView.runsSelected', { length: picked.length }))
+              : i18n.t('ui.training.HistoryView.finishedRunsOfOneDataset')}
           </Text>
           {selecting ? (
             <Group gap={4} wrap="nowrap">
               <Button size="compact-xs" variant="subtle" color="gray" onClick={stopSelecting}>
-                Cancel
+                {i18n.t('ui.training.HistoryView.cancel')}
               </Button>
               <Button
                 size="compact-xs"
@@ -182,7 +195,7 @@ export function HistoryView({
                 disabled={problem !== null}
                 onClick={() => setCombining(true)}
               >
-                Combine into an ensemble
+                {i18n.t('ui.training.HistoryView.combineIntoAnEnsemble')}
               </Button>
             </Group>
           ) : (
@@ -192,7 +205,7 @@ export function HistoryView({
               leftSection={<IconStack2 size={14} />}
               onClick={() => setSelecting(true)}
             >
-              Combine runs
+              {i18n.t('ui.training.HistoryView.combineRuns')}
             </Button>
           )}
         </Group>
@@ -209,7 +222,7 @@ export function HistoryView({
             {selecting &&
               (selectable ? (
                 <Checkbox
-                  aria-label={`Select ${run.name}`}
+                  aria-label={i18n.t('ui.training.HistoryView.select', { name: run.name })}
                   checked={selected.includes(run.id)}
                   onChange={() => toggleRun(run.id)}
                 />
@@ -229,7 +242,7 @@ export function HistoryView({
                     </Text>
                     {isEnsemble(run) && (
                       <Badge variant="outline" color="grape" tt="none" style={{ flexShrink: 0 }}>
-                        Ensemble
+                        {i18n.t('ui.training.HistoryView.ensemble')}
                       </Badge>
                     )}
                     <StatusBadge status={run.status} />
@@ -259,12 +272,12 @@ export function HistoryView({
               </Group>
             </UnstyledButton>
             {canDeleteRun(run, scope) ? (
-              <Tooltip label="Delete">
+              <Tooltip label={i18n.t('ui.training.HistoryView.delete')}>
                 <ActionIcon
                   variant="subtle"
                   color="gray"
                   onClick={() => confirmDeleteRun(run, onDeleted)}
-                  aria-label={`Delete ${run.name}`}
+                  aria-label={i18n.t('ui.training.HistoryView.delete2', { name: run.name })}
                 >
                   <IconTrash size={16} />
                 </ActionIcon>

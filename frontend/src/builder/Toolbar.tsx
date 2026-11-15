@@ -30,7 +30,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
-import { useTranslation } from '@/i18n';
+import { i18n, useTranslation } from '@/i18n';
 import { LiveBadge } from '@/live/LiveBadge';
 import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
@@ -208,7 +208,9 @@ export function Toolbar(props: ToolbarProps) {
               leftSection={<IconEye size={12} />}
               style={{ flexShrink: 0 }}
             >
-              <span className={sharingClasses.badgeLabel}>View only</span>
+              <span className={sharingClasses.badgeLabel}>
+                {i18n.t('ui.builder.Toolbar.viewOnly')}
+              </span>
             </Badge>
           </Tooltip>
         )}
@@ -403,7 +405,7 @@ export function Toolbar(props: ToolbarProps) {
             </ActionIcon>
           </Tooltip>
         )}
-        <Tooltip label="Properties">
+        <Tooltip label={i18n.t('ui.builder.Toolbar.properties')}>
           <ActionIcon
             hiddenFrom="lg"
             variant="default"

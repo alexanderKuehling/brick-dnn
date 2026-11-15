@@ -33,6 +33,7 @@ import {
 import { ActionIcon, Anchor, Badge, Collapse, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import type { AgentAction, AgentTarget } from '@/api';
 import { fullDateTime, timeInDay } from '@/collab/time';
+import { i18n, useTranslation } from '@/i18n';
 import {
   actionLabel,
   argumentText,
@@ -108,6 +109,7 @@ function TargetLink({
   onOpen: OpenTarget;
   children: React.ReactNode;
 }) {
+  useTranslation();
   return (
     <Anchor
       component="button"
@@ -117,7 +119,10 @@ function TargetLink({
         event.stopPropagation();
         onOpen(target);
       }}
-      aria-label={`Open ${TARGET_LABELS[target.kind].toLowerCase()} “${target.name}”`}
+      aria-label={i18n.t('ui.activity.ActivityItem.open', {
+        value: TARGET_LABELS[target.kind].toLowerCase(),
+        name: target.name,
+      })}
     >
       {children}
     </Anchor>
@@ -160,19 +165,20 @@ const OUTCOME_COLORS: Partial<Record<AgentAction['outcome'], string>> = {
 
 /** "Waiting for approval", "Approved" or "Denied" for entries of an approval request. */
 function ApprovalBadge({ entry, waiting }: { entry: AgentAction; waiting: boolean }) {
+  useTranslation();
   if (entry.approval == null) {
     return null;
   }
   const label =
     entry.outcome === 'pending'
       ? waiting
-        ? 'Waiting for approval'
-        : 'Asked for approval'
+        ? i18n.t('ui.activity.ActivityItem.waitingForApproval')
+        : i18n.t('ui.activity.ActivityItem.askedForApproval')
       : entry.outcome === 'approved'
-        ? 'Approved'
+        ? i18n.t('ui.activity.ActivityItem.approved')
         : entry.outcome === 'denied'
-          ? 'Denied'
-          : 'Approved, failed';
+          ? i18n.t('ui.activity.ActivityItem.denied')
+          : i18n.t('ui.activity.ActivityItem.approvedFailed');
   return (
     <Badge
       size="sm"
@@ -186,17 +192,25 @@ function ApprovalBadge({ entry, waiting }: { entry: AgentAction; waiting: boolea
 }
 
 function Details({ group, now }: { group: EntryGroup; now: Date }) {
+  useTranslation();
   const [entry] = group.entries;
   const args = Object.entries(entry.arguments);
   const source = entry.source === 'mcp' ? 'MCP tool' : 'REST request';
   return (
     <div className={classes.details}>
       <dl className={classes.facts}>
-        <dt>When</dt>
+        <dt>{i18n.t('ui.activity.ActivityItem.when')}</dt>
         <dd>
-          {fullDateTime(entry.created_at)}, took {formatDuration(entry.duration_ms)}
+          {i18n.t('ui.activity.ActivityItem.took', {
+            fullDateTime: fullDateTime(entry.created_at),
+            duration_ms: formatDuration(entry.duration_ms),
+          })}
         </dd>
-        <dt>{entry.agent.kind === 'app' ? 'Connected app' : 'API token'}</dt>
+        <dt>
+          {entry.agent.kind === 'app'
+            ? i18n.t('ui.activity.ActivityItem.connectedApp')
+            : i18n.t('ui.activity.ActivityItem.apiToken')}
+        </dt>
         <dd>
           {entry.agent.name}
           {entry.agent.prefix && (
@@ -208,7 +222,7 @@ function Details({ group, now }: { group: EntryGroup; now: Date }) {
         </dd>
         {entry.user_agent && (
           <>
-            <dt>Client</dt>
+            <dt>{i18n.t('ui.activity.ActivityItem.client')}</dt>
             <dd>{entry.user_agent}</dd>
           </>
         )}
@@ -217,13 +231,16 @@ function Details({ group, now }: { group: EntryGroup; now: Date }) {
           <Text span ff="monospace" size="sm">
             {actionLabel(entry)}
           </Text>
-          {entry.status_code !== null && ` → HTTP ${entry.status_code}`}
-          {entry.writes ? ' (changes something)' : ' (reads only)'}
+          {entry.status_code !== null &&
+            i18n.t('ui.activity.ActivityItem.http', { status_code: entry.status_code })}
+          {entry.writes
+            ? i18n.t('ui.activity.ActivityItem.changesSomething')
+            : i18n.t('ui.activity.ActivityItem.readsOnly')}
         </dd>
-        <dt>Arguments</dt>
+        <dt>{i18n.t('ui.activity.ActivityItem.arguments')}</dt>
         <dd>
           {args.length === 0
-            ? 'none'
+            ? i18n.t('ui.activity.ActivityItem.none')
             : args.map(([key, value]) => (
                 <div key={key}>
                   <Text span ff="monospace" size="sm">
@@ -235,13 +252,12 @@ function Details({ group, now }: { group: EntryGroup; now: Date }) {
         </dd>
       </dl>
       <Text size="xs" c="dimmed" mt="xs">
-        Arguments are stored summarised: sizes and counts instead of file contents and prediction
-        inputs, never tokens or passwords.
+        {i18n.t('ui.activity.ActivityItem.argumentsAreStoredSummarisedSizes')}
       </Text>
       {group.entries.length > 1 && (
         <>
           <Text size="sm" fw={600} mt="sm">
-            {group.entries.length} calls in a row
+            {i18n.t('ui.activity.ActivityItem.callsInARow', { length: group.entries.length })}
           </Text>
           <ol className={classes.calls}>
             {group.entries.map((call) => (
@@ -276,6 +292,7 @@ export function ActivityItem({
   /** The entry's approval request still waits for the user. */
   waiting?: boolean;
 }) {
+  useTranslation();
   const [opened, setOpened] = useState(false);
   const [entry] = group.entries;
   const failed = entry.outcome === 'error';
@@ -315,7 +332,7 @@ export function ActivityItem({
           )}
           {denied && entry.error && (
             <Text size="sm" c="dimmed" className={classes.error}>
-              Your message: {entry.error}
+              {i18n.t('ui.activity.ActivityItem.yourMessage', { error: entry.error })}
             </Text>
           )}
           <div className={classes.meta}>
@@ -343,7 +360,9 @@ export function ActivityItem({
                 color="gray"
                 radius="sm"
                 className={classes.count}
-                aria-label={`${group.entries.length} calls in a row`}
+                aria-label={i18n.t('ui.activity.ActivityItem.callsInARow', {
+                  length: group.entries.length,
+                })}
               >
                 ×{group.entries.length}
               </Badge>
@@ -360,7 +379,11 @@ export function ActivityItem({
             variant="subtle"
             color="gray"
             size="sm"
-            aria-label={opened ? 'Hide details' : 'Show details'}
+            aria-label={
+              opened
+                ? i18n.t('ui.activity.ActivityItem.hideDetails')
+                : i18n.t('ui.activity.ActivityItem.showDetails')
+            }
             aria-expanded={opened}
             aria-controls={detailsId}
             onClick={(event) => {

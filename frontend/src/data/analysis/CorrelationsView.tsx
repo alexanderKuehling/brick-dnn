@@ -4,6 +4,7 @@ import type { DataProfile, DataSample } from '@/api/types';
 import { divergingColor, useChartScheme } from '@/components/charts/colors';
 import { formatCoefficient, formatCount } from '@/components/charts/format';
 import { Heatmap, strongestPairs } from '@/components/charts/Heatmap';
+import { i18n, useTranslation } from '@/i18n';
 import { clusterOrder, sampleMatrix } from './relations';
 import { analysisNote } from './sampleData';
 import { Note } from './shared';
@@ -30,8 +31,12 @@ export interface CorrelationsViewProps {
 }
 
 const METHOD_LABELS: Record<CorrelationMethod, string> = {
-  pearson: 'Pearson',
-  spearman: 'Spearman',
+  get pearson() {
+    return i18n.t('ui.data.CorrelationsView.pearson');
+  },
+  get spearman() {
+    return i18n.t('ui.data.CorrelationsView.spearman');
+  },
 };
 
 interface ShownMatrix {
@@ -59,6 +64,7 @@ export const CorrelationsView = memo(
     onClusteredChange,
     chooser,
   }: CorrelationsViewProps) => {
+    useTranslation();
     const scheme = useChartScheme();
     const server = profile.correlations.find((c) => c.method === method) ?? null;
 
@@ -108,7 +114,7 @@ export const CorrelationsView = memo(
         <Group gap="sm" wrap="wrap" align="flex-end">
           <SegmentedControl
             size="xs"
-            aria-label="Correlation method"
+            aria-label={i18n.t('ui.data.CorrelationsView.correlationMethod')}
             value={method}
             onChange={(value) => onMethodChange(value as CorrelationMethod)}
             data={(['pearson', 'spearman'] as const).map((m) => ({
@@ -118,7 +124,7 @@ export const CorrelationsView = memo(
           />
           <Switch
             size="xs"
-            label="Group related columns"
+            label={i18n.t('ui.data.CorrelationsView.groupRelatedColumns')}
             checked={clustered}
             onChange={(event) => onClusteredChange(event.currentTarget.checked)}
           />
@@ -128,7 +134,12 @@ export const CorrelationsView = memo(
         {shown ? (
           <Heatmap
             title={`${METHOD_LABELS[method]} correlation`}
-            subtitle={`Showing ${formatCount(shown.columns.length)} of ${formatCount(all)} number and yes/no columns${clustered ? ', related ones next to each other' : ''}. ${shown.basis}`}
+            subtitle={i18n.t('ui.data.CorrelationsView.showingOfNumberAndYes', {
+              length: formatCount(shown.columns.length),
+              all: formatCount(all),
+              value: clustered ? i18n.t('ui.data.CorrelationsView.relatedOnesNextToEach') : '',
+              basis: shown.basis,
+            })}
             rows={shown.columns}
             columns={shown.columns}
             values={shown.values}
@@ -143,15 +154,15 @@ export const CorrelationsView = memo(
         ) : (
           <Text size="sm" c="dimmed">
             {columns
-              ? 'Choose at least two columns.'
-              : 'Correlations need at least two number or yes/no columns.'}
+              ? i18n.t('ui.data.CorrelationsView.chooseAtLeastTwoColumns')
+              : i18n.t('ui.data.CorrelationsView.correlationsNeedAtLeastTwo')}
           </Text>
         )}
 
         {pairs.length > 0 && shown && (
           <Stack gap={4}>
             <Text size="sm" fw={600}>
-              Strongest pairs
+              {i18n.t('ui.data.CorrelationsView.strongestPairs')}
             </Text>
             <ul className={classes.pairList}>
               {pairs.map((p) => {
@@ -163,7 +174,12 @@ export const CorrelationsView = memo(
                     <UnstyledButton
                       className={classes.pair}
                       onClick={() => onScatter(a, b)}
-                      aria-label={`${a} and ${b}: ${measure} ${formatCoefficient(p.value)}. Open the scatter plot.`}
+                      aria-label={i18n.t('ui.data.CorrelationsView.andOpenTheScatterPlot', {
+                        a,
+                        b,
+                        measure,
+                        value: formatCoefficient(p.value),
+                      })}
                     >
                       <svg width={64} height={8} aria-hidden="true" style={{ flexShrink: 0 }}>
                         <rect width={64} height={8} rx={4} style={{ fill: 'var(--chart-track)' }} />
@@ -182,7 +198,7 @@ export const CorrelationsView = memo(
                       </Text>
                       {size > 0.95 && (
                         <Badge size="xs" variant="light" color="gray">
-                          nearly redundant
+                          {i18n.t('ui.data.CorrelationsView.nearlyRedundant')}
                         </Badge>
                       )}
                     </UnstyledButton>
@@ -194,11 +210,12 @@ export const CorrelationsView = memo(
         )}
 
         <Note>
-          {method === 'pearson'
-            ? 'Pearson r measures linear relations (sensitive to outliers).'
-            : 'Spearman ρ is the correlation of ranks: it finds any monotonic relation and is robust to outliers.'}{' '}
-          −1 = perfectly opposite, 0 = no relation, +1 = perfectly together. Constant columns have
-          no correlation (–).
+          {i18n.t('ui.data.CorrelationsView.text1PerfectlyOpposite0No', {
+            value:
+              method === 'pearson'
+                ? i18n.t('ui.data.CorrelationsView.pearsonRMeasuresLinearRelations')
+                : i18n.t('ui.data.CorrelationsView.spearmanIsTheCorrelationOf'),
+          })}
         </Note>
       </Stack>
     );

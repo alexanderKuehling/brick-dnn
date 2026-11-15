@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Center, Checkbox, Group, Loader, Modal, Switch, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, type Project, type ProjectDataKind, type ProjectRef } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { ROLE_LABELS } from './roles';
 import classes from './Sharing.module.css';
 
@@ -29,6 +30,7 @@ export function ShareInNetworkDialog({
   onChange,
   datasets = [],
 }: ShareInNetworkDialogProps) {
+  useTranslation();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sharedIn, setSharedIn] = useState<ProjectRef[]>(item.shared_in);
@@ -75,7 +77,9 @@ export function ShareInNetworkDialog({
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: on ? `Could not share it in “${project.name}”` : 'Could not stop sharing it',
+        title: on
+          ? i18n.t('ui.sharing.ShareInNetworkDialog.couldNotShareItIn', { name: project.name })
+          : i18n.t('ui.sharing.ShareInNetworkDialog.couldNotStopSharingIt'),
         message: (error as Error).message,
       });
     } finally {
@@ -84,19 +88,27 @@ export function ShareInNetworkDialog({
   };
 
   return (
-    <Modal opened onClose={onClose} title={`Share “${item.name}” in a network`}>
+    <Modal
+      opened
+      onClose={onClose}
+      title={i18n.t('ui.sharing.ShareInNetworkDialog.shareInANetwork', { name: item.name })}
+    >
       <Text size="sm" c="dimmed" mb="md">
         {kind === 'prep'
-          ? 'Everyone in the network can open it in their Data tab; its editors can also change the steps and create training datasets from it. Training datasets you create from it are shared there, too. The imported table stays yours.'
-          : 'Everyone in the network can train on it. Only you can delete it.'}
+          ? i18n.t('ui.sharing.ShareInNetworkDialog.everyoneInTheNetworkCan')
+          : i18n.t('ui.sharing.ShareInNetworkDialog.everyoneInTheNetworkCan2')}
       </Text>
       {datasets.length > 0 && (
         <Checkbox
           mb="md"
           label={
             datasets.length === 1
-              ? `Also share the training dataset “${datasets[0].name}” made from it`
-              : `Also share the ${datasets.length} training datasets made from it`
+              ? i18n.t('ui.sharing.ShareInNetworkDialog.alsoShareTheTrainingDataset', {
+                  name: datasets[0].name,
+                })
+              : i18n.t('ui.sharing.ShareInNetworkDialog.alsoShareTheTrainingDatasets', {
+                  length: datasets.length,
+                })
           }
           checked={withDatasets}
           onChange={(event) => setWithDatasets(event.currentTarget.checked)}
@@ -109,21 +121,24 @@ export function ShareInNetworkDialog({
         </Center>
       )}
       {projects && listed.length === 0 && (
-        <Text size="sm">
-          You have no networks to share it in yet. Save a network (or ask to edit someone else’s),
-          then share it there.
-        </Text>
+        <Text size="sm">{i18n.t('ui.sharing.ShareInNetworkDialog.youHaveNoNetworksTo')}</Text>
       )}
       {listed.length > 0 && (
-        <ul className={classes.people} aria-label="Networks">
+        <ul
+          className={classes.people}
+          aria-label={i18n.t('ui.sharing.ShareInNetworkDialog.networks')}
+        >
           {listed.map((project) => (
             <li key={project.id} className={classes.person}>
               <Switch
                 label={project.name}
                 description={
                   project.role === 'owner'
-                    ? 'Your network'
-                    : `${project.owner.username}’s network · ${ROLE_LABELS[project.role]}`
+                    ? i18n.t('ui.sharing.ShareInNetworkDialog.yourNetwork')
+                    : i18n.t('ui.sharing.ShareInNetworkDialog.sNetwork', {
+                        username: project.owner.username,
+                        value: ROLE_LABELS[project.role],
+                      })
                 }
                 checked={busy?.id === project.id ? busy.on : shared.has(project.id)}
                 disabled={busy !== null || (project.role === 'viewer' && !shared.has(project.id))}
@@ -136,7 +151,7 @@ export function ShareInNetworkDialog({
       )}
       <Group justify="flex-end" mt="xl">
         <Button variant="default" onClick={onClose}>
-          Done
+          {i18n.t('ui.sharing.ShareInNetworkDialog.done')}
         </Button>
       </Group>
     </Modal>

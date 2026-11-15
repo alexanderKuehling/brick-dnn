@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 import type { Prediction, PredictionForm, PredictionResult, PredictionSample } from '@/api';
 import { downloadText } from '@/builder/download';
+import { i18n, useTranslation } from '@/i18n';
 import { MemberResults, Messages, ResultCard, ResultsTable } from './PredictionResults';
 import { isProblem, predictAll, type PredictionProblem } from './requests';
 import {
@@ -129,6 +130,7 @@ function Field({
 
 /** The prediction form of a run trained on a table: one row by hand, or many from CSV text. */
 export function TabularPredict({ runId, form, fileBase, ensemble = false }: TabularPredictProps) {
+  useTranslation();
   const [mode, setMode] = useState<Mode>(form.raw ? 'raw' : 'prepared');
   const columns = useMemo(() => columnsOf(form, mode), [form, mode]);
   const samples = samplesOf(form, mode);
@@ -257,43 +259,52 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
           value={mode}
           onChange={switchMode}
           data={[
-            { value: 'raw', label: 'Raw columns' },
-            { value: 'prepared', label: 'Prepared columns' },
+            { value: 'raw', label: i18n.t('ui.training.TabularPredict.rawColumns') },
+            { value: 'prepared', label: i18n.t('ui.training.TabularPredict.preparedColumns') },
           ]}
-          aria-label="Input columns"
+          aria-label={i18n.t('ui.training.TabularPredict.inputColumns')}
         />
       )}
       <Text size="xs" c="dimmed">
         {mode === 'raw' && form.raw
-          ? `The columns of “${form.raw.source ?? 'the source table'}” as imported. The server prepares them with ` +
-            `the data preparation${form.raw.prep ? ` “${form.raw.prep.name}”` : ''} and the values it learned ` +
-            'from the training rows, then predicts. Empty fields are missing values; the ranges are those of the training rows.'
-          : `The feature columns of the training dataset${form.raw ? ', after the data preparation' : ''}, as numbers. ` +
-            'The server standardises them like the training did.'}
+          ? i18n.t('ui.training.TabularPredict.theColumnsOfAsImported', {
+              value: form.raw.source ?? i18n.t('ui.training.TabularPredict.theSourceTable'),
+              prep: form.raw.prep ? ` “${form.raw.prep.name}”` : '',
+            })
+          : i18n.t('ui.training.TabularPredict.theFeatureColumnsOfThe', {
+              value: form.raw ? i18n.t('ui.training.TabularPredict.afterTheDataPreparation') : '',
+            })}
       </Text>
       {mode === 'raw' && form.raw && form.raw.skipped_steps.length > 0 && (
         <Text size="xs" c="dimmed">
-          Not applied to new rows (they only change training rows):{' '}
-          {form.raw.skipped_steps.join(', ')}.
+          {i18n.t('ui.training.TabularPredict.notAppliedToNewRows', {
+            skipped_steps: form.raw.skipped_steps.join(', '),
+          })}
         </Text>
       )}
       {mode === 'raw' && form.raw && form.raw.joined.length > 0 && (
         <Text size="xs" c="dimmed">
-          Joined with the stored copy of {form.raw.joined.map((name) => `“${name}”`).join(', ')} (as
-          it was when the dataset was created).
+          {i18n.t('ui.training.TabularPredict.joinedWithTheStoredCopy', {
+            map: form.raw.joined.map((name) => `“${name}”`).join(', '),
+          })}
         </Text>
       )}
       {unused.length > 0 && (
         <Text size="xs" c="dimmed">
-          Not needed: {unused.map((c) => c.name).join(', ')} (the preparation drops{' '}
-          {unused.length === 1 ? 'it' : 'them'}).
+          {i18n.t('ui.training.TabularPredict.notNeededThePreparationDrops', {
+            map: unused.map((c) => c.name).join(', '),
+            value:
+              unused.length === 1
+                ? i18n.t('ui.training.TabularPredict.it')
+                : i18n.t('ui.training.TabularPredict.them'),
+          })}
         </Text>
       )}
 
       {ensemble && (
         <Switch
           size="xs"
-          label="Show what each member predicts"
+          label={i18n.t('ui.training.TabularPredict.showWhatEachMemberPredicts')}
           checked={withMembers}
           onChange={(event) => setWithMembers(event.currentTarget.checked)}
         />
@@ -321,7 +332,7 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
           onClick={() => void predictOne()}
           disabled={busy}
         >
-          Predict
+          {i18n.t('ui.training.TabularPredict.predict')}
         </Button>
         {samples.length > 0 && (
           <Button
@@ -330,26 +341,38 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
             onClick={takeSample}
             disabled={busy}
           >
-            {sample === null ? 'Use a sample' : `Sample ${sample + 1} of ${samples.length}`}
+            {sample === null
+              ? i18n.t('ui.training.TabularPredict.useASample')
+              : i18n.t('ui.training.TabularPredict.sampleOf', {
+                  value: sample + 1,
+                  length: samples.length,
+                })}
           </Button>
         )}
         <Button variant="subtle" onClick={() => setCsvOpen((open) => !open)}>
-          {csvOpen ? 'Hide CSV rows' : 'Paste CSV rows'}
+          {csvOpen
+            ? i18n.t('ui.training.TabularPredict.hideCsvRows')
+            : i18n.t('ui.training.TabularPredict.pasteCsvRows')}
         </Button>
       </Group>
       {samples.length > 0 && sample === null && (
         <Text size="xs" c="dimmed" mt={-6}>
-          Samples are rows of the{' '}
-          {form.prepared?.samples.length && !form.raw ? 'dataset' : 'validation data'}, with their
-          actual value.
+          {i18n.t('ui.training.TabularPredict.samplesAreRowsOfThe', {
+            value:
+              form.prepared?.samples.length && !form.raw
+                ? i18n.t('ui.training.TabularPredict.dataset')
+                : i18n.t('ui.training.TabularPredict.validationData'),
+          })}
         </Text>
       )}
 
       {csvOpen && (
         <Stack gap="xs">
           <Textarea
-            label="CSV rows"
-            description={`A header line with the column names, then up to ${form.max_form_rows} rows (“,” or “;” separated).`}
+            label={i18n.t('ui.training.TabularPredict.csvRows')}
+            description={i18n.t('ui.training.TabularPredict.aHeaderLineWithThe', {
+              max_form_rows: form.max_form_rows,
+            })}
             placeholder={`${header}\n…`}
             autosize
             minRows={3}
@@ -365,7 +388,7 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
               disabled={busy || !csvText.trim()}
               loading={busy && progress !== null}
             >
-              Predict rows
+              {i18n.t('ui.training.TabularPredict.predictRows')}
             </Button>
             <FileButton
               accept=".csv,.tsv,.txt,text/csv,text/plain"
@@ -382,7 +405,7 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
                   variant="default"
                   leftSection={<IconFileUpload size={14} />}
                 >
-                  Upload a CSV file
+                  {i18n.t('ui.training.TabularPredict.uploadACsvFile')}
                 </Button>
               )}
             </FileButton>
@@ -392,7 +415,7 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
               value={(progress.done / Math.max(1, progress.total)) * 100}
               size="sm"
               animated
-              aria-label="Progress"
+              aria-label={i18n.t('ui.training.TabularPredict.progress')}
             />
           )}
         </Stack>
@@ -401,7 +424,11 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
       {problem && (
         <Messages
           color={problem.budget ? 'yellow' : 'red'}
-          title={problem.budget ? 'No compute left' : 'Cannot predict'}
+          title={
+            problem.budget
+              ? i18n.t('ui.training.TabularPredict.noComputeLeft')
+              : i18n.t('ui.training.TabularPredict.cannotPredict')
+          }
           messages={problem.errors.length > 0 ? problem.errors : [problem.message]}
         />
       )}
@@ -427,10 +454,16 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
       )}
       {many && many.rows.ignored.length > 0 && (
         <Text size="xs" c="dimmed">
-          Ignored columns: {many.rows.ignored.join(', ')}.
+          {i18n.t('ui.training.TabularPredict.ignoredColumns', {
+            ignored: many.rows.ignored.join(', '),
+          })}
         </Text>
       )}
-      <Messages color="yellow" title="Note" messages={warnings} />
+      <Messages
+        color="yellow"
+        title={i18n.t('ui.training.TabularPredict.note')}
+        messages={warnings}
+      />
     </Stack>
   );
 }

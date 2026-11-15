@@ -30,7 +30,7 @@ import type {
 import { ChartFrame, GradientLegend } from '@/components/charts/ChartFrame';
 import { SEQUENTIAL, sequentialColor, textOn, useChartScheme } from '@/components/charts/colors';
 import { ScatterPlot } from '@/components/charts/ScatterPlot';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { formatMetric, formatPercent } from './format';
 import { ThresholdAnalysis } from './ThresholdAnalysis';
 import classes from './Training.module.css';
@@ -38,9 +38,15 @@ import classes from './Training.module.css';
 type SplitKey = 'val' | 'test' | 'training';
 
 const SPLIT_LABELS: Record<SplitKey, string> = {
-  val: 'Validation',
-  test: 'Test',
-  training: 'Training (optimistic)',
+  get val() {
+    return i18n.t('ui.training.EvaluationResults.validation');
+  },
+  get test() {
+    return i18n.t('ui.training.EvaluationResults.test');
+  },
+  get training() {
+    return i18n.t('ui.training.EvaluationResults.trainingOptimistic');
+  },
 };
 /** "120 validation rows". */
 const ROW_LABELS: Record<SplitKey, string> = {
@@ -149,7 +155,10 @@ function lossTile<T extends { loss: number | null }>(
   hint: string
 ) {
   const values = [
-    { label: 'Train', value: formatMetric(evaluation.train?.loss) },
+    {
+      label: i18n.t('ui.training.EvaluationResults.train'),
+      value: formatMetric(evaluation.train?.loss),
+    },
     ...parts.map(({ key, split }) => ({
       label: SPLIT_LABELS[key],
       value: formatMetric(split.loss),
@@ -176,7 +185,7 @@ function rowShares(matrix: number[][]): number[][] {
 export function ConfusionMatrix({
   names,
   matrix,
-  title = 'Confusion matrix',
+  title = i18n.t('ui.training.EvaluationResults.confusionMatrix'),
   subtitle,
 }: {
   names: string[];
@@ -184,6 +193,7 @@ export function ConfusionMatrix({
   title?: string;
   subtitle?: string;
 }) {
+  useTranslation();
   const scheme = useChartScheme();
   const [mode, setMode] = useState<'counts' | 'percent'>('counts');
   const shares = useMemo(() => rowShares(matrix), [matrix]);
@@ -198,30 +208,32 @@ export function ConfusionMatrix({
           value={mode}
           onChange={(value) => setMode(value as 'counts' | 'percent')}
           data={[
-            { value: 'counts', label: 'Counts' },
-            { value: 'percent', label: '% of true class' },
+            { value: 'counts', label: i18n.t('ui.training.EvaluationResults.counts') },
+            { value: 'percent', label: i18n.t('ui.training.EvaluationResults.ofTrueClass') },
           ]}
-          aria-label="Values in the cells"
+          aria-label={i18n.t('ui.training.EvaluationResults.valuesInTheCells')}
         />
       }
       legendExtra={
         <GradientLegend
-          label="Colour: share of the true class, from 0% (light) to 100% (dark)"
+          label={i18n.t('ui.training.EvaluationResults.colourShareOfTheTrue')}
           stops={[SEQUENTIAL[scheme].fillLow, SEQUENTIAL[scheme].high]}
           labels={['0%', '100% of the true class']}
         />
       }
-      caption="Rows: true class · columns: predicted class · the diagonal is right. Hover a cell for both numbers."
+      caption={i18n.t('ui.training.EvaluationResults.rowsTrueClassColumnsPredicted')}
     >
       <ScrollArea.Autosize mah={520} type="auto" offsetScrollbars>
         <table
           className={classes.matrix}
-          aria-label={`${title}: rows true class, columns predicted class`}
+          aria-label={i18n.t('ui.training.EvaluationResults.rowsTrueClassColumnsPredicted2', {
+            title,
+          })}
         >
           <thead>
             <tr>
               <th className={classes.matrixCorner} scope="col">
-                <span>true ↓ predicted →</span>
+                <span>{i18n.t('ui.training.EvaluationResults.truePredicted')}</span>
               </th>
               {names.map((name, column) => (
                 <th
@@ -244,7 +256,13 @@ export function ConfusionMatrix({
                 {row.map((count, c) => {
                   const share = shares[r][c];
                   const fill = sequentialColor(share, scheme, true);
-                  const text = `True ${label(r)}, predicted ${label(c)}: ${count.toLocaleString(currentLocale())} (${formatPercent(share)} of ${label(r)})`;
+                  const text = i18n.t('ui.training.EvaluationResults.truePredictedOf', {
+                    label: label(r),
+                    label2: label(c),
+                    count: count.toLocaleString(currentLocale()),
+                    share: formatPercent(share),
+                    label3: label(r),
+                  });
                   return (
                     <td
                       key={c}
@@ -276,30 +294,35 @@ function ConfusedPairs({
   evaluation: ClassificationEvaluation;
   split: ClassificationSplit;
 }) {
+  useTranslation();
   const names = evaluation.class_names;
   const support = split.per_class.support;
   return (
     <div>
       <Text size="sm" fw={600}>
-        Most confused classes
+        {i18n.t('ui.training.EvaluationResults.mostConfusedClasses')}
       </Text>
       <Text size="xs" c="dimmed" mb={4}>
-        No confusion matrix for {names.length} classes (it is kept up to{' '}
-        {evaluation.matrix_classes_max}); the pairs mixed up most often instead.
+        {i18n.t('ui.training.EvaluationResults.noConfusionMatrixForClasses', {
+          length: names.length,
+          matrix_classes_max: evaluation.matrix_classes_max,
+        })}
       </Text>
       {split.most_confused.length === 0 ? (
         <Text size="sm" c="dimmed">
-          Every row was predicted right.
+          {i18n.t('ui.training.EvaluationResults.everyRowWasPredictedRight')}
         </Text>
       ) : (
         <ScrollArea type="auto">
-          <Table fz="xs" aria-label="Most confused classes">
+          <Table fz="xs" aria-label={i18n.t('ui.training.EvaluationResults.mostConfusedClasses')}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>True class</Table.Th>
-                <Table.Th>Predicted as</Table.Th>
-                <Table.Th ta="right">Rows</Table.Th>
-                <Table.Th ta="right">Of the true class</Table.Th>
+                <Table.Th>{i18n.t('ui.training.EvaluationResults.trueClass')}</Table.Th>
+                <Table.Th>{i18n.t('ui.training.EvaluationResults.predictedAs')}</Table.Th>
+                <Table.Th ta="right">{i18n.t('ui.training.EvaluationResults.rows')}</Table.Th>
+                <Table.Th ta="right">
+                  {i18n.t('ui.training.EvaluationResults.ofTheTrueClass')}
+                </Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -326,10 +349,25 @@ function ConfusedPairs({
 type SortKey = 'class' | 'precision' | 'recall' | 'f1' | 'support';
 
 const COLUMNS: { key: Exclude<SortKey, 'class'>; label: string }[] = [
-  { key: 'precision', label: 'Precision' },
-  { key: 'recall', label: 'Recall' },
+  {
+    key: 'precision',
+    get label() {
+      return i18n.t('ui.training.EvaluationResults.precision');
+    },
+  },
+  {
+    key: 'recall',
+    get label() {
+      return i18n.t('ui.training.EvaluationResults.recall');
+    },
+  },
   { key: 'f1', label: 'F1' },
-  { key: 'support', label: 'Support' },
+  {
+    key: 'support',
+    get label() {
+      return i18n.t('ui.training.EvaluationResults.support');
+    },
+  },
 ];
 
 /** Row order of the per-class table: by class (index) or by a column, nulls last. */
@@ -388,6 +426,7 @@ function SortHeader({
 
 /** Precision, recall, F1 and support of every class; the columns sort on click. */
 export function PerClassTable({ names, perClass }: { names: string[]; perClass: PerClassMetrics }) {
+  useTranslation();
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({
     key: 'class',
     descending: false,
@@ -405,14 +444,18 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
   return (
     <div>
       <Text size="sm" fw={600} mb={4}>
-        Per class
+        {i18n.t('ui.training.EvaluationResults.perClass')}
       </Text>
       <ScrollArea.Autosize mah={400} type="auto">
-        <Table fz="xs" stickyHeader aria-label="Metrics per class">
+        <Table
+          fz="xs"
+          stickyHeader
+          aria-label={i18n.t('ui.training.EvaluationResults.metricsPerClass')}
+        >
           <Table.Thead>
             <Table.Tr>
               <SortHeader
-                label="Class"
+                label={i18n.t('ui.training.EvaluationResults.class')}
                 active={sort.key === 'class'}
                 descending={sort.descending}
                 onClick={() => toggle('class')}
@@ -446,9 +489,7 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
         </Table>
       </ScrollArea.Autosize>
       <Text size="xs" c="dimmed" mt={4}>
-        Precision: of the rows predicted as the class, the share that is right. Recall: of the rows
-        of the class, the share found. F1: their harmonic mean. Support: rows of the class. “–”: not
-        defined (never predicted, or no rows).
+        {i18n.t('ui.training.EvaluationResults.precisionOfTheRowsPredicted')}
       </Text>
     </div>
   );
@@ -465,6 +506,7 @@ function SplitPicker({
   onChange: (value: SplitKey) => void;
   options: SplitKey[];
 }) {
+  useTranslation();
   if (options.length < 2) {
     return null;
   }
@@ -474,7 +516,7 @@ function SplitPicker({
       value={value}
       onChange={(next) => onChange(next as SplitKey)}
       data={options.map((key) => ({ value: key, label: SPLIT_LABELS[key] }))}
-      aria-label="Rows of the matrix and the table"
+      aria-label={i18n.t('ui.training.EvaluationResults.rowsOfTheMatrixAnd')}
     />
   );
 }
@@ -495,6 +537,7 @@ function ClassificationResults({
   trainHint: string;
   threshold?: ThresholdProps;
 }) {
+  useTranslation();
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
   const parts = splitsOf(evaluation);
   const { key: shown, split } = pickSplit(parts, splitKey);
@@ -536,8 +579,11 @@ function ClassificationResults({
       </SimpleGrid>
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed">
-          {split.size.toLocaleString(currentLocale())} {ROW_LABELS[shown]} rows · {names.length}{' '}
-          classes
+          {i18n.t('ui.training.EvaluationResults.rowsClasses', {
+            size: split.size.toLocaleString(currentLocale()),
+            value: ROW_LABELS[shown],
+            length: names.length,
+          })}
         </Text>
         <SplitPicker value={shown} onChange={setSplitKey} options={options} />
       </Group>
@@ -586,6 +632,7 @@ function RegressionResults({
   evaluation: RegressionEvaluation;
   trainHint: string;
 }) {
+  useTranslation();
   const [splitKey, setSplitKey] = useState<SplitKey>('val');
   const parts = splitsOf(evaluation);
   const { key: shown, split } = pickSplit(parts, splitKey);
@@ -613,27 +660,38 @@ function RegressionResults({
       </SimpleGrid>
       {residuals && (
         <Text size="xs" c="dimmed">
-          Residuals (predicted − actual), {ROW_LABELS[shown]} rows: 5% below{' '}
-          {formatMetric(residuals.q05)}, half between {formatMetric(residuals.q25)} and{' '}
-          {formatMetric(residuals.q75)} (median {formatMetric(residuals.median)}), 5% above{' '}
-          {formatMetric(residuals.q95)}.
+          {i18n.t('ui.training.EvaluationResults.residualsPredictedActualRows5', {
+            value: ROW_LABELS[shown],
+            q05: formatMetric(residuals.q05),
+            q25: formatMetric(residuals.q25),
+            q75: formatMetric(residuals.q75),
+            median: formatMetric(residuals.median),
+            q95: formatMetric(residuals.q95),
+          })}
         </Text>
       )}
       {points.actual.length > 0 && (
         <ScatterPlot
-          title="Predicted vs. actual"
-          subtitle={`${SPLIT_LABELS[shown]} rows, in the units of the target`}
+          title={i18n.t('ui.training.EvaluationResults.predictedVsActual')}
+          subtitle={i18n.t('ui.training.EvaluationResults.rowsInTheUnitsOf', {
+            value: SPLIT_LABELS[shown],
+          })}
           controls={<SplitPicker value={shown} onChange={setSplitKey} options={options} />}
           x={points.actual}
           y={points.predicted}
-          xLabel="Actual"
-          yLabel="Predicted"
+          xLabel={i18n.t('ui.training.EvaluationResults.actual')}
+          yLabel={i18n.t('ui.training.EvaluationResults.predicted')}
           diagonal="Predicted = actual"
           height={300}
           caption={
             points.actual.length < split.size
-              ? `${points.actual.length.toLocaleString(currentLocale())} of ${split.size.toLocaleString(currentLocale())} rows, evenly spaced.`
-              : `All ${split.size.toLocaleString(currentLocale())} rows.`
+              ? i18n.t('ui.training.EvaluationResults.ofRowsEvenlySpaced', {
+                  length: points.actual.length.toLocaleString(currentLocale()),
+                  size: split.size.toLocaleString(currentLocale()),
+                })
+              : i18n.t('ui.training.EvaluationResults.allRows', {
+                  size: split.size.toLocaleString(currentLocale()),
+                })
           }
         />
       )}
@@ -655,14 +713,15 @@ export function EvaluationResults({
   /** What was measured, if not the kept weights or the fitted model (e.g. an ensemble). */
   subject?: string;
 }) {
+  useTranslation();
   if (!evaluation || splitsOf<unknown>(evaluation).length === 0) {
     return null;
   }
   // Without validation and test rows the model can only be measured on what it learned from.
   const optimistic = !evaluation.val && !evaluation.test;
   const trainHint = classical
-    ? 'train: the fitted model on its training rows'
-    : 'train: mean over the batches of the epoch';
+    ? i18n.t('ui.training.EvaluationResults.trainTheFittedModelOn')
+    : i18n.t('ui.training.EvaluationResults.trainMeanOverTheBatches');
   const kept = subject
     ? subject
     : classical
@@ -676,10 +735,14 @@ export function EvaluationResults({
           .filter(Boolean)
           .join(' · ');
   return (
-    <Stack gap="sm" component="section" aria-label="Metrics">
+    <Stack
+      gap="sm"
+      component="section"
+      aria-label={i18n.t('ui.training.EvaluationResults.metrics')}
+    >
       <Group justify="space-between" gap="xs" align="baseline">
         <Text size="sm" fw={600}>
-          Metrics
+          {i18n.t('ui.training.EvaluationResults.metrics')}
         </Text>
         <Text size="xs" c="dimmed">
           {kept}
@@ -687,8 +750,7 @@ export function EvaluationResults({
       </Group>
       {optimistic && (
         <Text size="xs" c="orange" data-testid="optimistic-metrics">
-          No validation or test rows: these numbers come from the training rows, which the model has
-          learned from, so they are optimistic. They do not say how well it works on new data.
+          {i18n.t('ui.training.EvaluationResults.noValidationOrTestRows')}
         </Text>
       )}
       {evaluation.task === 'classification' ? (

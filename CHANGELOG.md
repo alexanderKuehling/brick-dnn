@@ -19,11 +19,15 @@
   language (else the request's, else English). The REST API without the header and the MCP
   server stay English. Legal pages can have a translation `<page>.<language>.md`, and a page
   with the sections `## English` and `## Deutsch` shows the one of the app's language. Tests
-  fail on a key missing in one language or a string without German translation. Not yet
-  translated: the Data tab beyond its catalogue, run results and charts, explanations, the
-  account, token, activity, approval, sharing, comment and billing pages, and messages the
-  server builds from data (network validation, training checks, readiness checks). See
-  docs/translations.md.
+  fail on a key missing in one language or a string without German translation. Every
+  page of the app is translated (builder, Data tab and its analyses, training panel, run
+  view, metrics and charts, explanations, account, two-factor, usage, tokens, agent
+  activity, approvals, sharing, comments, history, pricing and billing). Messages the
+  `brickdnn` package builds from data (network analysis, training checks and the run
+  summary, readiness checks, preparation steps) are translated by the API from templates read
+  out of the package's source (`brick_dnn_core/messages.py`), so the package stays free of
+  Django and the MCP server keeps English. See docs/translations.md, also for what is still
+  English.
 - **Landing pages in English and German.** `/` and `/de/` now describe Brick DNN for
   teaching, research and practice: what it is, use cases, how it works, features, where data
   is stored, the plans with their prices, an offer for teaching and research and an FAQ. They

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IconEraser, IconPhotoUp, IconWand } from '@tabler/icons-react';
 import { Box, Button, FileButton, Group, SegmentedControl, Stack, Text } from '@mantine/core';
 import type { Prediction, PredictionForm, PredictionResult } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { imagePixels } from './loadImage';
 import { fitDrawing, imageInput, rasterize, type Stroke } from './pixels';
 import { Messages, ResultCard } from './PredictionResults';
@@ -45,6 +46,7 @@ function DrawPad({
   /** Takes an update (pointer events can come faster than renders). */
   onChange: (update: (strokes: Stroke[]) => Stroke[]) => void;
 }) {
+  useTranslation();
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
 
@@ -97,7 +99,7 @@ function DrawPad({
       ref={canvas}
       width={280}
       height={280}
-      aria-label="Drawing pad"
+      aria-label={i18n.t('ui.training.ImagePredict.drawingPad')}
       style={{
         width: '100%',
         maxWidth: 280,
@@ -136,6 +138,7 @@ function DrawPad({
 
 /** Predict the class of an uploaded or drawn image. */
 export function ImagePredict({ runId, form }: { runId: string; form: PredictionForm }) {
+  useTranslation();
   const image = form.image!;
   // Drawing makes sense for small grayscale images like the MNIST digits.
   const drawable = image.channels === 1 && image.width <= 64 && image.height <= 64;
@@ -196,7 +199,11 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
   const predictDrawing = async () => {
     const digit = fitDrawing(rasterize(strokes, PAD, LINE_WIDTH), PAD, image.width, image.height);
     if (!digit) {
-      setProblem({ message: 'Draw something first.', errors: [], budget: false });
+      setProblem({
+        message: i18n.t('ui.training.ImagePredict.drawSomethingFirst'),
+        errors: [],
+        budget: false,
+      });
       return;
     }
     const pixels = [digit];
@@ -218,16 +225,20 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
             setInput(null);
           }}
           data={[
-            { value: 'upload', label: 'Upload an image' },
-            { value: 'draw', label: 'Draw' },
+            { value: 'upload', label: i18n.t('ui.training.ImagePredict.uploadAnImage') },
+            { value: 'draw', label: i18n.t('ui.training.ImagePredict.draw') },
           ]}
-          aria-label="Image input"
+          aria-label={i18n.t('ui.training.ImagePredict.imageInput')}
         />
       )}
       <Text size="xs" c="dimmed">
         {mode === 'draw'
-          ? `Draw a digit or shape. It is scaled into ${size} pixels and centred, like the MNIST digits (white on black).`
-          : `Any image file: it is resized to ${size} pixels${image.channels === 1 ? ' and turned grayscale' : ''}, then normalised like the training images.`}
+          ? i18n.t('ui.training.ImagePredict.drawADigitOrShape', { size })
+          : i18n.t('ui.training.ImagePredict.anyImageFileItIs', {
+              size,
+              value:
+                image.channels === 1 ? i18n.t('ui.training.ImagePredict.andTurnedGrayscale') : '',
+            })}
       </Text>
 
       {mode === 'draw' ? (
@@ -239,7 +250,7 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
               loading={busy}
               onClick={() => void predictDrawing()}
             >
-              Predict
+              {i18n.t('ui.training.ImagePredict.predict')}
             </Button>
             <Button
               variant="default"
@@ -250,7 +261,7 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
                 setInput(null);
               }}
             >
-              Clear
+              {i18n.t('ui.training.ImagePredict.clear')}
             </Button>
           </Group>
         </Stack>
@@ -261,7 +272,7 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
               {...props}
               component="button"
               type="button"
-              aria-label="Upload an image"
+              aria-label={i18n.t('ui.training.ImagePredict.uploadAnImage')}
               onDragOver={(event: React.DragEvent) => {
                 event.preventDefault();
                 setDragging(true);
@@ -287,10 +298,10 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
                 <IconPhotoUp size={20} />
                 <Text size="sm">
                   {busy
-                    ? 'Predicting …'
+                    ? i18n.t('ui.training.ImagePredict.predicting')
                     : fileName
-                      ? `${fileName} – choose another`
-                      : 'Drop an image here or click to choose one'}
+                      ? i18n.t('ui.training.ImagePredict.chooseAnother', { fileName })
+                      : i18n.t('ui.training.ImagePredict.dropAnImageHereOr')}
                 </Text>
               </Group>
             </Box>
@@ -302,7 +313,7 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
         <Group gap="xs" align="center">
           <canvas
             ref={preview}
-            aria-label="What the network sees"
+            aria-label={i18n.t('ui.training.ImagePredict.whatTheNetworkSees')}
             style={{
               width: 56,
               height: 56,
@@ -311,14 +322,18 @@ export function ImagePredict({ runId, form }: { runId: string; form: PredictionF
             }}
           />
           <Text size="xs" c="dimmed">
-            What the network gets ({size})
+            {i18n.t('ui.training.ImagePredict.whatTheNetworkGets', { size })}
           </Text>
         </Group>
       )}
       {problem && (
         <Messages
           color={problem.budget ? 'yellow' : 'red'}
-          title={problem.budget ? 'No compute left' : 'Cannot predict'}
+          title={
+            problem.budget
+              ? i18n.t('ui.training.ImagePredict.noComputeLeft')
+              : i18n.t('ui.training.ImagePredict.cannotPredict')
+          }
           messages={problem.errors.length > 0 ? problem.errors : [problem.message]}
         />
       )}

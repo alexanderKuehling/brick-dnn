@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
 import { api, type GenerateOptions, type GraphDocument, type NetworkFamily } from '@/api';
-import { useTranslation } from '@/i18n';
+import { i18n, useTranslation } from '@/i18n';
 import { CodeView } from './CodeView';
 import { downloadText } from './download';
 import { semanticKey } from './graph';
@@ -171,7 +171,7 @@ export default function CodeModal({
             <Box component="span" visibleFrom="xs">
               {filename}
             </Box>
-            .py
+            {i18n.t('ui.builder.CodeModal.py')}
           </span>
         </Button>
       </Group>

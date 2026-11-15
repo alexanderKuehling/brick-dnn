@@ -1,6 +1,7 @@
 import { IconCoffee } from '@tabler/icons-react';
 import { Button, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { i18n } from '@/i18n';
 import { SUPPORT_URL } from '@/links';
 
 /** Set once the hint was shown in this browser. */
@@ -31,14 +32,11 @@ export function showSupportHintOnce(): boolean {
     id: 'support-hint',
     color: 'yellow',
     icon: <IconCoffee size={18} />,
-    title: 'Your first training is done!',
+    title: i18n.t('ui.training.supportHint.yourFirstTrainingIsDone'),
     autoClose: 30000,
     message: (
       <>
-        <Text size="sm">
-          Brick DNN is free and open source. If it helps you, you can support its development with a
-          coffee.
-        </Text>
+        <Text size="sm">{i18n.t('ui.training.supportHint.brickDnnIsFreeAnd')}</Text>
         <Button
           component="a"
           href={SUPPORT_URL}
@@ -51,7 +49,7 @@ export function showSupportHintOnce(): boolean {
           leftSection={<IconCoffee size={14} />}
           onClick={() => notifications.hide('support-hint')}
         >
-          Buy me a coffee
+          {i18n.t('ui.training.supportHint.buyMeACoffee')}
         </Button>
       </>
     ),

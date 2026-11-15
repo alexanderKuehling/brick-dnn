@@ -3,7 +3,7 @@
  * a CSV file, and the messages of the server per row and column.
  */
 import type { Prediction, PredictionCell, PredictionResult } from '@/api';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 
 /** A column of the prediction form: a feature (prepared) or a column of the source (raw). */
 export interface InputColumn {
@@ -114,7 +114,7 @@ export function csvRows(
 ): CsvRows {
   const records = parseCsv(text);
   if (records.length < 2) {
-    throw new Error('Paste a header line with the column names and at least one row.');
+    throw new Error(i18n.t('ui.training.rows.pasteAHeaderLineWith'));
   }
   const header = records[0].map((h) => h.trim());
   const names = new Set(columns.map((c) => c.name));
@@ -123,12 +123,20 @@ export function csvRows(
   if (missing.length > 0) {
     const shown = missing.slice(0, 5).join(', ') + (missing.length > 5 ? ' …' : '');
     throw new Error(
-      `The header line lacks ${missing.length === 1 ? 'the column' : 'columns'}: ${shown}.`
+      i18n.t('ui.training.rows.theHeaderLineLacks', {
+        value:
+          missing.length === 1
+            ? i18n.t('ui.training.rows.theColumn')
+            : i18n.t('ui.training.rows.columns'),
+        shown,
+      })
     );
   }
   const body = records.slice(1);
   if (body.length > options.maxRows) {
-    throw new Error(`${body.length} rows are too many: at most ${options.maxRows} at a time.`);
+    throw new Error(
+      i18n.t('ui.training.rows.rowsAreTooManyAt', { length: body.length, maxRows: options.maxRows })
+    );
   }
   const targetAt = options.target ? header.indexOf(options.target) : -1;
   const rows = body.map((record) => {
@@ -213,7 +221,11 @@ export function shiftMessage(text: string, offset: number): string {
     return text;
   }
   const column = message.column !== null ? `, '${message.column}'` : '';
-  return `Row ${message.row + offset}${column}: ${message.text}`;
+  return i18n.t('ui.training.rows.row', {
+    value: message.row + offset,
+    column,
+    text: message.text,
+  });
 }
 
 /** `items` in pieces of at most `size`. */

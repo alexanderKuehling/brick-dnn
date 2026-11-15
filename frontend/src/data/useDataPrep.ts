@@ -13,6 +13,7 @@ import {
   type StepCatalog,
   type StepReport,
 } from '@/api';
+import { i18n } from '@/i18n';
 import { prepRole } from './prepAccess';
 import { insertStep, mergeReports } from './steps';
 
@@ -222,7 +223,9 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
         }
         const notFound = error instanceof ApiError && error.status === 404;
         setLoadError({
-          message: notFound ? 'This preparation does not exist (any more).' : error.message,
+          message: notFound
+            ? i18n.t('ui.data.useDataPrep.thisPreparationDoesNotExist')
+            : error.message,
           notFound,
         });
       });
@@ -425,7 +428,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
           }
           setPreviewError(
             error instanceof ApiError && error.status === 404
-              ? 'This preparation does not exist (any more).'
+              ? i18n.t('ui.data.useDataPrep.thisPreparationDoesNotExist')
               : error.message
           );
           setPreviewing(false);
@@ -588,7 +591,7 @@ const NO_STEPS: PipelineStep[] = [];
 function notifyNotSaved(pending: Pending, error: Error): void {
   notifications.show({
     color: 'red',
-    title: 'Changes not saved',
+    title: i18n.t('ui.data.useDataPrep.changesNotSaved'),
     message: `“${pending.draft.name.trim() || UNTITLED}”: ${error.message}`,
   });
 }

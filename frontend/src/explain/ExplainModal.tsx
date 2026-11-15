@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Loader, Modal, Stack, Tabs, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { api, type LayerCatalog, type RunDetail } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { explainApi, sampleFields } from './api';
 import { ImageExplanation } from './ImageExplanation';
 import { InsideView } from './InsideView';
@@ -40,12 +41,13 @@ interface ExplainModalProps extends ExplainStart {
 }
 
 export function ExplainModal({ run, opened, onClose, tab, sample }: ExplainModalProps) {
+  useTranslation();
   const small = useMediaQuery('(max-width: 48em)');
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Explain “${run.name}”`}
+      title={i18n.t('ui.explain.ExplainModal.explain', { name: run.name })}
       size="80rem"
       fullScreen={small}
       zIndex={400}
@@ -56,6 +58,7 @@ export function ExplainModal({ run, opened, onClose, tab, sample }: ExplainModal
 }
 
 export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainStart) {
+  useTranslation();
   const [methods, setMethods] = useState<ExplainMethods | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<LayerCatalog | null>(null);
@@ -87,10 +90,26 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
       ? 'tabular'
       : null;
   const tabs: { id: TabId; label: string; enabled: boolean }[] = [
-    { id: 'prediction', label: 'Explain a prediction', enabled: explainMethod !== null },
-    { id: 'importance', label: 'Feature importance', enabled: can('permutation') },
-    { id: 'boundary', label: 'Decision boundary', enabled: can('boundary') },
-    { id: 'inside', label: 'Inside the network', enabled: can('activations') || can('weights') },
+    {
+      id: 'prediction',
+      label: i18n.t('ui.explain.ExplainModal.explainAPrediction'),
+      enabled: explainMethod !== null,
+    },
+    {
+      id: 'importance',
+      label: i18n.t('ui.explain.ExplainModal.featureImportance'),
+      enabled: can('permutation'),
+    },
+    {
+      id: 'boundary',
+      label: i18n.t('ui.explain.ExplainModal.decisionBoundary'),
+      enabled: can('boundary'),
+    },
+    {
+      id: 'inside',
+      label: i18n.t('ui.explain.ExplainModal.insideTheNetwork'),
+      enabled: can('activations') || can('weights'),
+    },
   ];
   // A tab that does not work for the run (e.g. asked for by a link) falls back to the first one.
   const shownTab =
@@ -180,7 +199,8 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
   if (!shownTab) {
     return (
       <Alert color="yellow">
-        {methods.methods.find((m) => m.reason)?.reason ?? 'Nothing can be explained for this run.'}
+        {methods.methods.find((m) => m.reason)?.reason ??
+          i18n.t('ui.explain.ExplainModal.nothingCanBeExplainedFor')}
       </Alert>
     );
   }
@@ -209,8 +229,7 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
     <Stack gap="md">
       {methods.demo && (
         <Alert variant="light" color="yellow">
-          Trained on random demo data: the network has learned nothing meaningful, but you can still
-          look inside it.
+          {i18n.t('ui.explain.ExplainModal.trainedOnRandomDemoData')}
         </Alert>
       )}
       <Tabs value={shownTab} onChange={(value) => setTab(value as TabId)} keepMounted={false}>
@@ -233,7 +252,7 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
             {explainMethod === 'image' && (
               <Pending
                 result={explanation as Explanation<ImageAnswer>}
-                what="saliency, Grad-CAM and occlusion"
+                what={i18n.t('ui.explain.ExplainModal.saliencyGradCamAndOcclusion')}
               >
                 {(data) => (
                   <ImageExplanation
@@ -260,13 +279,16 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
         </Tabs.Panel>
 
         <Tabs.Panel value="importance" pt="md">
-          <Pending result={permutation} what="the permutation importance">
+          <Pending
+            result={permutation}
+            what={i18n.t('ui.explain.ExplainModal.thePermutationImportance')}
+          >
             {(data) => <PermutationView answer={data} />}
           </Pending>
         </Tabs.Panel>
 
         <Tabs.Panel value="boundary" pt="md">
-          <Pending result={boundary} what="the decision boundary">
+          <Pending result={boundary} what={i18n.t('ui.explain.ExplainModal.theDecisionBoundary')}>
             {(data) => <BoundaryView answer={data} />}
           </Pending>
         </Tabs.Panel>
@@ -276,11 +298,14 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
             {can('activations') && picker}
             {can('activations') && sample?.kind === 'random' && (
               <Text size="sm" c="dimmed">
-                A random input (the run trained on demo data, which is not kept).
+                {i18n.t('ui.explain.ExplainModal.aRandomInputTheRun')}
               </Text>
             )}
             {can('activations') && hasSample && (
-              <Pending result={activations} what="the output of every brick">
+              <Pending
+                result={activations}
+                what={i18n.t('ui.explain.ExplainModal.theOutputOfEveryBrick')}
+              >
                 {(data) => (
                   <InsideView activations={data} weights={null} descriptions={descriptions} />
                 )}
@@ -297,9 +322,7 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
         </Tabs.Panel>
       </Tabs>
       <Text size="xs" c="dimmed">
-        Explanations run on the server like predictions and count as predictions in your compute
-        usage; asking the same again is free. See the documentation for what each method can and
-        cannot tell.
+        {i18n.t('ui.explain.ExplainModal.explanationsRunOnTheServer')}
       </Text>
     </Stack>
   );

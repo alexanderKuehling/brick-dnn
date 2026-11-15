@@ -1,11 +1,22 @@
 import type { AgentAction, AgentArgument, AgentRef, AgentTarget, AgentTargetKind } from '@/api';
+import { i18n } from '@/i18n';
 
 export const TARGET_LABELS: Record<AgentTargetKind, string> = {
-  project: 'Network',
-  run: 'Training',
-  dataset: 'Dataset',
-  data_source: 'Data file',
-  data_prep: 'Data preparation',
+  get project() {
+    return i18n.t('ui.activity.format.network');
+  },
+  get run() {
+    return i18n.t('ui.activity.format.training');
+  },
+  get dataset() {
+    return i18n.t('ui.activity.format.dataset');
+  },
+  get data_source() {
+    return i18n.t('ui.activity.format.dataFile');
+  },
+  get data_prep() {
+    return i18n.t('ui.activity.format.dataPreparation');
+  },
 };
 
 /** "42 ms", "1.3 s", "2 min 5 s". */
@@ -18,7 +29,7 @@ export function formatDuration(ms: number): string {
   }
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.round((ms % 60_000) / 1000);
-  return seconds ? `${minutes} min ${seconds} s` : `${minutes} min`;
+  return seconds ? i18n.t('ui.activity.format.minS', { minutes, seconds }) : `${minutes} min`;
 }
 
 /** The tool of an MCP call ("save_project") or the method and route of a REST request. */

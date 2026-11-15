@@ -8,7 +8,7 @@ import {
   setTokens,
   type User,
 } from '@/api';
-import { currentLanguage, isLanguage, onLanguageChosen, setLanguage } from '@/i18n';
+import { currentLanguage, i18n, isLanguage, onLanguageChosen, setLanguage } from '@/i18n';
 
 /** After the password: logged in, or the code of the authenticator app is needed. */
 export type LoginStep = { done: true } | { done: false; challenge: string };
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 function useAuthState(): AuthState {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used inside <AuthProvider>');
+    throw new Error(i18n.t('ui.auth.AuthContext.useauthMustBeUsedInside'));
   }
   return context;
 }

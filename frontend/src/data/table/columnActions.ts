@@ -3,6 +3,7 @@
  * prefilled params (the param names of the step catalog, see PLAN 4.5).
  */
 import type { ColumnInfo, ColumnKind, ColumnProfile, NewStep } from '@/api/types';
+import { i18n } from '@/i18n';
 
 export type ColumnActionKey =
   'impute' | 'clip' | 'log' | 'onehot' | 'date_parts' | 'drop' | 'drop_rows';
@@ -31,7 +32,7 @@ export function columnStepActions(
       ? [
           {
             key: 'drop_rows',
-            label: 'Drop rows without a target value',
+            label: i18n.t('ui.data.columnActions.dropRowsWithoutATarget'),
             step: { type: 'drop_missing', params: { columns, how: 'any' } },
           },
         ]
@@ -43,12 +44,12 @@ export function columnStepActions(
       column.kind === 'numeric'
         ? {
             key: 'impute',
-            label: 'Fill missing values with the median',
+            label: i18n.t('ui.data.columnActions.fillMissingValuesWithThe'),
             step: { type: 'impute', params: { columns, strategy: 'median' } },
           }
         : {
             key: 'impute',
-            label: 'Fill missing values with the most frequent value',
+            label: i18n.t('ui.data.columnActions.fillMissingValuesWithThe2'),
             step: { type: 'impute', params: { columns, strategy: 'most_frequent' } },
           }
     );
@@ -56,7 +57,7 @@ export function columnStepActions(
   if (column.kind === 'numeric') {
     actions.push({
       key: 'clip',
-      label: 'Clip to the 1st–99th percentile',
+      label: i18n.t('ui.data.columnActions.clipToThe1st99th'),
       step: {
         type: 'clip',
         params: { columns, mode: 'quantiles', lower_q: 0.01, upper_q: 0.99 },
@@ -67,12 +68,12 @@ export function columnStepActions(
       typeof min === 'number' && min < 0
         ? {
             key: 'log',
-            label: 'Power transform (Yeo-Johnson)',
+            label: i18n.t('ui.data.columnActions.powerTransformYeoJohnson'),
             step: { type: 'transform', params: { columns, function: 'yeo_johnson' } },
           }
         : {
             key: 'log',
-            label: 'Log transform (log1p)',
+            label: i18n.t('ui.data.columnActions.logTransformLog1p'),
             step: { type: 'transform', params: { columns, function: 'log1p' } },
           }
     );
@@ -80,20 +81,20 @@ export function columnStepActions(
   if (column.kind === 'categorical') {
     actions.push({
       key: 'onehot',
-      label: 'One-hot encode',
+      label: i18n.t('ui.data.columnActions.oneHotEncode'),
       step: { type: 'encode', params: { columns, method: 'onehot' } },
     });
   }
   if (column.kind === 'datetime') {
     actions.push({
       key: 'date_parts',
-      label: 'Split into date parts',
+      label: i18n.t('ui.data.columnActions.splitIntoDateParts'),
       step: { type: 'datetime_features', params: { columns } },
     });
   }
   actions.push({
     key: 'drop',
-    label: 'Drop column',
+    label: i18n.t('ui.data.columnActions.dropColumn'),
     step: { type: 'drop_columns', params: { columns } },
   });
   return actions;
@@ -111,13 +112,13 @@ export function castStep(column: string, kind: ColumnKind): NewStep {
 export function renameError(column: string, name: string, existing: string[]): string | null {
   const trimmed = name.trim();
   if (!trimmed) {
-    return 'Enter a name.';
+    return i18n.t('ui.data.columnActions.enterAName');
   }
   if (trimmed === column) {
-    return 'That is the current name.';
+    return i18n.t('ui.data.columnActions.thatIsTheCurrentName');
   }
   if (existing.includes(trimmed)) {
-    return `There is already a column “${trimmed}”.`;
+    return i18n.t('ui.data.columnActions.thereIsAlreadyAColumn', { trimmed });
   }
   return null;
 }

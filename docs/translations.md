@@ -62,7 +62,8 @@ them.
 - `frontend/src/i18n/index.ts`: set-up, detection, `setLanguage`, `useLanguage`,
   `currentLocale`;
 - `frontend/src/i18n/locales/en/*.ts`: the English texts, one file per area of the app
-  (`builder.ts`, `training.ts` …). English is the reference;
+  (`builder.ts`, `training.ts` …), and `ui.ts` with the texts of all pages by area and file
+  (`ui.data.RowsView.compareRowsOn`). English is the reference;
 - `frontend/src/i18n/locales/de/*.ts`: the German texts with the same keys. Each file is
   typed `Messages<typeof en…>`, so a missing or extra key is a compiler error;
 - `frontend/src/i18n/i18next.d.ts`: typed keys: `t('builder.toolbar.train')` must name an
@@ -104,6 +105,15 @@ Django's gettext with `LOCALE_PATHS = backend/locale`:
 - `brick_dnn_core/catalog.py`: the `brickdnn` package describes layers, steps, examples and
   options in English and knows no Django. The API translates their text fields (`label`,
   `help`, `description` …) with gettext when it returns them; identifiers stay;
+- `brick_dnn_core/messages.py`: messages the `brickdnn` package builds from data (network
+  analysis, training checks, run summaries and logs, readiness checks, preparation steps).
+  The package writes them in English with f-strings; `templates()` reads its source with
+  `ast` and turns every message into a template with numbered placeholders
+  (`Kernel size {0} is larger than the (padded) input size {1}.`, context `brickdnn` in the
+  `.po` file). The API's JSON renderer matches the text fields of every answer (`message`,
+  `errors`, `warnings`, `summary`, `log` …) against them, sentence by sentence, and fills the
+  values into the German template. The MCP server stays English; a message that matches no
+  template stays English;
 - `brick_dnn_core/notices.py`: every e-mail is written inside
   `translation.override(<recipient's language>)`;
 - `backend/locale/de/LC_MESSAGES/django.po`: the German texts; `django.mo` next to it is
@@ -121,6 +131,11 @@ files are out of date.
 **Frontend:** add the key to the English file of the area (`locales/en/<area>.ts`) and the
 same key to the German file (`locales/de/<area>.ts`), then use it with `t('<area>.<key>')`.
 `npx tsc -b --noEmit` and `npx vitest run src/i18n` say what is missing.
+
+New messages of the `brickdnn` package need nothing in the package: write them in English
+as before and run `manage.py update_translations`, which adds their templates (context
+`brickdnn`); translate them in the `.po` file. Keep the values in placeholders, not in the
+literal text.
 
 **Backend:** write new user-visible strings with `gettext` (or `gettext_lazy` for module
 constants), with named placeholders (`gettext("Saved “%(name)s”.") % {"name": name}`), not
@@ -151,6 +166,18 @@ the catalogues and adds their texts.
 
 ## Known gaps
 
-Some texts still appear in English in the German app; they are listed in the
-[CHANGELOG](../CHANGELOG.md) entry of this feature and are translated step by step with the
-same mechanism.
+Still English in the German app:
+
+- values that the server or the package put into a translated message, e.g. task names
+  (*classification*), dataset names (*Demo data*) or metric phrases inside a run summary
+  (*Validation accuracy 87.5%*);
+- messages of the package outside the translated modules: reading and importing files
+  (`brickdnn/data/io.py`, `readers.py`), frozen datasets, training data loading and
+  estimates, and the explanation and inference modules; the Django side's own messages of
+  billing, budgets, approvals, sharing and the training service (`training_service.py`,
+  `data_service.py`) beyond the account and sign-up;
+- a few composed sentences in the frontend whose parts come from separate texts read in
+  German word order but are put together in English order (e.g. lists of counts);
+- the test e-mail of `manage.py send_test_email` (for the operator).
+
+They are translated step by step with the same mechanisms.

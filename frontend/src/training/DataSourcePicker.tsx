@@ -34,7 +34,7 @@ import type { BuiltinDataset, Dataset, TrainingStatus } from '@/api';
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import type { UploadBytes } from '@/components/useUploadProgress';
-import { currentLocale, i18n, useTranslation } from '@/i18n';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { isOwnDataset } from './access';
 import { classShares, datasetDetails, formatSplit, segmentationNotes } from './format';
 import type { SourceChoice, SourceTab } from './settings';
@@ -152,6 +152,7 @@ function builtinDetails(dataset: BuiltinDataset): string {
 
 /** How to pack images and masks for a segmentation dataset (shown on demand). */
 function SegmentationHelp({ status }: { status: TrainingStatus }) {
+  useTranslation();
   const [opened, { toggle }] = useDisclosure(false);
   const limits = status.segmentation;
   if (!limits) {
@@ -167,29 +168,32 @@ function SegmentationHelp({ status }: { status: TrainingStatus }) {
         onClick={toggle}
         aria-expanded={opened}
       >
-        Segmentation: how to pack the ZIP
+        {i18n.t('ui.training.DataSourcePicker.segmentationHowToPackThe')}
       </Button>
       <Collapse expanded={opened}>
         <Stack gap={6} mt={6}>
           <Text size="xs" c="dimmed">
-            Images with one mask each, in two folders. An image and its mask have the same file name
-            (the ending may differ):
+            {i18n.t('ui.training.DataSourcePicker.imagesWithOneMaskEach')}
           </Text>
           <Code block fz="xs">
-            {
-              'images/001.jpg\nimages/002.jpg\nmasks/001.png\nmasks/002.png\nclasses.txt   (optional: one class name per line)'
-            }
+            {i18n.t('ui.training.DataSourcePicker.images001JpgImages002')}
           </Code>
           <Text size="xs" c="dimmed">
-            <b>Masks</b> are PNG files that give every pixel its class: grey values 0, 1, 2 … (255
-            marks pixels to ignore), black and white for two classes, or one colour per class. Up to{' '}
-            {limits.max_classes} classes; JPEG masks and smoothed edges do not work.
+            <Trans
+              i18nKey="ui.training.DataSourcePicker.masksArePngFilesThat"
+              values={{ max_classes: limits.max_classes }}
+              components={[<b />]}
+            />
           </Text>
           <Text size="xs" c="dimmed">
-            With <Code fz="xs">train/images</Code>, <Code fz="xs">train/masks</Code>,{' '}
-            <Code fz="xs">val/…</Code> and <Code fz="xs">test/…</Code> the folders are the split.
-            Images of any size are resized to the Input of the network (at most{' '}
-            {limits.max_input_side}×{limits.max_input_side}).
+            <Trans
+              i18nKey="ui.training.DataSourcePicker.withTrainImagesTrainMasks"
+              values={{
+                max_input_side: limits.max_input_side,
+                max_input_side2: limits.max_input_side,
+              }}
+              components={[<Code fz="xs" />, <Code fz="xs" />, <Code fz="xs" />, <Code fz="xs" />]}
+            />
           </Text>
         </Stack>
       </Collapse>
@@ -212,6 +216,7 @@ function Uploads({
   onCancelUpload,
   onDelete,
 }: DataSourcePickerProps) {
+  useTranslation();
   // Reset the file input after each pick, so the same file can be chosen again (e.g. after
   // fixing it, or after a failed upload).
   const resetFile = useRef<() => void>(null);
@@ -219,15 +224,19 @@ function Uploads({
     <>
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
         <Text size="xs" c="dimmed">
-          <b>CSV</b>: numeric feature columns, the target in the last column. <b>ZIP</b>: one folder
-          per class with images inside
+          <b>{i18n.t('ui.training.DataSourcePicker.csv')}</b>
+          {i18n.t('ui.training.DataSourcePicker.numericFeatureColumnsTheTarget')}{' '}
+          <b>{i18n.t('ui.training.DataSourcePicker.zip')}</b>
+          {i18n.t('ui.training.DataSourcePicker.oneFolderPerClassWith')}
           {status.segmentation ? (
             <>
-              , or for segmentation the folders <Code fz="xs">images</Code> and{' '}
-              <Code fz="xs">masks</Code>
+              <Trans
+                i18nKey="ui.training.DataSourcePicker.orForSegmentationTheFolders"
+                components={[<Code fz="xs" />, <Code fz="xs" />]}
+              />
             </>
           ) : null}
-          {`. Up to ${status.max_upload_mb} MB.`}
+          {i18n.t('ui.training.DataSourcePicker.upToMb', { max_upload_mb: status.max_upload_mb })}
         </Text>
         <FileButton
           resetRef={resetFile}
@@ -248,7 +257,7 @@ function Uploads({
               loading={uploading !== null}
               style={{ flexShrink: 0 }}
             >
-              Upload
+              {i18n.t('ui.training.DataSourcePicker.upload')}
             </Button>
           )}
         </FileButton>
@@ -262,7 +271,12 @@ function Uploads({
         <UploadProgress bytes={uploadProgress} fileName={uploading} onCancel={onCancelUpload} />
       )}
       {uploadError && (
-        <Alert color="red" title="Upload failed" withCloseButton onClose={onDismissUploadError}>
+        <Alert
+          color="red"
+          title={i18n.t('ui.training.DataSourcePicker.uploadFailed')}
+          withCloseButton
+          onClose={onDismissUploadError}
+        >
           {uploadError}
         </Alert>
       )}
@@ -270,20 +284,20 @@ function Uploads({
         <Alert color="red">
           {datasetsError}{' '}
           <Button size="compact-xs" variant="light" color="red" onClick={onReloadDatasets}>
-            Try again
+            {i18n.t('ui.training.DataSourcePicker.tryAgain')}
           </Button>
         </Alert>
       )}
       {datasets === null && !datasetsError && <Loader size="sm" />}
       {datasets?.length === 0 && (
         <Text size="sm" c="dimmed">
-          You have not uploaded any data yet.
+          {i18n.t('ui.training.DataSourcePicker.youHaveNotUploadedAny')}
         </Text>
       )}
 
       {datasets && datasets.length > 0 && (
         <Radio.Group
-          aria-label="Datasets"
+          aria-label={i18n.t('ui.training.DataSourcePicker.datasets')}
           value={choice.upload !== null ? String(choice.upload) : null}
           onChange={(id) => onChange({ ...choice, upload: Number(id) })}
         >
@@ -302,6 +316,7 @@ function DatasetGroups({
   datasets: Dataset[];
   onDelete: (dataset: Dataset) => void;
 }) {
+  useTranslation();
   const own = datasets.filter(isOwnDataset);
   const shared = datasets.filter((dataset) => !isOwnDataset(dataset));
   const ownHeading = useId();
@@ -309,11 +324,11 @@ function DatasetGroups({
   return (
     <Stack gap="xs">
       <Text size="sm" fw={500} id={ownHeading}>
-        Your datasets
+        {i18n.t('ui.training.DataSourcePicker.yourDatasets')}
       </Text>
       {own.length === 0 ? (
         <Text size="sm" c="dimmed">
-          You have not uploaded any data yet.
+          {i18n.t('ui.training.DataSourcePicker.youHaveNotUploadedAny')}
         </Text>
       ) : (
         <Stack gap="xs" role="group" aria-labelledby={ownHeading}>
@@ -327,7 +342,7 @@ function DatasetGroups({
           <Group gap={6} wrap="nowrap" mt="xs">
             <IconUsers size={16} color="var(--mantine-color-dimmed)" aria-hidden />
             <Text size="sm" fw={500} id={sharedHeading}>
-              Shared with you
+              {i18n.t('ui.training.DataSourcePicker.sharedWithYou')}
             </Text>
           </Group>
           <Stack gap="xs" role="group" aria-labelledby={sharedHeading}>
@@ -355,6 +370,7 @@ function DatasetCard({
   /** Without it, the dataset cannot be deleted here (it belongs to someone else). */
   onDelete?: (dataset: Dataset) => void;
 }) {
+  useTranslation();
   const own = isOwnDataset(dataset);
   const segmentation = dataset.kind === 'segmentation';
   const shares = segmentation ? classShares(dataset) : null;
@@ -388,12 +404,14 @@ function DatasetCard({
                 <Tooltip
                   label={
                     dataset.prepared_from
-                      ? `Made in the Data tab from “${dataset.prepared_from.name}”`
-                      : 'Made in the Data tab'
+                      ? i18n.t('ui.training.DataSourcePicker.madeInTheDataTab', {
+                          name: dataset.prepared_from.name,
+                        })
+                      : i18n.t('ui.training.DataSourcePicker.madeInTheDataTab2')
                   }
                 >
                   <Badge size="xs" variant="light" color="teal" style={{ flexShrink: 0 }}>
-                    Prepared
+                    {i18n.t('ui.training.DataSourcePicker.prepared')}
                   </Badge>
                 </Tooltip>
               )}
@@ -408,12 +426,14 @@ function DatasetCard({
             </Text>
             {shares && (
               <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
-                Pixels: {shares}
+                {i18n.t('ui.training.DataSourcePicker.pixels', { shares })}
               </Text>
             )}
             {dataset.info.predefined_split && (
               <Text size="xs" c="dimmed">
-                Split {formatSplit(dataset.info.predefined_split)} (training / validation / test)
+                {i18n.t('ui.training.DataSourcePicker.splitTrainingValidationTest', {
+                  predefined_split: formatSplit(dataset.info.predefined_split),
+                })}
               </Text>
             )}
             {notes && (
@@ -425,12 +445,12 @@ function DatasetCard({
         </Group>
       </Radio.Card>
       {onDelete && own ? (
-        <Tooltip label="Delete">
+        <Tooltip label={i18n.t('ui.training.DataSourcePicker.delete')}>
           <ActionIcon
             variant="subtle"
             color="gray"
             onClick={() => onDelete(dataset)}
-            aria-label={`Delete ${dataset.name}`}
+            aria-label={i18n.t('ui.training.DataSourcePicker.delete2', { name: dataset.name })}
           >
             <IconTrash size={16} />
           </ActionIcon>
@@ -444,8 +464,12 @@ function DatasetCard({
 
 const KIND_LABELS: Record<Dataset['kind'], string> = {
   csv: 'CSV',
-  images: 'Images',
-  segmentation: 'Segmentation',
+  get images() {
+    return i18n.t('ui.training.DataSourcePicker.images');
+  },
+  get segmentation() {
+    return i18n.t('ui.training.DataSourcePicker.segmentation');
+  },
 };
 const KIND_COLORS: Record<Dataset['kind'], string> = {
   csv: 'teal',

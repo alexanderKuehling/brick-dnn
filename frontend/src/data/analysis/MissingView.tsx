@@ -7,6 +7,7 @@ import { formatCount, formatPercent } from '@/components/charts/format';
 import { MissingMatrix } from '@/components/charts/MissingMatrix';
 import { StatTile } from '@/components/charts/StatTile';
 import { formatPercentTick } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { sampleNote } from './sampleData';
 import { WarningList } from './WarningList';
@@ -29,6 +30,7 @@ export function MissingView({
   onAddStep,
   onShowColumn,
 }: MissingViewProps) {
+  useTranslation();
   const { readOnly } = usePrepAccess();
   const [allBars, setAllBars] = useState(false);
   const [allColumns, setAllColumns] = useState(false);
@@ -62,7 +64,11 @@ export function MissingView({
     return (
       <Group gap={6}>
         <IconCircleCheck size={18} color="var(--chart-status-good)" aria-hidden="true" />
-        <Text size="sm">No missing values in {formatCount(profile.n_rows)} rows.</Text>
+        <Text size="sm">
+          {i18n.t('ui.data.MissingView.noMissingValuesInRows', {
+            n_rows: formatCount(profile.n_rows),
+          })}
+        </Text>
       </Group>
     );
   }
@@ -71,19 +77,24 @@ export function MissingView({
     <Stack gap="md">
       <SimpleGrid type="container" cols={{ base: 2, '520px': 3 }} spacing="xs">
         <StatTile
-          label="Missing cells"
+          label={i18n.t('ui.data.MissingView.missingCells')}
           value={formatCount(profile.missing_cells)}
-          hint={`${formatPercent(cells ? profile.missing_cells / cells : 0)} of all cells`}
+          hint={i18n.t('ui.data.MissingView.ofAllCells', {
+            value: formatPercent(cells ? profile.missing_cells / cells : 0),
+          })}
         />
         <StatTile
-          label="Columns with gaps"
+          label={i18n.t('ui.data.MissingView.columnsWithGaps')}
           value={formatCount(withMissing.length)}
           hint={`of ${plural(profile.n_columns, 'column')}`}
         />
         <StatTile
-          label="Incomplete rows"
+          label={i18n.t('ui.data.MissingView.incompleteRows')}
           value={formatPercent(sample.rows ? rowStats.incomplete / sample.rows : 0)}
-          hint={`${formatCount(rowStats.incomplete)} of ${formatCount(sample.rows)} sample rows`}
+          hint={i18n.t('ui.data.MissingView.ofSampleRows', {
+            incomplete: formatCount(rowStats.incomplete),
+            rows: formatCount(sample.rows),
+          })}
         />
       </SimpleGrid>
 
@@ -97,7 +108,9 @@ export function MissingView({
                 onAddStep({ type: 'impute', params: { columns: numeric, strategy: 'median' } })
               }
             >
-              Fill {plural(numeric.length, 'number column')} (median)
+              {i18n.t('ui.data.MissingView.fillMedian', {
+                plural: plural(numeric.length, 'number column'),
+              })}
             </Button>
           )}
           {categorical.length > 0 && (
@@ -111,15 +124,19 @@ export function MissingView({
                 })
               }
             >
-              Fill {plural(categorical.length, 'category column')} (most frequent)
+              {i18n.t('ui.data.MissingView.fillMostFrequent', {
+                plural: plural(categorical.length, 'category column'),
+              })}
             </Button>
           )}
         </Group>
       )}
 
       <BarChart
-        title="Missing values per column"
-        subtitle={`Share of all ${formatCount(profile.n_rows)} rows.`}
+        title={i18n.t('ui.data.MissingView.missingValuesPerColumn')}
+        subtitle={i18n.t('ui.data.MissingView.shareOfAllRows', {
+          n_rows: formatCount(profile.n_rows),
+        })}
         rows={(allBars ? withMissing : withMissing.slice(0, BARS)).map((c) => ({
           key: c.name,
           label: c.name,
@@ -143,24 +160,28 @@ export function MissingView({
           style={{ alignSelf: 'flex-start' }}
         >
           {allBars
-            ? `Show the ${BARS} largest`
-            : `Show all ${formatCount(withMissing.length)} columns`}
+            ? i18n.t('ui.data.MissingView.showTheLargest', { BARS })
+            : i18n.t('ui.data.MissingView.showAllColumns', {
+                length: formatCount(withMissing.length),
+              })}
         </Button>
       )}
 
       <MissingMatrix
-        title="Where values are missing"
-        subtitle={`Sample rows from top to bottom in table order. ${sampleNote(sample)}`}
+        title={i18n.t('ui.data.MissingView.whereValuesAreMissing')}
+        subtitle={i18n.t('ui.data.MissingView.sampleRowsFromTopTo', {
+          sampleNote: sampleNote(sample),
+        })}
         columns={matrixColumns}
         controls={
           <Switch
             size="xs"
-            label="All columns"
+            label={i18n.t('ui.data.MissingView.allColumns')}
             checked={allColumns}
             onChange={(event) => setAllColumns(event.currentTarget.checked)}
           />
         }
-        caption="Gaps in the same rows across columns point to rows that are incomplete as a whole (e.g. from a join)."
+        caption={i18n.t('ui.data.MissingView.gapsInTheSameRows')}
       />
 
       <WarningList

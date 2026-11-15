@@ -2,6 +2,7 @@ import { Badge, Loader, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunStatus, type RunSummary } from '@/api';
+import { i18n } from '@/i18n';
 import { isClassicalRun, isHybridRun } from './classical';
 import { isActive, STATUS_COLORS, STATUS_LABELS } from './format';
 
@@ -29,21 +30,29 @@ export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => v
   // A run that still waits in the queue is cancelled: nothing was trained, nothing is lost.
   const queued = run.status === 'queued';
   modals.openConfirmModal({
-    title: queued ? 'Cancel the training?' : 'Stop the training?',
+    title: queued
+      ? i18n.t('ui.training.runActions.cancelTheTraining')
+      : i18n.t('ui.training.runActions.stopTheTraining'),
     children: (
       <Text size="sm">
         {queued
-          ? `“${run.name}” leaves the queue without having trained. It uses no compute.`
+          ? i18n.t('ui.training.runActions.leavesTheQueueWithoutHaving', { name: run.name })
           : isClassicalRun(run)
-            ? `scikit-learn cannot pause a fit: “${run.name}” stops at once and nothing is saved.`
+            ? i18n.t('ui.training.runActions.scikitLearnCannotPauseA', { name: run.name })
             : isHybridRun(run)
-              ? `“${run.name}” stops at once. A hybrid network is only kept once its classical model is fitted (a search keeps its best trial): stopped while its features are learned, nothing is saved.`
-              : `“${run.name}” stops after the current batch. The weights trained so far are kept.`}
+              ? i18n.t('ui.training.runActions.stopsAtOnceAHybrid', { name: run.name })
+              : i18n.t('ui.training.runActions.stopsAfterTheCurrentBatch', { name: run.name })}
       </Text>
     ),
     labels: queued
-      ? { confirm: 'Cancel training', cancel: 'Keep waiting' }
-      : { confirm: 'Stop training', cancel: 'Keep training' },
+      ? {
+          confirm: i18n.t('ui.training.runActions.cancelTraining'),
+          cancel: i18n.t('ui.training.runActions.keepWaiting'),
+        }
+      : {
+          confirm: i18n.t('ui.training.runActions.stopTraining'),
+          cancel: i18n.t('ui.training.runActions.keepTraining'),
+        },
     confirmProps: { color: 'red' },
     onConfirm: async () => {
       try {
@@ -53,8 +62,8 @@ export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => v
         notifications.show({
           color: 'red',
           title: notAllowed(error)
-            ? `You cannot ${what} this training`
-            : `Cannot ${what} the training`,
+            ? i18n.t('ui.training.runActions.youCannotThisTraining', { what })
+            : i18n.t('ui.training.runActions.cannotTheTraining', { what }),
           message: (error as Error).message,
         });
       }
@@ -64,18 +73,21 @@ export function confirmStopRun(run: RunSummary, onStopped: (run: RunDetail) => v
 
 export function confirmDeleteRun(run: RunSummary, onDeleted: (id: string) => void) {
   modals.openConfirmModal({
-    title: `Delete “${run.name}”?`,
+    title: i18n.t('ui.training.runActions.delete', { name: run.name }),
     children: (
       <Text size="sm">
         {run.status === 'queued'
-          ? 'The training leaves the queue and is deleted.'
+          ? i18n.t('ui.training.runActions.theTrainingLeavesTheQueue')
           : isActive(run.status)
-            ? 'The training is stopped and everything it produced is deleted, including the weights.'
-            : 'The results and the trained weights are deleted. This cannot be undone.'}
-        {run.project !== null && ' It is deleted for everyone in the network.'}
+            ? i18n.t('ui.training.runActions.theTrainingIsStoppedAnd')
+            : i18n.t('ui.training.runActions.theResultsAndTheTrained')}
+        {run.project !== null && i18n.t('ui.training.runActions.itIsDeletedForEveryone')}
       </Text>
     ),
-    labels: { confirm: 'Delete', cancel: 'Cancel' },
+    labels: {
+      confirm: i18n.t('ui.training.runActions.delete2'),
+      cancel: i18n.t('ui.training.runActions.cancel'),
+    },
     confirmProps: { color: 'red' },
     onConfirm: async () => {
       try {
@@ -85,8 +97,8 @@ export function confirmDeleteRun(run: RunSummary, onDeleted: (id: string) => voi
           notifications.show({
             color: 'red',
             title: notAllowed(error)
-              ? 'You cannot delete this training'
-              : 'Cannot delete the training',
+              ? i18n.t('ui.training.runActions.youCannotDeleteThisTraining')
+              : i18n.t('ui.training.runActions.cannotDeleteTheTraining'),
             message: (error as Error).message,
           });
           return;

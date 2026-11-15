@@ -24,6 +24,7 @@ import { notifications } from '@mantine/notifications';
 import type { GraphDocument, ProjectRole, UserRef } from '@/api/types';
 import { fromDocument, semanticKey, toDocument, type LayerFlowNode } from '@/builder/graph';
 import type { OpenProject } from '@/builder/useOpenProject';
+import { i18n } from '@/i18n';
 import { applyMeta, applyOps, diffGraph, mergeEdges, mergeNodes, removedIds } from './ops';
 import { usePeople, useRemoteDrags } from './presence';
 import type { LiveOp, LiveProjectState, PresenceState, ServerMessage } from './protocol';
@@ -171,7 +172,7 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
         id: 'live-left',
         color: 'yellow',
         title,
-        message: 'Your unsaved changes stay open here as a new network. Save it to keep them.',
+        message: i18n.t('ui.live.useLiveBuilder.yourUnsavedChangesStayOpen'),
       });
     },
     [getClient]
@@ -269,10 +270,12 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       const own = message.by.id === latest.current.user?.id;
       notifications.show({
         id: 'live-replaced', // A restore from the history shows its own message instead.
-        title: own ? 'The network was replaced' : `${message.by.username} replaced the network`,
+        title: own
+          ? i18n.t('ui.live.useLiveBuilder.theNetworkWasReplaced')
+          : i18n.t('ui.live.useLiveBuilder.replacedTheNetwork', { username: message.by.username }),
         message: own
-          ? 'You saved it from another window or app. The new version is shown here.'
-          : 'Their version is shown here now.',
+          ? i18n.t('ui.live.useLiveBuilder.youSavedItFromAnother')
+          : i18n.t('ui.live.useLiveBuilder.theirVersionIsShownHere'),
       });
     },
     [getClient, load, patchProject, tryTrack]
@@ -290,11 +293,11 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
         getClient()?.dropPending();
         getClient()?.resync('now a viewer');
         notifications.show({
-          title: `You can only view “${name}” now`,
-          message: 'You still see the changes of the others as they happen.',
+          title: i18n.t('ui.live.useLiveBuilder.youCanOnlyViewNow', { name }),
+          message: i18n.t('ui.live.useLiveBuilder.youStillSeeTheChanges'),
         });
       } else {
-        notifications.show({ message: `You can edit “${name}” now.` });
+        notifications.show({ message: i18n.t('ui.live.useLiveBuilder.youCanEditNow', { name }) });
       }
     },
     [getClient, patchProject]
@@ -346,22 +349,22 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       notifications.show({
         id: 'live-left',
         color: 'yellow',
-        title: `“${name}” was deleted`,
+        title: i18n.t('ui.live.useLiveBuilder.wasDeleted', { name }),
         message: keep,
       });
     } else if (endReason === 'forbidden') {
       notifications.show({
         id: 'live-left',
         color: 'yellow',
-        title: `You no longer have access to “${name}”`,
+        title: i18n.t('ui.live.useLiveBuilder.youNoLongerHaveAccess', { name }),
         message: keep,
       });
     } else if (endReason === 'not_found') {
       notifications.show({
         id: 'no-access',
         color: 'yellow',
-        title: 'No access any more',
-        message: `“${name}” was deleted or is no longer shared with you. ${keep}`,
+        title: i18n.t('ui.live.useLiveBuilder.noAccessAnyMore'),
+        message: i18n.t('ui.live.useLiveBuilder.wasDeletedOrIsNo', { name, keep }),
       });
     } else {
       return;

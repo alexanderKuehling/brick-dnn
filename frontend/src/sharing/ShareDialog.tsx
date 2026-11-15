@@ -38,6 +38,7 @@ import {
   type UserRef,
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { i18n, useTranslation } from '@/i18n';
 import { ProjectDataPanel } from './ProjectDataPanel';
 import { MEMBER_ROLE_OPTIONS, ROLE_LABELS, shareUrl } from './roles';
 import classes from './Sharing.module.css';
@@ -87,6 +88,7 @@ export function ShareDialog({
   onLeave,
   initialTab = 'people',
 }: ShareDialogProps) {
+  useTranslation();
   const { user } = useAuth();
   const [tab, setTab] = useState<ShareTab>(initialTab);
   const isOwner = project.role === 'owner';
@@ -137,7 +139,7 @@ export function ShareDialog({
   const invite = async () => {
     const name = invitee.trim();
     if (!name) {
-      setInviteMessage('Enter a username or an e-mail address.');
+      setInviteMessage(i18n.t('ui.sharing.ShareDialog.enterAUsernameOrAn'));
       return;
     }
     setInviting(true);
@@ -150,7 +152,7 @@ export function ShareDialog({
       if (error instanceof ApiError && error.status === 400) {
         setInviteMessage(inviteError(error));
       } else {
-        failed('Could not invite')(error);
+        failed(i18n.t('ui.sharing.ShareDialog.couldNotInvite'))(error);
       }
     } finally {
       setInviting(false);
@@ -163,7 +165,7 @@ export function ShareDialog({
       const updated = await api.projects.members.update(project.id, member.id, role);
       updateMembers((list) => list.map((m) => (m.id === updated.id ? updated : m)));
     } catch (error) {
-      failed('Could not change the role')(error);
+      failed(i18n.t('ui.sharing.ShareDialog.couldNotChangeTheRole'))(error);
     } finally {
       setBusyMember(null);
     }
@@ -175,7 +177,9 @@ export function ShareDialog({
       await api.projects.members.remove(project.id, member.id);
       updateMembers((list) => list.filter((m) => m.id !== member.id));
     } catch (error) {
-      failed(`Could not remove ${member.user.username}`)(error);
+      failed(i18n.t('ui.sharing.ShareDialog.couldNotRemove', { username: member.user.username }))(
+        error
+      );
     } finally {
       setBusyMember(null);
     }
@@ -191,10 +195,10 @@ export function ShareDialog({
         report(members, next);
       }
       if (regenerate) {
-        notifications.show({ message: 'New link created. The old link no longer works.' });
+        notifications.show({ message: i18n.t('ui.sharing.ShareDialog.newLinkCreatedTheOld') });
       }
     } catch (error) {
-      failed('Could not change the link')(error);
+      failed(i18n.t('ui.sharing.ShareDialog.couldNotChangeTheLink'))(error);
     } finally {
       setLinkBusy(false);
     }
@@ -208,11 +212,13 @@ export function ShareDialog({
       if (own) {
         await api.projects.members.remove(project.id, own.id);
       }
-      notifications.show({ message: `You left “${project.name}”.` });
+      notifications.show({
+        message: i18n.t('ui.sharing.ShareDialog.youLeft', { name: project.name }),
+      });
       onLeave?.();
       onClose();
     } catch (error) {
-      failed('Could not leave the network')(error);
+      failed(i18n.t('ui.sharing.ShareDialog.couldNotLeaveTheNetwork'))(error);
       setBusyMember(null);
     }
   };
@@ -221,7 +227,12 @@ export function ShareDialog({
   const url = link.share_token ? shareUrl(link.share_token) : null;
 
   return (
-    <Modal opened onClose={onClose} title={`Share “${project.name}”`} size="lg">
+    <Modal
+      opened
+      onClose={onClose}
+      title={i18n.t('ui.sharing.ShareDialog.share', { name: project.name })}
+      size="lg"
+    >
       <Tabs
         value={tab}
         onChange={(value) => value && setTab(value as ShareTab)}
@@ -229,10 +240,10 @@ export function ShareDialog({
       >
         <Tabs.List mb="md">
           <Tabs.Tab value="people" leftSection={<IconUsers size={14} />}>
-            People
+            {i18n.t('ui.sharing.ShareDialog.people')}
           </Tabs.Tab>
           <Tabs.Tab value="data" leftSection={<IconDatabase size={14} />}>
-            Data
+            {i18n.t('ui.sharing.ShareDialog.data')}
           </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="people">
@@ -246,8 +257,8 @@ export function ShareDialog({
             >
               <TextInput
                 className={classes.inviteUser}
-                aria-label="Username or e-mail"
-                placeholder="Username or e-mail"
+                aria-label={i18n.t('ui.sharing.ShareDialog.usernameOrEMail')}
+                placeholder={i18n.t('ui.sharing.ShareDialog.usernameOrEMail')}
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -260,7 +271,7 @@ export function ShareDialog({
               />
               <div className={classes.inviteControls}>
                 <Select
-                  aria-label="Role of the invited person"
+                  aria-label={i18n.t('ui.sharing.ShareDialog.roleOfTheInvitedPerson')}
                   data={MEMBER_ROLE_OPTIONS}
                   value={inviteRole}
                   onChange={(value) => value && setInviteRole(value as MemberRole)}
@@ -269,14 +280,14 @@ export function ShareDialog({
                   w={130}
                 />
                 <Button type="submit" loading={inviting}>
-                  Invite
+                  {i18n.t('ui.sharing.ShareDialog.invite')}
                 </Button>
               </div>
             </form>
           )}
 
           <Text fw={600} size="sm" mt={isOwner ? 'lg' : 0} mb={4} id="share-people">
-            People with access
+            {i18n.t('ui.sharing.ShareDialog.peopleWithAccess')}
           </Text>
           {loadError && <Alert color="red">{loadError}</Alert>}
           {!members && !loadError && (
@@ -299,7 +310,7 @@ export function ShareDialog({
                     {isOwner ? (
                       <>
                         <Select
-                          aria-label={`Role of ${name}`}
+                          aria-label={i18n.t('ui.sharing.ShareDialog.roleOf', { name })}
                           data={MEMBER_ROLE_OPTIONS}
                           value={member.role}
                           onChange={(value) =>
@@ -313,13 +324,13 @@ export function ShareDialog({
                           size="xs"
                           w={110}
                         />
-                        <Tooltip label={`Remove ${name}`}>
+                        <Tooltip label={i18n.t('ui.sharing.ShareDialog.remove', { name })}>
                           <ActionIcon
                             variant="subtle"
                             color="gray"
                             onClick={() => void remove(member)}
                             disabled={busyMember === member.id}
-                            aria-label={`Remove ${name}`}
+                            aria-label={i18n.t('ui.sharing.ShareDialog.remove', { name })}
                           >
                             <IconX size={16} />
                           </ActionIcon>
@@ -338,7 +349,7 @@ export function ShareDialog({
                             leftSection={<IconLogout size={14} />}
                             onClick={() => setConfirming('leave')}
                           >
-                            Leave
+                            {i18n.t('ui.sharing.ShareDialog.leave')}
                           </Button>
                         )}
                       </>
@@ -350,17 +361,17 @@ export function ShareDialog({
           )}
           {members && isOwner && members.members.length === 0 && (
             <Text size="sm" c="dimmed" mt={4}>
-              Only you can open this network. Invite people by their username or e-mail address.
+              {i18n.t('ui.sharing.ShareDialog.onlyYouCanOpenThis')}
             </Text>
           )}
           {confirming === 'leave' && (
             <div className={classes.confirm}>
               <Text size="sm">
-                Leave “{project.name}”? You lose access to it; only the owner can invite you again.
+                {i18n.t('ui.sharing.ShareDialog.leaveYouLoseAccessTo', { name: project.name })}
               </Text>
               <Group justify="flex-end" gap="xs" mt="sm">
                 <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
-                  Cancel
+                  {i18n.t('ui.sharing.ShareDialog.cancel')}
                 </Button>
                 <Button
                   color="red"
@@ -368,7 +379,7 @@ export function ShareDialog({
                   loading={busyMember !== null && busyMember === own?.id}
                   onClick={() => void leave()}
                 >
-                  Leave
+                  {i18n.t('ui.sharing.ShareDialog.leave')}
                 </Button>
               </Group>
             </div>
@@ -378,8 +389,8 @@ export function ShareDialog({
           {isOwner ? (
             <>
               <Switch
-                label="Anyone with the link can view"
-                description="No account needed. They can see the network and its code, not change it."
+                label={i18n.t('ui.sharing.ShareDialog.anyoneWithTheLinkCan')}
+                description={i18n.t('ui.sharing.ShareDialog.noAccountNeededTheyCan')}
                 checked={linkOn}
                 disabled={linkBusy}
                 onChange={(event) => void changeLink(event.currentTarget.checked)}
@@ -389,7 +400,7 @@ export function ShareDialog({
                   <div className={classes.link}>
                     <TextInput
                       className={classes.linkUrl}
-                      aria-label="Share link"
+                      aria-label={i18n.t('ui.sharing.ShareDialog.shareLink')}
                       value={url}
                       readOnly
                       onFocus={(event) => event.currentTarget.select()}
@@ -401,7 +412,9 @@ export function ShareDialog({
                           color={copied ? 'teal' : undefined}
                           leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                         >
-                          {copied ? 'Copied' : 'Copy link'}
+                          {copied
+                            ? i18n.t('ui.sharing.ShareDialog.copied')
+                            : i18n.t('ui.sharing.ShareDialog.copyLink')}
                         </Button>
                       )}
                     </CopyButton>
@@ -414,24 +427,21 @@ export function ShareDialog({
                     onClick={() => setConfirming('regenerate')}
                     disabled={linkBusy}
                   >
-                    Create new link
+                    {i18n.t('ui.sharing.ShareDialog.createNewLink')}
                   </Button>
                   {confirming === 'regenerate' && (
                     <div className={classes.confirm}>
-                      <Text size="sm">
-                        Create a new link? The current link stops working: people who have it can no
-                        longer open the network.
-                      </Text>
+                      <Text size="sm">{i18n.t('ui.sharing.ShareDialog.createANewLinkThe')}</Text>
                       <Group justify="flex-end" gap="xs" mt="sm">
                         <Button variant="default" size="xs" onClick={() => setConfirming(null)}>
-                          Cancel
+                          {i18n.t('ui.sharing.ShareDialog.cancel')}
                         </Button>
                         <Button
                           size="xs"
                           loading={linkBusy}
                           onClick={() => void changeLink(true, true)}
                         >
-                          Create new link
+                          {i18n.t('ui.sharing.ShareDialog.createNewLink')}
                         </Button>
                       </Group>
                     </div>
@@ -441,10 +451,11 @@ export function ShareDialog({
             </>
           ) : (
             <Text size="sm" c="dimmed">
-              {linkOn
-                ? 'Anyone with the link can view this network.'
-                : 'Only the people above can open this network.'}{' '}
-              Only the owner can change who has access.
+              {i18n.t('ui.sharing.ShareDialog.onlyTheOwnerCanChange', {
+                value: linkOn
+                  ? i18n.t('ui.sharing.ShareDialog.anyoneWithTheLinkCan2')
+                  : i18n.t('ui.sharing.ShareDialog.onlyThePeopleAboveCan'),
+              })}
             </Text>
           )}
         </Tabs.Panel>
@@ -455,7 +466,7 @@ export function ShareDialog({
 
       <Group justify="flex-end" mt="xl">
         <Button variant="default" onClick={onClose}>
-          Done
+          {i18n.t('ui.sharing.ShareDialog.done')}
         </Button>
       </Group>
     </Modal>
@@ -471,6 +482,7 @@ function Person({
   you: boolean;
   children: React.ReactNode;
 }) {
+  useTranslation();
   return (
     <li className={classes.person} aria-label={user.username}>
       <div className={classes.personName}>
@@ -480,7 +492,7 @@ function Person({
           {you && (
             <Text span c="dimmed" size="sm">
               {' '}
-              (you)
+              {i18n.t('ui.sharing.ShareDialog.you')}
             </Text>
           )}
         </Text>

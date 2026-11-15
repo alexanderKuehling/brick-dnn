@@ -32,7 +32,7 @@ import {
   type GraphDocument,
   type RunDetail,
 } from '@/api';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
   canSetThreshold,
@@ -79,6 +79,7 @@ export function EnsembleRunView({
   onDeleted,
   onOpenRun,
 }: EnsembleRunViewProps) {
+  useTranslation();
   const state = run.state;
   const info = run.ensemble ?? null;
   const combined = state?.ensemble ?? null;
@@ -110,7 +111,7 @@ export function EnsembleRunView({
           leftSection={<IconArrowLeft size={14} />}
           onClick={onBack}
         >
-          All runs
+          {i18n.t('ui.training.EnsembleRunView.allRuns')}
         </Button>
       </Group>
 
@@ -144,10 +145,14 @@ export function EnsembleRunView({
       ) : active ? (
         <Group gap="xs" wrap="nowrap">
           <Loader size="xs" />
-          <Text size="sm">{run.message || 'Combining …'}</Text>
+          <Text size="sm">{run.message || i18n.t('ui.training.EnsembleRunView.combining')}</Text>
         </Group>
       ) : run.status === 'failed' ? (
-        <Alert color="red" icon={<IconAlertTriangle size={18} />} title="The ensemble failed">
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={18} />}
+          title={i18n.t('ui.training.EnsembleRunView.theEnsembleFailed')}
+        >
           {run.message}
         </Alert>
       ) : (
@@ -158,7 +163,11 @@ export function EnsembleRunView({
         )
       )}
       {info?.broken && (
-        <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="A member is gone">
+        <Alert
+          color="yellow"
+          icon={<IconAlertTriangle size={18} />}
+          title={i18n.t('ui.training.EnsembleRunView.aMemberIsGone')}
+        >
           {info.broken}
         </Alert>
       )}
@@ -184,7 +193,11 @@ export function EnsembleRunView({
             disabled={run.stop_requested}
             onClick={() => confirmStopRun(run, onUpdate)}
           >
-            {queued ? 'Cancel' : run.stop_requested ? 'Stopping …' : 'Stop'}
+            {queued
+              ? i18n.t('ui.training.EnsembleRunView.cancel')
+              : run.stop_requested
+                ? i18n.t('ui.training.EnsembleRunView.stopping')
+                : i18n.t('ui.training.EnsembleRunView.stop')}
           </Button>
         )}
         {canDeleteRun(run, scope) && (
@@ -194,7 +207,7 @@ export function EnsembleRunView({
             leftSection={<IconTrash size={16} />}
             onClick={() => confirmDeleteRun(run, onDeleted)}
           >
-            Delete
+            {i18n.t('ui.training.EnsembleRunView.delete')}
           </Button>
         )}
       </Group>
@@ -202,7 +215,7 @@ export function EnsembleRunView({
       {canPredict && (
         <div>
           <ToggleButton opened={predictOpened} onClick={predict.toggle}>
-            Try the ensemble: predict
+            {i18n.t('ui.training.EnsembleRunView.tryTheEnsemblePredict')}
           </ToggleButton>
           <Collapse expanded={predictOpened}>
             {predictOpened && (
@@ -233,6 +246,7 @@ function Members({
   onOpenRun?: (id: string) => void;
   onUpdate: (run: RunDetail) => void;
 }) {
+  useTranslation();
   const info = run.ensemble;
   const members = useMemo(() => info?.members ?? [], [info]);
   const method = info?.method ?? 'average';
@@ -256,13 +270,13 @@ function Members({
       onUpdate(await api.training.runs.setEnsembleWeights(run.id, weights));
       notifications.show({
         color: 'green',
-        title: 'Weights saved',
-        message: 'The ensemble was measured again with the new weights.',
+        title: i18n.t('ui.training.EnsembleRunView.weightsSaved'),
+        message: i18n.t('ui.training.EnsembleRunView.theEnsembleWasMeasuredAgain'),
       });
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Cannot save the weights',
+        title: i18n.t('ui.training.EnsembleRunView.cannotSaveTheWeights'),
         message: (error as Error).message,
       });
     } finally {
@@ -271,10 +285,10 @@ function Members({
   };
 
   return (
-    <Stack gap="xs" component="section" aria-label="Members">
+    <Stack gap="xs" component="section" aria-label={i18n.t('ui.training.EnsembleRunView.members')}>
       <Group justify="space-between" gap="xs" align="baseline">
         <Text size="sm" fw={600}>
-          Members
+          {i18n.t('ui.training.EnsembleRunView.members')}
         </Text>
         <Text size="xs" c="dimmed">
           {METHOD_LABELS[method]}
@@ -283,12 +297,20 @@ function Members({
       <Text size="xs" c="dimmed">
         {methodText(method, run.task)}
       </Text>
-      <Table fz="sm" withTableBorder aria-label="Members of the ensemble">
+      <Table
+        fz="sm"
+        withTableBorder
+        aria-label={i18n.t('ui.training.EnsembleRunView.membersOfTheEnsemble')}
+      >
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Run</Table.Th>
-            <Table.Th>Model</Table.Th>
-            {method === 'average' && <Table.Th w={editable ? 130 : 80}>Weight</Table.Th>}
+            <Table.Th>{i18n.t('ui.training.EnsembleRunView.run')}</Table.Th>
+            <Table.Th>{i18n.t('ui.training.EnsembleRunView.model')}</Table.Th>
+            {method === 'average' && (
+              <Table.Th w={editable ? 130 : 80}>
+                {i18n.t('ui.training.EnsembleRunView.weight')}
+              </Table.Th>
+            )}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -304,7 +326,7 @@ function Members({
                 )}
                 {member.deleted && (
                   <Badge color="red" variant="light" tt="none" ml={6}>
-                    deleted
+                    {i18n.t('ui.training.EnsembleRunView.deleted')}
                   </Badge>
                 )}
               </Table.Td>
@@ -321,7 +343,9 @@ function Members({
                       min={0}
                       step={0.1}
                       decimalScale={3}
-                      aria-label={`Weight of ${member.name}`}
+                      aria-label={i18n.t('ui.training.EnsembleRunView.weightOf', {
+                        name: member.name,
+                      })}
                       value={weights[index] ?? 0}
                       rightSection={
                         <Text size="xs" c="dimmed" pr={6}>
@@ -353,13 +377,13 @@ function Members({
             disabled={!valid}
             onClick={() => void save()}
           >
-            Save weights
+            {i18n.t('ui.training.EnsembleRunView.saveWeights')}
           </Button>
           <Button size="compact-sm" variant="subtle" color="gray" onClick={() => setWeights(saved)}>
-            Reset
+            {i18n.t('ui.training.EnsembleRunView.reset')}
           </Button>
           <Text size="xs" c="dimmed">
-            Measured again on the members’ saved predictions.
+            {i18n.t('ui.training.EnsembleRunView.measuredAgainOnTheMembers')}
           </Text>
         </Group>
       )}
@@ -382,6 +406,7 @@ function formatColumn(column: ComparisonColumn, value: number | null | undefined
 
 /** Every member and the ensemble on the same rows of one split. */
 function Comparison({ combined, task }: { combined: EnsembleState; task: string | null }) {
+  useTranslation();
   const splits = combined.splits.length > 0 ? combined.splits : (['val'] as EnsembleSplit[]);
   const [split, setSplit] = useState<EnsembleSplit>(splits.includes('test') ? 'test' : splits[0]);
   const rows = combined.comparison;
@@ -404,30 +429,38 @@ function Comparison({ combined, task }: { combined: EnsembleState; task: string 
   let note: string | null = null;
   if (stackingFit) {
     note = combined.optimistic
-      ? 'The stacking model was fitted on these rows, and the dataset has no test rows: the ensemble’s numbers are optimistic.'
-      : 'The stacking model was fitted on these rows: the ensemble’s numbers here are optimistic. The test rows show how it does on new data.';
+      ? i18n.t('ui.training.EnsembleRunView.theStackingModelWasFitted')
+      : i18n.t('ui.training.EnsembleRunView.theStackingModelWasFitted2');
   } else if (combined.method === 'average' && combined.optimistic) {
-    note =
-      'No validation or test rows: measured on the training rows, which the members learned from (optimistic).';
+    note = i18n.t('ui.training.EnsembleRunView.noValidationOrTestRows');
   }
 
   return (
-    <Stack gap="xs" component="section" aria-label="Comparison">
+    <Stack
+      gap="xs"
+      component="section"
+      aria-label={i18n.t('ui.training.EnsembleRunView.comparison')}
+    >
       <Group justify="space-between" gap="xs" align="center">
         <Text size="sm" fw={600}>
-          Members and ensemble
+          {i18n.t('ui.training.EnsembleRunView.membersAndEnsemble')}
         </Text>
         {splits.length > 1 && (
           <SegmentedControl
             size="xs"
-            aria-label="Split"
+            aria-label={i18n.t('ui.training.EnsembleRunView.split')}
             value={split}
             onChange={(value) => setSplit(value as EnsembleSplit)}
             data={splits.map((key) => ({ value: key, label: SPLIT_LABELS[key] }))}
           />
         )}
       </Group>
-      <Table fz="xs" striped withTableBorder aria-label="Members and ensemble">
+      <Table
+        fz="xs"
+        striped
+        withTableBorder
+        aria-label={i18n.t('ui.training.EnsembleRunView.membersAndEnsemble')}
+      >
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{SPLIT_LABELS[split]}</Table.Th>
@@ -441,7 +474,9 @@ function Comparison({ combined, task }: { combined: EnsembleState; task: string 
             const ensemble = row.member === null;
             return (
               <Table.Tr key={`${row.member ?? 'ensemble'}`} fw={ensemble ? 700 : undefined}>
-                <Table.Td>{ensemble ? 'Ensemble' : row.name}</Table.Td>
+                <Table.Td>
+                  {ensemble ? i18n.t('ui.training.EnsembleRunView.ensemble') : row.name}
+                </Table.Td>
                 {columns.map((column) => {
                   const value = row[split]?.[column.key];
                   const top = typeof value === 'number' && value === best(column);

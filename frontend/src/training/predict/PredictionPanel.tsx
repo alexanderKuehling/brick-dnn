@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Loader, Paper, Stack, Text } from '@mantine/core';
 import { api, type PredictionForm } from '@/api';
 import { slugify } from '@/builder/graph';
+import { i18n, useTranslation } from '@/i18n';
 import { formatThreshold } from '../threshold';
 import { ImagePredict } from './ImagePredict';
 import { TabularPredict } from './TabularPredict';
@@ -27,6 +28,7 @@ export function PredictionPanel({
   /** The class the threshold decides for. */
   positiveClass?: string;
 }) {
+  useTranslation();
   const [form, setForm] = useState<PredictionForm | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,18 +55,17 @@ export function PredictionPanel({
       </Text>
     );
   } else if (!form) {
-    body = <Loader size="sm" aria-label="Loading" />;
+    body = <Loader size="sm" aria-label={i18n.t('ui.training.PredictionPanel.loading')} />;
   } else if (!form.available) {
     body = (
       <Text size="sm" c="dimmed">
-        {form.reason ?? 'This run cannot predict.'}
+        {form.reason ?? i18n.t('ui.training.PredictionPanel.thisRunCannotPredict')}
       </Text>
     );
   } else if (form.kind === 'demo') {
     body = (
       <Text size="sm" c="dimmed">
-        This run was trained on random demo data, so its predictions mean nothing. Train it on a
-        dataset to try it here.
+        {i18n.t('ui.training.PredictionPanel.thisRunWasTrainedOn')}
       </Text>
     );
   } else if (form.kind === 'image' && form.image) {
@@ -81,7 +82,7 @@ export function PredictionPanel({
   } else {
     body = (
       <Text size="sm" c="dimmed">
-        Predictions for this kind of run are not available in the web app.
+        {i18n.t('ui.training.PredictionPanel.predictionsForThisKindOf')}
       </Text>
     );
   }
@@ -90,18 +91,25 @@ export function PredictionPanel({
     <Paper withBorder p="sm" radius="sm">
       <Stack gap="sm">
         {form?.budget_note && (
-          <Alert color="yellow" variant="light" p="xs" title="No compute left">
+          <Alert
+            color="yellow"
+            variant="light"
+            p="xs"
+            title={i18n.t('ui.training.PredictionPanel.noComputeLeft')}
+          >
             <Text size="sm">{form.budget_note}</Text>
             <Text size="xs" c="dimmed">
-              Predictions use compute (CPU time) too, so they are not possible until it resets.
+              {i18n.t('ui.training.PredictionPanel.predictionsUseComputeCpuTime')}
             </Text>
           </Alert>
         )}
         {typeof decisionThreshold === 'number' && form?.available && (
           <Text size="xs" c="dimmed" data-testid="prediction-threshold">
-            Decision threshold {formatThreshold(decisionThreshold)}: the prediction is “
-            {positiveClass ?? 'the second class'}” when its probability is at least{' '}
-            {formatThreshold(decisionThreshold)}. Change it under Metrics.
+            {i18n.t('ui.training.PredictionPanel.decisionThresholdThePredictionIs', {
+              decisionThreshold: formatThreshold(decisionThreshold),
+              value: positiveClass ?? i18n.t('ui.training.PredictionPanel.theSecondClass'),
+              decisionThreshold2: formatThreshold(decisionThreshold),
+            })}
           </Text>
         )}
         {form?.raw_note && (

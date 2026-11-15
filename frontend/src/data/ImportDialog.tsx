@@ -41,7 +41,7 @@ import {
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import { useUploadProgress } from '@/components/useUploadProgress';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import classes from './DataPage.module.css';
 
@@ -94,34 +94,103 @@ const DEFAULT_OPTIONS: ImportOptions = {
 };
 
 const DELIMITERS: { value: ImportOptions['delimiter']; label: string }[] = [
-  { value: 'auto', label: 'Detect' },
-  { value: ',', label: 'Comma ( , )' },
-  { value: ';', label: 'Semicolon ( ; )' },
-  { value: '\t', label: 'Tab' },
-  { value: '|', label: 'Pipe ( | )' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.detect');
+    },
+  },
+  {
+    value: ',',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.comma');
+    },
+  },
+  {
+    value: ';',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.semicolon');
+    },
+  },
+  {
+    value: '\t',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.tab');
+    },
+  },
+  {
+    value: '|',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.pipe');
+    },
+  },
 ];
 const DECIMALS: { value: ImportOptions['decimal']; label: string }[] = [
-  { value: 'auto', label: 'Detect' },
-  { value: '.', label: 'Point (1.5)' },
-  { value: ',', label: 'Comma (1,5)' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.detect');
+    },
+  },
+  {
+    value: '.',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.point15');
+    },
+  },
+  {
+    value: ',',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.comma15');
+    },
+  },
 ];
 const HEADERS: { value: ImportOptions['header']; label: string }[] = [
-  { value: 'auto', label: 'Detect' },
-  { value: 'yes', label: 'First row has the column names' },
-  { value: 'no', label: 'No header row' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.detect');
+    },
+  },
+  {
+    value: 'yes',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.firstRowHasTheColumn');
+    },
+  },
+  {
+    value: 'no',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.noHeaderRow');
+    },
+  },
 ];
 const ENCODINGS: { value: ImportOptions['encoding']; label: string }[] = [
-  { value: 'auto', label: 'Detect' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.detect');
+    },
+  },
   { value: 'utf-8', label: 'UTF-8' },
   { value: 'cp1252', label: 'Windows-1252' },
-  { value: 'latin-1', label: 'Latin-1 (ISO 8859-1)' },
+  {
+    value: 'latin-1',
+    get label() {
+      return i18n.t('ui.data.ImportDialog.latin1Iso88591');
+    },
+  },
 ];
 
 const ENCODING_NAMES: Record<string, string> = {
   'utf-8': 'UTF-8',
   'utf-8-sig': 'UTF-8',
-  cp1252: 'Windows-1252',
-  'latin-1': 'Latin-1',
+  get cp1252() {
+    return i18n.t('ui.data.ImportDialog.windows1252');
+  },
+  get 'latin-1'() {
+    return i18n.t('ui.data.ImportDialog.latin1');
+  },
 };
 
 const DELIMITER_NAMES: Record<string, string> = {
@@ -133,13 +202,23 @@ const DELIMITER_NAMES: Record<string, string> = {
 
 const FORMAT_NAMES: Record<ImportFormat, string> = {
   csv: 'CSV',
-  xlsx: 'Excel workbook',
-  xls: 'Excel 97-2003 workbook',
-  ods: 'OpenDocument spreadsheet',
+  get xlsx() {
+    return i18n.t('ui.data.ImportDialog.excelWorkbook');
+  },
+  get xls() {
+    return i18n.t('ui.data.ImportDialog.excel972003Workbook');
+  },
+  get ods() {
+    return i18n.t('ui.data.ImportDialog.opendocumentSpreadsheet');
+  },
   json: 'JSON',
   jsonl: 'JSON Lines',
-  parquet: 'Parquet',
-  feather: 'Feather / Arrow',
+  get parquet() {
+    return i18n.t('ui.data.ImportDialog.parquet');
+  },
+  get feather() {
+    return i18n.t('ui.data.ImportDialog.featherArrow');
+  },
 };
 
 const PACKED: Record<string, string> = {
@@ -153,9 +232,13 @@ const WORKBOOKS: ImportFormat[] = ['xlsx', 'xls', 'ods'];
 
 /** "1,200 rows × 9 columns" */
 export function tableSize(rows: number, columns: number): string {
-  const plural = (n: number, word: string) =>
-    `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : 's'}`;
-  return `${plural(rows, 'row')} × ${plural(columns, 'column')}`;
+  return i18n.t('data.tableSize', {
+    rows: i18n.t('data.rows', { count: rows, value: rows.toLocaleString(currentLocale()) }),
+    columns: i18n.t('data.columns', {
+      count: columns,
+      value: columns.toLocaleString(currentLocale()),
+    }),
+  });
 }
 
 /**
@@ -202,13 +285,16 @@ export function fileProblem(
   fileTypes: string[] = DEFAULT_FILE_TYPES
 ): string | null {
   if (!fileTypes.includes(suffix(file.name))) {
-    return (
-      `“${file.name}” cannot be imported. Choose a CSV, Excel, OpenDocument, JSON or Parquet ` +
-      `file (${fileTypes.join(', ')}).`
-    );
+    return i18n.t('ui.data.ImportDialog.cannotBeImportedChooseA', {
+      name: file.name,
+      fileTypes: fileTypes.join(', '),
+    });
   }
   if (maxUploadMb > 0 && file.size > maxUploadMb * 1024 * 1024) {
-    return `The file is ${formatBytes(file.size)}; the server accepts up to ${maxUploadMb} MB.`;
+    return i18n.t('ui.data.ImportDialog.theFileIsTheServer', {
+      size: formatBytes(file.size),
+      maxUploadMb,
+    });
   }
   return null;
 }
@@ -217,7 +303,7 @@ export function fileProblem(
 export function linkProblem(url: string): string | null {
   return /^https?:\/\/[^\s/?#]+\S*$/i.test(url.trim())
     ? null
-    : 'Enter a link that starts with https:// or http://.';
+    : i18n.t('ui.data.ImportDialog.enterALinkThatStarts');
 }
 
 /** The name of a table from its file name: "sales" for "sales.csv.gz". */
@@ -286,6 +372,7 @@ export function ImportDialog({
   currentPrepName,
   onImported,
 }: ImportDialogProps) {
+  useTranslation();
   const [mode, setMode] = useState<Mode>('file');
   const [file, setFile] = useState<File | null>(initialFile);
   const [link, setLink] = useState('');
@@ -478,7 +565,13 @@ export function ImportDialog({
     <Modal
       opened={opened}
       onClose={close}
-      title={imported ? 'Imported' : pending ? 'Choose the sheet' : 'Import data'}
+      title={
+        imported
+          ? i18n.t('ui.data.ImportDialog.imported')
+          : pending
+            ? i18n.t('ui.data.ImportDialog.chooseTheSheet')
+            : i18n.t('ui.data.ImportDialog.importData')
+      }
       size="lg"
       closeOnClickOutside={!busy}
     >
@@ -489,9 +582,17 @@ export function ImportDialog({
             icon={<IconCircleCheck size={18} />}
             title={`“${imported.name}”: ${tableSize(imported.n_rows, imported.n_columns)}`}
           >
-            <Text size="sm">Read as {describeReport(imported.report)}.</Text>
+            <Text size="sm">
+              {i18n.t('ui.data.ImportDialog.readAs', {
+                describeReport: describeReport(imported.report),
+              })}
+            </Text>
           </Alert>
-          <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Please check">
+          <Alert
+            color="yellow"
+            icon={<IconAlertTriangle size={18} />}
+            title={i18n.t('ui.data.ImportDialog.pleaseCheck')}
+          >
             <List size="sm" spacing={4}>
               {imported.report.warnings.map((warning) => (
                 <List.Item key={warning}>{warning}</List.Item>
@@ -499,12 +600,11 @@ export function ImportDialog({
             </List>
           </Alert>
           <Text size="xs" c="dimmed">
-            If the file was read wrongly, import it again with other options under “Import options”,
-            or fix the column types with a “Change type” step.
+            {i18n.t('ui.data.ImportDialog.ifTheFileWasRead')}
           </Text>
           <Group justify="flex-end">
             <Button onClick={onClose} data-autofocus>
-              Continue
+              {i18n.t('ui.data.ImportDialog.continue')}
             </Button>
           </Group>
         </Stack>
@@ -517,10 +617,16 @@ export function ImportDialog({
         >
           <Stack gap="md">
             <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
-              “{pending.filename || label}” has {pending.report.sheets?.length} sheets. Which one do
-              you want to import?
+              {i18n.t('ui.data.ImportDialog.hasSheetsWhichOneDo', {
+                value: pending.filename || label,
+                length: pending.report.sheets?.length,
+              })}
             </Text>
-            <Radio.Group value={sheet} onChange={setSheet} label="Sheet">
+            <Radio.Group
+              value={sheet}
+              onChange={setSheet}
+              label={i18n.t('ui.data.ImportDialog.sheet')}
+            >
               <ScrollArea.Autosize mah={260} type="auto" offsetScrollbars>
                 <Stack gap={8} mt={6}>
                   {(pending.report.sheets ?? []).map((sheetName) => (
@@ -531,7 +637,9 @@ export function ImportDialog({
                       disabled={busy}
                       description={
                         sheetName === pending.report.sheet
-                          ? `Read: ${tableSize(pending.n_rows, pending.n_columns)}`
+                          ? i18n.t('ui.data.ImportDialog.read', {
+                              tableSize: tableSize(pending.n_rows, pending.n_columns),
+                            })
                           : undefined
                       }
                       styles={{ label: { overflowWrap: 'anywhere' } }}
@@ -541,17 +649,23 @@ export function ImportDialog({
               </ScrollArea.Autosize>
             </Radio.Group>
             {error && (
-              <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot import">
+              <Alert
+                color="red"
+                icon={<IconAlertTriangle size={18} />}
+                title={i18n.t('ui.data.ImportDialog.cannotImport')}
+              >
                 {error}
               </Alert>
             )}
             <ImportProgress mode={mode} label={label} busy={busy} bytes={progress.bytes} />
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={close}>
-                Cancel
+                {i18n.t('ui.data.ImportDialog.cancel')}
               </Button>
               <Button type="submit" loading={busy} disabled={!sheet}>
-                {sheet === pending.report.sheet ? 'Continue' : 'Import this sheet'}
+                {sheet === pending.report.sheet
+                  ? i18n.t('ui.data.ImportDialog.continue')
+                  : i18n.t('ui.data.ImportDialog.importThisSheet')}
               </Button>
             </Group>
           </Stack>
@@ -580,10 +694,10 @@ export function ImportDialog({
               {urlImport && (
                 <Tabs.List grow mb="md">
                   <Tabs.Tab value="file" leftSection={<IconUpload size={14} />} disabled={busy}>
-                    File
+                    {i18n.t('ui.data.ImportDialog.file')}
                   </Tabs.Tab>
                   <Tabs.Tab value="link" leftSection={<IconLink size={14} />} disabled={busy}>
-                    From a link
+                    {i18n.t('ui.data.ImportDialog.fromALink')}
                   </Tabs.Tab>
                 </Tabs.List>
               )}
@@ -620,8 +734,7 @@ export function ImportDialog({
                     </div>
                   ) : (
                     <Text size="sm" c="dimmed">
-                      Drop a file here, or choose one: CSV, Excel, OpenDocument, JSON, Parquet,
-                      Feather, also packed as .zip or .gz. Up to {maxUploadMb} MB.
+                      {i18n.t('ui.data.ImportDialog.dropAFileHereOr', { maxUploadMb })}
                     </Text>
                   )}
                   <FileButton
@@ -637,7 +750,9 @@ export function ImportDialog({
                         disabled={busy}
                         leftSection={<IconUpload size={14} />}
                       >
-                        {file ? 'Choose another file' : 'Choose file'}
+                        {file
+                          ? i18n.t('ui.data.ImportDialog.chooseAnotherFile')
+                          : i18n.t('ui.data.ImportDialog.chooseFile')}
                       </Button>
                     )}
                   </FileButton>
@@ -647,7 +762,7 @@ export function ImportDialog({
                 <Tabs.Panel value="link">
                   <Stack gap="xs">
                     <TextInput
-                      label="Link to the file"
+                      label={i18n.t('ui.data.ImportDialog.linkToTheFile')}
                       type="url"
                       inputMode="url"
                       autoComplete="off"
@@ -664,36 +779,44 @@ export function ImportDialog({
                       data-autofocus
                     />
                     <Text size="xs" c="dimmed">
-                      A public link to a CSV, Excel, JSON or Parquet file, up to {maxUploadMb} MB.
-                      The server downloads it. For example:
+                      {i18n.t('ui.data.ImportDialog.aPublicLinkToA', { maxUploadMb })}
                     </Text>
                     <List size="xs" c="dimmed" spacing={2} withPadding>
                       <List.Item>
-                        <b>Google Sheets:</b> the link from “Share” (shared with “Anyone with the
-                        link”); the tab that is open in the link is imported.
+                        <Trans
+                          i18nKey="ui.data.ImportDialog.googleSheetsTheLinkFrom"
+                          components={[<b />]}
+                        />
                       </List.Item>
                       <List.Item>
-                        <b>GitHub:</b> the page of a file (…/blob/main/data.csv) or its “Raw” link.
+                        <Trans
+                          i18nKey="ui.data.ImportDialog.githubThePageOfA"
+                          components={[<b />]}
+                        />
                       </List.Item>
                       <List.Item>
-                        <b>Hugging Face:</b> the page of a file in a dataset
-                        (…/datasets/…/blob/main/train.csv).
+                        <Trans
+                          i18nKey="ui.data.ImportDialog.huggingFaceThePageOf"
+                          components={[<b />]}
+                        />
                       </List.Item>
                     </List>
                     <Text size="xs" c="dimmed">
-                      No link at hand?{' '}
-                      <Anchor
-                        component="button"
-                        type="button"
-                        size="xs"
-                        onClick={() => {
-                          setLink(EXAMPLE_LINK);
-                          setError(null);
-                        }}
-                        disabled={busy}
-                      >
-                        Try the iris flowers (a CSV file on GitHub)
-                      </Anchor>
+                      <Trans
+                        i18nKey="ui.data.ImportDialog.noLinkAtHandTry"
+                        components={[
+                          <Anchor
+                            component="button"
+                            type="button"
+                            size="xs"
+                            onClick={() => {
+                              setLink(EXAMPLE_LINK);
+                              setError(null);
+                            }}
+                            disabled={busy}
+                          />,
+                        ]}
+                      />
                     </Text>
                   </Stack>
                 </Tabs.Panel>
@@ -702,13 +825,13 @@ export function ImportDialog({
             <UploadNotice />
 
             <TextInput
-              label="Name"
+              label={i18n.t('ui.data.ImportDialog.name')}
               placeholder={
                 mode === 'file'
                   ? file
                     ? fileStem(file.name)
-                    : 'e.g. customers'
-                  : 'Empty: the name of the file'
+                    : i18n.t('ui.data.ImportDialog.eGCustomers')
+                  : i18n.t('ui.data.ImportDialog.emptyTheNameOfThe')
               }
               value={name}
               onChange={(event) => {
@@ -719,10 +842,10 @@ export function ImportDialog({
               disabled={busy}
             />
             <Checkbox
-              label="Start a new preparation with this table"
+              label={i18n.t('ui.data.ImportDialog.startANewPreparationWith')}
               description={
                 currentPrepName
-                  ? `Turn this off to only add the table, e.g. to join it into “${currentPrepName}”.`
+                  ? i18n.t('ui.data.ImportDialog.turnThisOffToOnly', { currentPrepName })
                   : undefined
               }
               checked={openNew}
@@ -732,8 +855,8 @@ export function ImportDialog({
 
             {sheetChoices && (
               <Select
-                label="Sheet"
-                description="The sheet of the workbook to import."
+                label={i18n.t('ui.data.ImportDialog.sheet')}
+                description={i18n.t('ui.data.ImportDialog.theSheetOfTheWorkbook')}
                 data={sheetChoices}
                 value={options.sheet ?? null}
                 onChange={(value) => value && set('sheet')(value)}
@@ -753,20 +876,19 @@ export function ImportDialog({
                 onClick={() => setAdvanced((value) => !value)}
                 aria-expanded={advanced}
               >
-                Import options
+                {i18n.t('ui.data.ImportDialog.importOptions')}
               </Button>
               <Collapse expanded={advanced}>
                 <Stack gap="sm" pt="xs">
                   <Text size="xs" c="dimmed">
-                    Brick DNN detects these from the file. Set them only if the detection gets it
-                    wrong.
+                    {i18n.t('ui.data.ImportDialog.brickDnnDetectsTheseFrom')}
                     {mode === 'link' &&
-                      ' Separator, decimal mark and encoding apply to CSV files only.'}
+                      i18n.t('ui.data.ImportDialog.separatorDecimalMarkAndEncoding')}
                   </Text>
                   <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
                     {applies === 'text' && (
                       <Select
-                        label="Separator"
+                        label={i18n.t('ui.data.ImportDialog.separator')}
                         data={DELIMITERS}
                         value={options.delimiter}
                         onChange={(value) =>
@@ -778,7 +900,7 @@ export function ImportDialog({
                     )}
                     {applies === 'text' && (
                       <Select
-                        label="Decimal mark"
+                        label={i18n.t('ui.data.ImportDialog.decimalMark')}
                         data={DECIMALS}
                         value={options.decimal}
                         onChange={(value) =>
@@ -790,7 +912,7 @@ export function ImportDialog({
                     )}
                     {applies !== 'other' && (
                       <Select
-                        label="Header row"
+                        label={i18n.t('ui.data.ImportDialog.headerRow')}
                         data={HEADERS}
                         value={options.header}
                         onChange={(value) =>
@@ -802,7 +924,7 @@ export function ImportDialog({
                     )}
                     {applies === 'text' && (
                       <Select
-                        label="Text encoding"
+                        label={i18n.t('ui.data.ImportDialog.textEncoding')}
                         data={ENCODINGS}
                         value={options.encoding}
                         onChange={(value) =>
@@ -814,9 +936,13 @@ export function ImportDialog({
                     )}
                   </SimpleGrid>
                   <TagsInput
-                    label="Values that mean “missing”"
-                    description="Empty: the usual ones (NA, N/A, null, -, ? …). Press Enter after each value."
-                    placeholder={options.missing_values?.length ? undefined : 'e.g. -999, unknown'}
+                    label={i18n.t('ui.data.ImportDialog.valuesThatMeanMissing')}
+                    description={i18n.t('ui.data.ImportDialog.emptyTheUsualOnesNa')}
+                    placeholder={
+                      options.missing_values?.length
+                        ? undefined
+                        : i18n.t('ui.data.ImportDialog.eG999Unknown')
+                    }
                     value={options.missing_values ?? []}
                     onChange={(values) => set('missing_values')(values.length > 0 ? values : null)}
                     acceptValueOnBlur
@@ -827,7 +953,11 @@ export function ImportDialog({
             </div>
 
             {error && (
-              <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot import">
+              <Alert
+                color="red"
+                icon={<IconAlertTriangle size={18} />}
+                title={i18n.t('ui.data.ImportDialog.cannotImport')}
+              >
                 {error}
               </Alert>
             )}
@@ -835,10 +965,10 @@ export function ImportDialog({
 
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={close}>
-                Cancel
+                {i18n.t('ui.data.ImportDialog.cancel')}
               </Button>
               <Button type="submit" loading={busy} disabled={problem !== null}>
-                Import
+                {i18n.t('ui.data.ImportDialog.import')}
               </Button>
             </Group>
           </Stack>
@@ -860,6 +990,7 @@ function ImportProgress({
   busy: boolean;
   bytes: ReturnType<typeof useUploadProgress>['bytes'];
 }) {
+  useTranslation();
   if (!busy) {
     return null;
   }
@@ -872,7 +1003,7 @@ function ImportProgress({
       />
     ) : null;
   }
-  const text = 'Downloading and reading the file …';
+  const text = i18n.t('ui.data.ImportDialog.downloadingAndReadingTheFile');
   return (
     <Stack gap={6}>
       <Text size="sm" role="status">
@@ -885,7 +1016,7 @@ function ImportProgress({
           animated
           withAria={false}
           role="progressbar"
-          aria-label="Import from the link"
+          aria-label={i18n.t('ui.data.ImportDialog.importFromTheLink')}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuetext={text}

@@ -1,4 +1,5 @@
 import { Badge, Loader, Tooltip } from '@mantine/core';
+import { i18n } from '@/i18n';
 import type { LiveIndicator } from './useLiveBuilder';
 import classes from './Live.module.css';
 
@@ -6,15 +7,31 @@ const BADGES: Record<LiveIndicator, { color: string; label: string; more?: strin
   {
     live: {
       color: 'green',
-      label: 'Live',
-      tip: 'Your changes are saved as you make them. Everyone with access sees them right away.',
+      get label() {
+        return i18n.t('ui.live.LiveBadge.live');
+      },
+      get tip() {
+        return i18n.t('ui.live.LiveBadge.yourChangesAreSavedAs');
+      },
     },
-    saving: { color: 'blue', label: 'Saving…', tip: 'Sending your changes to the server…' },
+    saving: {
+      color: 'blue',
+      get label() {
+        return i18n.t('ui.live.LiveBadge.saving');
+      },
+      get tip() {
+        return i18n.t('ui.live.LiveBadge.sendingYourChangesToThe');
+      },
+    },
     offline: {
       color: 'yellow',
-      label: 'Offline',
+      get label() {
+        return i18n.t('ui.live.LiveBadge.offline');
+      },
       more: ' – changes will sync',
-      tip: 'No connection to the server. Your changes are kept and sent when it is back.',
+      get tip() {
+        return i18n.t('ui.live.LiveBadge.noConnectionToTheServer');
+      },
     },
   };
 

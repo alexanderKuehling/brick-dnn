@@ -5,9 +5,11 @@
 import { auth, legal } from './auth';
 import { builder } from './builder';
 import { common } from './common';
+import { data } from './data';
 import { nav } from './nav';
 import { projects } from './projects';
 import { training } from './training';
+import { ui } from './ui';
 
 export const en = {
   common,
@@ -17,4 +19,6 @@ export const en = {
   builder,
   training,
   projects,
+  ui,
+  data,
 };

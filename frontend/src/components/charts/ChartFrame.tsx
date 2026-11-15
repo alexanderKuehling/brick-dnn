@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { IconChartBar, IconTable } from '@tabler/icons-react';
 import { ActionIcon, Box, Group, ScrollArea, Table, Text, Tooltip } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import classes from './Chart.module.css';
 
 export interface LegendItem {
@@ -47,8 +48,9 @@ export function LegendKey({
 }
 
 export function Legend({ items }: { items: LegendItem[] }) {
+  useTranslation();
   return (
-    <ul className={classes.legend} aria-label="Legend">
+    <ul className={classes.legend} aria-label={i18n.t('ui.components.ChartFrame.legend')}>
       {items.map((item) => (
         <li key={item.key} className={classes.legendItem}>
           <LegendKey color={item.color} shape={item.shape} />
@@ -89,6 +91,7 @@ export function GradientLegend({
 }
 
 export function ChartTableView({ table, title }: { table: ChartTable; title: string }) {
+  useTranslation();
   const numeric = table.numeric ?? table.head.map((_, i) => i > 0);
   return (
     <ScrollArea.Autosize mah={360} type="auto">
@@ -98,7 +101,7 @@ export function ChartTableView({ table, title }: { table: ChartTable; title: str
         withTableBorder
         fz="xs"
         verticalSpacing={4}
-        aria-label={`${title} (table)`}
+        aria-label={i18n.t('ui.components.ChartFrame.table', { title })}
         stickyHeader
       >
         <Table.Thead>
@@ -156,6 +159,7 @@ export function ChartFrame({
   caption,
   children,
 }: ChartFrameProps) {
+  useTranslation();
   const [showTable, setShowTable] = useState(false);
   const titleId = useId();
   const showLegend = (legend && legend.length > 1) || legendExtra;
@@ -175,12 +179,23 @@ export function ChartFrame({
         <Group gap={6} wrap="wrap" justify="flex-end">
           {controls}
           {table && (
-            <Tooltip label={showTable ? 'Show the chart' : 'Show as table'} withinPortal>
+            <Tooltip
+              label={
+                showTable
+                  ? i18n.t('ui.components.ChartFrame.showTheChart')
+                  : i18n.t('ui.components.ChartFrame.showAsTable')
+              }
+              withinPortal
+            >
               <ActionIcon
                 variant="subtle"
                 color="gray"
                 size="sm"
-                aria-label={showTable ? `Show ${title} as chart` : `Show ${title} as table`}
+                aria-label={
+                  showTable
+                    ? i18n.t('ui.components.ChartFrame.showAsChart', { title })
+                    : i18n.t('ui.components.ChartFrame.showAsTable2', { title })
+                }
                 aria-pressed={showTable}
                 onClick={() => setShowTable((value) => !value)}
               >
@@ -206,7 +221,12 @@ export function ChartFrame({
   );
 }
 
-export function ChartEmpty({ children = 'No values to show' }: { children?: ReactNode }) {
+export function ChartEmpty({
+  children = i18n.t('ui.components.ChartFrame.noValuesToShow'),
+}: {
+  children?: ReactNode;
+}) {
+  useTranslation();
   return (
     <div className={classes.empty}>
       <Text size="sm" c="dimmed" ta="center" px="sm">

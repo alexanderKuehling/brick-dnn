@@ -51,6 +51,14 @@ export const training = {
     dataTab: 'Data tab',
     messyCsv: 'Messy CSV? Clean, encode and analyse it in the',
   },
+  run: {
+    by: 'by {{user}}',
+    via: 'via “{{name}}”',
+    queued: 'queued {{date}}',
+    started: 'started {{date}}',
+    training: 'Training',
+    validation: 'Validation',
+  },
   setup: {
     budget: {
       budget_exceeded: 'Not enough compute budget',

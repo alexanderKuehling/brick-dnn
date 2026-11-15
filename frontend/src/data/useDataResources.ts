@@ -7,7 +7,7 @@ import {
   type DataStatus,
   type StepCatalog,
 } from '@/api';
-import { useLanguage } from '@/i18n';
+import { i18n, useLanguage } from '@/i18n';
 
 export interface DataResources {
   /** What the server can do; null while loading. */
@@ -77,7 +77,7 @@ export function useDataResources(loggedIn: boolean): DataResources {
         }
         setStatusError(
           error instanceof ApiError && error.status === 404
-            ? 'This server does not support data preparation. Update Brick DNN to use it.'
+            ? i18n.t('ui.data.useDataResources.thisServerDoesNotSupport')
             : error.message
         );
       });

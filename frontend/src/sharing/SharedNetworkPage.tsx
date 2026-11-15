@@ -22,6 +22,7 @@ import { slugify } from '@/builder/graph';
 import { NetworkViewer } from '@/builder/NetworkViewer';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
+import { i18n, useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 import classes from './Sharing.module.css';
 
@@ -34,6 +35,7 @@ interface LoadError {
 
 /** A network opened through its share link: read only, no login needed. */
 export function SharedNetworkPage() {
+  useTranslation();
   const { token = '' } = useParams<{ token: string }>();
   const { user, ready } = useAuth();
   const navigate = useNavigate();
@@ -73,8 +75,8 @@ export function SharedNetworkPage() {
   const duplicate = async () => {
     if (!user) {
       notifications.show({
-        title: 'Log in to duplicate',
-        message: 'A copy of your own needs a free account. You come back here afterwards.',
+        title: i18n.t('ui.sharing.SharedNetworkPage.logInToDuplicate'),
+        message: i18n.t('ui.sharing.SharedNetworkPage.aCopyOfYourOwn'),
       });
       // The login page sends the user back here, with the state to continue.
       navigate('/login', {
@@ -87,14 +89,14 @@ export function SharedNetworkPage() {
       const copy = await api.shared.duplicate(token);
       notifications.show({
         color: 'green',
-        title: `Saved “${copy.name}” to your networks`,
-        message: 'This copy is yours: you can change it.',
+        title: i18n.t('ui.sharing.SharedNetworkPage.savedToYourNetworks', { name: copy.name }),
+        message: i18n.t('ui.sharing.SharedNetworkPage.thisCopyIsYoursYou'),
       });
       openInBuilder(projectDraft(copy));
     } catch (err) {
       notifications.show({
         color: 'red',
-        title: 'Could not duplicate the network',
+        title: i18n.t('ui.sharing.SharedNetworkPage.couldNotDuplicateTheNetwork'),
         message: (err as Error).message,
       });
     } finally {
@@ -119,19 +121,21 @@ export function SharedNetworkPage() {
         </ThemeIcon>
         <Title order={2} mt="md">
           {error.notFound
-            ? 'This link does not exist or was turned off'
-            : 'Cannot open the network'}
+            ? i18n.t('ui.sharing.SharedNetworkPage.thisLinkDoesNotExist')
+            : i18n.t('ui.sharing.SharedNetworkPage.cannotOpenTheNetwork')}
         </Title>
         <Text c="dimmed" mt="sm">
-          {error.notFound ? 'Ask the person who shared the network for a new link.' : error.message}
+          {error.notFound
+            ? i18n.t('ui.sharing.SharedNetworkPage.askThePersonWhoShared')
+            : error.message}
         </Text>
         {error.notFound ? (
           <Button component={Link} to="/" mt="xl">
-            Go to the builder
+            {i18n.t('ui.sharing.SharedNetworkPage.goToTheBuilder')}
           </Button>
         ) : (
           <Button mt="xl" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
+            {i18n.t('ui.sharing.SharedNetworkPage.tryAgain')}
           </Button>
         )}
       </Container>
@@ -167,23 +171,26 @@ export function SharedNetworkPage() {
               leftSection={<IconEye size={12} />}
               style={{ flexShrink: 0 }}
             >
-              View only
+              {i18n.t('ui.sharing.SharedNetworkPage.viewOnly')}
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            by {network.owner} · updated {formatDate(network.updated_at)}
+            {i18n.t('ui.sharing.SharedNetworkPage.byUpdated', {
+              owner: network.owner,
+              updated_at: formatDate(network.updated_at),
+            })}
           </Text>
         </div>
         <Group gap="xs" className={classes.sharedActions}>
           <Button variant="default" leftSection={<IconCode size={16} />} onClick={code.open}>
-            View code
+            {i18n.t('ui.sharing.SharedNetworkPage.viewCode')}
           </Button>
           <Button
             leftSection={<IconCopyPlus size={16} />}
             loading={duplicating}
             onClick={() => void duplicate()}
           >
-            Duplicate to my networks
+            {i18n.t('ui.sharing.SharedNetworkPage.duplicateToMyNetworks')}
           </Button>
         </Group>
         {network.description && (

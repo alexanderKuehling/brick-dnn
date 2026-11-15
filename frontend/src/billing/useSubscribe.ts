@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useComputedColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, type BillingEnabled, type BillingPlan, type BillingState } from '@/api';
+import { i18n } from '@/i18n';
 import { openCheckout } from './paddle';
 
 const POLL_MS = 2000;
@@ -76,15 +77,14 @@ export function useSubscribe(info: BillingEnabled, onChanged: (state: BillingSta
               onChanged(state);
               notifications.show({
                 color: 'green',
-                title: `You are on the ${plan.name} plan now`,
-                message: 'Thank you! Your new limits apply at once.',
+                title: i18n.t('ui.billing.useSubscribe.youAreOnThePlan', { name: plan.name }),
+                message: i18n.t('ui.billing.useSubscribe.thankYouYourNewLimits'),
               });
             } else {
               notifications.show({
                 color: 'yellow',
-                title: 'Your payment arrived',
-                message:
-                  'The plan is not active yet. This can take a few minutes; load this page again then.',
+                title: i18n.t('ui.billing.useSubscribe.yourPaymentArrived'),
+                message: i18n.t('ui.billing.useSubscribe.thePlanIsNotActive'),
                 autoClose: false,
               });
             }
@@ -93,7 +93,7 @@ export function useSubscribe(info: BillingEnabled, onChanged: (state: BillingSta
       } catch (err) {
         notifications.show({
           color: 'red',
-          title: 'Could not open the checkout',
+          title: i18n.t('ui.billing.useSubscribe.couldNotOpenTheCheckout'),
           message: (err as Error).message,
         });
       } finally {

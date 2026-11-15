@@ -13,7 +13,7 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 import { isClassicalRun, isHybridRun } from './classical';
 import { PARAM_LABELS } from './search';
 
@@ -25,13 +25,27 @@ export function isActive(status: RunStatus | null | undefined): boolean {
 }
 
 export const STATUS_LABELS: Record<RunStatus, string> = {
-  queued: 'Queued',
-  starting: 'Starting',
-  preparing: 'Preparing',
-  running: 'Running',
-  completed: 'Completed',
-  stopped: 'Stopped',
-  failed: 'Failed',
+  get queued() {
+    return i18n.t('ui.training.format.queued2');
+  },
+  get starting() {
+    return i18n.t('ui.training.format.starting');
+  },
+  get preparing() {
+    return i18n.t('ui.training.format.preparing');
+  },
+  get running() {
+    return i18n.t('ui.training.format.running');
+  },
+  get completed() {
+    return i18n.t('ui.training.format.completed');
+  },
+  get stopped() {
+    return i18n.t('ui.training.format.stopped');
+  },
+  get failed() {
+    return i18n.t('ui.training.format.failed');
+  },
 };
 
 export const STATUS_COLORS: Record<RunStatus, string> = {
@@ -47,7 +61,11 @@ export const STATUS_COLORS: Record<RunStatus, string> = {
 /** 0.9812 → "98.1%". */
 export function formatPercent(value: number | null | undefined, digits = 1): string {
   return typeof value === 'number' && Number.isFinite(value)
-    ? `${(value * 100).toFixed(digits)}%`
+    ? value.toLocaleString(currentLocale(), {
+        style: 'percent',
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      })
     : '–';
 }
 
@@ -84,7 +102,7 @@ export function formatBytesOf(sent: number, total: number): string {
   }
   const format = (bytes: number) =>
     `${unit === 0 ? bytes : (bytes / scale).toFixed(1)} ${units[unit]}`;
-  return `${format(sent)} of ${format(total)}`;
+  return i18n.t('ui.training.format.of', { sent: format(sent), total: format(total) });
 }
 
 /** R² (coefficient of determination): 0.91234 → "0.912". */
@@ -111,10 +129,14 @@ export function formatDuration(seconds: number | null | undefined): string {
   }
   const minutes = Math.floor(total / 60);
   if (minutes < 60) {
-    return total % 60 ? `${minutes} min ${total % 60} s` : `${minutes} min`;
+    return total % 60
+      ? i18n.t('ui.training.format.minS', { minutes, value: total % 60 })
+      : `${minutes} min`;
   }
   const hours = Math.floor(minutes / 60);
-  return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+  return minutes % 60
+    ? i18n.t('ui.training.format.hMin', { hours, value: minutes % 60 })
+    : `${hours} h`;
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -228,29 +250,69 @@ export const TUNABLE_SETTINGS: TunableSetting[] = [
 ];
 
 export const SETTING_LABELS: Record<TunableSetting, string> = {
-  learning_rate: 'Learning rate',
-  batch_size: 'Batch size',
-  optimizer: 'Optimizer',
-  weight_decay: 'Weight decay',
-  loss: 'Loss',
-  focal_gamma: 'Focal gamma',
-  label_smoothing: 'Label smoothing',
-  huber_delta: 'Huber delta',
+  get learning_rate() {
+    return i18n.t('ui.training.format.learningRate');
+  },
+  get batch_size() {
+    return i18n.t('ui.training.format.batchSize');
+  },
+  get optimizer() {
+    return i18n.t('ui.training.format.optimizer');
+  },
+  get weight_decay() {
+    return i18n.t('ui.training.format.weightDecay');
+  },
+  get loss() {
+    return i18n.t('ui.training.format.loss');
+  },
+  get focal_gamma() {
+    return i18n.t('ui.training.format.focalGamma');
+  },
+  get label_smoothing() {
+    return i18n.t('ui.training.format.labelSmoothing');
+  },
+  get huber_delta() {
+    return i18n.t('ui.training.format.huberDelta');
+  },
 };
 
 /** The losses by name (backend/brickdnn/training/losses.py). */
 export const LOSS_NAMES: Record<string, string> = {
-  auto: 'Automatic',
-  cross_entropy: 'Cross-entropy',
-  weighted_cross_entropy: 'Weighted cross-entropy',
-  focal: 'Focal loss',
-  cross_entropy_dice: 'Cross-entropy + Dice',
-  mse: 'Mean squared error',
-  mae: 'Mean absolute error',
-  huber: 'Huber loss',
+  get auto() {
+    return i18n.t('ui.training.format.automatic');
+  },
+  get cross_entropy() {
+    return i18n.t('ui.training.format.crossEntropy');
+  },
+  get weighted_cross_entropy() {
+    return i18n.t('ui.training.format.weightedCrossEntropy');
+  },
+  get focal() {
+    return i18n.t('ui.training.format.focalLoss');
+  },
+  get cross_entropy_dice() {
+    return i18n.t('ui.training.format.crossEntropyDice');
+  },
+  get mse() {
+    return i18n.t('ui.training.format.meanSquaredError');
+  },
+  get mae() {
+    return i18n.t('ui.training.format.meanAbsoluteError');
+  },
+  get huber() {
+    return i18n.t('ui.training.format.huberLoss');
+  },
 };
 
-const OPTIMIZER_LABELS: Record<Optimizer, string> = { adam: 'Adam', adamw: 'AdamW', sgd: 'SGD' };
+const OPTIMIZER_LABELS: Record<Optimizer, string> = {
+  get adam() {
+    return i18n.t('ui.training.format.adam');
+  },
+  get adamw() {
+    return i18n.t('ui.training.format.adamw');
+  },
+  sgd: 'SGD',
+};
 
 /** A setting value as people write it: 0.00312, 64, "Adam". */
 export function formatSetting(name: TunableSetting, value: number | string | undefined): string {
@@ -306,7 +368,9 @@ export function describeParams(params: TrialParams): string {
   const [neural, rest] = splitParams(params);
   if (Object.keys(neural).length > 0) {
     // A hybrid network that searched its neural settings too.
-    const text = `neural layers: ${describeParams(neural)}`;
+    const text = i18n.t('ui.training.format.neuralLayers', {
+      describeParams: describeParams(neural),
+    });
     return Object.keys(rest).length > 0 ? `${text}; ${describeParams(rest)}` : text;
   }
   const names = Object.keys(params).filter((name) => params[name] !== undefined);
@@ -355,7 +419,9 @@ export function searchedParams(tuning: TuningConfig | null | undefined): string[
 export function paramLabel(name: string): string {
   if (name.startsWith(NEURAL_PREFIX)) {
     const setting = name.slice(NEURAL_PREFIX.length) as TunableSetting;
-    return `Neural ${(SETTING_LABELS[setting] ?? setting).toLowerCase()}`;
+    return i18n.t('ui.training.format.neural', {
+      value: (SETTING_LABELS[setting] ?? setting).toLowerCase(),
+    });
   }
   return SETTING_LABELS[name as TunableSetting] ?? PARAM_LABELS[name] ?? name;
 }
@@ -448,16 +514,19 @@ export function startsIn(seconds: number | null | undefined): string | null {
     return null;
   }
   if (seconds < 20) {
-    return 'starts in a moment';
+    return i18n.t('ui.training.format.startsInAMoment');
   }
   if (seconds < 90) {
-    return 'starts in about a minute';
+    return i18n.t('ui.training.format.startsInAboutAMinute');
   }
   if (seconds < 90 * 60) {
-    return `starts in about ${Math.round(seconds / 60)} minutes`;
+    return i18n.t('ui.training.format.startsInAboutMinutes', { round: Math.round(seconds / 60) });
   }
   const hours = Math.round(seconds / 3600);
-  return `starts in about ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  return i18n.t('ui.training.format.startsInAbout', {
+    hours,
+    value: hours === 1 ? i18n.t('ui.training.format.hour') : i18n.t('ui.training.format.hours'),
+  });
 }
 
 /**
@@ -470,10 +539,10 @@ export function queueText(queue: RunQueue | null | undefined): string {
   }
   const place = `Queued — position ${queue.position}`;
   if (!queue.worker_online) {
-    return `${place}, waiting for a training worker`;
+    return i18n.t('ui.training.format.waitingForATrainingWorker', { place });
   }
   if (queue.blocked_by === 'account') {
-    return `${place}, starts after your running training`;
+    return i18n.t('ui.training.format.startsAfterYourRunningTraining', { place });
   }
   const start = startsIn(queue.estimated_wait_seconds);
   return start ? `${place}, ${start}` : place;
@@ -485,7 +554,7 @@ export function queueText(queue: RunQueue | null | undefined): string {
  */
 export function progressLabel(run: RunSummary): string {
   if (run.status === 'queued' && run.queue) {
-    return `Queued #${run.queue.position}`;
+    return i18n.t('ui.training.format.queued', { position: run.queue.position });
   }
   if (run.status === 'running' && isClassicalRun(run)) {
     return 'Fitting';
@@ -503,14 +572,19 @@ export function progressLabel(run: RunSummary): string {
       run.trials_done === 0 &&
       run.epochs_done < run.epochs &&
       run.config.feature_training !== 'frozen';
-    return learning ? `Epoch ${run.epochs_done + 1}/${run.epochs}` : (trial ?? 'Fitting');
+    return learning
+      ? i18n.t('ui.training.format.epoch', { value: run.epochs_done + 1, epochs: run.epochs })
+      : (trial ?? 'Fitting');
   }
   if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
     const total = run.tuning.trials;
-    return `Trial ${Math.min(run.trials_done + 1, total)}/${total}`;
+    return i18n.t('ui.training.format.trial', { min: Math.min(run.trials_done + 1, total), total });
   }
   if (run.status === 'running' && run.epochs > 0) {
-    return `Epoch ${Math.min(run.epochs_done + 1, run.epochs)}/${run.epochs}`;
+    return i18n.t('ui.training.format.epoch2', {
+      min: Math.min(run.epochs_done + 1, run.epochs),
+      epochs: run.epochs,
+    });
   }
   return STATUS_LABELS[run.status];
 }
@@ -629,7 +703,9 @@ export function resultText(run: RunSummary): string | null {
     return null;
   }
   const text = `${headline[1]} ${headline[0]}`;
-  return run.tuning && run.best_trial ? `best trial ${run.best_trial.trial}, ${text}` : text;
+  return run.tuning && run.best_trial
+    ? i18n.t('ui.training.format.bestTrial', { trial: run.best_trial.trial, text })
+    : text;
 }
 
 /**

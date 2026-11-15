@@ -1,5 +1,6 @@
 import { IconAlertTriangle, IconGauge, IconInfoCircle } from '@tabler/icons-react';
 import { Alert, Anchor, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import { formatCpu, formatMoney, formatResetDate } from './format';
 import type { CostEstimateState } from './useCostEstimate';
 
@@ -8,9 +9,10 @@ import type { CostEstimateState } from './useCostEstimate';
  * network and settings (it is also shown outside of the router in tests).
  */
 export function AccountLink() {
+  useTranslation();
   return (
     <Anchor href="/account" target="_blank" rel="noopener" size="sm">
-      Usage & budget
+      {i18n.t('ui.usage.CostEstimate.usageBudget')}
     </Anchor>
   );
 }
@@ -53,6 +55,7 @@ export function budgetText(state: Pick<CostEstimateState, 'budget'>): string | n
  * use within the budgets, and why a start would be refused or probably be stopped.
  */
 export function CostEstimate({ state }: { state: CostEstimateState }) {
+  useTranslation();
   const { estimate, budget, loading } = state;
   if (!estimate && !budget) {
     return null;
@@ -62,18 +65,24 @@ export function CostEstimate({ state }: { state: CostEstimateState }) {
   return (
     <Stack gap="xs" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 150ms' }}>
       {estimate && (
-        <Paper component="section" withBorder p="sm" radius="md" aria-label="Estimated compute">
+        <Paper
+          component="section"
+          withBorder
+          p="sm"
+          radius="md"
+          aria-label={i18n.t('ui.usage.CostEstimate.estimatedCompute')}
+        >
           <Group justify="space-between" gap="xs" wrap="wrap">
             <Group gap={6} wrap="nowrap">
               <IconGauge size={16} color="var(--mantine-color-dimmed)" aria-hidden />
               <Text size="sm" fw={600}>
-                Estimated compute
+                {i18n.t('ui.usage.CostEstimate.estimatedCompute')}
               </Text>
               <Tooltip label={`${estimate.basis}. ${estimate.note}`} multiline w={280} withArrow>
                 <IconInfoCircle
                   size={14}
                   color="var(--mantine-color-dimmed)"
-                  aria-label="How the estimate is made"
+                  aria-label={i18n.t('ui.usage.CostEstimate.howTheEstimateIsMade')}
                 />
               </Tooltip>
             </Group>
@@ -92,10 +101,10 @@ export function CostEstimate({ state }: { state: CostEstimateState }) {
           icon={<IconAlertTriangle size={18} />}
           title={
             budget.code === 'storage_quota_exceeded'
-              ? 'The storage of your account is full'
+              ? i18n.t('ui.usage.CostEstimate.theStorageOfYourAccount')
               : budget.code === 'estimate_too_high'
-                ? 'Too much compute for your budget'
-                : 'Not enough compute budget'
+                ? i18n.t('ui.usage.CostEstimate.tooMuchComputeForYour')
+                : i18n.t('ui.usage.CostEstimate.notEnoughComputeBudget')
           }
         >
           <Text size="sm">{budget.reason}</Text>

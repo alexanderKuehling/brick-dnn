@@ -23,6 +23,7 @@ import type {
 } from '@/api/types';
 import { formatCount, formatNumber, formatPercent } from '@/components/charts/format';
 import { StatTile } from '@/components/charts/StatTile';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../../prepAccess';
 import { PairsView } from './PairsView';
 import { ProjectionView, type ProjectionColor } from './ProjectionView';
@@ -60,18 +61,63 @@ export interface RowsViewProps {
 }
 
 const FEATURE_MODES: { value: RowFeatureMode; label: string }[] = [
-  { value: 'auto', label: 'Automatic' },
-  { value: 'partnered', label: 'Partnered' },
-  { value: 'all', label: 'All number columns' },
-  { value: 'columns', label: 'I choose' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.RowsView.automatic');
+    },
+  },
+  {
+    value: 'partnered',
+    get label() {
+      return i18n.t('ui.data.RowsView.partnered');
+    },
+  },
+  {
+    value: 'all',
+    get label() {
+      return i18n.t('ui.data.RowsView.allNumberColumns');
+    },
+  },
+  {
+    value: 'columns',
+    get label() {
+      return i18n.t('ui.data.RowsView.iChoose');
+    },
+  },
 ];
 
 const FILTERS: { value: RowFilter; label: string }[] = [
-  { value: 'all', label: 'All rows' },
-  { value: 'atypical', label: 'Unusually typical' },
-  { value: 'twins', label: 'With a near twin' },
-  { value: 'group', label: 'Group of the chosen row' },
-  { value: 'selected', label: 'Selected' },
+  {
+    value: 'all',
+    get label() {
+      return i18n.t('ui.data.RowsView.allRows');
+    },
+  },
+  {
+    value: 'atypical',
+    get label() {
+      return i18n.t('ui.data.RowsView.unusuallyTypical');
+    },
+  },
+  {
+    value: 'twins',
+    get label() {
+      return i18n.t('ui.data.RowsView.withANearTwin');
+    },
+  },
+  {
+    value: 'group',
+    get label() {
+      return i18n.t('ui.data.RowsView.groupOfTheChosenRow');
+    },
+  },
+  {
+    value: 'selected',
+    get label() {
+      return i18n.t('ui.data.RowsView.selected');
+    },
+  },
 ];
 
 const REASONS: Record<string, string> = {
@@ -85,7 +131,7 @@ const REASONS: Record<string, string> = {
 const RELOAD_DELAY = 400;
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : 'The rows could not be analysed.';
+  return error instanceof Error ? error.message : i18n.t('ui.data.RowsView.theRowsCouldNotBe');
 }
 
 /**
@@ -100,6 +146,7 @@ export function RowsView({
   onAddStep,
   readOnly: readOnlyProp = false,
 }: RowsViewProps) {
+  useTranslation();
   const access = usePrepAccess();
   const readOnly = readOnlyProp || access.readOnly;
   const [mode, setMode] = useState<RowFeatureMode>('auto');
@@ -227,11 +274,11 @@ export function RowsView({
       <Group gap="sm" align="flex-end" wrap="wrap">
         <div>
           <Text size="xs" fw={500} mb={4}>
-            Compare rows on
+            {i18n.t('ui.data.RowsView.compareRowsOn')}
           </Text>
           <SegmentedControl
             size="xs"
-            aria-label="Compare rows on"
+            aria-label={i18n.t('ui.data.RowsView.compareRowsOn')}
             data={FEATURE_MODES}
             value={mode}
             onChange={(value) => setMode(value as RowFeatureMode)}
@@ -240,8 +287,8 @@ export function RowsView({
         {mode === 'columns' && (
           <MultiSelect
             size="xs"
-            label="Columns"
-            placeholder="Choose number columns"
+            label={i18n.t('ui.data.RowsView.columns')}
+            placeholder={i18n.t('ui.data.RowsView.chooseNumberColumns')}
             data={numberColumns}
             value={chosen}
             onChange={setChosen}
@@ -262,7 +309,7 @@ export function RowsView({
       <Stack gap="md">
         {featureControl}
         <Text size="sm" c="dimmed">
-          Choose the number columns to compare the rows on.
+          {i18n.t('ui.data.RowsView.chooseTheNumberColumnsTo')}
         </Text>
       </Stack>
     );
@@ -272,7 +319,11 @@ export function RowsView({
       <Stack gap="md">
         {featureControl}
         {error ? (
-          <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot analyse the rows">
+          <Alert
+            color="red"
+            icon={<IconAlertTriangle size={18} />}
+            title={i18n.t('ui.data.RowsView.cannotAnalyseTheRows')}
+          >
             <Text size="sm">{error}</Text>
             <Button
               size="compact-sm"
@@ -281,14 +332,14 @@ export function RowsView({
               mt="xs"
               onClick={() => setAttempt((n) => n + 1)}
             >
-              Try again
+              {i18n.t('ui.data.RowsView.tryAgain')}
             </Button>
           </Alert>
         ) : (
           <Group gap="xs">
             <Loader size="sm" />
             <Text size="sm" c="dimmed">
-              Comparing every row with every other row …
+              {i18n.t('ui.data.RowsView.comparingEveryRowWithEvery')}
             </Text>
           </Group>
         )}
@@ -321,10 +372,7 @@ export function RowsView({
   return (
     <Stack gap="md" data-loading={loading || undefined} style={{ opacity: loading ? 0.7 : 1 }}>
       <Text size="sm" c="dimmed">
-        Each row compared with all others: how typical its values are, and how close its nearest row
-        is. Unusually typical rows (every value near its median) are often filler or synthetic rows;
-        rows with a near twin are often the same person or object measured twice. Drag the
-        thresholds, look at the rows, then act with a step.
+        {i18n.t('ui.data.RowsView.eachRowComparedWithAll')}
       </Text>
       {featureControl}
       {error && (
@@ -335,44 +383,60 @@ export function RowsView({
       {analysis.sampled && (
         <Alert color="blue" p="xs" icon={<IconInfoCircle size={16} />}>
           <Text size="sm">
-            A random sample of {formatCount(analysis.analysed)} of {formatCount(analysis.n_total)}{' '}
-            rows is analysed (the limit for {formatCount(analysis.features.count)} columns). A row's
-            twin may be outside the sample, so near twins are undercounted.
+            {i18n.t('ui.data.RowsView.aRandomSampleOfOf', {
+              analysed: formatCount(analysis.analysed),
+              n_total: formatCount(analysis.n_total),
+              count: formatCount(analysis.features.count),
+            })}
           </Text>
         </Alert>
       )}
 
       <div className={classes.tiles}>
         <StatTile
-          label="Rows analysed"
+          label={i18n.t('ui.data.RowsView.rowsAnalysed')}
           value={formatCount(analysis.analysed)}
           hint={`${formatNumber((analysis.stats_ms ?? 0) / 1000, 2)} s`}
         />
         <StatTile
-          label="Unusually typical"
+          label={i18n.t('ui.data.RowsView.unusuallyTypical')}
           value={formatCount(atypicalCount)}
-          hint={`spread below ${formatNumber(thresholds.atypical, 3)}`}
+          hint={i18n.t('ui.data.RowsView.spreadBelow', {
+            atypical: formatNumber(thresholds.atypical, 3),
+          })}
         />
         <StatTile
-          label="With a near twin"
+          label={i18n.t('ui.data.RowsView.withANearTwin')}
           value={formatCount(twinCount)}
-          hint={`NN ratio below ${formatNumber(thresholds.twins, 3)}`}
+          hint={i18n.t('ui.data.RowsView.nnRatioBelow', {
+            twins: formatNumber(thresholds.twins, 3),
+          })}
         />
         <StatTile
-          label="Groups of near twins"
+          label={i18n.t('ui.data.RowsView.groupsOfNearTwins')}
           value={formatCount(groups.count)}
           hint={
-            groups.count ? `${formatCount(groups.rows)} rows, up to ${groups.largest} each` : 'none'
+            groups.count
+              ? i18n.t('ui.data.RowsView.rowsUpToEach', {
+                  rows: formatCount(groups.rows),
+                  largest: groups.largest,
+                })
+              : 'none'
           }
         />
         {groups.held_out > 0 && (
           <StatTile
-            label="Validation/test rows with a twin in training"
+            label={i18n.t('ui.data.RowsView.validationTestRowsWithA')}
             value={formatPercent(groups.held_out_with_twin / groups.held_out)}
             hint={
               analysis.split_group_by
-                ? `split keeps '${analysis.split_group_by}' together`
-                : `${formatCount(groups.held_out_with_twin)} of ${formatCount(groups.held_out)}`
+                ? i18n.t('ui.data.RowsView.splitKeepsTogether', {
+                    split_group_by: analysis.split_group_by,
+                  })
+                : i18n.t('ui.data.RowsView.of', {
+                    held_out_with_twin: formatCount(groups.held_out_with_twin),
+                    held_out: formatCount(groups.held_out),
+                  })
             }
           />
         )}
@@ -380,19 +444,25 @@ export function RowsView({
 
       <div className={classes.grid}>
         <ThresholdHistogram
-          title="How typical is each row? (spread)"
-          description="Median distance of the row's values from their column medians, in robust standard deviations. Ordinary rows: about 0.67. A separate cluster near 0: rows whose every value sits at the median."
+          title={i18n.t('ui.data.RowsView.howTypicalIsEachRow')}
+          description={i18n.t('ui.data.RowsView.medianDistanceOfTheRow')}
           values={analysis.rows.spread}
           threshold={thresholds.atypical}
           onThresholdChange={setAtypicalOverride}
           suggested={analysis.suggested.atypical}
           cap={4}
           xLabel="spread"
-          belowText={(n) => `${formatCount(n)} ${n === 1 ? 'row is' : 'rows are'} below`}
+          belowText={(n) =>
+            i18n.t('ui.data.RowsView.below', {
+              n: formatCount(n),
+              value:
+                n === 1 ? i18n.t('ui.data.RowsView.rowIs') : i18n.t('ui.data.RowsView.rowsAre'),
+            })
+          }
           actions={
             <Group gap="xs">
               <Button size="compact-xs" variant="default" onClick={() => setFilter('atypical')}>
-                Show them
+                {i18n.t('ui.data.RowsView.showThem')}
               </Button>
               {!readOnly && (
                 <Button
@@ -401,15 +471,17 @@ export function RowsView({
                   disabled={atypicalCount === 0}
                   onClick={removeAtypical}
                 >
-                  Remove {formatCount(atypicalCount)} rows (step)
+                  {i18n.t('ui.data.RowsView.removeRowsStep', {
+                    atypicalCount: formatCount(atypicalCount),
+                  })}
                 </Button>
               )}
             </Group>
           }
         />
         <ThresholdHistogram
-          title="How close is each row's nearest row? (NN ratio)"
-          description="Distance to the nearest other row divided by the distance of a typical pair of rows. Below about 0.5: a near twin. The dashed outline shows random pairs."
+          title={i18n.t('ui.data.RowsView.howCloseIsEachRow')}
+          description={i18n.t('ui.data.RowsView.distanceToTheNearestOther')}
           values={analysis.rows.nn_ratio}
           baseline={randomRatios}
           baselineLabel="random pairs (same number of rows)"
@@ -417,12 +489,18 @@ export function RowsView({
           onThresholdChange={setTwinOverride}
           suggested={analysis.suggested.twins}
           cap={2}
-          xLabel="NN ratio"
-          belowText={(n) => `${formatCount(n)} ${n === 1 ? 'row has' : 'rows have'} a near twin`}
+          xLabel={i18n.t('ui.data.RowsView.nnRatio')}
+          belowText={(n) =>
+            i18n.t('ui.data.RowsView.aNearTwin', {
+              n: formatCount(n),
+              value:
+                n === 1 ? i18n.t('ui.data.RowsView.rowHas') : i18n.t('ui.data.RowsView.rowsHave'),
+            })
+          }
           actions={
             <Group gap="xs">
               <Button size="compact-xs" variant="default" onClick={() => setFilter('twins')}>
-                Show them
+                {i18n.t('ui.data.RowsView.showThem')}
               </Button>
               {!readOnly && (
                 <Button
@@ -431,7 +509,7 @@ export function RowsView({
                   disabled={twinCount === 0}
                   onClick={findGroups}
                 >
-                  Find groups &amp; split by them (step)
+                  {i18n.t('ui.data.RowsView.findGroupsSplitByThem')}
                 </Button>
               )}
             </Group>
@@ -440,8 +518,7 @@ export function RowsView({
       </div>
       {analysis.suggested.atypical === null && analysis.suggested.twins === null && (
         <Text size="xs" c="dimmed">
-          Neither histogram has a clear gap: no cluster of unusually typical rows and no separate
-          group of near twins was found. The thresholds are starting points to explore.
+          {i18n.t('ui.data.RowsView.neitherHistogramHasAClear')}
         </Text>
       )}
 
@@ -464,7 +541,7 @@ export function RowsView({
         <Group gap="sm" align="flex-end" wrap="wrap">
           <Select
             size="xs"
-            label="Show"
+            label={i18n.t('ui.data.RowsView.show')}
             w={210}
             data={FILTERS}
             value={filter}
@@ -474,15 +551,22 @@ export function RowsView({
           />
           <TextInput
             size="xs"
-            label={analysis.id_column ? `Row or ${analysis.id_column}` : 'Row'}
-            placeholder="Find …"
+            label={
+              analysis.id_column
+                ? i18n.t('ui.data.RowsView.rowOr', { id_column: analysis.id_column })
+                : i18n.t('ui.data.RowsView.row')
+            }
+            placeholder={i18n.t('ui.data.RowsView.find')}
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
             w={160}
           />
           <Text size="xs" c="dimmed" pb={6} data-testid="row-count">
-            {formatCount(matching.length)} of {formatCount(analysis.analysed)} rows ·{' '}
-            {formatCount(selected.size)} selected
+            {i18n.t('ui.data.RowsView.ofRowsSelected', {
+              length: formatCount(matching.length),
+              analysed: formatCount(analysis.analysed),
+              size: formatCount(selected.size),
+            })}
           </Text>
           <Group gap="xs" pb={2}>
             <Button
@@ -491,7 +575,7 @@ export function RowsView({
               disabled={matching.length === 0}
               onClick={() => setSelected(new Set([...selected, ...matching]))}
             >
-              Select all {formatCount(matching.length)} shown
+              {i18n.t('ui.data.RowsView.selectAllShown', { length: formatCount(matching.length) })}
             </Button>
             <Button
               size="compact-xs"
@@ -499,7 +583,7 @@ export function RowsView({
               disabled={selected.size === 0}
               onClick={() => setSelected(new Set())}
             >
-              Clear selection
+              {i18n.t('ui.data.RowsView.clearSelection')}
             </Button>
             {!readOnly && (
               <Button
@@ -517,7 +601,9 @@ export function RowsView({
                   setSelected(new Set());
                 }}
               >
-                Drop {formatCount(selected.size)} selected rows (step)
+                {i18n.t('ui.data.RowsView.dropSelectedRowsStep', {
+                  size: formatCount(selected.size),
+                })}
               </Button>
             )}
           </Group>
@@ -536,8 +622,7 @@ export function RowsView({
           }}
         />
         <Text size="xs" c="dimmed">
-          Click a row to see its most similar rows. Spread and NN ratio as in the histograms; Group:
-          the group of near twins (number · rows) at the NN ratio threshold.
+          {i18n.t('ui.data.RowsView.clickARowToSee')}
         </Text>
       </Stack>
 
@@ -560,6 +645,7 @@ export function RowsView({
 }
 
 function FeatureNote({ analysis }: { analysis: RowAnalysis }) {
+  useTranslation();
   const { features } = analysis;
   const counts = features.left_out_counts;
   const leftOut = Object.entries(counts)
@@ -567,18 +653,25 @@ function FeatureNote({ analysis }: { analysis: RowAnalysis }) {
     .map(([reason, n]) => `${formatCount(n)} ${REASONS[reason] ?? reason}`);
   let what: string;
   if (features.used === 'partnered') {
-    what = `${formatCount(features.count)} of ${formatCount(features.candidates)} number columns: the ones with a strong partner (|Spearman r| ≥ ${formatNumber(features.partner_threshold, 2)} with another column)`;
+    what = i18n.t('ui.data.RowsView.ofNumberColumnsTheOnes', {
+      count: formatCount(features.count),
+      candidates: formatCount(features.candidates),
+      partner_threshold: formatNumber(features.partner_threshold, 2),
+    });
   } else if (features.used === 'all') {
-    what = `all ${formatCount(features.count)} number columns`;
+    what = i18n.t('ui.data.RowsView.allNumberColumns2', { count: formatCount(features.count) });
   } else {
-    what = `${formatCount(features.count)} chosen columns`;
+    what = i18n.t('ui.data.RowsView.chosenColumns', { count: formatCount(features.count) });
   }
   return (
     <Text size="xs" c="dimmed" data-testid="feature-note">
-      Compared on {what}
-      {leftOut.length ? `; left out: ${leftOut.join(', ')}` : ''}. Columns without any partner are
-      mostly noise in wide tables, and noise drowns the differences between rows.
-      {features.note ? ` ${features.note}` : ''}
+      {i18n.t('ui.data.RowsView.comparedOnColumnsWithoutAny', {
+        what,
+        value: leftOut.length
+          ? i18n.t('ui.data.RowsView.leftOut', { leftOut: leftOut.join(', ') })
+          : '',
+        value2: features.note ? ` ${features.note}` : '',
+      })}
     </Text>
   );
 }

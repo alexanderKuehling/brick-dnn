@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Group, Modal, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
 import type { ColumnInfo, ColumnKind, NewStep } from '@/api/types';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { castStep, renameError, renameStep } from './columnActions';
 import { KIND_LABELS, KINDS } from './kinds';
 
@@ -16,6 +17,7 @@ interface ColumnDialogProps {
 
 /** Small dialogs for the column actions that need an input: rename and change type. */
 export function ColumnDialog({ state, names, onClose, onAddStep }: ColumnDialogProps) {
+  useTranslation();
   const column = state?.column;
   return (
     <Modal
@@ -24,8 +26,8 @@ export function ColumnDialog({ state, names, onClose, onAddStep }: ColumnDialogP
       title={
         column
           ? state?.mode === 'rename'
-            ? `Rename “${column.name}”`
-            : `Change the type of “${column.name}”`
+            ? i18n.t('ui.data.ColumnDialog.rename', { name: column.name })
+            : i18n.t('ui.data.ColumnDialog.changeTheTypeOf', { name: column.name })
           : ''
       }
       size="sm"
@@ -64,6 +66,7 @@ interface FormProps {
 }
 
 function RenameForm({ column, names, onCancel, onSubmit }: FormProps & { names: string[] }) {
+  useTranslation();
   const [name, setName] = useState(column.name);
   const [touched, setTouched] = useState(false);
   const error = renameError(column.name, name, names);
@@ -79,7 +82,7 @@ function RenameForm({ column, names, onCancel, onSubmit }: FormProps & { names: 
     >
       <Stack gap="sm">
         <TextInput
-          label="New name"
+          label={i18n.t('ui.data.ColumnDialog.newName')}
           value={name}
           data-autofocus
           error={touched || name !== column.name ? error : null}
@@ -87,14 +90,14 @@ function RenameForm({ column, names, onCancel, onSubmit }: FormProps & { names: 
           onFocus={(event) => event.currentTarget.select()}
         />
         <Text size="xs" c="dimmed">
-          Adds a step that renames the column at the end of the pipeline.
+          {i18n.t('ui.data.ColumnDialog.addsAStepThatRenames')}
         </Text>
         <Group justify="flex-end" gap="xs">
           <Button variant="default" onClick={onCancel}>
-            Cancel
+            {i18n.t('ui.data.ColumnDialog.cancel')}
           </Button>
           <Button type="submit" disabled={Boolean(error)}>
-            Rename
+            {i18n.t('ui.data.ColumnDialog.rename2')}
           </Button>
         </Group>
       </Stack>
@@ -103,6 +106,7 @@ function RenameForm({ column, names, onCancel, onSubmit }: FormProps & { names: 
 }
 
 function CastForm({ column, onCancel, onSubmit }: FormProps) {
+  useTranslation();
   const choices = KINDS.filter((kind) => kind !== column.kind);
   const [kind, setKind] = useState<ColumnKind>(choices[0]);
   return (
@@ -114,10 +118,14 @@ function CastForm({ column, onCancel, onSubmit }: FormProps) {
     >
       <Stack gap="sm">
         <Text size="sm">
-          Now: <b>{KIND_LABELS[column.kind]}</b>
+          <Trans
+            i18nKey="ui.data.ColumnDialog.now"
+            values={{ value: KIND_LABELS[column.kind] }}
+            components={[<b />]}
+          />
         </Text>
         <SegmentedControl
-          aria-label="New type"
+          aria-label={i18n.t('ui.data.ColumnDialog.newType')}
           orientation="vertical"
           fullWidth
           data={choices.map((value) => ({ value, label: KIND_LABELS[value] }))}
@@ -125,14 +133,13 @@ function CastForm({ column, onCancel, onSubmit }: FormProps) {
           onChange={(value) => setKind(value as ColumnKind)}
         />
         <Text size="xs" c="dimmed">
-          Adds a step that converts the column. Values that cannot be converted become missing; the
-          step reports how many.
+          {i18n.t('ui.data.ColumnDialog.addsAStepThatConverts')}
         </Text>
         <Group justify="flex-end" gap="xs">
           <Button variant="default" onClick={onCancel}>
-            Cancel
+            {i18n.t('ui.data.ColumnDialog.cancel')}
           </Button>
-          <Button type="submit">Change type</Button>
+          <Button type="submit">{i18n.t('ui.data.ColumnDialog.changeType')}</Button>
         </Group>
       </Stack>
     </form>

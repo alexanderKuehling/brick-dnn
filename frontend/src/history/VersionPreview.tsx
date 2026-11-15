@@ -19,6 +19,7 @@ import { api, type ProjectVersion, type ProjectVersionDetail } from '@/api';
 import { NetworkViewer } from '@/builder/NetworkViewer';
 import { WithoutCollab } from '@/collab/context';
 import { fullDateTime, relativeTime } from '@/collab/time';
+import { i18n, useTranslation } from '@/i18n';
 import { layerCount } from './labels';
 import classes from './History.module.css';
 
@@ -52,6 +53,7 @@ export function VersionPreview({
   onRestore,
   onClose,
 }: VersionPreviewProps) {
+  useTranslation();
   const theme = useMantineTheme();
   const phone = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
   const [detail, setDetail] = useState<ProjectVersionDetail | null>(null);
@@ -102,7 +104,7 @@ export function VersionPreview({
             <Text fw={700}>{title}</Text>
             {current && (
               <Badge size="sm" variant="light" tt="none">
-                Current version
+                {i18n.t('ui.history.VersionPreview.currentVersion')}
               </Badge>
             )}
           </Group>
@@ -116,41 +118,40 @@ export function VersionPreview({
       <div className={classes.previewBar}>
         {current ? (
           <Text size="sm" c="dimmed">
-            This is the current state of the network.
+            {i18n.t('ui.history.VersionPreview.thisIsTheCurrentState')}
           </Text>
         ) : canRestore ? (
           !confirming && (
             <>
               <Text size="sm" c="dimmed" className={classes.previewHint}>
-                A read-only preview. Restoring makes it the current state.
+                {i18n.t('ui.history.VersionPreview.aReadOnlyPreviewRestoring')}
               </Text>
               <Button
                 leftSection={<IconRestore size={16} />}
                 onClick={() => setConfirming(true)}
                 disabled={!detail}
               >
-                Restore this version
+                {i18n.t('ui.history.VersionPreview.restoreThisVersion')}
               </Button>
             </>
           )
         ) : (
           <Text size="sm" c="dimmed">
-            A read-only preview. The owner and editors can restore earlier versions.
+            {i18n.t('ui.history.VersionPreview.aReadOnlyPreviewThe')}
           </Text>
         )}
         {confirming && (
           <Paper withBorder p="sm" radius="md" className={classes.confirm}>
             <Text fw={600} size="sm">
-              Restore “{title}”?
+              {i18n.t('ui.history.VersionPreview.restore', { title })}
             </Text>
             <Text size="sm" mt={4}>
-              It becomes the current state of the network, for everyone who works on it. Nothing is
-              lost: the current state stays in the history, so you can undo this by restoring it.
+              {i18n.t('ui.history.VersionPreview.itBecomesTheCurrentState')}
             </Text>
             {unsaved && (
               <Text size="sm" mt={4} c="orange">
-                <IconAlertTriangle size={14} style={{ verticalAlign: 'text-bottom' }} /> Your
-                unsaved changes on the canvas are replaced.
+                <IconAlertTriangle size={14} style={{ verticalAlign: 'text-bottom' }} />{' '}
+                {i18n.t('ui.history.VersionPreview.yourUnsavedChangesOnThe')}
               </Text>
             )}
             {restoreError && (
@@ -160,7 +161,7 @@ export function VersionPreview({
             )}
             <Group justify="flex-end" gap="xs" mt="sm">
               <Button variant="default" onClick={() => setConfirming(false)} disabled={restoring}>
-                Cancel
+                {i18n.t('ui.history.VersionPreview.cancel')}
               </Button>
               <Button
                 leftSection={<IconRestore size={16} />}
@@ -168,7 +169,7 @@ export function VersionPreview({
                 disabled={!detail}
                 onClick={() => void restore()}
               >
-                Restore
+                {i18n.t('ui.history.VersionPreview.restore2')}
               </Button>
             </Group>
           </Paper>
@@ -194,10 +195,15 @@ export function VersionPreview({
           </WithoutCollab>
         ) : error ? (
           <Center style={{ flex: 1 }} p="md">
-            <Alert color="red" variant="light" title="Could not load this version" maw={420}>
+            <Alert
+              color="red"
+              variant="light"
+              title={i18n.t('ui.history.VersionPreview.couldNotLoadThisVersion')}
+              maw={420}
+            >
               {error}{' '}
               <Button variant="subtle" size="compact-xs" onClick={() => setAttempt((n) => n + 1)}>
-                Try again
+                {i18n.t('ui.history.VersionPreview.tryAgain')}
               </Button>
             </Alert>
           </Center>

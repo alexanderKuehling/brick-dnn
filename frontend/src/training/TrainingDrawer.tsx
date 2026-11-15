@@ -28,7 +28,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import type { Analysis, GraphDocument } from '@/api';
-import { Trans, useTranslation } from '@/i18n';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { canTrain, otherStarter, trainingProject, type RunFilter } from './access';
 import { canStartTraining, trainingFamily, unavailableReason, type Family } from './classical';
 import { HistoryView } from './HistoryView';
@@ -395,7 +395,7 @@ function Unavailable({
               <Trans i18nKey="training.drawer.classicalNoSklearn" components={{ code: <Code /> }} />
             </Text>
           )}
-          <Code block>pip install -r requirements.txt</Code>
+          <Code block>{i18n.t('ui.training.TrainingDrawer.pipInstallRRequirementsTxt')}</Code>
           <Text size="sm" c="dimmed">
             {t('training.drawer.dockerSklearn')}
           </Text>
@@ -424,11 +424,11 @@ function Unavailable({
           <Text size="sm" c="dimmed">
             <Trans i18nKey="training.drawer.inBackend" components={{ code: <Code /> }} />
           </Text>
-          <Code block>pip install torch torchvision</Code>
+          <Code block>{i18n.t('ui.training.TrainingDrawer.pipInstallTorchTorchvision')}</Code>
           <Text size="sm" fw={600}>
-            Docker
+            {i18n.t('ui.training.TrainingDrawer.docker')}
           </Text>
-          <Code block>BRICKDNN_INSTALL_TORCH=true docker compose up -d --build</Code>
+          <Code block>{i18n.t('ui.training.TrainingDrawer.brickdnnInstallTorchTrueDocker')}</Code>
           {family === 'hybrid' && sklearnMissing && (
             <Text size="sm">
               <Trans i18nKey="training.drawer.hybridAlso" components={{ code: <Code /> }} />

@@ -4,18 +4,36 @@ import { formatNumber } from '@/i18n/format';
 import { compactKernel, isBoosting, isEnsemble } from './kinds';
 
 const ACTIVATION_NAMES: Record<string, string> = {
-  relu: 'ReLU',
-  leaky_relu: 'LeakyReLU',
+  get relu() {
+    return i18n.t('ui.builder.format.relu');
+  },
+  get leaky_relu() {
+    return i18n.t('ui.builder.format.leakyrelu');
+  },
   gelu: 'GELU',
   elu: 'ELU',
   selu: 'SELU',
-  silu: 'SiLU',
-  mish: 'Mish',
-  sigmoid: 'Sigmoid',
-  tanh: 'Tanh',
-  softplus: 'Softplus',
-  softmax: 'Softmax',
-  log_softmax: 'LogSoftmax',
+  get silu() {
+    return i18n.t('ui.builder.format.silu');
+  },
+  get mish() {
+    return i18n.t('ui.builder.format.mish');
+  },
+  get sigmoid() {
+    return i18n.t('ui.builder.format.sigmoid');
+  },
+  get tanh() {
+    return i18n.t('ui.builder.format.tanh');
+  },
+  get softplus() {
+    return i18n.t('ui.builder.format.softplus');
+  },
+  get softmax() {
+    return i18n.t('ui.builder.format.softmax');
+  },
+  get log_softmax() {
+    return i18n.t('ui.builder.format.logsoftmax');
+  },
 };
 
 /**
@@ -87,12 +105,18 @@ export function pyFloat(value: ParamValue): string {
 /** Kernel bricks: their scikit-learn name with the starting values of the hyperparameters. */
 const KERNEL_FORMULAS: Record<string, (p: Params) => string> = {
   RBF: (p) => `RBF(ℓ=${pyFloat(p.length_scale)})`,
-  Matern: (p) => `Matérn(ℓ=${pyFloat(p.length_scale)}, ν=${num(p.nu)})`,
+  Matern: (p) =>
+    i18n.t('ui.builder.format.matRn', { pyFloat: pyFloat(p.length_scale), num: num(p.nu) }),
   RationalQuadratic: (p) => `RQ(ℓ=${pyFloat(p.length_scale)}, α=${pyFloat(p.alpha)})`,
-  ExpSineSquared: (p) => `Periodic(ℓ=${pyFloat(p.length_scale)}, p=${pyFloat(p.periodicity)})`,
-  DotProduct: (p) => `Dot(σ₀=${pyFloat(p.sigma_0)})`,
-  WhiteKernel: (p) => `White(noise=${pyFloat(p.noise_level)})`,
-  ConstantKernel: (p) => `Constant(${pyFloat(p.constant_value)})`,
+  ExpSineSquared: (p) =>
+    i18n.t('ui.builder.format.periodicP', {
+      pyFloat: pyFloat(p.length_scale),
+      pyFloat2: pyFloat(p.periodicity),
+    }),
+  DotProduct: (p) => i18n.t('ui.builder.format.dot', { pyFloat: pyFloat(p.sigma_0) }),
+  WhiteKernel: (p) => i18n.t('ui.builder.format.whiteNoise', { pyFloat: pyFloat(p.noise_level) }),
+  ConstantKernel: (p) =>
+    i18n.t('ui.builder.format.constant', { pyFloat: pyFloat(p.constant_value) }),
 };
 
 function hyperparameterNote(value: string): string {
@@ -142,11 +166,22 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
     case 'Input':
       return `${formatShape(p.shape as number[])}${p.dtype === 'long' ? ` · ${i18n.t('builder.format.tokenIds')}` : ''}`;
     case 'Linear':
-      return `${num(p.in_features)} → ${num(p.out_features)}${p.bias === false ? ` · ${i18n.t('builder.format.noBias')}` : ''}`;
+      return i18n.t('ui.builder.format.text', {
+        num: num(p.in_features),
+        num2: num(p.out_features),
+        value: p.bias === false ? ` · ${i18n.t('builder.format.noBias')}` : '',
+      });
     case 'Conv1d':
     case 'Conv2d':
     case 'ConvTranspose2d':
-      return `${i18n.t('builder.format.filters', { count: Number(p.out_channels), value: num(p.out_channels) })} · ${size(p.kernel_size)}${strideText(p.stride)}`;
+      return i18n.t('ui.builder.format.text2', {
+        value: i18n.t('builder.format.filters', {
+          count: Number(p.out_channels),
+          value: num(p.out_channels),
+        }),
+        size: size(p.kernel_size),
+        strideText: strideText(p.stride),
+      });
     case 'MaxPool1d':
     case 'MaxPool2d':
     case 'AvgPool2d':

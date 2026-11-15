@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import { i18n, useTranslation } from '@/i18n';
 import { ChartFrame, ChartTooltip, TooltipRow, type LegendItem } from './ChartFrame';
 import { mixColors, seriesHex, TRACK, useChartScheme } from './colors';
 import { formatCount, formatPercent } from './format';
@@ -43,6 +44,7 @@ export function MissingMatrix({
   height: plotHeight = 200,
   width: fixedWidth,
 }: MissingMatrixProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const scheme = useChartScheme();
@@ -127,24 +129,45 @@ export function MissingMatrix({
     if (!s) {
       return '';
     }
-    return `${columns[c].name}: ${formatCount(s.missing)} of ${formatCount(rows)} rows missing (${formatPercent(rows ? s.missing / rows : 0)})`;
+    return i18n.t('ui.components.MissingMatrix.ofRowsMissing', {
+      name: columns[c].name,
+      missing: formatCount(s.missing),
+      rows: formatCount(rows),
+      value: formatPercent(rows ? s.missing / rows : 0),
+    });
   };
   const withMissing = stats
     .map((s, c) => ({ c, missing: s.missing }))
     .filter((s) => s.missing > 0)
     .sort((a, b) => b.missing - a.missing);
-  const summary = `${title}. ${m} columns, ${formatCount(rows)} rows. ${
-    withMissing.length === 0
-      ? 'No missing values.'
-      : `Missing values in ${withMissing.length} ${withMissing.length === 1 ? 'column' : 'columns'}: ${withMissing
-          .slice(0, 6)
-          .map(({ c }) => columnText(c))
-          .join('; ')}.`
-  }`;
+  const summary = i18n.t('ui.components.MissingMatrix.columnsRows', {
+    title,
+    m,
+    rows: formatCount(rows),
+    value:
+      withMissing.length === 0
+        ? i18n.t('ui.components.MissingMatrix.noMissingValues')
+        : i18n.t('ui.components.MissingMatrix.missingValuesIn', {
+            length: withMissing.length,
+            value: withMissing.length === 1 ? 'column' : 'columns',
+            map: withMissing
+              .slice(0, 6)
+              .map(({ c }) => columnText(c))
+              .join('; '),
+          }),
+  });
 
   const legend: LegendItem[] = [
-    { key: 'missing', label: 'Missing', color: 'var(--chart-series-1)' },
-    { key: 'present', label: 'Present', color: 'var(--chart-track)' },
+    {
+      key: 'missing',
+      label: i18n.t('ui.components.MissingMatrix.missing'),
+      color: 'var(--chart-series-1)',
+    },
+    {
+      key: 'present',
+      label: i18n.t('ui.components.MissingMatrix.present'),
+      color: 'var(--chart-track)',
+    },
   ];
 
   const pick = (clientX: number, clientY: number, target: HTMLElement) => {
@@ -169,7 +192,11 @@ export function MissingMatrix({
       controls={controls}
       legend={legend}
       table={() => ({
-        head: ['Column', 'Missing', 'Share'],
+        head: [
+          i18n.t('ui.components.MissingMatrix.column'),
+          i18n.t('ui.components.MissingMatrix.missing'),
+          i18n.t('ui.components.MissingMatrix.share'),
+        ],
         rows: stats.map((s, c) => [
           columns[c].name,
           formatCount(s.missing),
@@ -211,7 +238,7 @@ export function MissingMatrix({
                   transform={`translate(${12},${top + plotHeight / 2}) rotate(-90)`}
                   textAnchor="middle"
                 >
-                  Rows
+                  {i18n.t('ui.components.MissingMatrix.rows')}
                 </text>
                 {active !== null && (
                   <rect
@@ -236,7 +263,7 @@ export function MissingMatrix({
             className={classes.overlay}
             role="slider"
             tabIndex={0}
-            aria-label={`${title}: use the arrow keys to read the columns`}
+            aria-label={i18n.t('ui.components.MissingMatrix.useTheArrowKeysTo', { title })}
             aria-valuemin={1}
             aria-valuemax={Math.max(1, m)}
             aria-valuenow={(active ?? 0) + 1}
@@ -275,7 +302,10 @@ export function MissingMatrix({
                       label={
                         from === to
                           ? `row ${formatCount(from)}`
-                          : `rows ${formatCount(from)}–${formatCount(to)}`
+                          : i18n.t('ui.components.MissingMatrix.rows2', {
+                              from: formatCount(from),
+                              to: formatCount(to),
+                            })
                       }
                     />
                   );

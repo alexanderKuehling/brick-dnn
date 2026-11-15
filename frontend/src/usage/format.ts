@@ -1,9 +1,12 @@
-import { currentLocale, longDateLocale } from '@/i18n';
+import { currentLocale, i18n, longDateLocale } from '@/i18n';
 
 /** Formatting of compute usage (CPU minutes), money and budget dates. */
 
 /** 0.0123 → "0.01 CPU min", 2.5 → "2.5 CPU min", 312.4 → "312 CPU min". */
-export function formatCpu(minutes: number | null | undefined, unit = 'CPU min'): string {
+export function formatCpu(
+  minutes: number | null | undefined,
+  unit = i18n.t('ui.usage.format.cpuMin')
+): string {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) {
     return '–';
   }

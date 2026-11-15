@@ -17,6 +17,7 @@ import {
 } from '@/components/charts/format';
 import { Histogram, type HistogramSeries } from '@/components/charts/Histogram';
 import { boxFromStats, boxFromValues } from '@/components/charts/stats';
+import { i18n, useTranslation } from '@/i18n';
 import {
   calendarCounts,
   classGroups,
@@ -171,6 +172,7 @@ export function DistributionView({
   onAddStep,
   onScatter,
 }: DistributionViewProps) {
+  useTranslation();
   const column = profile.columns.find((c) => c.name === name) ?? profile.columns[0];
   const groups = useMemo(
     () =>
@@ -180,7 +182,7 @@ export function DistributionView({
     [sample, profile, target]
   );
   if (!column) {
-    return <Text size="sm">No columns.</Text>;
+    return <Text size="sm">{i18n.t('ui.data.DistributionView.noColumns')}</Text>;
   }
   const isTarget = column.name === target;
   const canSplit = !!groups && !isTarget && groups.groups.length > 1;
@@ -205,7 +207,7 @@ export function DistributionView({
     <Stack gap="md">
       <Group gap="sm" align="flex-end" wrap="wrap">
         <ColumnSelect
-          label="Column"
+          label={i18n.t('ui.data.DistributionView.column')}
           columns={profile.columns}
           value={column.name}
           onChange={(value) => value && onColumnChange(value)}
@@ -214,7 +216,7 @@ export function DistributionView({
         {(column.kind === 'numeric' || column.kind === 'datetime') && (
           <Switch
             size="xs"
-            label="Log scale (counts)"
+            label={i18n.t('ui.data.DistributionView.logScaleCounts')}
             checked={options.log}
             onChange={(event) => onOptionsChange({ ...options, log: event.currentTarget.checked })}
           />
@@ -222,7 +224,7 @@ export function DistributionView({
         {zoomable && (
           <Switch
             size="xs"
-            label="Zoom to 1st–99th percentile"
+            label={i18n.t('ui.data.DistributionView.zoomTo1st99thPercentile')}
             checked={zoom}
             onChange={(event) =>
               onOptionsChange({
@@ -235,7 +237,7 @@ export function DistributionView({
         {canSplit && (
           <Switch
             size="xs"
-            label={`Split by ${target}`}
+            label={i18n.t('ui.data.DistributionView.splitBy', { target })}
             checked={options.split}
             onChange={(event) =>
               onOptionsChange({ ...options, split: event.currentTarget.checked })
@@ -249,17 +251,22 @@ export function DistributionView({
             leftSection={<IconChartDots size={14} />}
             onClick={() => onScatter(column.name, regressionTarget)}
           >
-            Plot against {regressionTarget}
+            {i18n.t('ui.data.DistributionView.plotAgainst', { regressionTarget })}
           </Button>
         )}
       </Group>
       <Text size="xs" c="dimmed">
-        {KIND_LABELS[column.kind]}
-        {column.integer && column.kind === 'numeric' ? ' (whole numbers)' : ''} ·{' '}
-        {formatCount(column.count)} values ·{' '}
-        {formatPercent(profile.n_rows ? column.missing / profile.n_rows : 0)} missing ·{' '}
-        {formatCount(column.unique)} unique
-        {isTarget ? ' · target' : ''}
+        {i18n.t('ui.data.DistributionView.valuesMissingUnique', {
+          value: KIND_LABELS[column.kind],
+          value2:
+            column.integer && column.kind === 'numeric'
+              ? i18n.t('ui.data.DistributionView.wholeNumbers')
+              : '',
+          count: formatCount(column.count),
+          value3: formatPercent(profile.n_rows ? column.missing / profile.n_rows : 0),
+          unique: formatCount(column.unique),
+          value4: isTarget ? i18n.t('ui.data.DistributionView.target') : '',
+        })}
       </Text>
 
       {column.kind === 'numeric' && (
@@ -293,7 +300,7 @@ export function DistributionView({
       {warnings.length > 0 && (
         <Stack gap={6}>
           <Text size="sm" fw={600}>
-            Warnings
+            {i18n.t('ui.data.DistributionView.warnings')}
           </Text>
           <WarningList warnings={warnings} resetKey={profile} onAddStep={onAddStep} />
         </Stack>
@@ -342,6 +349,7 @@ function NumericDistribution({
   log,
   zoom,
 }: PartProps & { log: boolean; zoom: boolean }) {
+  useTranslation();
   const col = sampleColumn(sample, column.name);
   const values = useMemo(() => (col && groups ? valuesByGroup(col, groups) : null), [col, groups]);
   const hist = column.histogram;
@@ -388,13 +396,30 @@ function NumericDistribution({
     <Stack gap="md">
       {edges.length > 1 ? (
         <Histogram
-          title={split ? `${column.name} by ${groups!.column}` : `Distribution of ${column.name}`}
+          title={
+            split
+              ? i18n.t('ui.data.DistributionView.by', { name: column.name, column: groups!.column })
+              : i18n.t('ui.data.DistributionView.distributionOf', { name: column.name })
+          }
           subtitle={
             zoomed
-              ? `${split ? "Share of each class's rows" : 'Rows'} per bin between ${num(stats!.q01)} and ${num(stats!.q99)} (1st–99th percentile; ${formatCount(zoomed.outside)} of ${formatCount(zoomed.inside + zoomed.outside)} sample values outside). ${sampleNote(sample)}`
+              ? i18n.t('ui.data.DistributionView.perBinBetweenAnd1st', {
+                  value: split
+                    ? i18n.t('ui.data.DistributionView.shareOfEachClassS')
+                    : i18n.t('ui.data.DistributionView.rows'),
+                  num: num(stats!.q01),
+                  num2: num(stats!.q99),
+                  outside: formatCount(zoomed.outside),
+                  value2: formatCount(zoomed.inside + zoomed.outside),
+                  sampleNote: sampleNote(sample),
+                })
               : split
-                ? `Share of each class's rows per bin. ${sampleNote(sample)}`
-                : `Rows per bin, all ${formatCount(profile.n_rows)} rows.`
+                ? i18n.t('ui.data.DistributionView.shareOfEachClassS2', {
+                    sampleNote: sampleNote(sample),
+                  })
+                : i18n.t('ui.data.DistributionView.rowsPerBinAllRows', {
+                    n_rows: formatCount(profile.n_rows),
+                  })
           }
           edges={edges}
           series={series}
@@ -406,16 +431,20 @@ function NumericDistribution({
         />
       ) : (
         <Text size="sm" c="dimmed">
-          No values to show.
+          {i18n.t('ui.data.DistributionView.noValuesToShow')}
         </Text>
       )}
       {boxes.length > 0 && (
         <BoxPlot
-          title={split ? 'Box plots by class' : 'Box plot'}
+          title={
+            split
+              ? i18n.t('ui.data.DistributionView.boxPlotsByClass')
+              : i18n.t('ui.data.DistributionView.boxPlot')
+          }
           subtitle={
             split
               ? sampleNote(sample)
-              : 'Quartiles from all rows; whiskers at most 1.5 × IQR beyond the box.'
+              : i18n.t('ui.data.DistributionView.quartilesFromAllRowsWhiskers')
           }
           groups={boxes}
         />
@@ -424,16 +453,19 @@ function NumericDistribution({
         <SimpleGrid type="container" cols={{ base: 1, '480px': 2 }} spacing="lg">
           <div>
             <Text size="sm" fw={600} mb={4}>
-              Quantiles
+              {i18n.t('ui.data.DistributionView.quantiles')}
             </Text>
-            <KeyValueTable label={`Quantiles of ${column.name}`} rows={quantileRows(stats, num)} />
+            <KeyValueTable
+              label={i18n.t('ui.data.DistributionView.quantilesOf', { name: column.name })}
+              rows={quantileRows(stats, num)}
+            />
           </div>
           <div>
             <Text size="sm" fw={600} mb={4}>
-              Statistics
+              {i18n.t('ui.data.DistributionView.statistics')}
             </Text>
             <KeyValueTable
-              label={`Statistics of ${column.name}`}
+              label={i18n.t('ui.data.DistributionView.statisticsOf', { name: column.name })}
               rows={numericFacts(column, profile.n_rows)}
             />
           </div>
@@ -450,6 +482,7 @@ function DatetimeDistribution({
   groups,
   log,
 }: PartProps & { log: boolean }) {
+  useTranslation();
   const col = sampleColumn(sample, column.name);
   const values = useMemo(() => (col && groups ? valuesByGroup(col, groups) : null), [col, groups]);
   const calendar = useMemo(() => (col ? calendarCounts(numericValues(col)) : null), [col]);
@@ -463,11 +496,19 @@ function DatetimeDistribution({
     <Stack gap="md">
       {hist ? (
         <Histogram
-          title={split ? `${column.name} by ${groups!.column}` : `${column.name} over time`}
+          title={
+            split
+              ? i18n.t('ui.data.DistributionView.by', { name: column.name, column: groups!.column })
+              : i18n.t('ui.data.DistributionView.overTime', { name: column.name })
+          }
           subtitle={
             split
-              ? `Share of each class's rows per bin. ${sampleNote(sample)}`
-              : `Rows per period, all ${formatCount(profile.n_rows)} rows.`
+              ? i18n.t('ui.data.DistributionView.shareOfEachClassS2', {
+                  sampleNote: sampleNote(sample),
+                })
+              : i18n.t('ui.data.DistributionView.rowsPerPeriodAllRows', {
+                  n_rows: formatCount(profile.n_rows),
+                })
           }
           edges={hist.edges}
           series={
@@ -483,13 +524,13 @@ function DatetimeDistribution({
         />
       ) : (
         <Text size="sm" c="dimmed">
-          No values to show.
+          {i18n.t('ui.data.DistributionView.noValuesToShow')}
         </Text>
       )}
       {calendar && (
         <SimpleGrid type="container" cols={{ base: 1, '560px': 2 }} spacing="lg">
           <BarChart
-            title="By weekday"
+            title={i18n.t('ui.data.DistributionView.byWeekday')}
             subtitle={sampleNote(sample)}
             rows={WEEKDAYS.map((label, i) => ({
               key: label,
@@ -499,7 +540,7 @@ function DatetimeDistribution({
             unit="rows"
           />
           <BarChart
-            title="By month"
+            title={i18n.t('ui.data.DistributionView.byMonth')}
             subtitle={sampleNote(sample)}
             rows={MONTHS.map((label, i) => ({ key: label, label, values: [calendar.month[i]] }))}
             unit="rows"
@@ -508,7 +549,7 @@ function DatetimeDistribution({
       )}
       {stats && (
         <KeyValueTable
-          label={`Statistics of ${column.name}`}
+          label={i18n.t('ui.data.DistributionView.statisticsOf', { name: column.name })}
           rows={[
             ...columnFacts(column, profile.n_rows),
             ['First', date(stats.min)],
@@ -529,6 +570,7 @@ function DatetimeDistribution({
 }
 
 function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
+  useTranslation();
   const col = sampleColumn(sample, column.name);
   const top = column.top ?? [];
   const total = column.count + column.missing;
@@ -542,14 +584,23 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
       ? [
           {
             key: 'other',
-            label: `Other (${formatCount(Math.max(0, column.unique - top.length))} values)`,
+            label: i18n.t('ui.data.DistributionView.otherValues', {
+              max: formatCount(Math.max(0, column.unique - top.length)),
+            }),
             values: [column.other_count],
             muted: true,
           },
         ]
       : []),
     ...(column.missing
-      ? [{ key: 'missing', label: 'Missing', values: [column.missing], muted: true }]
+      ? [
+          {
+            key: 'missing',
+            label: i18n.t('ui.data.DistributionView.missing'),
+            values: [column.missing],
+            muted: true,
+          },
+        ]
       : []),
   ];
 
@@ -565,10 +616,18 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
       values: table.rows[i],
     }));
     if (table.other.some((v) => v > 0)) {
-      splitRows.push({ key: 'other', label: 'Other values', values: table.other });
+      splitRows.push({
+        key: 'other',
+        label: i18n.t('ui.data.DistributionView.otherValues2'),
+        values: table.other,
+      });
     }
     if (table.missing.some((v) => v > 0)) {
-      splitRows.push({ key: 'missing', label: 'Missing', values: table.missing });
+      splitRows.push({
+        key: 'missing',
+        label: i18n.t('ui.data.DistributionView.missing'),
+        values: table.missing,
+      });
     }
     const series: BarSeries[] = groups.groups.map((g) => ({
       key: g.key,
@@ -591,8 +650,13 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
     <Stack gap="md">
       {split ? (
         <BarChart
-          title={`${column.name} by ${groups!.column}`}
-          subtitle={`Class mix per value. ${sampleNote(sample)}`}
+          title={i18n.t('ui.data.DistributionView.by', {
+            name: column.name,
+            column: groups!.column,
+          })}
+          subtitle={i18n.t('ui.data.DistributionView.classMixPerValue', {
+            sampleNote: sampleNote(sample),
+          })}
           rows={split.rows}
           series={split.series}
           layout="stacked"
@@ -603,10 +667,14 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
         <BarChart
           title={
             column.kind === 'text'
-              ? `Most frequent texts in ${column.name}`
-              : `Values of ${column.name}`
+              ? i18n.t('ui.data.DistributionView.mostFrequentTextsIn', { name: column.name })
+              : i18n.t('ui.data.DistributionView.valuesOf', { name: column.name })
           }
-          subtitle={`Rows per value, all ${formatCount(profile.n_rows)} rows${top.length >= 20 ? ' (the 20 most frequent values)' : ''}.`}
+          subtitle={i18n.t('ui.data.DistributionView.rowsPerValueAllRows', {
+            n_rows: formatCount(profile.n_rows),
+            value:
+              top.length >= 20 ? i18n.t('ui.data.DistributionView.the20MostFrequentValues') : '',
+          })}
           rows={rows}
           tipLabel={(row) =>
             `${formatCount(row.values[0])} · ${formatPercent(total ? row.values[0] / total : 0)}`
@@ -616,19 +684,26 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
       )}
       {lengths && lengths.edges.length > 1 && (
         <Histogram
-          title="Text length"
-          subtitle={`Characters per text. ${sampleNote(sample)}`}
+          title={i18n.t('ui.data.DistributionView.textLength')}
+          subtitle={i18n.t('ui.data.DistributionView.charactersPerText', {
+            sampleNote: sampleNote(sample),
+          })}
           edges={lengths.edges}
           series={[
-            { key: 'length', label: 'Length', color: seriesColor(0), counts: lengths.counts },
+            {
+              key: 'length',
+              label: i18n.t('ui.data.DistributionView.length'),
+              color: seriesColor(0),
+              counts: lengths.counts,
+            },
           ]}
           integer
-          xLabel="Characters"
+          xLabel={i18n.t('ui.data.DistributionView.characters')}
           unit="texts"
         />
       )}
       <KeyValueTable
-        label={`Statistics of ${column.name}`}
+        label={i18n.t('ui.data.DistributionView.statisticsOf', { name: column.name })}
         rows={[
           ...columnFacts(column, profile.n_rows),
           ...(column.kind === 'boolean' && typeof column.stats?.mean === 'number'
@@ -659,9 +734,7 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
         ]}
       />
       {column.kind === 'text' && (
-        <Note>
-          Free text cannot be used as a feature directly. Drop it, or turn it into categories first.
-        </Note>
+        <Note>{i18n.t('ui.data.DistributionView.freeTextCannotBeUsed')}</Note>
       )}
     </Stack>
   );

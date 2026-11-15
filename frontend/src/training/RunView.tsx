@@ -53,7 +53,7 @@ import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import { ExplainHeadline } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { AccountLink } from '@/usage/CostEstimate';
 import {
   canDeleteRun,
@@ -199,6 +199,7 @@ function NetworkRunView({
   onDeleted,
   onLoadNetwork,
 }: RunViewProps) {
+  useTranslation();
   const state = run.state;
   const active = isActive(run.status);
   // Waiting for a training worker: nothing was trained yet.
@@ -315,7 +316,7 @@ function NetworkRunView({
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Download failed',
+        title: i18n.t('ui.training.RunView.downloadFailed'),
         message: (error as Error).message,
       });
     } finally {
@@ -336,7 +337,7 @@ function NetworkRunView({
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Download failed',
+        title: i18n.t('ui.training.RunView.downloadFailed'),
         message: (error as Error).message,
       });
     } finally {
@@ -355,7 +356,7 @@ function NetworkRunView({
           leftSection={<IconArrowLeft size={14} />}
           onClick={onBack}
         >
-          All runs
+          {i18n.t('ui.training.RunView.allRuns')}
         </Button>
         {canTrain(scope) && (
           <Button
@@ -364,7 +365,7 @@ function NetworkRunView({
             leftSection={<IconPlayerPlay size={14} />}
             onClick={onNewTraining}
           >
-            New training
+            {i18n.t('ui.training.RunView.newTraining')}
           </Button>
         )}
       </Group>
@@ -378,12 +379,14 @@ function NetworkRunView({
         </Group>
         <Text size="xs" c="dimmed" mt={4}>
           {[
-            by && `by ${by}`,
+            by && i18n.t('training.run.by', { user: by }),
             run.dataset.name,
             tuning && searchLabel(tuning),
             state?.device_label,
-            run.started_via?.name && `via “${run.started_via.name}”`,
-            `${queued ? 'queued' : 'started'} ${formatDate(new Date(startedAt).toISOString())}`,
+            run.started_via?.name && i18n.t('training.run.via', { name: run.started_via.name }),
+            i18n.t(queued ? 'training.run.queued' : 'training.run.started', {
+              date: formatDate(new Date(startedAt).toISOString()),
+            }),
             formatDuration(elapsed),
             cpuUsage(run),
           ]
@@ -413,60 +416,81 @@ function NetworkRunView({
         <>
           {hybridRun && (
             <div>
-              <Title order={5}>Phase 1 · The neural layers learn the features</Title>
+              <Title order={5}>{i18n.t('ui.training.RunView.phase1TheNeuralLayers')}</Title>
               <Text size="xs" c="dimmed">
                 {frozenFeatures
-                  ? `Frozen random features: the neural layers keep their random initial weights and compute ${learnedFeatures ?? 'the'} features without training.`
-                  : `They learn ${learnedFeatures ?? 'the'} features with a temporary linear head on the target; the curves are those of that head. Then the head is dropped.`}
+                  ? i18n.t('ui.training.RunView.frozenRandomFeaturesTheNeural', {
+                      value: learnedFeatures ?? i18n.t('ui.training.RunView.the'),
+                    })
+                  : i18n.t('ui.training.RunView.theyLearnFeaturesWithA', {
+                      value: learnedFeatures ?? i18n.t('ui.training.RunView.the'),
+                    })}
               </Text>
             </div>
           )}
           {!hybridRun && (
             <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
-              <Tile label="Training loss" value={formatMetric(metrics?.train_loss)} />
+              <Tile
+                label={i18n.t('ui.training.RunView.trainingLoss')}
+                value={formatMetric(metrics?.train_loss)}
+              />
               {noValidation ? (
-                <Tile label="Validation" value="None" hint="no validation data" />
+                <Tile
+                  label={i18n.t('ui.training.RunView.validation')}
+                  value="None"
+                  hint={i18n.t('ui.training.RunView.noValidationData')}
+                />
               ) : (
-                <Tile label="Validation loss" value={formatMetric(metrics?.val_loss)} />
+                <Tile
+                  label={i18n.t('ui.training.RunView.validationLoss')}
+                  value={formatMetric(metrics?.val_loss)}
+                />
               )}
               {noValidation ? (
                 classification ? (
                   <Tile
-                    label="Training accuracy"
+                    label={i18n.t('ui.training.RunView.trainingAccuracy')}
                     value={formatPercent(trainAccuracy)}
-                    hint="on the training data, optimistic"
+                    hint={i18n.t('ui.training.RunView.onTheTrainingDataOptimistic')}
                   />
                 ) : null
               ) : segmentation ? (
                 <>
                   <Tile
-                    label="Validation IoU"
+                    label={i18n.t('ui.training.RunView.validationIou')}
                     value={formatPercent(metrics?.val_iou)}
-                    hint="mean over the classes"
+                    hint={i18n.t('ui.training.RunView.meanOverTheClasses')}
                   />
                   <Tile
-                    label="Validation Dice"
+                    label={i18n.t('ui.training.RunView.validationDice')}
                     value={formatPercent(metrics?.val_dice)}
-                    hint="mean over the classes"
+                    hint={i18n.t('ui.training.RunView.meanOverTheClasses')}
                   />
                   <Tile
-                    label="Pixel accuracy"
+                    label={i18n.t('ui.training.RunView.pixelAccuracy')}
                     value={formatPercent(metrics?.val_pixel_accuracy)}
                     hint="validation"
                   />
                 </>
               ) : classification ? (
-                <Tile label="Validation accuracy" value={formatPercent(metrics?.val_accuracy)} />
+                <Tile
+                  label={i18n.t('ui.training.RunView.validationAccuracy')}
+                  value={formatPercent(metrics?.val_accuracy)}
+                />
               ) : (
                 <Tile
-                  label="Validation RMSE"
+                  label={i18n.t('ui.training.RunView.validationRmse')}
                   value={formatMetric(metrics?.val_rmse)}
                   next={r2 ? { label: 'R²', value: formatR2(metrics?.val_r2) } : undefined}
                 />
               )}
               {tuning ? (
                 <Tile
-                  label={active ? 'Best trial so far' : 'Best trial'}
+                  label={
+                    active
+                      ? i18n.t('ui.training.RunView.bestTrialSoFar')
+                      : i18n.t('ui.training.RunView.bestTrial')
+                  }
                   value={bestTrial ? String(bestTrial.trial) : '–'}
                   hint={
                     bestTrial
@@ -482,13 +506,13 @@ function NetworkRunView({
                 />
               ) : noValidation ? (
                 <Tile
-                  label="Kept epoch"
+                  label={i18n.t('ui.training.RunView.keptEpoch')}
                   value={keptEpoch !== null ? String(keptEpoch) : '–'}
-                  hint="the last one (no validation data)"
+                  hint={i18n.t('ui.training.RunView.theLastOneNoValidation')}
                 />
               ) : (
                 <Tile
-                  label="Best epoch"
+                  label={i18n.t('ui.training.RunView.bestEpoch')}
                   value={best ? String(best.epoch) : '–'}
                   hint={
                     best
@@ -503,15 +527,18 @@ function NetworkRunView({
               )}
               {active && progress?.samples_per_second ? (
                 <Tile
-                  label="Speed"
+                  label={i18n.t('ui.training.RunView.speed')}
                   value={`${formatCompact(progress.samples_per_second)}/s`}
                   hint="samples"
                 />
               ) : (
-                <Tile label="Time per epoch" value={formatDuration(meanEpoch)} />
+                <Tile
+                  label={i18n.t('ui.training.RunView.timePerEpoch')}
+                  value={formatDuration(meanEpoch)}
+                />
               )}
               <Tile
-                label="Parameters"
+                label={i18n.t('ui.training.RunView.parameters')}
                 value={formatCount(run.total_params ?? state?.total_params)}
               />
             </SimpleGrid>
@@ -545,21 +572,26 @@ function NetworkRunView({
               {tuning && (
                 <Text size="xs" c="dimmed" mb={-8}>
                   {runningTrial !== null
-                    ? `Curves of trial ${runningTrial} (running)`
+                    ? i18n.t('ui.training.RunView.curvesOfTrialRunning', { runningTrial })
                     : bestTrialNumber !== null
-                      ? `Curves of the best trial (${bestTrialNumber})`
+                      ? i18n.t('ui.training.RunView.curvesOfTheBestTrial', { bestTrialNumber })
                       : null}
                 </Text>
               )}
               {loss && (
                 <Text size="xs" c="dimmed" mb={-8}>
-                  {`Loss: ${loss}. The curves, early stopping and the kept epoch use this loss; losses of different kinds are not comparable, so compare runs by their metrics.`}
+                  {i18n.t('ui.training.RunView.lossTheCurvesEarlyStopping', { loss })}
                 </Text>
               )}
-              <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />
+              <LineChart
+                title={i18n.t('ui.training.RunView.loss')}
+                x={charts.x}
+                series={charts.loss}
+                yBounds={[0, Infinity]}
+              />
               {charts.iou.length > 0 && (
                 <LineChart
-                  title="Validation IoU"
+                  title={i18n.t('ui.training.RunView.validationIou')}
                   x={charts.x}
                   series={charts.iou}
                   yBounds={[0, 1]}
@@ -569,7 +601,7 @@ function NetworkRunView({
               )}
               {segmentation ? null : classification ? (
                 <LineChart
-                  title="Accuracy"
+                  title={i18n.t('ui.training.RunView.accuracy')}
                   x={charts.x}
                   series={charts.accuracy}
                   yBounds={[0, 1]}
@@ -579,7 +611,7 @@ function NetworkRunView({
               ) : (
                 charts.rmse.length > 0 && (
                   <LineChart
-                    title="Validation RMSE"
+                    title={i18n.t('ui.training.RunView.validationRmse')}
                     x={charts.x}
                     series={charts.rmse}
                     yBounds={[0, Infinity]}
@@ -588,7 +620,7 @@ function NetworkRunView({
               )}
               {charts.r2.length > 0 && (
                 <LineChart
-                  title="Validation R²"
+                  title={i18n.t('ui.training.RunView.validationR')}
                   x={charts.x}
                   series={charts.r2}
                   yBounds={[-Infinity, 1]}
@@ -597,7 +629,7 @@ function NetworkRunView({
               )}
               <div>
                 <ToggleButton opened={tableOpened} onClick={table.toggle}>
-                  Values per epoch
+                  {i18n.t('ui.training.RunView.valuesPerEpoch')}
                 </ToggleButton>
                 <Collapse expanded={tableOpened}>
                   <HistoryTable
@@ -615,7 +647,7 @@ function NetworkRunView({
             active &&
             !frozenFeatures && (
               <Text size="sm" c="dimmed">
-                The charts appear when the first epoch is done.
+                {i18n.t('ui.training.RunView.theChartsAppearWhenThe')}
               </Text>
             )
           )}
@@ -623,11 +655,13 @@ function NetworkRunView({
           {hybridRun && (
             <>
               <div>
-                <Title order={5}>Phase 2 · {hybridModel} on the learned features</Title>
+                <Title order={5}>
+                  {i18n.t('ui.training.RunView.phase2OnTheLearned', { hybridModel })}
+                </Title>
                 <Text size="xs" c="dimmed">
                   {tuning?.neural_space
-                    ? 'Every trial of the search learned its own features and fitted the model on those of the training rows; the best trial is kept and measured on the validation and test rows, like a classical model.'
-                    : 'Fitted on the features of the training rows and measured on the validation and test rows, like a classical model.'}
+                    ? i18n.t('ui.training.RunView.everyTrialOfTheSearch')
+                    : i18n.t('ui.training.RunView.fittedOnTheFeaturesOf')}
                 </Text>
               </div>
               <ClassicalResults
@@ -654,7 +688,13 @@ function NetworkRunView({
       {logLines.length > 0 && (
         <div>
           <ToggleButton opened={logOpened} onClick={log.toggle}>
-            Log ({logLines.length} {logLines.length === 1 ? 'line' : 'lines'})
+            {i18n.t('ui.training.RunView.log', {
+              length: logLines.length,
+              value:
+                logLines.length === 1
+                  ? i18n.t('ui.training.RunView.line')
+                  : i18n.t('ui.training.RunView.lines'),
+            })}
           </ToggleButton>
           <Collapse expanded={logOpened}>
             <ScrollArea.Autosize mah={240} type="auto" viewportRef={logViewport}>
@@ -673,7 +713,11 @@ function NetworkRunView({
             disabled={run.stop_requested}
             onClick={() => confirmStopRun(run, onUpdate)}
           >
-            {queued ? 'Cancel' : run.stop_requested ? 'Stopping …' : 'Stop'}
+            {queued
+              ? i18n.t('ui.training.RunView.cancel')
+              : run.stop_requested
+                ? i18n.t('ui.training.RunView.stopping')
+                : i18n.t('ui.training.RunView.stop')}
           </Button>
         )}
         {run.has_weights && (
@@ -682,7 +726,11 @@ function NetworkRunView({
             loading={downloading === 'weights'}
             onClick={() => void downloadWeights()}
           >
-            {classicalRun ? 'Model (.joblib)' : hybridRun ? 'Model (.zip)' : 'Weights (.pt)'}
+            {classicalRun
+              ? i18n.t('ui.training.RunView.modelJoblib')
+              : hybridRun
+                ? i18n.t('ui.training.RunView.modelZip')
+                : i18n.t('ui.training.RunView.weightsPt')}
           </Button>
         )}
         {preprocessing && (
@@ -693,7 +741,7 @@ function NetworkRunView({
               downloadText(`${base}.preprocessing.json`, preprocessing, 'application/json')
             }
           >
-            Preprocessing (.json)
+            {i18n.t('ui.training.RunView.preprocessingJson')}
           </Button>
         )}
         <Button
@@ -702,7 +750,7 @@ function NetworkRunView({
           loading={downloading === 'script'}
           onClick={() => void downloadScript()}
         >
-          Script (.py)
+          {i18n.t('ui.training.RunView.scriptPy')}
         </Button>
         {!sameNetwork && (
           <Button
@@ -710,7 +758,7 @@ function NetworkRunView({
             leftSection={<IconReplace size={16} />}
             onClick={() => onLoadNetwork(run.graph, run.name)}
           >
-            Load into editor
+            {i18n.t('ui.training.RunView.loadIntoEditor')}
           </Button>
         )}
         {canDeleteRun(run, scope) && (
@@ -720,7 +768,7 @@ function NetworkRunView({
             leftSection={<IconTrash size={16} />}
             onClick={() => confirmDeleteRun(run, onDeleted)}
           >
-            Delete
+            {i18n.t('ui.training.RunView.delete')}
           </Button>
         )}
       </Group>
@@ -733,7 +781,7 @@ function NetworkRunView({
       {run.has_weights && !active && (
         <div>
           <ToggleButton opened={predictOpened} onClick={predict.toggle}>
-            Try the model: predict
+            {i18n.t('ui.training.RunView.tryTheModelPredict')}
           </ToggleButton>
           <Collapse expanded={predictOpened}>
             {predictOpened && (
@@ -751,31 +799,35 @@ function NetworkRunView({
       {run.has_weights && (
         <div>
           <ToggleButton opened={usageOpened} onClick={usage.toggle}>
-            {classicalRun ? 'How to use the model' : 'How to use the weights'}
+            {classicalRun
+              ? i18n.t('ui.training.RunView.howToUseTheModel')
+              : i18n.t('ui.training.RunView.howToUseTheWeights')}
           </ToggleButton>
           <Collapse expanded={usageOpened}>
             {hybridRun ? (
               <Text size="sm" c="dimmed" mb="xs">
-                {`The ZIP file holds the neural layers (${base}.features.pt), the classical model (${base}.joblib), the preprocessing and the script. Unzip it; the script predicts the rows of a CSV file with both parts: `}
+                {i18n.t('ui.training.RunView.theZipFileHoldsThe', { base, base2: base })}
                 <Code>
-                  {`python ${base}.py --predict new.csv --weights ${base}.features.pt --save ${base}.joblib`}
+                  {i18n.t('ui.training.RunView.pythonPyPredictNewCsv', {
+                    base,
+                    base2: base,
+                    base3: base,
+                  })}
                 </Code>
               </Text>
             ) : classicalRun ? (
               <Text size="sm" c="dimmed" mb="xs">
-                Download the model and load it in Python with joblib (it needs scikit-learn). It is
-                the whole pipeline: it standardises the features itself. The script predicts with it
-                too:{' '}
-                <Code>
-                  python {base}.py --predict new.csv --save {modelFile}
-                </Code>
+                <Trans
+                  i18nKey="ui.training.RunView.downloadTheModelAndLoad"
+                  values={{ base, modelFile }}
+                  components={[<Code />]}
+                />
               </Text>
             ) : (
               <Text size="sm" c="dimmed" mb="xs">
-                Download the weights and the script, put both in one folder and load them in Python
-                {preprocessing
-                  ? '. New inputs need the same preprocessing as the training data; its values are also in the preprocessing download (.json).'
-                  : ':'}
+                {i18n.t('ui.training.RunView.downloadTheWeightsAndThe', {
+                  value: preprocessing ? i18n.t('ui.training.RunView.newInputsNeedTheSame') : ':',
+                })}
               </Text>
             )}
             <ScrollArea type="auto">
@@ -789,8 +841,12 @@ function NetworkRunView({
 }
 
 const STOP_TITLES = {
-  budget: 'Stopped by the compute budget',
-  run_limit: 'Stopped at the limit per training',
+  get budget() {
+    return i18n.t('ui.training.RunView.stoppedByTheComputeBudget');
+  },
+  get run_limit() {
+    return i18n.t('ui.training.RunView.stoppedAtTheLimitPer');
+  },
 };
 
 function RunProgress({
@@ -808,6 +864,7 @@ function RunProgress({
   /** A classical model: fitted once, without progress. */
   classical?: boolean;
 }) {
+  useTranslation();
   const state = run.state;
   // The API keeps run.message in sync with state.json while the process runs, and sets it
   // itself when the process died or had to be killed (state.json is stale then).
@@ -821,7 +878,7 @@ function RunProgress({
     return (
       <Group gap="xs" wrap="nowrap">
         <Loader size="sm" />
-        <Text size="sm">{message || 'Preparing the data …'}</Text>
+        <Text size="sm">{message || i18n.t('ui.training.RunView.preparingTheData')}</Text>
       </Group>
     );
   }
@@ -831,13 +888,13 @@ function RunProgress({
         <Group gap="xs" wrap="nowrap">
           <Loader size="sm" />
           <Text size="sm" fw={600}>
-            {message || 'Fitting the model …'}
+            {message || i18n.t('ui.training.RunView.fittingTheModel')}
           </Text>
         </Group>
         <Text size="xs" c="dimmed" mt={4}>
           {run.stop_requested
-            ? 'Stopping …'
-            : 'scikit-learn fits the model in one go, without progress in between. Stopping ends the fit at once; nothing is saved then.'}
+            ? i18n.t('ui.training.RunView.stopping')
+            : i18n.t('ui.training.RunView.scikitLearnFitsTheModel')}
         </Text>
       </Box>
     );
@@ -853,25 +910,27 @@ function RunProgress({
             {Math.floor(overall)}%
           </Text>
         </Group>
-        <Progress value={overall} aria-label="Training progress" />
+        <Progress value={overall} aria-label={i18n.t('ui.training.RunView.trainingProgress')} />
         {progress && (
           <>
             <Text size="xs" c="dimmed" mt="xs" mb={4}>
-              Step {progress.step.toLocaleString(currentLocale())} of{' '}
-              {progress.steps.toLocaleString(currentLocale())} in this epoch
-              {typeof progress.loss === 'number' && ` · loss ${formatMetric(progress.loss)}`}
+              {i18n.t('ui.training.RunView.step')} {progress.step.toLocaleString(currentLocale())}{' '}
+              {i18n.t('ui.training.RunView.of')} {progress.steps.toLocaleString(currentLocale())}{' '}
+              {i18n.t('ui.training.RunView.inThisEpoch')}
+              {typeof progress.loss === 'number' &&
+                i18n.t('ui.training.RunView.loss3', { loss: formatMetric(progress.loss) })}
             </Text>
             <Progress
               value={stepShare * 100}
               size="xs"
               color="gray"
-              aria-label="Progress of the current epoch"
+              aria-label={i18n.t('ui.training.RunView.progressOfTheCurrentEpoch')}
             />
           </>
         )}
         {run.stop_requested && (
           <Text size="sm" c="dimmed" mt="xs">
-            Stopping after the current batch …
+            {i18n.t('ui.training.RunView.stoppingAfterTheCurrentBatch')}
           </Text>
         )}
       </Box>
@@ -880,7 +939,7 @@ function RunProgress({
   if (run.status === 'completed') {
     return (
       <Alert color="green" icon={<IconCircleCheck size={18} />}>
-        {message || 'Training finished.'}
+        {message || i18n.t('ui.training.RunView.trainingFinished')}
       </Alert>
     );
   }
@@ -892,7 +951,7 @@ function RunProgress({
         icon={<IconInfoCircle size={18} />}
         title={reason === 'budget' || reason === 'run_limit' ? STOP_TITLES[reason] : undefined}
       >
-        {message || 'Training was stopped.'}
+        {message || i18n.t('ui.training.RunView.trainingWasStopped')}
       </Alert>
     );
   }
@@ -902,9 +961,13 @@ function RunProgress({
     <Alert
       color="red"
       icon={<IconAlertTriangle size={18} />}
-      title={noBudget ? 'Not started: no compute budget left' : 'Training failed'}
+      title={
+        noBudget
+          ? i18n.t('ui.training.RunView.notStartedNoComputeBudget')
+          : i18n.t('ui.training.RunView.trainingFailed')
+      }
     >
-      {message || 'Something went wrong.'}
+      {message || i18n.t('ui.training.RunView.somethingWentWrong')}
       {noBudget && (
         <div>
           <AccountLink />
@@ -912,7 +975,7 @@ function RunProgress({
       )}
       {(state?.log.length ?? 0) > 0 && (
         <Text size="xs" mt={4}>
-          The log below may tell more.
+          {i18n.t('ui.training.RunView.theLogBelowMayTell')}
         </Text>
       )}
     </Alert>
@@ -933,20 +996,25 @@ function EnsembleMembers({
   classification: boolean;
   validation: boolean;
 }) {
+  useTranslation();
   return (
     <Stack gap={4}>
-      <Table fz="sm" aria-label="Models of the ensemble" style={{ whiteSpace: 'nowrap' }}>
+      <Table
+        fz="sm"
+        aria-label={i18n.t('ui.training.RunView.modelsOfTheEnsemble')}
+        style={{ whiteSpace: 'nowrap' }}
+      >
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Model</Table.Th>
+            <Table.Th>{i18n.t('ui.training.RunView.model')}</Table.Th>
             {classification ? (
               <>
-                <Table.Th>Accuracy</Table.Th>
-                <Table.Th>Loss</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.accuracy')}</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.loss')}</Table.Th>
               </>
             ) : (
               <>
-                <Table.Th>RMSE</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.rmse')}</Table.Th>
                 <Table.Th>R²</Table.Th>
               </>
             )}
@@ -980,7 +1048,11 @@ function EnsembleMembers({
         </Table.Tbody>
       </Table>
       <Text size="xs" c="dimmed" mt={-6}>
-        Each model of the ensemble on its own, on the {validation ? 'validation' : 'training'} rows.
+        {i18n.t('ui.training.RunView.eachModelOfTheEnsemble', {
+          value: validation
+            ? i18n.t('ui.training.RunView.validation2')
+            : i18n.t('ui.training.RunView.training2'),
+        })}
       </Text>
     </Stack>
   );
@@ -1006,6 +1078,7 @@ function ClassicalResults({
   /** The classical model of a hybrid network: the history is that of its features. */
   hybrid?: boolean;
 }) {
+  useTranslation();
   const state = run.state;
   const fit = state?.classical ?? null;
   // Once fitted: the model on the validation rows (a hybrid network keeps them apart from
@@ -1064,14 +1137,18 @@ function ClassicalResults({
     typeof size === 'number' ? size.toLocaleString(currentLocale()) : '–';
 
   const splits: { label: string; metrics: ClassicalMetrics | null; size: number | null }[] = [
-    { label: 'Training', metrics: fit?.train ?? null, size: rows },
+    { label: i18n.t('ui.training.RunView.training'), metrics: fit?.train ?? null, size: rows },
   ];
   // A validation split of 0: no validation rows to show.
   if (state?.val_size !== 0) {
-    splits.push({ label: 'Validation', metrics: validation, size: state?.val_size ?? null });
+    splits.push({
+      label: i18n.t('ui.training.RunView.validation'),
+      metrics: validation,
+      size: state?.val_size ?? null,
+    });
   }
   if (test || testSize !== null) {
-    splits.push({ label: 'Test', metrics: test, size: testSize });
+    splits.push({ label: i18n.t('ui.training.RunView.test'), metrics: test, size: testSize });
   }
   const supportShare = fit?.support_vectors != null && rows ? fit.support_vectors / rows : null;
   const boosting = Boolean(fit && (fit.iterations != null || isBoosting(fit.estimator)));
@@ -1082,66 +1159,84 @@ function ClassicalResults({
   return (
     <Stack gap="sm">
       <SimpleGrid cols={{ base: 2, xs: 3 }} spacing="xs" verticalSpacing="xs">
-        <Tile label="Fit time" value={formatFitTime(fit?.fit_seconds)} />
         <Tile
-          label="Rows fitted on"
+          label={i18n.t('ui.training.RunView.fitTime')}
+          value={formatFitTime(fit?.fit_seconds)}
+        />
+        <Tile
+          label={i18n.t('ui.training.RunView.rowsFittedOn')}
           value={sizeText(rows)}
           hint={
             fit?.subsampled_from
-              ? `subsampled from ${sizeText(fit.subsampled_from)} (limit ${sizeText(fit.max_rows)})`
+              ? i18n.t('ui.training.RunView.subsampledFromLimit', {
+                  sizeText: sizeText(fit.subsampled_from),
+                  sizeText2: sizeText(fit.max_rows),
+                })
               : fit
-                ? `at most ${sizeText(fit.max_rows)} on this server`
+                ? i18n.t('ui.training.RunView.atMostOnThisServer', {
+                    sizeText: sizeText(fit.max_rows),
+                  })
                 : undefined
           }
         />
         {members ? (
           <Tile
-            label="Ensemble"
+            label={i18n.t('ui.training.RunView.ensemble')}
             value={`${members.length} models`}
             hint={fit?.ensemble === 'stacking' ? 'stacking' : 'voting'}
           />
         ) : gaussianProcess ? (
           <Tile
-            label="Log marginal likelihood"
+            label={i18n.t('ui.training.RunView.logMarginalLikelihood')}
             value={formatMetric(fit?.log_marginal_likelihood)}
-            hint="of the fitted kernel; higher fits better"
+            hint={i18n.t('ui.training.RunView.ofTheFittedKernelHigher')}
           />
         ) : boosting ? (
           <Tile
-            label="Boosting iterations"
+            label={i18n.t('ui.training.RunView.boostingIterations')}
             value={sizeText(iterations)}
             hint={
               iterations !== null && maxIterations !== null
                 ? iterations < maxIterations
-                  ? `of at most ${sizeText(maxIterations)}: early stopping`
-                  : `of at most ${sizeText(maxIterations)}`
+                  ? i18n.t('ui.training.RunView.ofAtMostEarlyStopping', {
+                      sizeText: sizeText(maxIterations),
+                    })
+                  : i18n.t('ui.training.RunView.ofAtMost', { sizeText: sizeText(maxIterations) })
                 : undefined
             }
           />
         ) : (
           <Tile
-            label="Support vectors"
+            label={i18n.t('ui.training.RunView.supportVectors')}
             value={fit?.support_vectors != null ? sizeText(fit.support_vectors) : '–'}
             hint={
-              supportShare !== null ? `${formatPercent(supportShare, 0)} of the rows` : undefined
+              supportShare !== null
+                ? i18n.t('ui.training.RunView.ofTheRows', {
+                    supportShare: formatPercent(supportShare, 0),
+                  })
+                : undefined
             }
           />
         )}
       </SimpleGrid>
 
       {entry || test ? (
-        <Table fz="sm" aria-label="Results of the fitted model" style={{ whiteSpace: 'nowrap' }}>
+        <Table
+          fz="sm"
+          aria-label={i18n.t('ui.training.RunView.resultsOfTheFittedModel')}
+          style={{ whiteSpace: 'nowrap' }}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Rows</Table.Th>
+              <Table.Th>{i18n.t('ui.training.RunView.rows')}</Table.Th>
               {classification ? (
                 <>
-                  <Table.Th>Accuracy</Table.Th>
-                  <Table.Th>Loss</Table.Th>
+                  <Table.Th>{i18n.t('ui.training.RunView.accuracy')}</Table.Th>
+                  <Table.Th>{i18n.t('ui.training.RunView.loss')}</Table.Th>
                 </>
               ) : (
                 <>
-                  <Table.Th>RMSE</Table.Th>
+                  <Table.Th>{i18n.t('ui.training.RunView.rmse')}</Table.Th>
                   <Table.Th>R²</Table.Th>
                 </>
               )}
@@ -1175,16 +1270,16 @@ function ClassicalResults({
       ) : (
         active && (
           <Text size="sm" c="dimmed">
-            The results appear when the fit is done.
+            {i18n.t('ui.training.RunView.theResultsAppearWhenThe')}
           </Text>
         )
       )}
       {(entry || test) && (
         <Text size="xs" c="dimmed" mt={-6}>
           {classification
-            ? 'Loss: cross-entropy of the predicted class probabilities.'
-            : 'RMSE in the units of the target; R² = 1 is a perfect fit, 0 is no better than the mean.'}
-          {test ? ' The test rows were measured once, after the fit.' : ''}
+            ? i18n.t('ui.training.RunView.lossCrossEntropyOfThe')
+            : i18n.t('ui.training.RunView.rmseInTheUnitsOf')}
+          {test ? i18n.t('ui.training.RunView.theTestRowsWereMeasured') : ''}
         </Text>
       )}
 
@@ -1217,9 +1312,15 @@ function ClassicalResults({
       {gaussianProcess && fit?.at_bounds?.length ? (
         <KernelBoundsHint bounds={fit.at_bounds} />
       ) : null}
-      {gaussianProcess && fit?.kernel && <KernelBlock label="Fitted kernel" code={fit.kernel} />}
+      {gaussianProcess && fit?.kernel && (
+        <KernelBlock label={i18n.t('ui.training.RunView.fittedKernel')} code={fit.kernel} />
+      )}
       {gaussianProcess && fit?.initial_kernel && (
-        <KernelBlock label="Starting kernel" code={fit.initial_kernel} dimmed />
+        <KernelBlock
+          label={i18n.t('ui.training.RunView.startingKernel')}
+          code={fit.initial_kernel}
+          dimmed
+        />
       )}
     </Stack>
   );
@@ -1267,13 +1368,13 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
   const loss = [
     series(
       'train_loss',
-      'Training',
+      i18n.t('training.run.training'),
       SERIES_COLORS[0],
       history.map((h) => h.train_loss)
     ),
     series(
       'val_loss',
-      'Validation',
+      i18n.t('training.run.validation'),
       SERIES_COLORS[1],
       history.map((h) => h.val_loss)
     ),
@@ -1282,13 +1383,13 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
     ? [
         series(
           'train_acc',
-          'Training',
+          i18n.t('training.run.training'),
           SERIES_COLORS[0],
           history.map((h) => h.train_accuracy)
         ),
         series(
           'val_acc',
-          'Validation',
+          i18n.t('training.run.validation'),
           SERIES_COLORS[1],
           history.map((h) => h.val_accuracy)
         ),
@@ -1297,7 +1398,7 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
   const rmse = [
     series(
       'val_rmse',
-      'Validation',
+      i18n.t('training.run.validation'),
       SERIES_COLORS[1],
       history.map((h) => h.val_rmse)
     ),
@@ -1305,7 +1406,7 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
   const r2 = [
     series(
       'val_r2',
-      'Validation',
+      i18n.t('training.run.validation'),
       SERIES_COLORS[1],
       history.map((h) => h.val_r2)
     ),
@@ -1353,16 +1454,17 @@ function HistoryTable({
   /** False for a run without validation data: only the training columns. */
   validation?: boolean;
 }) {
+  useTranslation();
   if (!validation) {
     return (
       <ScrollArea.Autosize mah={260} type="auto">
         <Table striped stickyHeader fz="xs" ff="monospace" style={{ whiteSpace: 'nowrap' }}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Epoch</Table.Th>
-              <Table.Th>Train loss</Table.Th>
-              {classification && <Table.Th>Train acc.</Table.Th>}
-              <Table.Th>Time</Table.Th>
+              <Table.Th>{i18n.t('ui.training.RunView.epoch')}</Table.Th>
+              <Table.Th>{i18n.t('ui.training.RunView.trainLoss')}</Table.Th>
+              {classification && <Table.Th>{i18n.t('ui.training.RunView.trainAcc')}</Table.Th>}
+              <Table.Th>{i18n.t('ui.training.RunView.time')}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -1384,25 +1486,25 @@ function HistoryTable({
       <Table striped stickyHeader fz="xs" ff="monospace" style={{ whiteSpace: 'nowrap' }}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Epoch</Table.Th>
-            <Table.Th>Train loss</Table.Th>
-            <Table.Th>Val. loss</Table.Th>
+            <Table.Th>{i18n.t('ui.training.RunView.epoch')}</Table.Th>
+            <Table.Th>{i18n.t('ui.training.RunView.trainLoss')}</Table.Th>
+            <Table.Th>{i18n.t('ui.training.RunView.valLoss')}</Table.Th>
             {segmentation ? (
               <>
-                <Table.Th>Val. IoU</Table.Th>
-                <Table.Th>Val. Dice</Table.Th>
-                <Table.Th>Pixel acc.</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.valIou')}</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.valDice')}</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.pixelAcc')}</Table.Th>
               </>
             ) : classification ? (
               <>
-                <Table.Th>Train acc.</Table.Th>
-                <Table.Th>Val. acc.</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.trainAcc')}</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.valAcc')}</Table.Th>
               </>
             ) : (
-              <Table.Th>Val. RMSE</Table.Th>
+              <Table.Th>{i18n.t('ui.training.RunView.valRmse')}</Table.Th>
             )}
-            {r2 && <Table.Th>Val. R²</Table.Th>}
-            <Table.Th>Time</Table.Th>
+            {r2 && <Table.Th>{i18n.t('ui.training.RunView.valR')}</Table.Th>}
+            <Table.Th>{i18n.t('ui.training.RunView.time')}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -1455,6 +1557,7 @@ function TestResultCard({
   r2: boolean;
   active: boolean;
 }) {
+  useTranslation();
   const state = run.state;
   const metrics = run.metrics;
   const fromMetrics: TestResult | null =
@@ -1478,12 +1581,12 @@ function TestResultCard({
 
   const rmse = typeof result?.rmse === 'number';
   const label = segmentation
-    ? 'Test IoU'
+    ? i18n.t('ui.training.RunView.testIou')
     : classification
-      ? 'Test accuracy'
+      ? i18n.t('ui.training.RunView.testAccuracy')
       : rmse
-        ? 'Test RMSE'
-        : 'Test loss';
+        ? i18n.t('ui.training.RunView.testRmse')
+        : i18n.t('ui.training.RunView.testLoss');
   const value = segmentation
     ? formatPercent(result?.iou)
     : classification
@@ -1495,11 +1598,14 @@ function TestResultCard({
   if (result) {
     const loss =
       segmentation || classification || rmse ? `loss ${formatMetric(result.loss)} · ` : '';
-    note = `${loss}${samples}, measured once after training`;
+    note = i18n.t('ui.training.RunView.measuredOnceAfterTraining', { loss, samples });
   } else if (active) {
-    note = `${samples} ${size !== null ? 'are' : 'is'} held out until training has finished.`;
+    note = i18n.t('ui.training.RunView.heldOutUntilTrainingHas', {
+      samples,
+      value: size !== null ? i18n.t('ui.training.RunView.are') : i18n.t('ui.training.RunView.is'),
+    });
   } else {
-    note = 'Not measured: the training did not finish.';
+    note = i18n.t('ui.training.RunView.notMeasuredTheTrainingDid');
   }
   return (
     <Paper withBorder p="xs" radius="sm">
@@ -1507,9 +1613,17 @@ function TestResultCard({
         <Group gap="md" wrap="nowrap" align="flex-start" style={{ flexShrink: 0 }}>
           <Metric label={label} value={value} />
           {r2 && <Metric label="R²" value={formatR2(result?.r2)} />}
-          {segmentation && <Metric label="Dice" value={formatPercent(result?.dice)} />}
           {segmentation && (
-            <Metric label="Pixel acc." value={formatPercent(result?.pixel_accuracy)} />
+            <Metric
+              label={i18n.t('ui.training.RunView.dice')}
+              value={formatPercent(result?.dice)}
+            />
+          )}
+          {segmentation && (
+            <Metric
+              label={i18n.t('ui.training.RunView.pixelAcc')}
+              value={formatPercent(result?.pixel_accuracy)}
+            />
           )}
         </Group>
         <Text size="xs" c="dimmed" ta="right">
@@ -1520,7 +1634,20 @@ function TestResultCard({
   );
 }
 
-const STATUS_TEXT = { completed: 'Done', running: 'Running', stopped: 'Stopped', failed: 'Failed' };
+const STATUS_TEXT = {
+  get completed() {
+    return i18n.t('ui.training.RunView.done');
+  },
+  get running() {
+    return i18n.t('ui.training.RunView.running');
+  },
+  get stopped() {
+    return i18n.t('ui.training.RunView.stopped');
+  },
+  get failed() {
+    return i18n.t('ui.training.RunView.failed');
+  },
+};
 
 export function TrialsTable({
   tuning,
@@ -1551,6 +1678,7 @@ export function TrialsTable({
    */
   features?: boolean;
 }) {
+  useTranslation();
   const settings = searchedParams(tuning);
   const metric = tuning.metric ?? 'loss';
   // The loss, accuracy, RMSE and R² have columns of their own; other metrics get one.
@@ -1567,52 +1695,77 @@ export function TrialsTable({
     <div>
       <Group justify="space-between" gap="xs" mb={4}>
         <Text size="sm" fw={600}>
-          Trials
+          {i18n.t('ui.training.RunView.trials')}
         </Text>
         <Text size="xs" c="dimmed">
-          {tuning.method === 'grid' ? 'Grid search' : 'Random search'} · {finished} of {total}{' '}
-          finished
+          {i18n.t('ui.training.RunView.ofFinished', {
+            value:
+              tuning.method === 'grid'
+                ? i18n.t('ui.training.RunView.gridSearch')
+                : i18n.t('ui.training.RunView.randomSearch'),
+            finished,
+            total,
+          })}
         </Text>
       </Group>
       <Text size="xs" c="dimmed" mb={4}>
-        Ranked by {metricInSentence(metric)} on {where} ({metricDirection(metric)}).
+        {i18n.t('ui.training.RunView.rankedByOn', {
+          metricInSentence: metricInSentence(metric),
+          where,
+          metricDirection: metricDirection(metric),
+        })}
       </Text>
       {winner && (
         <Text size="sm" mb="xs">
-          {active ? 'Best so far' : 'Best'}: trial {winner.trial} ({describeParams(winner.params)})
-          {active
-            ? ''
-            : features
-              ? '. Its features and model are kept.'
-              : classical
-                ? '. Its model is kept.'
-                : '. Its weights are kept.'}
+          {i18n.t('ui.training.RunView.trial', {
+            value: active
+              ? i18n.t('ui.training.RunView.bestSoFar')
+              : i18n.t('ui.training.RunView.best'),
+            trial: winner.trial,
+            describeParams: describeParams(winner.params),
+            value2: active
+              ? ''
+              : features
+                ? i18n.t('ui.training.RunView.itsFeaturesAndModelAre')
+                : classical
+                  ? i18n.t('ui.training.RunView.itsModelIsKept')
+                  : i18n.t('ui.training.RunView.itsWeightsAreKept'),
+          })}
         </Text>
       )}
       {trials.length === 0 ? (
         <Text size="sm" c="dimmed">
-          The first trial starts when the data is ready.
+          {i18n.t('ui.training.RunView.theFirstTrialStartsWhen')}
         </Text>
       ) : (
         <ScrollArea.Autosize mah={260} type="auto">
-          <Table stickyHeader fz="xs" style={{ whiteSpace: 'nowrap' }} aria-label="Trials">
+          <Table
+            stickyHeader
+            fz="xs"
+            style={{ whiteSpace: 'nowrap' }}
+            aria-label={i18n.t('ui.training.RunView.trials')}
+          >
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Trial</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.trial2')}</Table.Th>
                 {settings.map((name) => (
                   <Table.Th key={name}>{paramLabel(name)}</Table.Th>
                 ))}
-                <Table.Th>{prefix} loss</Table.Th>
-                {classification && <Table.Th>{prefix} acc.</Table.Th>}
-                {showRmse && <Table.Th>{prefix} RMSE</Table.Th>}
+                <Table.Th>{i18n.t('ui.training.RunView.loss2', { prefix })}</Table.Th>
+                {classification && (
+                  <Table.Th>{i18n.t('ui.training.RunView.acc', { prefix })}</Table.Th>
+                )}
+                {showRmse && <Table.Th>{i18n.t('ui.training.RunView.rmse2', { prefix })}</Table.Th>}
                 {showR2 && <Table.Th>{prefix} R²</Table.Th>}
-                {segmentation && <Table.Th>{prefix} IoU</Table.Th>}
+                {segmentation && (
+                  <Table.Th>{i18n.t('ui.training.RunView.iou', { prefix })}</Table.Th>
+                )}
                 {scoreColumn && (
                   <Table.Th>
                     {prefix} {metricInfo(metric).label}
                   </Table.Th>
                 )}
-                <Table.Th>Status</Table.Th>
+                <Table.Th>{i18n.t('ui.training.RunView.status')}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -1673,11 +1826,17 @@ function TrialStatus({
   /** Learns the features in `epochs` epochs, then fits a classical model. */
   features?: boolean;
 }) {
+  useTranslation();
   if (entry.status === 'failed') {
     return (
-      <Tooltip label={entry.message || 'Failed'} multiline w={260} withArrow>
+      <Tooltip
+        label={entry.message || i18n.t('ui.training.RunView.failed')}
+        multiline
+        w={260}
+        withArrow
+      >
         <Text span size="xs" c="red" td="underline" style={{ textDecorationStyle: 'dotted' }}>
-          Failed
+          {i18n.t('ui.training.RunView.failed')}
         </Text>
       </Tooltip>
     );
@@ -1685,7 +1844,7 @@ function TrialStatus({
   if (entry.status === 'running' && !active) {
     return (
       <Text span size="xs" c="dimmed">
-        Interrupted
+        {i18n.t('ui.training.RunView.interrupted')}
       </Text>
     );
   }
@@ -1693,15 +1852,18 @@ function TrialStatus({
     return (
       <Text span size="xs" c="blue">
         {classical || (features && entry.epochs_done >= epochs)
-          ? 'Fitting'
-          : `Epoch ${Math.min(entry.epochs_done + 1, epochs)}/${epochs}`}
+          ? i18n.t('ui.training.RunView.fitting')
+          : i18n.t('ui.training.RunView.epoch2', {
+              min: Math.min(entry.epochs_done + 1, epochs),
+              epochs,
+            })}
       </Text>
     );
   }
   if (best) {
     return (
       <Badge size="xs" variant="filled">
-        Best
+        {i18n.t('ui.training.RunView.best')}
       </Badge>
     );
   }

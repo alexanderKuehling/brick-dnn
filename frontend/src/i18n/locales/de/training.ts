@@ -55,6 +55,14 @@ export const training: Messages<typeof en> = {
     dataTab: 'Daten-Tab',
     messyCsv: 'Unaufgeräumte CSV-Datei? Bereinigen, kodieren und analysieren Sie sie im',
   },
+  run: {
+    by: 'von {{user}}',
+    via: 'über „{{name}}“',
+    queued: 'eingereiht {{date}}',
+    started: 'gestartet {{date}}',
+    training: 'Training',
+    validation: 'Validierung',
+  },
   setup: {
     budget: {
       budget_exceeded: 'Nicht genug Rechenbudget',

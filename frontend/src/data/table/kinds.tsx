@@ -8,13 +8,24 @@ import {
   type Icon,
 } from '@tabler/icons-react';
 import type { ColumnKind } from '@/api/types';
+import { i18n } from '@/i18n';
 
 export const KIND_LABELS: Record<ColumnKind, string> = {
-  numeric: 'Numeric',
-  boolean: 'Boolean',
-  datetime: 'Date/time',
-  categorical: 'Categorical',
-  text: 'Text',
+  get numeric() {
+    return i18n.t('ui.data.kinds.numeric');
+  },
+  get boolean() {
+    return i18n.t('ui.data.kinds.boolean');
+  },
+  get datetime() {
+    return i18n.t('ui.data.kinds.dateTime');
+  },
+  get categorical() {
+    return i18n.t('ui.data.kinds.categorical');
+  },
+  get text() {
+    return i18n.t('ui.data.kinds.text');
+  },
 };
 
 export const KIND_COLORS: Record<ColumnKind, string> = {

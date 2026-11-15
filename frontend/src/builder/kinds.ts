@@ -28,7 +28,13 @@ export function inputSlots(spec: LayerSpec | undefined): InputSlot[] {
     return [];
   }
   return [
-    { name: 'input', label: 'Input', kind: 'tensor', min: spec.min_inputs, max: spec.max_inputs },
+    {
+      name: 'input',
+      label: i18n.t('ui.builder.kinds.input'),
+      kind: 'tensor',
+      min: spec.min_inputs,
+      max: spec.max_inputs,
+    },
   ];
 }
 
@@ -178,12 +184,22 @@ export function isFeatureEdge(
 
 /** Short names of scikit-learn's kernels for the canvas. */
 const SHORT_KERNEL_NAMES: Record<string, string> = {
-  ConstantKernel: 'Constant',
-  WhiteKernel: 'White',
-  ExpSineSquared: 'Periodic',
+  get ConstantKernel() {
+    return i18n.t('ui.builder.kinds.constant');
+  },
+  get WhiteKernel() {
+    return i18n.t('ui.builder.kinds.white');
+  },
+  get ExpSineSquared() {
+    return i18n.t('ui.builder.kinds.periodic');
+  },
   RationalQuadratic: 'RQ',
-  DotProduct: 'Dot',
-  Matern: 'Matérn',
+  get DotProduct() {
+    return i18n.t('ui.builder.kinds.dot');
+  },
+  get Matern() {
+    return i18n.t('ui.builder.kinds.matRn');
+  },
 };
 
 /**
