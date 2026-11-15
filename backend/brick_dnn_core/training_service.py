@@ -45,6 +45,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from dataclasses import replace as dataclass_replace
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from pathlib import Path
@@ -87,9 +88,10 @@ from brickdnn.training import (
     torch_installed,
     torchvision_installed,
 )
+from brickdnn.training import losses as training_losses
 from brickdnn.training.compat import MAX_SEGMENTATION_SIDE
 from brickdnn.training.config import (
-    LOSSES,
+    SEGMENTATION_LOSSES,
     ConfigError,
     classical_max_rows,
     segmentation_memory_bytes,
@@ -450,8 +452,11 @@ def capabilities(user=None) -> dict[str, Any]:
             "max_input_side": MAX_SEGMENTATION_SIDE,
             # A batch (every layer's output for all its images) may need this much memory.
             "batch_memory_mb": round(segmentation_memory_bytes() / 1024**2),
-            "losses": list(LOSSES),
+            "losses": list(SEGMENTATION_LOSSES),
         },
+        # The losses of neural networks per task (the first one is its default) and their
+        # settings, see brickdnn.training.losses.
+        "losses": training_losses.capabilities(),
         "max_upload_mb": settings.TRAINING_MAX_UPLOAD_MB,
         # Trainings that run at the same time (all users): the slots of the workers, or
         # BRICKDNN_TRAINING_MAX_RUNS when the web server trains itself.
@@ -703,7 +708,7 @@ def check(
     """check_compatibility() plus checks that depend on this server. For a graph document
     (not an :class:`Analysis`), the result suggests fixes as well. ``search``: the run is a
     hyperparameter search (it needs validation data)."""
-    result = check_compatibility(graph, dataset.info, config, tuning=search is not None)
+    result = check_compatibility(graph, dataset.info, config, tuning=search or False)
     family = graph.family if isinstance(graph, Analysis) else graph_family(graph)
     if search is not None:
         _check_search(result, search, family, dataset.info, config or TrainingConfig())
@@ -858,6 +863,10 @@ def start_run(
     if not compatibility.ok:
         raise IncompatibleNetwork(compatibility)
     assert compatibility.plan is not None
+    if family != "classical":
+        # The run stores the loss it trains with ("auto" becomes the default of the task).
+        loss = training_losses.resolved(training_config.loss, compatibility.plan)
+        training_config = dataclass_replace(training_config, loss=loss)
     estimate = estimate_run(
         analysis, dataset, training_config, compatibility.plan.to_dict(), search
     )

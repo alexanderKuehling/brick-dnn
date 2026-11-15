@@ -94,6 +94,12 @@ class MaskFileSource:
         masks = torch.stack([mask for _, mask in loaded])
         return [self.transform(images)], [masks.long()]
 
+    def masks_of(self, indices: torch.Tensor) -> torch.Tensor:
+        """Only the masks of some samples (to count the pixels of every class)."""
+        return torch.stack(
+            [load_mask(self.pairs[i], self.image, self.decoder) for i in indices.tolist()]
+        )
+
 
 def load_mask(pair: Pair, image: dict[str, Any], decoder: MaskDecoder) -> torch.Tensor:
     """The class map of one mask file as uint8 (H, W) at the planned size."""

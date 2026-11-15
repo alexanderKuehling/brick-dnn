@@ -92,6 +92,14 @@ SCRIPT_NAMES = {
     "main",
     "NUM_FEATURES",
     "NUM_CLASSES",
+    "LOSS",
+    "CLASS_WEIGHTS",
+    "FOCAL_GAMMA",
+    "LABEL_SMOOTHING",
+    "HUBER_DELTA",
+    "class_weights",
+    "focal_loss",
+    "make_loss",
     "x",
     "model",
     "out",
@@ -104,11 +112,23 @@ SCRIPT_NAMES = {
 RESERVED = set(keyword.kwlist) | set(dir(builtins)) | NN_MODULE_ATTRIBUTES | SCRIPT_NAMES
 
 
+# The settings of the loss that the training code of a script takes (see
+# brickdnn.training.losses), with the names of the training settings.
+LOSS_OPTIONS = ("loss", "class_weights", "focal_gamma", "label_smoothing", "huber_delta")
+
+
 @dataclass
 class GeneratorOptions:
     class_name: str = "NeuralNetwork"
     include_main: bool = True
     include_training: bool = True
+    # The loss of the training code (like the training settings of Brick DNN): "auto" is
+    # the default of the task (cross-entropy, or the mean squared error for one output).
+    loss: str = "auto"
+    class_weights: str | list[float] | dict[str, float] | None = None
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    huber_delta: float = 1.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> GeneratorOptions:
@@ -118,10 +138,14 @@ class GeneratorOptions:
             raise ValueError(f"'{name}' is not a valid Python class name.")
         if name in RESERVED:
             raise ValueError(f"'{name}' is already used in the generated code; pick another name.")
+        from .training.config import TrainingConfig  # ConfigError is a ValueError
+
+        loss = TrainingConfig.from_dict({key: data.get(key) for key in LOSS_OPTIONS})
         return cls(
             class_name=name,
             include_main=bool(data.get("include_main", True)),
             include_training=bool(data.get("include_training", True)),
+            **{key: getattr(loss, key) for key in LOSS_OPTIONS},
         )
 
 
@@ -415,6 +439,10 @@ class _Generator:
             )
             task = '        "task": "classification",\n        "num_classes": NUM_CLASSES,'
             loss = "nn.CrossEntropyLoss()"
+            code = self._classification_loss(n_outputs)
+            if code is not None:
+                header += "\n" + code
+                loss = "make_loss(target[train_rows], device)"
             metric_init = "        val_loss, correct = 0.0, 0\n"
             metric_update = (
                 "                correct += (outputs.argmax(dim=1) == targets).sum().item()\n"
@@ -429,6 +457,10 @@ class _Generator:
             targets = "    return header, features, target.unsqueeze(1)"
             task = '        "task": "regression",'
             loss = "nn.MSELoss()"
+            code = self._regression_loss()
+            if code is not None:
+                header += "\n" + code
+                loss = "make_loss(target[train_rows])"
             metric_init = "        val_loss = 0.0\n"
             metric_update = ""
             metric_print = ""
@@ -444,6 +476,128 @@ class _Generator:
             .replace("[[METRIC_PRINT]]", metric_print)
             .replace("[[PREDICTIONS]]", predictions)
         )
+
+    def _loss_name(self, task: str) -> str:
+        from .training.losses import TASK_LOSSES, loss_for
+
+        name = self.opt.loss
+        if name != "auto" and name not in TASK_LOSSES[task]:
+            if task == "regression" and name == "cross_entropy":
+                return "mse"  # the old default of every task
+            losses = ", ".join(["auto", *TASK_LOSSES[task]])
+            output = "one output" if task == "regression" else "one output per class"
+            raise ValueError(
+                f"The loss '{name}' does not fit the training code of this network "
+                f"({task}: {output}). Possible: {losses}."
+            )
+        return loss_for(name, task)
+
+    def _classification_loss(self, classes: int) -> str | None:
+        """The loss settings and functions of a classification script, or None for the
+        plain cross-entropy."""
+        name = self._loss_name("classification")
+        smoothing = self.opt.label_smoothing if name != "focal" else 0.0
+        if name == "cross_entropy" and smoothing == 0.0:
+            return None
+        weights: Any = self.opt.class_weights if name != "cross_entropy" else None
+        if weights is None and name == "weighted_cross_entropy":
+            weights = "balanced"
+        if isinstance(weights, dict):
+            vector = [1.0] * classes
+            for key, value in weights.items():
+                if not (key.isdigit() and int(key) < classes):
+                    raise ValueError(
+                        f"Class weights: '{key}' is not a class of the script, whose classes "
+                        f"are the indices 0 to {classes - 1}."
+                    )
+                vector[int(key)] = value
+            weights = vector
+        if isinstance(weights, list) and len(weights) != classes:
+            raise ValueError(
+                f"Class weights: give one weight per class ({classes}), not {len(weights)}."
+            )
+        lines = [
+            "# The loss: cross_entropy, weighted_cross_entropy or focal (as in Brick DNN).",
+            f'LOSS = "{name}"',
+            '# "balanced" (from the class counts of the training rows), a weight per class, or',
+            "# None. The focal loss uses them as alpha.",
+            f"CLASS_WEIGHTS = {_literal(weights)}",
+            f"FOCAL_GAMMA = {float(self.opt.focal_gamma)!r}  # focal: 0 is the cross-entropy",
+            f"LABEL_SMOOTHING = {float(smoothing)!r}  # the cross-entropies",
+        ]
+        return "\n".join(lines) + "\n\n\n" + _CLASSIFICATION_LOSS
+
+    def _regression_loss(self) -> str | None:
+        """The loss settings of a regression script, or None for the mean squared error."""
+        name = self._loss_name("regression")
+        if name == "mse":
+            return None
+        lines = [
+            "# The loss: mse, mae or huber (as in Brick DNN).",
+            f'LOSS = "{name}"',
+            "# huber: where the loss turns from squared to linear, in standard deviations of",
+            "# the target (Brick DNN standardises the target; this script scales delta).",
+            f"HUBER_DELTA = {float(self.opt.huber_delta)!r}",
+        ]
+        return "\n".join(lines) + "\n\n\n" + _REGRESSION_LOSS
+
+
+def _literal(value: Any) -> str:
+    if value is None:
+        return "None"
+    if isinstance(value, str):
+        return f'"{value}"'
+    return "[" + ", ".join(f"{float(v):g}" for v in value) + "]"
+
+
+_CLASSIFICATION_LOSS = '''\
+def class_weights(target: torch.Tensor) -> torch.Tensor | None:
+    """The weight of every class. "balanced": n / (k * count) from the class counts of the
+    training rows (k: the classes that occur; a class without rows gets 1)."""
+    if CLASS_WEIGHTS is None:
+        return None
+    if CLASS_WEIGHTS != "balanced":
+        return torch.tensor(CLASS_WEIGHTS, dtype=torch.float32)
+    counts = torch.bincount(target, minlength=NUM_CLASSES).float()
+    weights = len(target) / (int((counts > 0).sum()) * counts.clamp(min=1))
+    weights[counts == 0] = 1.0
+    return weights
+
+
+def focal_loss(
+    outputs: torch.Tensor, targets: torch.Tensor, gamma: float, weight: torch.Tensor | None
+) -> torch.Tensor:
+    """The focal loss: the mean of -alpha * (1 - p)^gamma * log(p), p the probability of the
+    true class, alpha its class weight (1 without weights)."""
+    log_p = torch.log_softmax(outputs, dim=1).gather(1, targets.unsqueeze(1)).squeeze(1)
+    loss = -((1 - log_p.exp()).clamp(min=0) ** gamma) * log_p
+    if weight is not None:
+        loss = loss * weight[targets]
+    return loss.mean()
+
+
+def make_loss(target: torch.Tensor, device: str):
+    """The loss function, with the class weights of the training targets."""
+    weight = class_weights(target)
+    if weight is not None:
+        weight = weight.to(device)
+        print("Class weights:", [round(w, 4) for w in weight.tolist()])
+    if LOSS == "focal":
+        return lambda outputs, targets: focal_loss(outputs, targets, FOCAL_GAMMA, weight)
+    if LOSS == "cross_entropy":
+        weight = None
+    return nn.CrossEntropyLoss(weight=weight, label_smoothing=LABEL_SMOOTHING)'''
+
+
+_REGRESSION_LOSS = '''\
+def make_loss(target: torch.Tensor):
+    """The loss function. The target is not standardised here, so Huber's delta is scaled
+    by its standard deviation on the training rows."""
+    if LOSS == "mae":
+        return nn.L1Loss()
+    if LOSS == "huber":
+        return nn.HuberLoss(delta=HUBER_DELTA * max(float(target.std()), 1e-8))
+    return nn.MSELoss()'''
 
 
 _COUNT_PARAMETERS = """\

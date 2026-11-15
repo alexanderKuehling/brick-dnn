@@ -51,16 +51,40 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .config import OPTIMIZERS, ConfigError, TrainingConfig
+from .losses import FOCAL_GAMMA, HUBER_DELTA, LABEL_SMOOTHING, LOSSES
+from .losses import LABELS as LOSS_LABELS
 from .objectives import DEFAULT_METRIC, parse_metric
 
 METHODS = ("random", "grid")
-# Settings that can be tuned, in the order they are shown.
-TUNABLE = ("learning_rate", "batch_size", "optimizer", "weight_decay")
+# Settings that can be tuned, in the order they are shown. The loss and its settings (see
+# losses.py) change what the loss measures: a search over losses is ranked by another
+# metric than the loss.
+TUNABLE = (
+    "learning_rate",
+    "batch_size",
+    "optimizer",
+    "weight_decay",
+    "loss",
+    "focal_gamma",
+    "label_smoothing",
+    "huber_delta",
+)
 LABELS = {
     "learning_rate": "learning rate",
     "batch_size": "batch size",
     "optimizer": "optimizer",
     "weight_decay": "weight decay",
+    "loss": "loss",
+    "focal_gamma": "focal gamma",
+    "label_smoothing": "label smoothing",
+    "huber_delta": "Huber delta",
+}
+# Ranges of the settings drawn evenly (not on a log scale): (smallest, largest, smallest
+# excluded).
+LINEAR_RANGES = {
+    "focal_gamma": FOCAL_GAMMA,
+    "label_smoothing": LABEL_SMOOTHING,
+    "huber_delta": HUBER_DELTA,
 }
 OPTIMIZER_NAMES = {"adam": "Adam", "adamw": "AdamW", "sgd": "SGD"}
 MAX_TRIALS = 100
@@ -153,10 +177,22 @@ def _values(name: str, raw: list[Any]) -> Values:
                     f"Hyperparameter search: the optimizer must be one of: {', '.join(OPTIMIZERS)}."
                 )
             values.append(value)
+    elif name == "loss":
+        values = []
+        for item in raw:
+            value = str(item).strip().lower()
+            if value not in LOSSES:
+                raise ConfigError(
+                    f"Hyperparameter search: the loss must be one of: {', '.join(LOSSES)}."
+                )
+            values.append(value)
     elif name == "batch_size":
         values = [_number(v, "batch sizes", 1, 8192, False, True) for v in raw]
     elif name == "learning_rate":
         values = [_number(v, "learning rates", 0.0, 10.0, True, False) for v in raw]
+    elif name in LINEAR_RANGES:
+        lo, hi, open_lo = LINEAR_RANGES[name]
+        values = [_number(v, f"the values of the {label}", lo, hi, open_lo, False) for v in raw]
     else:
         values = [_number(v, "weight decays", 0.0, 1.0, False, False) for v in raw]
     return tuple(dict.fromkeys(values))  # without duplicates, in the given order
@@ -164,6 +200,8 @@ def _values(name: str, raw: list[Any]) -> Values:
 
 def _range(name: str, raw: dict[str, Any]) -> Range:
     label = LABELS[name]
+    if name in LINEAR_RANGES:
+        return _linear_range(name, raw)
     if name not in ("learning_rate", "weight_decay"):
         raise ConfigError(f"Hyperparameter search: give a list of values for the {label}.")
     if set(raw) - {"min", "max", "scale"} or "min" not in raw or "max" not in raw:
@@ -180,6 +218,28 @@ def _range(name: str, raw: dict[str, Any]) -> Range:
             f"Hyperparameter search: the smallest {label} must not be larger than the largest."
         )
     return Range(lo, top)
+
+
+def _linear_range(name: str, raw: dict[str, Any]) -> Range:
+    """A range of a setting of the loss, drawn evenly (``"scale": "log"`` for a log scale,
+    which needs a minimum above 0)."""
+    label = LABELS[name]
+    if set(raw) - {"min", "max", "scale"} or "min" not in raw or "max" not in raw:
+        raise ConfigError(f'Hyperparameter search: a range for the {label} needs "min" and "max".')
+    scale = raw.get("scale") or "linear"
+    if scale not in ("linear", "log"):
+        raise ConfigError(
+            f'Hyperparameter search: the scale of the {label} must be "linear" or "log".'
+        )
+    lo_limit, hi, open_lo = LINEAR_RANGES[name]
+    what = f"the {label} range"
+    lo = _number(raw["min"], what, lo_limit, hi, open_lo or scale == "log", False)
+    top = _number(raw["max"], what, lo_limit, hi, open_lo or scale == "log", False)
+    if lo > top:
+        raise ConfigError(
+            f"Hyperparameter search: the smallest {label} must not be larger than the largest."
+        )
+    return Range(lo, top, log=scale == "log")
 
 
 def _space(raw: Any) -> dict[str, Range | Values]:
@@ -372,10 +432,15 @@ class TuningConfig:
 
 
 def _space_dict(space: dict[str, Range | Values]) -> dict[str, Any]:
-    return {
-        name: values.to_dict() if isinstance(values, Range) else list(values)
-        for name, values in space.items()
-    }
+    data: dict[str, Any] = {}
+    for name, values in space.items():
+        if not isinstance(values, Range):
+            data[name] = list(values)
+            continue
+        data[name] = values.to_dict()
+        if values.log and name.removeprefix(NEURAL_PREFIX) in LINEAR_RANGES:
+            data[name]["scale"] = "log"  # these are drawn evenly by default
+    return data
 
 
 def _merged(
@@ -446,6 +511,8 @@ def format_value(name: str, value: Any) -> str:
     name = name.removeprefix(NEURAL_PREFIX)
     if name == "optimizer":
         return OPTIMIZER_NAMES.get(value, str(value))
+    if name == "loss":
+        return LOSS_LABELS.get(value, str(value))
     if value is None:
         return "no limit"
     if name == "batch_size" or isinstance(value, (bool, str, int)):
@@ -470,5 +537,6 @@ def describe_params(params: dict[str, Any], model: str | None = None) -> str:
     for name in TUNABLE:
         if name in params:
             value = format_value(name, params[name])
-            parts.append(value if name == "optimizer" else f"{LABELS[name]} {value}")
+            plain = name in ("optimizer", "loss")
+            parts.append(value if plain else f"{LABELS[name]} {value}")
     return ", ".join(parts)

@@ -32,10 +32,13 @@ import torch.nn as nn
 from ..codegen import generate_code
 from .compat import TrainingPlan, check_compatibility, segmentation_memory_error
 from .config import NO_VALIDATION_SEARCH, TrainingConfig
-from .data import PreparedData, Source, iterate_batches, prepare_data
+from .data import PreparedData, Source, class_counts, iterate_batches, prepare_data
 from .datasets import DEFAULT_DATA_ROOT
 from .devices import available_devices, default_device, device_label, select_device
 from .job import TrainingJob, TrainingResult
+from .loss_functions import build_loss, class_weights_for, needs_counts
+from .losses import KIND_TASKS, config_problems, describe, loss_for, search_problems
+from .losses import text as loss_text
 from .objectives import (
     DEFAULT_METRIC,
     HISTORY_KEYS,
@@ -55,7 +58,7 @@ from .reporting import (
     short_error,
 )
 from .segmentation import class_colors
-from .segmetrics import SegmentationLoss, SegmentationMetrics, predicted_classes
+from .segmetrics import SegmentationMetrics, predicted_classes
 from .state import finite, preprocessing_path, write_json_atomic
 from .tuning import TuningConfig, describe_params, trial_config
 
@@ -450,6 +453,7 @@ class _Run:
         self._prepare_data()
         self._check_memory(self.config)
         self._build(self.config)
+        self._log_loss()
         self.reporter.setup(self._setup_info())
         self._to_device(check=True)
         self.optimizer = self._optimizer()
@@ -483,7 +487,10 @@ class _Run:
         self._check_stop()
 
         targets = self.plan.targets
-        self.losses = [self._loss_function(t) for t in targets]
+        errors, _ = config_problems(config, self.plan)
+        if errors:
+            raise TrainingError(errors[0])
+        self.counts: dict[int, list[float]] = {}  # class counts of the training data
         self.accuracy = len(targets) == 1 and targets[0]["kind"] == "class"
         self.regression = self.plan.task == "regression"
         self.segmentation = self.plan.task == "segmentation"
@@ -494,14 +501,41 @@ class _Run:
                 f"the weights of the last epoch are kept{off}."
             )
 
-    def _loss_function(self, target: dict[str, Any]) -> nn.Module:
-        if target["kind"] == "mask":
-            return SegmentationLoss(
-                int(target["num_classes"]),
-                bool(target.get("binary")),
-                dice=self.job.config.loss == "cross_entropy_dice",
+    def _losses(self, config: TrainingConfig) -> None:
+        """The loss function of every output with ``config`` (see losses.py), and what the
+        run reports about it (``loss_info``; the first output's, with the losses of the
+        others if they differ). Balanced class weights count the classes of the training
+        data once."""
+        self.losses: list[nn.Module] = []
+        infos = []
+        for index, target in enumerate(self.plan.targets):
+            counts = None
+            if needs_counts(config, target):
+                if index not in self.counts:
+                    self.reporter.status("preparing", "Counting the classes …")
+                    k = int(target["num_classes"])
+                    self.counts[index] = class_counts(self.data.train, index, k)
+                counts = self.counts[index]
+            weights = class_weights_for(config, target, self.plan.class_names, counts)
+            self.losses.append(build_loss(config, target, weights))
+            infos.append(describe(config, KIND_TASKS[target["kind"]], weights))
+        self.loss_info: dict[str, Any] | None = dict(infos[0]) if infos else None
+        names = list(dict.fromkeys(info["name"] for info in infos))
+        if self.loss_info is not None and len(names) > 1:
+            self.loss_info["outputs"] = [info["name"] for info in infos]
+        # Regressions report the RMSE from the loss only when it is the mean squared error.
+        self.mse = all(info["name"] == "mse" for info in infos if info["task"] == "regression")
+
+    def _log_loss(self) -> None:
+        """Say which loss is trained with when it is not the default of the task."""
+        info = self.loss_info
+        if info is None:
+            return
+        default = loss_for("auto", info["task"])
+        if info["name"] != default or info.get("label_smoothing") or "outputs" in info:
+            self.reporter.log(
+                f"Loss: {loss_text(info)}. The curves, early stopping and the kept epoch use it."
             )
-        return nn.CrossEntropyLoss() if target["kind"] == "class" else nn.MSELoss()
 
     def _check_memory(self, config: TrainingConfig) -> None:
         """Segmentation: refuse a batch that would not fit into memory (the process would be
@@ -527,6 +561,7 @@ class _Run:
         self.stopped_early = False
         self.steps = 0
         self.class_results = {}
+        self._losses(config)
         self.shuffle = torch.Generator().manual_seed(self.seed + 1)
         torch.manual_seed(self.seed)
         self.model = build_model(self.job.graph)
@@ -551,6 +586,7 @@ class _Run:
             "steps_per_epoch": self.steps_per_epoch,
             "total_params": sum(p.numel() for p in self.model.parameters() if p.requires_grad),
             "preprocessing": self.data.preprocessing,
+            "loss": self.loss_info,
         }
 
     def _to_device(self, check: bool) -> None:
@@ -789,6 +825,7 @@ class _Run:
         self.model.eval()
         loss_sum, seen, correct = 0.0, 0, 0
         r2 = _R2() if self.regression else None
+        squared, values_seen = 0.0, 0  # the squared errors, when the loss is not the MSE
         masks = None
         if self.segmentation:
             target = self.plan.targets[0]
@@ -805,6 +842,13 @@ class _Run:
                     correct += self._correct(outputs, targets)
                 if r2 is not None:
                     r2.add([outputs[i] for i in values], [targets[i] for i in values])
+                    if not self.mse:
+                        for i in values:
+                            error = outputs[i].detach().double() - targets[i].to(
+                                outputs[i].device
+                            ).double().reshape(outputs[i].shape)
+                            squared += float((error**2).sum())
+                            values_seen += error.numel()
                 if masks is not None:
                     masks.add(outputs[0], targets[0])
                 if collect is not None:
@@ -812,8 +856,9 @@ class _Run:
         seen = max(seen, 1)
         loss = loss_sum / seen
         rmse = None
-        if self.regression and self.data.target_std is not None and math.isfinite(loss):
-            rmse = math.sqrt(loss) * self.data.target_std
+        mse = loss if self.mse else (squared / values_seen if values_seen else math.nan)
+        if self.regression and self.data.target_std is not None and math.isfinite(mse):
+            rmse = math.sqrt(mse) * self.data.target_std
         result = {
             "loss": loss,
             "accuracy": correct / seen if self.accuracy else None,
@@ -921,7 +966,7 @@ class _Run:
             kept = self.class_results.get(self.weights_epoch or 0)
             test = self.test_result
             result: dict[str, Any] = {
-                "loss": self.job.config.loss,
+                "loss": loss_for(self.config.loss, "segmentation"),
                 "binary": bool(target.get("binary")),
                 "ignore_index": (plan.segmentation or {}).get("ignore_index"),
                 "class_names": names,
@@ -1002,6 +1047,7 @@ class _Search(_Run):
         self.best_history: list[dict[str, Any]] = []
         self.best_epoch: dict[str, Any] | None = None
         self.best_class_results: dict[int, dict[str, Any]] = {}
+        self.best_loss_info: dict[str, Any] | None = None
         self.device_checked = False  # the Apple GPU check (_try_mps) is done once
 
     def _execute(self) -> None:
@@ -1009,8 +1055,9 @@ class _Search(_Run):
         if not self.data.has_val:
             raise TrainingError(NO_VALIDATION_SEARCH)
         error = metric_error(self.tuning.metric, self.plan)
-        if error is not None:
-            raise TrainingError(error)
+        errors, _ = search_problems(self.tuning, self.plan, self.base_config)
+        if error is not None or errors:
+            raise TrainingError(error or errors[0])
         trials = self.tuning.sample(self.seed)
         self.total = len(trials)
         for index, params in enumerate(trials, start=1):
@@ -1099,6 +1146,7 @@ class _Search(_Run):
             self.best_history = list(self.history)
             self.best_epoch = dict(self.best) if self.best else None
             self.best_class_results = dict(self.class_results)
+            self.best_loss_info = self.loss_info
             self._trial_done(entry, "completed", "", started, new_best=True, score=score)
         else:
             self._trial_done(entry, "completed", "", started, score=score)
@@ -1170,6 +1218,7 @@ class _Search(_Run):
         self.weights_epoch = best["weights_epoch"]
         self.stopped_early = best["stopped_early"]
         self.trial = 0
+        self.reporter.setup({"loss": self.loss_info})  # the loss of the best trial
         self.reporter.search_end(
             {
                 "best_trial": best["trial"],
@@ -1190,6 +1239,7 @@ class _Search(_Run):
             self.class_results = dict(self.best_class_results)
             self.weights_epoch = best["weights_epoch"]
             self.stopped_early = best["stopped_early"]
+            self.reporter.setup({"loss": self.best_loss_info})
             self.reporter.search_end(
                 {
                     "best_trial": best["trial"],

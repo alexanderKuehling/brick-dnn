@@ -20,8 +20,9 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import type {
   FeatureTraining,
+  LossName,
+  LossTask,
   Optimizer,
-  SegmentationLoss,
   TrainingDevice,
   TuningMethod,
   TuningMetric,
@@ -39,10 +40,17 @@ import {
 import {
   BATCH_SIZE_PRESETS,
   classicalParams,
+  classWeightModes,
+  effectiveLoss,
   FEATURE_TRAININGS,
+  FOCAL_GAMMA_PRESETS,
   hasValidation,
+  HUBER_DELTA_PRESETS,
+  LABEL_SMOOTHING_PRESETS,
   LIMITS,
-  LOSSES,
+  LOSS_OPTIONS,
+  lossesInUse,
+  lossUses,
   LR_PRESETS,
   OPTIMIZERS,
   parseField,
@@ -51,7 +59,11 @@ import {
   plannedTrials,
   searchesNeural,
   tunedSettings,
+  usesParam,
   WEIGHT_DECAY_PRESETS,
+  type ClassWeightsMode,
+  type LossParam,
+  type LossScope,
   type SegmentationScope,
   type SettingsErrors,
   type SettingsValues,
@@ -98,6 +110,11 @@ interface SettingsFormProps {
    * while it is not known: all are offered and the server checks).
    */
   metrics?: MetricInfo[] | null;
+  /**
+   * The task of the data, whose losses the form offers, and its classes (from the training
+   * check; a segmentation's without it). Null: not known, the loss is the task's default.
+   */
+  loss?: LossScope | null;
 }
 
 export interface ClassicalSettings {
@@ -144,6 +161,7 @@ export function SettingsForm({
   hybrid = null,
   segmentation = null,
   metrics = null,
+  loss = null,
 }: SettingsFormProps) {
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
@@ -155,7 +173,12 @@ export function SettingsForm({
     onChange({ ...values, [key]: value });
   // A hybrid network's search varies the training settings only if it searches the neural
   // layers too; frozen features use none of them.
-  const tuned = tunedSettings(hybrid ? { ...values, search: searchesNeural(values) } : values);
+  const lossScope: LossScope | null = loss ?? (segmentation ? { task: 'segmentation' } : null);
+  const task = lossScope?.task ?? null;
+  const tuned = tunedSettings(
+    hybrid ? { ...values, search: searchesNeural(values) } : values,
+    task
+  );
   const frozen = hybrid !== null && values.feature_training === 'frozen';
   const maxBatch = segmentation?.maxBatch ?? null;
 
@@ -433,17 +456,36 @@ export function SettingsForm({
           allowDeselect={false}
         />
         {validationField}
-        {segmentation && (
+        {task && (
           <Select
             label="Loss"
-            description="The Dice term helps classes that cover only a few pixels"
-            data={LOSSES}
-            value={values.loss}
-            onChange={(value) => value && set('loss')(value as SegmentationLoss)}
+            description={
+              frozen
+                ? NOT_TRAINED
+                : tuned.loss
+                  ? 'The search tries the losses: rank it by a metric, not by the loss.'
+                  : `${LOSS_OPTIONS[task].find((o) => o.value === effectiveLoss(values, task))?.help ?? ''} The curves and early stopping use it.`
+            }
+            data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
+            value={tuned.loss ? null : effectiveLoss(values, task)}
+            placeholder={tuned.loss ? SEARCHED : undefined}
+            disabled={tuned.loss || frozen}
+            onChange={(value) => value && set('loss')(value as LossName)}
             allowDeselect={false}
           />
         )}
       </SimpleGrid>
+
+      {lossScope && !frozen && (
+        <LossFields
+          values={values}
+          onChange={onChange}
+          errors={errors}
+          task={lossScope.task}
+          tuned={tuned}
+          searched={hybrid ? searchesNeural(values) : values.search}
+        />
+      )}
 
       {testFields}
 
@@ -465,6 +507,7 @@ export function SettingsForm({
                 validates={validates}
                 metrics={metrics}
                 hybrid={{ model: hybrid.model, frozen }}
+                task={task}
               />
             )}
           </div>
@@ -478,7 +521,13 @@ export function SettingsForm({
             onChange={(event) => set('search')(event.currentTarget.checked)}
           />
           {values.search && (
-            <SearchFields values={values} onChange={onChange} errors={errors} metrics={metrics} />
+            <SearchFields
+              values={values}
+              onChange={onChange}
+              errors={errors}
+              metrics={metrics}
+              task={task}
+            />
           )}
         </div>
       )}
@@ -565,12 +614,128 @@ const options = (values: number[], format: (value: number) => string) =>
 const LR_OPTIONS = options(LR_PRESETS, (v) => formatSetting('learning_rate', v));
 const BATCH_SIZE_OPTIONS = options(BATCH_SIZE_PRESETS, String);
 const WEIGHT_DECAY_OPTIONS = options(WEIGHT_DECAY_PRESETS, (v) => formatSetting('weight_decay', v));
+const FOCAL_GAMMA_OPTIONS = options(FOCAL_GAMMA_PRESETS, String);
+const LABEL_SMOOTHING_OPTIONS = options(LABEL_SMOOTHING_PRESETS, String);
+const HUBER_DELTA_OPTIONS = options(HUBER_DELTA_PRESETS, String);
 
 interface SearchFieldsProps {
   values: SettingsValues;
   onChange: (values: SettingsValues) => void;
   errors: SettingsErrors;
   metrics: MetricInfo[] | null;
+  /** The task whose losses a search can try (null: not known, no loss rows). */
+  task?: LossTask | null;
+}
+
+/**
+ * The settings of the losses the run uses: class weights, focal gamma, label smoothing and
+ * Huber's delta (those a search varies show that).
+ */
+function LossFields({
+  values,
+  onChange,
+  errors,
+  task,
+  tuned,
+  searched,
+}: {
+  values: SettingsValues;
+  onChange: (values: SettingsValues) => void;
+  errors: SettingsErrors;
+  task: LossTask;
+  tuned: ReturnType<typeof tunedSettings>;
+  /** Whether a search varies the training settings (a hybrid network's: its neural ones). */
+  searched: boolean;
+}) {
+  const losses = lossesInUse({ ...values, search: searched }, task);
+  const uses = (param: LossParam) => losses.some((name) => usesParam(param, name, task));
+  const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
+  const modes = classWeightModes(losses);
+  const mode = modes.some((option) => option.value === values.class_weights_mode)
+    ? values.class_weights_mode
+    : modes[0].value;
+  if (!(['class_weights', 'focal_gamma', 'label_smoothing', 'huber_delta'] as const).some(uses)) {
+    return null;
+  }
+  const pixels = task === 'segmentation';
+  return (
+    <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+      {uses('class_weights') && (
+        <Select
+          label="Class weights"
+          description={
+            mode === 'balanced'
+              ? `n / (k · count) from the ${pixels ? 'pixels of the training images' : 'training rows'}: an alternative to oversampling.`
+              : mode === 'custom'
+                ? 'One weight per class, or by class name.'
+                : 'Every class counts the same (alpha 1).'
+          }
+          data={modes}
+          value={mode}
+          onChange={(value) => value && update({ class_weights_mode: value as ClassWeightsMode })}
+          allowDeselect={false}
+        />
+      )}
+      {uses('class_weights') && mode === 'custom' && (
+        <TextInput
+          label="Weights"
+          placeholder="1, 10   or   fraud: 10, ok: 1"
+          description="Classes that are not named get 1."
+          value={values.class_weights_text}
+          onChange={(event) => update({ class_weights_text: event.currentTarget.value })}
+          error={errors.class_weights_text}
+        />
+      )}
+      {uses('focal_gamma') && (
+        <NumberInput
+          label="Focal gamma"
+          description="How much less well-classified samples count (0: the cross-entropy; 2 is usual)"
+          value={tuned.focal_gamma ? '' : values.focal_gamma}
+          placeholder={tuned.focal_gamma ? SEARCHED : undefined}
+          disabled={tuned.focal_gamma}
+          onChange={(value) => update({ focal_gamma: value })}
+          min={LIMITS.focal_gamma.min}
+          max={LIMITS.focal_gamma.max}
+          step={0.5}
+          decimalScale={3}
+          allowNegative={false}
+          error={errors.focal_gamma}
+        />
+      )}
+      {uses('label_smoothing') && (
+        <NumberInput
+          label="Label smoothing"
+          description="Share of the target spread over all classes (0 to 0.3): against overconfident predictions"
+          value={tuned.label_smoothing ? '' : values.label_smoothing}
+          placeholder={tuned.label_smoothing ? SEARCHED : undefined}
+          disabled={tuned.label_smoothing}
+          onChange={(value) => update({ label_smoothing: value })}
+          min={LIMITS.label_smoothing.min}
+          max={LIMITS.label_smoothing.max}
+          step={0.05}
+          decimalScale={3}
+          allowNegative={false}
+          error={errors.label_smoothing}
+        />
+      )}
+      {uses('huber_delta') && (
+        <NumberInput
+          label="Huber delta"
+          description="Where the loss turns from squared to linear, in standard deviations of the target"
+          value={tuned.huber_delta ? '' : values.huber_delta}
+          placeholder={tuned.huber_delta ? SEARCHED : undefined}
+          disabled={tuned.huber_delta}
+          onChange={(value) => update({ huber_delta: value })}
+          min={LIMITS.huber_delta.min}
+          max={LIMITS.huber_delta.max}
+          step={0.25}
+          decimalScale={3}
+          allowNegative={false}
+          error={errors.huber_delta}
+        />
+      )}
+    </SimpleGrid>
+  );
 }
 
 /** What ranks the trials; only the metrics the data allows (all while that is not known). */
@@ -601,10 +766,10 @@ function MetricField({
   );
 }
 
-function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) {
+function SearchFields({ values, onChange, errors, metrics, task = null }: SearchFieldsProps) {
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const grid = values.search_method === 'grid';
-  const trials = plannedTrials(values);
+  const trials = plannedTrials(values, task);
   const epochs = parseField(values.epochs);
   const requested = parseField(values.search_trials);
 
@@ -644,7 +809,7 @@ function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) 
           )}
         </Group>
 
-        <NeuralSearchRows values={values} onChange={onChange} errors={errors} />
+        <NeuralSearchRows values={values} onChange={onChange} errors={errors} task={task} />
 
         <MetricField
           values={values}
@@ -678,6 +843,7 @@ function NeuralSearchRows({
   onChange,
   errors,
   neural = false,
+  task = null,
 }: Omit<SearchFieldsProps, 'metrics'> & {
   /** Those of a hybrid network's neural layers (beside the parameters of its model). */
   neural?: boolean;
@@ -778,8 +944,87 @@ function NeuralSearchRows({
           error={errors.weight_decays}
         />
       </SearchRow>
+      {task && (
+        <SearchRow
+          label="Loss"
+          what={`${of}loss`}
+          checked={values.tune_loss}
+          onToggle={(checked) => update({ tune_loss: checked })}
+          fixed={
+            LOSS_OPTIONS[task].find((option) => option.value === effectiveLoss(values, task))
+              ?.label ?? '–'
+          }
+        >
+          <MultiSelect
+            aria-label="Losses to try"
+            data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
+            value={LOSS_OPTIONS[task]
+              .map((option) => option.value)
+              .filter((name) => values.losses.includes(name))}
+            onChange={(list) => update({ losses: list as LossName[] })}
+            error={errors.losses}
+          />
+        </SearchRow>
+      )}
+      {lossUses(values, task, 'focal_gamma') && (
+        <SearchRow
+          label="Focal gamma"
+          what={`${of}focal gamma`}
+          checked={values.tune_focal_gamma}
+          onToggle={(checked) => update({ tune_focal_gamma: checked })}
+          fixed={formatNumber(values.focal_gamma)}
+        >
+          <MultiSelect
+            aria-label="Focal gammas to try"
+            data={FOCAL_GAMMA_OPTIONS}
+            value={values.focal_gammas.map(String)}
+            onChange={(list) => update({ focal_gammas: numbers(list) })}
+            error={errors.focal_gammas}
+          />
+        </SearchRow>
+      )}
+      {lossUses(values, task, 'label_smoothing') && (
+        <SearchRow
+          label="Label smoothing"
+          what={`${of}label smoothing`}
+          checked={values.tune_label_smoothing}
+          onToggle={(checked) => update({ tune_label_smoothing: checked })}
+          fixed={formatNumber(values.label_smoothing)}
+        >
+          <MultiSelect
+            aria-label="Label smoothings to try"
+            data={LABEL_SMOOTHING_OPTIONS}
+            value={values.label_smoothings.map(String)}
+            onChange={(list) => update({ label_smoothings: numbers(list) })}
+            error={errors.label_smoothings}
+          />
+        </SearchRow>
+      )}
+      {lossUses(values, task, 'huber_delta') && (
+        <SearchRow
+          label="Huber delta"
+          what={`${of}Huber delta`}
+          checked={values.tune_huber_delta}
+          onToggle={(checked) => update({ tune_huber_delta: checked })}
+          fixed={formatNumber(values.huber_delta)}
+        >
+          <MultiSelect
+            aria-label="Huber deltas to try"
+            data={HUBER_DELTA_OPTIONS}
+            value={values.huber_deltas.map(String)}
+            onChange={(list) => update({ huber_deltas: numbers(list) })}
+            error={errors.huber_deltas}
+          />
+        </SearchRow>
+      )}
     </>
   );
+}
+
+/** A number field as text, "–" while it is empty or not a number. */
+function formatNumber(field: string | number) {
+  const value = parseField(field);
+  return typeof value === 'number' ? String(value) : '–';
 }
 
 /** "10 epochs". */
@@ -881,6 +1126,7 @@ function ClassicalSearchFields({
   validates,
   metrics,
   hybrid = null,
+  task = null,
 }: ClassicalSearchFieldsProps) {
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const grid = values.search_method === 'grid';
@@ -894,7 +1140,7 @@ function ClassicalSearchFields({
     });
   const neural = hybrid !== null && searchesNeural(values);
   const trials = hybrid
-    ? plannedHybridTrials(values, model)
+    ? plannedHybridTrials(values, model, task)
     : plannedClassicalTrials(values, model);
   const requested = parseField(values.search_trials);
   // The neural settings are compared on the validation rows (their features of the training
@@ -963,7 +1209,13 @@ function ClassicalSearchFields({
               onChange={(event) => update({ search_neural: event.currentTarget.checked })}
             />
             {neural && (
-              <NeuralSearchRows values={values} onChange={onChange} errors={errors} neural />
+              <NeuralSearchRows
+                values={values}
+                onChange={onChange}
+                errors={errors}
+                neural
+                task={task}
+              />
             )}
             <Text size="sm" fw={600}>
               {hybrid.model}

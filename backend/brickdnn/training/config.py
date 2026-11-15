@@ -7,12 +7,23 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .losses import (
+    FOCAL_GAMMA,
+    HUBER_DELTA,
+    LABEL_SMOOTHING,
+    LOSSES,
+    TASK_LOSSES,
+    LossError,
+    parse_class_weights,
+)
+
 OPTIMIZERS = ("adam", "adamw", "sgd")
 DEVICES = ("auto", "cpu", "cuda", "mps")
-# Loss of a segmentation: the cross-entropy of every pixel, or that plus a Dice term (one
-# minus the overlap of the predicted and the true area of each class), which helps when a
-# class covers only a few pixels. Other tasks do not use the setting.
-LOSSES = ("cross_entropy", "cross_entropy_dice")
+# The losses of neural networks per task are in losses.py: "auto" is the default of the
+# task (classification and segmentation: cross_entropy, regression: mse); a segmentation
+# can add a Dice term (cross_entropy_dice), which helps when a class covers only a few
+# pixels.
+SEGMENTATION_LOSSES = TASK_LOSSES["segmentation"]
 # Hybrid networks (neural layers before a classical model): how the neural layers learn the
 # features before the classical model is fitted on them. "pretrain": like a network of their
 # own, with a temporary linear head on the target (the normal epochs, optimizer, early
@@ -137,6 +148,13 @@ def _choice(data: dict[str, Any], name: str, label: str, default: str, options: 
     return value
 
 
+def _class_weights(value: Any) -> str | list[float] | dict[str, float] | None:
+    try:
+        return parse_class_weights(value)
+    except LossError as exc:
+        raise ConfigError(str(exc)) from None
+
+
 @dataclass
 class TrainingConfig:
     epochs: int = 10
@@ -162,8 +180,20 @@ class TrainingConfig:
     # Keep the weights of the epoch with the lowest validation loss (they are tested and
     # saved) instead of those of the last epoch.
     restore_best: bool = True
-    # Segmentation only (see LOSSES).
-    loss: str = "cross_entropy"
+    # The loss of a neural network (see losses.py): "auto" is the default of the task, and
+    # a run stores the loss it trains with.
+    loss: str = "auto"
+    # weighted_cross_entropy and focal: "balanced", a weight per class or {class: weight}
+    # (None: weighted_cross_entropy is balanced, focal has no weights).
+    class_weights: str | list[float] | dict[str, float] | None = None
+    # focal: how much the loss of well-classified samples is lowered (0: cross-entropy).
+    focal_gamma: float = 2.0
+    # cross_entropy and weighted_cross_entropy of a classification: the share of the target
+    # spread over all classes.
+    label_smoothing: float = 0.0
+    # huber: where the loss turns from squared to linear, in standard deviations of the
+    # target (the target is standardised).
+    huber_delta: float = 1.0
     # Hybrid networks only (see FEATURE_TRAINING).
     feature_training: str = "pretrain"
 
@@ -203,6 +233,12 @@ class TrainingConfig:
             patience=_int(data, "patience", "Patience", None, 1, 1000),
             restore_best=_bool(data, "restore_best", "Restore best weights", cls.restore_best),
             loss=_choice(data, "loss", "Loss", cls.loss, LOSSES),
+            class_weights=_class_weights(data.get("class_weights")),
+            focal_gamma=_float(data, "focal_gamma", "Focal gamma", cls.focal_gamma, *FOCAL_GAMMA),
+            label_smoothing=_float(
+                data, "label_smoothing", "Label smoothing", cls.label_smoothing, *LABEL_SMOOTHING
+            ),
+            huber_delta=_float(data, "huber_delta", "Huber delta", cls.huber_delta, *HUBER_DELTA),
             feature_training=_choice(
                 data,
                 "feature_training",
