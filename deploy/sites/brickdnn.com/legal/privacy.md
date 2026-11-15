@@ -1,11 +1,11 @@
 # Datenschutzerklärung
 
-Stand: 13. November 2026
+Stand: 15. November 2026
 
 ## 1. Verantwortlicher
 
 Alexander Kühling
-E-Mail: alexander.kuehling@gmx.net
+E-Mail: alexander.kuehling@brickdnn.com
 
 Anschrift: siehe [Impressum](/imprint).
 
@@ -17,7 +17,7 @@ Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammens
 
 - Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10). Technische Fehlerberichte gehen ohne Angaben zu Ihrer Person an den Dienst Sentry (Abschnitt 4).
 - E-Mails versendet die App nur zu Ihrem Konto (z. B. zum Bestätigen Ihrer Adresse oder Zurücksetzen des Passworts), keine Werbung und keine Newsletter (Abschnitt 5).
-- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank, den E-Mail-Versand bzw. die Fehlerüberwachung für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
+- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank, das E-Mail-Postfach, den E-Mail-Versand bzw. die Fehlerüberwachung für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Links zu anderen Seiten (z. B. GitHub oder „Buy me a coffee“) werden erst geladen, wenn Sie sie anklicken; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
 
 ## 3. Hosting
@@ -27,6 +27,8 @@ Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammens
 **Datenbank:** Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank des Anbieters Supabase Inc., in der Region London (Vereinigtes Königreich). Mit Supabase besteht ein Vertrag zur Auftragsverarbeitung (Data Processing Addendum) nach Art. 28 DSGVO. Für das Vereinigte Königreich hat die EU-Kommission festgestellt, dass dort ein angemessenes Datenschutzniveau besteht (Angemessenheitsbeschluss, Art. 45 DSGVO). Soweit Supabase oder seine Unterauftragnehmer Daten in andere Drittländer, etwa die USA, übermitteln, geschieht das auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO), die Teil dieses Vertrags sind.
 
 Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Dienstes) und lit. f (berechtigtes Interesse an einem sicheren, zuverlässigen Betrieb).
+
+**E-Mail-Postfach:** Wenn Sie mir an eine Adresse unter brickdnn.com schreiben (z. B. alexander.kuehling@brickdnn.com), liegt Ihre Nachricht mit Ihrer E-Mail-Adresse, Ihrem Namen und dem Inhalt in einem Postfach der Infomaniak Network SA in der Schweiz (Anschrift und Vertrag zur Auftragsverarbeitung wie beim Server oben). Ich verwende sie nur, um Ihre Anfrage zu beantworten, und lösche sie, wenn sie erledigt ist und keine gesetzlichen Aufbewahrungspflichten (z. B. für geschäftliche Korrespondenz) entgegenstehen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO, wenn es um Ihr Konto oder einen Vertrag geht, sonst lit. f (berechtigtes Interesse, Anfragen zu beantworten).
 
 ## 4. Aufruf der Website und Server-Logdateien
 
@@ -124,7 +126,7 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 
 Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21).
 
-Vieles können Sie selbst unter **Account** erledigen: E-Mail-Adresse ändern, **alle Ihre Daten als ZIP-Datei herunterladen** (maschinenlesbar, JSON und Ihre Dateien) und das **Konto löschen**. Für alles andere schreiben Sie an alexander.kuehling@gmx.net.
+Vieles können Sie selbst unter **Account** erledigen: E-Mail-Adresse ändern, **alle Ihre Daten als ZIP-Datei herunterladen** (maschinenlesbar, JSON und Ihre Dateien) und das **Konto löschen**. Für alles andere schreiben Sie an alexander.kuehling@brickdnn.com.
 
 Sie haben außerdem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren (Art. 77 DSGVO), insbesondere in dem Mitgliedstaat Ihres Aufenthaltsorts, Ihres Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes.
 

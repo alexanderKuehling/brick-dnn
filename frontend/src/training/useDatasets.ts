@@ -61,35 +61,8 @@ export function useDatasets(
     stop: stopProgress,
   } = useUploadProgress();
 
-  useEffect(() => {
-    session.current += 1;
-    version.current += 1;
-    if (!active) {
-      setDatasets(null);
-      setDatasetsError(null);
-      setUploading(null);
-      setUploadError(null);
-      busy.current = false;
-      // The upload belonged to the account that logged out.
-      running.current?.abort();
-      running.current = null;
-      stopProgress();
-    }
-  }, [active, stopProgress]);
-
-  const setSource = useCallback(
-    (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) => {
-      setSourceState((current) => (typeof update === 'function' ? update(current) : update));
-      setSelection((n) => n + 1);
-    },
-    []
-  );
-  useEffect(() => saveSource(source), [source]);
-
-  const reloadDatasets = useCallback(() => {
-    if (!active) {
-      return;
-    }
+  // Loads the list; a request that started before the next change of the list is ignored.
+  const loadList = useCallback(() => {
     const started = version.current;
     setDatasetsError(null);
     api.training.datasets
@@ -104,7 +77,45 @@ export function useDatasets(
           setDatasetsError(error.message);
         }
       });
-  }, [active]);
+  }, []);
+
+  useEffect(() => {
+    session.current += 1;
+    version.current += 1;
+    if (active) {
+      // Bumping the version drops every list request that started before, including one a
+      // child (the open setup view) started in this same commit, before this effect ran:
+      // effects of children run first. Without loading again here, the list would never
+      // arrive, e.g. when the panel opens from the Data tab while the training status (and
+      // with it `active`) is still loading.
+      loadList();
+    } else {
+      setDatasets(null);
+      setDatasetsError(null);
+      setUploading(null);
+      setUploadError(null);
+      busy.current = false;
+      // The upload belonged to the account that logged out.
+      running.current?.abort();
+      running.current = null;
+      stopProgress();
+    }
+  }, [active, stopProgress, loadList]);
+
+  const setSource = useCallback(
+    (update: SourceChoice | ((current: SourceChoice) => SourceChoice)) => {
+      setSourceState((current) => (typeof update === 'function' ? update(current) : update));
+      setSelection((n) => n + 1);
+    },
+    []
+  );
+  useEffect(() => saveSource(source), [source]);
+
+  const reloadDatasets = useCallback(() => {
+    if (active) {
+      loadList();
+    }
+  }, [active, loadList]);
 
   const upload = useCallback(
     (file: File) => {
