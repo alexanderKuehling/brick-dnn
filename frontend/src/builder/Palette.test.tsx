@@ -1,6 +1,7 @@
 import { render, screen, userEvent } from '@test-utils';
 import { vi } from 'vitest';
 import type { LayerCatalog } from '@/api/types';
+import { i18n } from '@/i18n';
 import { CLASSICAL_CATALOG } from './classicalFixtures';
 import { Palette } from './Palette';
 
@@ -26,6 +27,20 @@ describe('Palette', () => {
     await userEvent.type(screen.getByLabelText('Search layers'), 'lstm');
     expect(screen.queryByText('Linear')).not.toBeInTheDocument();
     expect(screen.getByText('LSTM')).toBeInTheDocument();
+  });
+
+  it('is in German, with the category names translated and the layer types kept', async () => {
+    await i18n.changeLanguage('de');
+    render(<Palette catalog={CLASSICAL_CATALOG} onAdd={() => {}} />);
+    expect(screen.getByLabelText('Schichten suchen')).toBeInTheDocument();
+    expect(screen.getByText('Neuronales Netz · PyTorch')).toBeInTheDocument();
+    expect(screen.getByText('Klassisch · scikit-learn')).toBeInTheDocument();
+    expect(screen.getByText('Klassische Modelle')).toBeInTheDocument();
+    expect(screen.getByText(/Kombinieren Sie sie mit Kernel-Summe/)).toBeInTheDocument();
+    expect(screen.getByText('Linear')).toBeInTheDocument();
+    // The search finds German category names too.
+    await userEvent.type(screen.getByLabelText('Schichten suchen'), 'faltung');
+    expect(screen.queryByText('Linear')).not.toBeInTheDocument();
   });
 
   it('has no family headings without classical bricks', () => {

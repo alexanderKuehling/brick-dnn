@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
 import { api, type GenerateOptions, type GraphDocument, type NetworkFamily } from '@/api';
+import { useTranslation } from '@/i18n';
 import { CodeView } from './CodeView';
 import { downloadText } from './download';
 import { semanticKey } from './graph';
@@ -43,6 +44,7 @@ export default function CodeModal({
   onOptionsChange,
   family = 'neural',
 }: CodeModalProps) {
+  const { t } = useTranslation();
   const classical = family === 'classical';
   const hybrid = family === 'hybrid';
   const [debounced] = useDebouncedValue(options, 300);
@@ -80,7 +82,11 @@ export default function CodeModal({
       opened={opened}
       onClose={onClose}
       title={
-        classical ? 'scikit-learn code' : hybrid ? 'PyTorch and scikit-learn code' : 'PyTorch code'
+        classical
+          ? t('builder.code.titleSklearn')
+          : hybrid
+            ? t('builder.code.titleHybrid')
+            : t('builder.code.titlePytorch')
       }
       size="xl"
       fullScreen={fullScreen}
@@ -97,7 +103,7 @@ export default function CodeModal({
         {/* A classical model is built by make_model(): there is no class to name. */}
         {!classical && (
           <TextInput
-            label="Class name"
+            label={t('builder.code.className')}
             value={options.class_name ?? ''}
             onChange={(event) =>
               onOptionsChange({ ...options, class_name: event.currentTarget.value })
@@ -106,14 +112,14 @@ export default function CodeModal({
           />
         )}
         <Switch
-          label="Runnable script (__main__)"
+          label={t('builder.code.runnable')}
           checked={options.include_main ?? true}
           onChange={(event) =>
             onOptionsChange({ ...options, include_main: event.currentTarget.checked })
           }
         />
         <Switch
-          label={classical ? 'Fit to a CSV file (--csv)' : 'CSV training loop'}
+          label={classical ? t('builder.code.fitCsv') : t('builder.code.csvLoop')}
           disabled={options.include_main === false}
           checked={options.include_training ?? true}
           onChange={(event) =>
@@ -123,10 +129,10 @@ export default function CodeModal({
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
         {classical
-          ? 'make_model() returns a scikit-learn pipeline that standardises the features. The script fits it to a CSV file, saves it with joblib (--save) and predicts new rows (--predict), also with a model trained in Brick DNN.'
+          ? t('builder.code.noteSklearn')
           : hybrid
-            ? 'The neural layers (FeatureExtractor) learn the features with a temporary linear head on the target, then make_model() is fitted on them. --csv trains both phases and saves the neural layers (--weights) and the classical model (--save); --predict uses both, also those of a model trained in Brick DNN.'
-            : 'The training loop is added for models with one flat input and one flat output (tabular data).'}
+            ? t('builder.code.noteHybrid')
+            : t('builder.code.notePytorch')}
       </Text>
 
       {error && (
@@ -152,7 +158,7 @@ export default function CodeModal({
 
       <Group justify="flex-end" mt="md">
         <Button variant="default" onClick={onClose}>
-          Close
+          {t('common.close')}
         </Button>
         <Button
           leftSection={<IconDownload size={16} />}
@@ -161,7 +167,7 @@ export default function CodeModal({
         >
           {/* One inline span: the button label is a flex box, which would drop the space. */}
           <span>
-            Download{' '}
+            {t('common.download')}{' '}
             <Box component="span" visibleFrom="xs">
               {filename}
             </Box>

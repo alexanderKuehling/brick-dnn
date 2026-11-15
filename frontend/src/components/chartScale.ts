@@ -1,3 +1,5 @@
+import { currentLocale } from '@/i18n';
+
 /** Scale and tick helpers for the small SVG charts (no chart library needed). */
 
 /** Round a raw step up to 1, 2 or 5 × 10^k. */
@@ -106,7 +108,13 @@ export function linearScale(
   return (value) => r0 + (value - d0) * k;
 }
 
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const compact = {
+  format: (value: number) =>
+    new Intl.NumberFormat(currentLocale(), {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value),
+};
 
 /**
  * Axis label for a tick: as many decimals as the step needs, compact from 1,000 up (1K, 2.5K)
@@ -119,7 +127,7 @@ export function formatTick(value: number, step: number): string {
     if (step >= unit / 10) {
       return compact.format(value);
     }
-    return value.toLocaleString('en-US', { maximumFractionDigits: stepDecimals(step) });
+    return value.toLocaleString(currentLocale(), { maximumFractionDigits: stepDecimals(step) });
   }
   const text = value.toFixed(stepDecimals(step));
   return text === '-0' ? '0' : text;

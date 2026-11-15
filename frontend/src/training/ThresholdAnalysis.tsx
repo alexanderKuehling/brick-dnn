@@ -22,6 +22,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import type { ClassificationEvaluation, ThresholdCurve } from '@/api';
 import { CurveChart } from '@/components/charts/CurveChart';
+import { currentLocale } from '@/i18n';
 import { formatPercent } from './format';
 import {
   DEFAULT_THRESHOLD,
@@ -63,7 +64,7 @@ export function curvesOf(evaluation: ClassificationEvaluation): {
 }
 
 function count(value: number): string {
-  return value.toLocaleString('en-US');
+  return value.toLocaleString(currentLocale());
 }
 
 export function ThresholdAnalysis({

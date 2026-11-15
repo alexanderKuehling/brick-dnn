@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunSummary, type TrainingStatus } from '@/api';
+import { useLanguage } from '@/i18n';
 import { isOwnRun, isRelevantRun, NO_SCOPE, otherStarter, type TrainingScope } from './access';
 import { isActive, resultText } from './format';
 import { showSupportHintOnce } from './supportHint';
@@ -293,6 +294,8 @@ export function useTraining(
   );
 
   // ---------------------------------------------------------------- capabilities
+  // Their descriptions come in the app's language: loaded again when it changes.
+  const language = useLanguage();
   useEffect(() => {
     const controller = new AbortController();
     setStatusError(null);
@@ -311,7 +314,7 @@ export function useTraining(
         );
       });
     return () => controller.abort();
-  }, [statusRequest]);
+  }, [statusRequest, language]);
 
   // ---------------------------------------------------------------- run list
   useEffect(() => {

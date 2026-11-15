@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **The app in German.** The language comes from the browser (German for `de*`, otherwise
+  English) and can be switched with *EN | DE* in the header, the phone menu and on the login
+  and sign-up pages; the choice is kept in the browser and, when logged in, on the account
+  (new field `UserProfile.language`, `language` in `GET /api/auth/me/`,
+  `PATCH /api/auth/account/language/`, optional `language` at sign-up), so it follows the user
+  to other devices. `<html lang>` follows it. The frontend uses i18next with typed keys,
+  plurals and interpolation (`frontend/src/i18n`); numbers and dates are written with `Intl`
+  (decimal comma in German, number fields included), while values sent to the API and the
+  generated code keep their point. Requests carry the app's language as `Accept-Language`:
+  the backend translates with gettext (`backend/locale/de`, compiled `.mo` committed,
+  `manage.py update_translations` keeps it up to date without GNU gettext) the descriptions
+  of layers, parameters, preparation steps, examples and training options, account and
+  sign-up messages (and Django's own), and the e-mails, which go out in the account's
+  language (else the request's, else English). The REST API without the header and the MCP
+  server stay English. Legal pages can have a translation `<page>.<language>.md`, and a page
+  with the sections `## English` and `## Deutsch` shows the one of the app's language. Tests
+  fail on a key missing in one language or a string without German translation. Not yet
+  translated: the Data tab beyond its catalogue, run results and charts, explanations, the
+  account, token, activity, approval, sharing, comment and billing pages, and messages the
+  server builds from data (network validation, training checks, readiness checks). See
+  docs/translations.md.
 - **Hybrid networks: a search of the neural training settings.** The hyperparameter search
   of a hybrid network can vary the learning rate, batch size, optimizer and weight decay of
   its neural layers (`tuning.neural_space`, the space of a network), alone or together with

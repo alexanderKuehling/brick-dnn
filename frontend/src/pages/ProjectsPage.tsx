@@ -38,16 +38,18 @@ import { api, type Project } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { projectDraft } from '@/builder/draft';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
-import { leaveProject, ROLE_LABELS } from '@/sharing/roles';
+import { currentLocale, useTranslation } from '@/i18n';
+import { leaveProject } from '@/sharing/roles';
 import { ShareDialog, type ShareTab } from '@/sharing/ShareDialog';
 
 type Tab = 'mine' | 'shared';
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function ProjectsPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const openInBuilder = useOpenInBuilder();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,32 +81,32 @@ export function ProjectsPage() {
   const createNew = () =>
     openInBuilder({
       doc: { version: 1, nodes: [], edges: [] },
-      name: 'Untitled network',
+      name: t('builder.untitled'),
       projectId: null,
     });
 
   const rename = (project: Project) => {
     let value = project.name;
     modals.openConfirmModal({
-      title: 'Rename network',
+      title: t('projects.renameTitle'),
       children: (
         <TextInput
           data-autofocus
-          label="Name"
+          label={t('training.settings.name')}
           defaultValue={project.name}
           onChange={(e) => {
             value = e.currentTarget.value;
           }}
         />
       ),
-      labels: { confirm: 'Save', cancel: 'Cancel' },
+      labels: { confirm: t('common.save'), cancel: t('common.cancel') },
       onConfirm: async () => {
         try {
           replaceProject(
             await api.projects.update(project.id, { name: value.trim() || project.name })
           );
         } catch (err) {
-          failed('Could not rename the network', err);
+          failed(t('projects.renameFailed'), err);
         }
       },
     });
@@ -118,43 +120,39 @@ export function ProjectsPage() {
         color: 'green',
         message:
           tab === 'mine'
-            ? `Created “${copy.name}”.`
-            : `Saved “${copy.name}” to your own networks (“Mine”).`,
+            ? t('projects.created', { name: copy.name })
+            : t('projects.savedToMine', { name: copy.name }),
       });
     } catch (err) {
-      failed('Could not duplicate the network', err);
+      failed(t('builder.page.duplicateFailed'), err);
     }
   };
 
   const remove = (project: Project) =>
     modals.openConfirmModal({
-      title: `Delete "${project.name}"?`,
+      title: t('projects.deleteTitle', { name: project.name }),
       children: (
         <Text size="sm">
-          {project.shared && 'Everyone you shared it with loses access too. '}This cannot be undone.
+          {project.shared ? t('projects.deleteShared') : t('projects.deleteText')}
         </Text>
       ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
           await api.projects.remove(project.id);
           dropProject(project.id);
         } catch (err) {
-          failed('Could not delete the network', err);
+          failed(t('projects.deleteFailed'), err);
         }
       },
     });
 
   const leave = (project: Project) =>
     modals.openConfirmModal({
-      title: `Leave “${project.name}”?`,
-      children: (
-        <Text size="sm">
-          You lose access to this network. Only {project.owner.username} can invite you again.
-        </Text>
-      ),
-      labels: { confirm: 'Leave', cancel: 'Cancel' },
+      title: t('projects.leaveTitle', { name: project.name }),
+      children: <Text size="sm">{t('projects.leaveText', { owner: project.owner.username })}</Text>,
+      labels: { confirm: t('projects.leave'), cancel: t('common.cancel') },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         if (!user) {
@@ -163,9 +161,9 @@ export function ProjectsPage() {
         try {
           await leaveProject(project.id, user.id);
           dropProject(project.id);
-          notifications.show({ message: `You left “${project.name}”.` });
+          notifications.show({ message: t('projects.left', { name: project.name }) });
         } catch (err) {
-          failed('Could not leave the network', err);
+          failed(t('projects.leaveFailed'), err);
         }
       },
     });
@@ -182,9 +180,7 @@ export function ProjectsPage() {
         {list?.length === 0 && (
           <Card withBorder p="xl" ta="center">
             <Text c="dimmed">
-              {value === 'mine'
-                ? 'You have not saved any networks yet. Build one in the editor and press “Save”.'
-                : 'Nobody has shared a network with you yet. When someone invites you, it appears here.'}
+              {value === 'mine' ? t('projects.emptyMine') : t('projects.emptyShared')}
             </Text>
           </Card>
         )}
@@ -218,9 +214,9 @@ export function ProjectsPage() {
   return (
     <Container size="lg" py="xl">
       <Group justify="space-between" mb="md">
-        <Title order={2}>My networks</Title>
+        <Title order={2}>{t('nav.myNetworks')}</Title>
         <Button leftSection={<IconPlus size={16} />} onClick={createNew}>
-          New network
+          {t('builder.toolbar.newNetwork')}
         </Button>
       </Group>
 
@@ -244,14 +240,14 @@ export function ProjectsPage() {
               leftSection={<IconFolder size={16} />}
               rightSection={count('mine')}
             >
-              Mine
+              {t('projects.mine')}
             </Tabs.Tab>
             <Tabs.Tab
               value="shared"
               leftSection={<IconUsers size={16} />}
               rightSection={count('shared')}
             >
-              Shared with me
+              {t('projects.sharedWithMe')}
             </Tabs.Tab>
           </Tabs.List>
           {panel('mine')}
@@ -289,6 +285,7 @@ interface ProjectCardProps {
 }
 
 function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
+  const { t } = useTranslation();
   const isOwner = project.role === 'owner';
   const changedBy = project.updated_by !== username ? project.updated_by : null;
   return (
@@ -299,27 +296,27 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
         </Text>
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
-            <ActionIcon variant="subtle" color="gray" aria-label="Network actions">
+            <ActionIcon variant="subtle" color="gray" aria-label={t('projects.actions')}>
               <IconDots size={16} />
             </ActionIcon>
           </Menu.Target>
           <Menu.Dropdown>
             <Menu.Item leftSection={<IconFolderOpen size={14} />} onClick={actions.onOpen}>
-              Open
+              {t('common.open')}
             </Menu.Item>
             <Menu.Item leftSection={<IconUsersPlus size={14} />} onClick={actions.onShare}>
-              Share…
+              {t('builder.toolbar.share')}
             </Menu.Item>
             <Menu.Item leftSection={<IconDatabase size={14} />} onClick={actions.onShowData}>
-              Shared data…
+              {t('projects.sharedData')}
             </Menu.Item>
             {project.role !== 'viewer' && (
               <Menu.Item leftSection={<IconPencil size={14} />} onClick={actions.onRename}>
-                Rename
+                {t('common.rename')}
               </Menu.Item>
             )}
             <Menu.Item leftSection={<IconCopyPlus size={14} />} onClick={actions.onDuplicate}>
-              Duplicate
+              {t('builder.inspector.duplicate')}
             </Menu.Item>
             <Menu.Divider />
             {isOwner ? (
@@ -328,7 +325,7 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
                 leftSection={<IconTrash size={14} />}
                 onClick={actions.onDelete}
               >
-                Delete
+                {t('common.delete')}
               </Menu.Item>
             ) : (
               <Menu.Item
@@ -336,7 +333,7 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
                 leftSection={<IconLogout size={14} />}
                 onClick={actions.onLeave}
               >
-                Leave
+                {t('projects.leave')}
               </Menu.Item>
             )}
           </Menu.Dropdown>
@@ -344,7 +341,7 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
       </Group>
       {!isOwner && (
         <Text size="sm" c="dimmed">
-          by {project.owner.username}
+          {t('projects.by', { user: project.owner.username })}
         </Text>
       )}
       <Group gap="xs" mt="xs">
@@ -355,24 +352,25 @@ function ProjectCard({ project, username, ...actions }: ProjectCardProps) {
             leftSection={project.role === 'editor' ? <IconEdit size={12} /> : <IconEye size={12} />}
             tt="none"
           >
-            {ROLE_LABELS[project.role]}
+            {t(`projects.roles.${project.role}`)}
           </Badge>
         )}
         <Badge variant="light" color={isOwner ? undefined : 'gray'}>
-          {project.num_layers} layers
+          {t('projects.layers', { count: project.num_layers })}
         </Badge>
         {isOwner && project.shared && (
           <Badge variant="outline" leftSection={<IconUsers size={12} />} tt="none">
-            Shared
+            {t('projects.shared')}
           </Badge>
         )}
       </Group>
       <Text size="xs" c="dimmed" mt="sm">
-        Updated {formatDate(project.updated_at)}
-        {changedBy && ` by ${changedBy}`}
+        {changedBy
+          ? t('projects.updatedBy', { date: formatDate(project.updated_at), user: changedBy })
+          : t('projects.updated', { date: formatDate(project.updated_at) })}
       </Text>
       <Button variant="light" fullWidth mt="md" onClick={actions.onOpen}>
-        Open in builder
+        {t('projects.openInBuilder')}
       </Button>
     </Card>
   );

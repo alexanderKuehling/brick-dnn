@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type ApiToken, type ApiTokenExpiry, type NewApiToken } from '@/api';
+import { currentLocale } from '@/i18n';
 import { McpSetup } from './McpSetup';
 import classes from './Tokens.module.css';
 
@@ -48,7 +49,7 @@ function expiryHint(value: string): string {
     return 'The token works until you revoke it.';
   }
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return `Expires on ${date.toLocaleDateString(undefined, { dateStyle: 'medium' })}.`;
+  return `Expires on ${date.toLocaleDateString(currentLocale(), { dateStyle: 'medium' })}.`;
 }
 
 /** Splits a 400 answer into messages for the form fields and the rest (if any). */

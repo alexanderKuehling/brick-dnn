@@ -7,6 +7,7 @@ import {
   type DataStatus,
   type StepCatalog,
 } from '@/api';
+import { useLanguage } from '@/i18n';
 
 export interface DataResources {
   /** What the server can do; null while loading. */
@@ -46,6 +47,8 @@ function put<T extends { id: number }>(list: T[] | null, item: T): T[] {
  */
 export function useDataResources(loggedIn: boolean): DataResources {
   const [status, setStatus] = useState<DataStatus | null>(null);
+  // The step descriptions come in the app's language.
+  const language = useLanguage();
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusRequest, setStatusRequest] = useState(0);
   const [catalog, setCatalog] = useState<StepCatalog | null>(null);
@@ -96,7 +99,7 @@ export function useDataResources(loggedIn: boolean): DataResources {
         }
       });
     return () => controller.abort();
-  }, [available, catalogRequest]);
+  }, [available, catalogRequest, language]);
 
   useEffect(() => {
     version.current += 1;

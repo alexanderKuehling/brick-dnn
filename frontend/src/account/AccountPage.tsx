@@ -31,6 +31,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { PlanSection } from '@/billing/PlanSection';
 import { useBillingInfo } from '@/billing/useBillingInfo';
 import { downloadBlob } from '@/builder/download';
+import { currentLocale } from '@/i18n';
 import { LegalLinks } from '@/legal/LegalLinks';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { formatBytes, formatDate } from '@/training/format';
@@ -39,7 +40,7 @@ import { fieldError } from './fieldError';
 import { TwoFactorSection } from './TwoFactorSection';
 
 function plural(count: number, word: string, words = `${word}s`): string {
-  return `${count.toLocaleString('en-US')} ${count === 1 ? word : words}`;
+  return `${count.toLocaleString(currentLocale())} ${count === 1 ? word : words}`;
 }
 
 /** "3 networks, 2 comments, 1 dataset …": what the server keeps for the account. */

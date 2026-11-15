@@ -30,6 +30,7 @@ import type {
 import { ChartFrame, GradientLegend } from '@/components/charts/ChartFrame';
 import { SEQUENTIAL, sequentialColor, textOn, useChartScheme } from '@/components/charts/colors';
 import { ScatterPlot } from '@/components/charts/ScatterPlot';
+import { currentLocale } from '@/i18n';
 import { formatMetric, formatPercent } from './format';
 import { ThresholdAnalysis } from './ThresholdAnalysis';
 import classes from './Training.module.css';
@@ -243,7 +244,7 @@ export function ConfusionMatrix({
                 {row.map((count, c) => {
                   const share = shares[r][c];
                   const fill = sequentialColor(share, scheme, true);
-                  const text = `True ${label(r)}, predicted ${label(c)}: ${count.toLocaleString('en-US')} (${formatPercent(share)} of ${label(r)})`;
+                  const text = `True ${label(r)}, predicted ${label(c)}: ${count.toLocaleString(currentLocale())} (${formatPercent(share)} of ${label(r)})`;
                   return (
                     <td
                       key={c}
@@ -252,7 +253,9 @@ export function ConfusionMatrix({
                       style={{ backgroundColor: fill, color: textOn(fill) }}
                       title={text}
                     >
-                      {mode === 'counts' ? count.toLocaleString('en-US') : formatPercent(share, 0)}
+                      {mode === 'counts'
+                        ? count.toLocaleString(currentLocale())
+                        : formatPercent(share, 0)}
                     </td>
                   );
                 })}
@@ -304,7 +307,7 @@ function ConfusedPairs({
                 <Table.Tr key={`${pair.true}-${pair.predicted}`}>
                   <Table.Td>{names[pair.true] ?? pair.true}</Table.Td>
                   <Table.Td>{names[pair.predicted] ?? pair.predicted}</Table.Td>
-                  <Table.Td ta="right">{pair.count.toLocaleString('en-US')}</Table.Td>
+                  <Table.Td ta="right">{pair.count.toLocaleString(currentLocale())}</Table.Td>
                   <Table.Td ta="right">
                     {support[pair.true] ? formatPercent(pair.count / support[pair.true]) : '–'}
                   </Table.Td>
@@ -435,7 +438,7 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
                 <Table.Td ta="right">{formatPercent(perClass.recall[index])}</Table.Td>
                 <Table.Td ta="right">{formatScore(perClass.f1[index])}</Table.Td>
                 <Table.Td ta="right">
-                  {(perClass.support[index] ?? 0).toLocaleString('en-US')}
+                  {(perClass.support[index] ?? 0).toLocaleString(currentLocale())}
                 </Table.Td>
               </Table.Tr>
             ))}
@@ -533,7 +536,8 @@ function ClassificationResults({
       </SimpleGrid>
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed">
-          {split.size.toLocaleString('en-US')} {ROW_LABELS[shown]} rows · {names.length} classes
+          {split.size.toLocaleString(currentLocale())} {ROW_LABELS[shown]} rows · {names.length}{' '}
+          classes
         </Text>
         <SplitPicker value={shown} onChange={setSplitKey} options={options} />
       </Group>
@@ -628,8 +632,8 @@ function RegressionResults({
           height={300}
           caption={
             points.actual.length < split.size
-              ? `${points.actual.length.toLocaleString('en-US')} of ${split.size.toLocaleString('en-US')} rows, evenly spaced.`
-              : `All ${split.size.toLocaleString('en-US')} rows.`
+              ? `${points.actual.length.toLocaleString(currentLocale())} of ${split.size.toLocaleString(currentLocale())} rows, evenly spaced.`
+              : `All ${split.size.toLocaleString(currentLocale())} rows.`
           }
         />
       )}

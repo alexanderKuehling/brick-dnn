@@ -53,6 +53,7 @@ import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import { ExplainHeadline } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
+import { currentLocale } from '@/i18n';
 import { AccountLink } from '@/usage/CostEstimate';
 import {
   canDeleteRun,
@@ -849,8 +850,8 @@ function RunProgress({
         {progress && (
           <>
             <Text size="xs" c="dimmed" mt="xs" mb={4}>
-              Step {progress.step.toLocaleString('en-US')} of{' '}
-              {progress.steps.toLocaleString('en-US')} in this epoch
+              Step {progress.step.toLocaleString(currentLocale())} of{' '}
+              {progress.steps.toLocaleString(currentLocale())} in this epoch
               {typeof progress.loss === 'number' && ` · loss ${formatMetric(progress.loss)}`}
             </Text>
             <Progress
@@ -1053,7 +1054,7 @@ function ClassicalResults({
   );
   const rows = fit?.rows ?? state?.train_size ?? null;
   const sizeText = (size: number | null | undefined) =>
-    typeof size === 'number' ? size.toLocaleString('en-US') : '–';
+    typeof size === 'number' ? size.toLocaleString(currentLocale()) : '–';
 
   const splits: { label: string; metrics: ClassicalMetrics | null; size: number | null }[] = [
     { label: 'Training', metrics: fit?.train ?? null, size: rows },
@@ -1481,7 +1482,8 @@ function TestResultCard({
     : classification
       ? formatPercent(result?.accuracy)
       : formatMetric(rmse ? result?.rmse : result?.loss);
-  const samples = size !== null ? `${size.toLocaleString('en-US')} test samples` : 'The test set';
+  const samples =
+    size !== null ? `${size.toLocaleString(currentLocale())} test samples` : 'The test set';
   let note: string;
   if (result) {
     const loss =

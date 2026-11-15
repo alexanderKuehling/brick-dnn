@@ -32,6 +32,7 @@ import {
   type GraphDocument,
   type RunDetail,
 } from '@/api';
+import { currentLocale } from '@/i18n';
 import {
   canDeleteRun,
   canSetThreshold,
@@ -457,7 +458,8 @@ function Comparison({ combined, task }: { combined: EnsembleState; task: string 
       </Table>
       <Text size="xs" c="dimmed">
         {[
-          typeof size === 'number' && `${size.toLocaleString('en-US')} rows, the same for all.`,
+          typeof size === 'number' &&
+            `${size.toLocaleString(currentLocale())} rows, the same for all.`,
           'The best value of each column is green.',
         ]
           .filter(Boolean)

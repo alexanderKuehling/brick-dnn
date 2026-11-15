@@ -122,6 +122,12 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   delete unused data automatically ([docs/privacy.md](docs/privacy.md)). Optional two-factor
   login with an authenticator app, and with an e-mail provider password reset, confirmed
   addresses and security notices ([docs/email.md](docs/email.md)).
+- **English and German**: the app starts in the browser's language and has a switch *EN | DE*
+  in the header and on the login pages; the choice is kept in the browser and on the account,
+  and decides the language of the e-mails too. Numbers and dates are written the German way
+  in German (generated code and API values keep their point); layer types, parameter names
+  and the code stay as they are. See [docs/translations.md](docs/translations.md), also for
+  adding a translation.
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
 - **A short guide** on the first visit (palette, connections, the analysis, code and export,
@@ -366,6 +372,7 @@ brick-dnn/
 │       ├── auth/            login state
 │       ├── account/         account page: e-mail, password, data export, deletion
 │       ├── legal/           imprint, privacy policy, terms of use (safe Markdown)
+│       ├── i18n/            languages: English and German texts, switch, number formats
 │       └── pages/           login, sign-up, saved networks
 ├── deploy/                  server setup (Docker Compose, Caddy), legal templates
 ├── docs/                    graph format, REST API, training, data, database, privacy, scaling

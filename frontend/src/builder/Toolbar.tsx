@@ -30,6 +30,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { Analysis, Example, RunSummary } from '@/api/types';
+import { useTranslation } from '@/i18n';
 import { LiveBadge } from '@/live/LiveBadge';
 import type { LiveIndicator } from '@/live/useLiveBuilder';
 import { PeopleAvatars } from '@/sharing/PeopleAvatars';
@@ -88,10 +89,11 @@ function Status({
   empty,
   onShowSummary,
 }: Pick<ToolbarProps, 'analysis' | 'analyzing' | 'analysisError' | 'empty' | 'onShowSummary'>) {
+  const { t } = useTranslation();
   if (empty) {
     return (
       <Badge color="gray" variant="light" tt="none" style={{ flexShrink: 0 }} data-tour="status">
-        Empty
+        {t('builder.toolbar.empty')}
       </Badge>
     );
   }
@@ -99,7 +101,7 @@ function Status({
     return (
       <Tooltip label={analysisError} multiline w={260}>
         <Badge color="red" variant="light" tt="none" style={{ flexShrink: 0 }} data-tour="status">
-          Server unreachable
+          {t('builder.toolbar.unreachable')}
         </Badge>
       </Tooltip>
     );
@@ -121,7 +123,7 @@ function Status({
       >
         {/* Phones keep the space for the network name: the check says it is valid. */}
         <Box component="span" visibleFrom="xs">
-          Valid ·{' '}
+          {t('builder.toolbar.valid')} ·{' '}
         </Box>
         {count}
       </Badge>
@@ -137,19 +139,20 @@ function Status({
       onClick={onShowSummary}
       data-tour="status"
     >
-      {count === 1 ? '1 problem' : `${count} problems`}
+      {t('builder.toolbar.problems', { count })}
     </Badge>
   );
 }
 
 export function Toolbar(props: ToolbarProps) {
+  const { t } = useTranslation();
   const { name, onNameChange, examples, saving, isSaved, readOnly = false, owner, people } = props;
   const family = networkFamily(props.analysis);
   const library =
     family === 'classical'
       ? 'scikit-learn'
       : family === 'hybrid'
-        ? 'PyTorch and scikit-learn'
+        ? t('builder.toolbar.pytorchAndSklearn')
         : 'PyTorch';
   const { onShare, onDuplicate, here = null, live = null } = props;
   const canSave = !readOnly && !live;
@@ -165,13 +168,13 @@ export function Toolbar(props: ToolbarProps) {
     >
       <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
         {!readOnly && (
-          <Tooltip label="Layers">
+          <Tooltip label={t('builder.toolbar.layers')}>
             <ActionIcon
               hiddenFrom="md"
               variant="default"
               size="lg"
               onClick={props.onOpenPalette}
-              aria-label="Show layers"
+              aria-label={t('builder.toolbar.showLayers')}
               data-tour="palette-button"
             >
               <IconLayoutSidebar size={18} />
@@ -179,7 +182,7 @@ export function Toolbar(props: ToolbarProps) {
           </Tooltip>
         )}
         <TextInput
-          aria-label="Network name"
+          aria-label={t('builder.toolbar.networkName')}
           value={name}
           onChange={(event) => onNameChange(event.currentTarget.value)}
           readOnly={readOnly}
@@ -194,7 +197,7 @@ export function Toolbar(props: ToolbarProps) {
         <Status {...props} />
         {readOnly && (
           <Tooltip
-            label={`${owner ? `Shared with you by ${owner}. ` : ''}You can view it, not change it.`}
+            label={owner ? t('builder.toolbar.sharedBy', { owner }) : t('builder.toolbar.viewOnly')}
             multiline
             w={240}
           >
@@ -224,37 +227,37 @@ export function Toolbar(props: ToolbarProps) {
           </Box>
         )}
         {onShare && (
-          <Tooltip label="Invite people or share a link">
+          <Tooltip label={t('builder.toolbar.inviteTooltip')}>
             <Button
               variant="default"
               leftSection={<IconUsersPlus size={16} />}
               onClick={onShare}
               visibleFrom="sm"
             >
-              Share
+              {t('builder.toolbar.shareButton')}
             </Button>
           </Tooltip>
         )}
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
             <Button variant="default" rightSection={<IconChevronDown size={14} />}>
-              File
+              {t('builder.toolbar.file')}
             </Button>
           </Menu.Target>
           {/* At most the height of the screen: the list of examples is longer than a phone. */}
           <Menu.Dropdown maw={360} mah="calc(100dvh - 5rem)" style={{ overflowY: 'auto' }}>
             <Menu.Item leftSection={<IconFilePlus size={16} />} onClick={props.onNew}>
-              New network
+              {t('builder.toolbar.newNetwork')}
             </Menu.Item>
             <Menu.Item leftSection={<IconFileImport size={16} />} onClick={props.onImport}>
-              Open JSON file…
+              {t('builder.toolbar.openJson')}
             </Menu.Item>
             <Menu.Item leftSection={<IconFileExport size={16} />} onClick={props.onExportJson}>
-              Save as JSON file
+              {t('builder.toolbar.saveJson')}
             </Menu.Item>
             {!readOnly && (
               <Menu.Item leftSection={<IconLayoutGrid size={16} />} onClick={props.onTidy}>
-                Tidy up layout
+                {t('builder.toolbar.tidy')}
               </Menu.Item>
             )}
             {canSave && (
@@ -263,7 +266,7 @@ export function Toolbar(props: ToolbarProps) {
                 leftSection={<IconDeviceFloppy size={16} />}
                 onClick={props.onSave}
               >
-                Save to account
+                {t('builder.toolbar.saveToAccount')}
               </Menu.Item>
             )}
             {readOnly && onDuplicate && (
@@ -272,7 +275,7 @@ export function Toolbar(props: ToolbarProps) {
                 leftSection={<IconCopyPlus size={16} />}
                 onClick={onDuplicate}
               >
-                Duplicate to my networks
+                {t('builder.toolbar.duplicate')}
               </Menu.Item>
             )}
             {onShare && (
@@ -281,7 +284,7 @@ export function Toolbar(props: ToolbarProps) {
                 leftSection={<IconUsersPlus size={16} />}
                 onClick={onShare}
               >
-                Share…
+                {t('builder.toolbar.share')}
               </Menu.Item>
             )}
             <Menu.Item
@@ -289,15 +292,15 @@ export function Toolbar(props: ToolbarProps) {
               leftSection={<IconCode size={16} />}
               onClick={props.onShowCode}
             >
-              View code
+              {t('builder.toolbar.viewCode')}
             </Menu.Item>
             {props.onShowGuide && (
               <Menu.Item leftSection={<IconHelp size={16} />} onClick={props.onShowGuide}>
-                Guide to the builder
+                {t('builder.toolbar.guide')}
               </Menu.Item>
             )}
             <Menu.Divider />
-            <Menu.Label>Examples</Menu.Label>
+            <Menu.Label>{t('builder.toolbar.examples')}</Menu.Label>
             {examples.map((example) => (
               <Menu.Item
                 key={example.id}
@@ -315,14 +318,16 @@ export function Toolbar(props: ToolbarProps) {
 
         {live && <LiveBadge indicator={live} />}
         {canSave && (
-          <Tooltip label={isSaved ? 'Saved to your account' : 'Save to your account (Ctrl+S)'}>
+          <Tooltip
+            label={isSaved ? t('builder.toolbar.savedTooltip') : t('builder.toolbar.saveTooltip')}
+          >
             <ActionIcon
               variant="default"
               size="lg"
               loading={saving}
               onClick={props.onSave}
               visibleFrom="sm"
-              aria-label="Save to account"
+              aria-label={t('builder.toolbar.saveToAccount')}
             >
               <IconDeviceFloppy size={18} />
             </ActionIcon>
@@ -330,23 +335,23 @@ export function Toolbar(props: ToolbarProps) {
         )}
         {readOnly && onDuplicate && (
           <>
-            <Tooltip label="Make a copy that you can change">
+            <Tooltip label={t('builder.toolbar.copyTooltip')}>
               <Button
                 variant="default"
                 leftSection={<IconCopyPlus size={16} />}
                 onClick={onDuplicate}
                 visibleFrom="sm"
               >
-                Duplicate to my networks
+                {t('builder.toolbar.duplicate')}
               </Button>
             </Tooltip>
-            <Tooltip label="Duplicate to my networks">
+            <Tooltip label={t('builder.toolbar.duplicate')}>
               <ActionIcon
                 variant="default"
                 size="lg"
                 onClick={onDuplicate}
                 hiddenFrom="sm"
-                aria-label="Duplicate to my networks"
+                aria-label={t('builder.toolbar.duplicate')}
               >
                 <IconCopyPlus size={18} />
               </ActionIcon>
@@ -360,39 +365,39 @@ export function Toolbar(props: ToolbarProps) {
           visibleFrom="sm"
           data-tour="code"
         >
-          Code
+          {t('builder.toolbar.code')}
         </Button>
         {!readOnly && <TrainButton run={props.trainingRun} onClick={props.onTrain} />}
-        <Tooltip label={`Download the ${library} script (Ctrl+E)`}>
+        <Tooltip label={t('builder.toolbar.downloadShortcut', { library })}>
           <Button
             leftSection={<IconDownload size={16} />}
             onClick={props.onExportPython}
             className={classes.exportLabelled}
             data-tour="export"
           >
-            Export .py
+            {t('builder.toolbar.export')}
           </Button>
         </Tooltip>
-        <Tooltip label={`Export .py: download the ${library} script`}>
+        <Tooltip label={t('builder.toolbar.exportTooltip', { library })}>
           <ActionIcon
             size="lg"
             onClick={props.onExportPython}
             className={classes.exportIcon}
-            aria-label={`Download the ${library} script`}
+            aria-label={t('builder.toolbar.download', { library })}
             data-tour="export-icon"
           >
             <IconDownload size={18} />
           </ActionIcon>
         </Tooltip>
         {props.onShowGuide && (
-          <Tooltip label="Guide to the builder">
+          <Tooltip label={t('builder.toolbar.guide')}>
             <ActionIcon
               variant="subtle"
               color="gray"
               size="lg"
               onClick={props.onShowGuide}
               visibleFrom="sm"
-              aria-label="Show the guide"
+              aria-label={t('builder.toolbar.showGuide')}
             >
               <IconHelp size={18} />
             </ActionIcon>
@@ -404,7 +409,7 @@ export function Toolbar(props: ToolbarProps) {
             variant="default"
             size="lg"
             onClick={props.onOpenInspector}
-            aria-label="Show properties"
+            aria-label={t('builder.toolbar.showProperties')}
           >
             <IconAdjustmentsHorizontal size={18} />
           </ActionIcon>
@@ -415,11 +420,12 @@ export function Toolbar(props: ToolbarProps) {
 }
 
 function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => void }) {
+  const { t } = useTranslation();
   const label = !run
-    ? 'Train this network on the server (Ctrl+Enter)'
+    ? t('builder.toolbar.trainTooltip')
     : run.status === 'queued'
       ? `“${run.name}”: ${queueText(run.queue)}`
-      : `Training “${run.name}”: ${progressLabel(run)}`;
+      : t('builder.toolbar.trainingRun', { name: run.name, progress: progressLabel(run) });
   return (
     <>
       <Tooltip label={label}>
@@ -430,7 +436,7 @@ function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => 
           visibleFrom="sm"
           data-tour="train"
         >
-          {run ? progressLabel(run) : 'Train'}
+          {run ? progressLabel(run) : t('builder.toolbar.train')}
         </Button>
       </Tooltip>
       <Tooltip label={label}>
@@ -439,7 +445,11 @@ function TrainButton({ run, onClick }: { run: RunSummary | null; onClick: () => 
           size="lg"
           onClick={onClick}
           hiddenFrom="sm"
-          aria-label={run ? `Training: ${progressLabel(run)}` : 'Train'}
+          aria-label={
+            run
+              ? t('builder.toolbar.trainingProgress', { progress: progressLabel(run) })
+              : t('builder.toolbar.train')
+          }
           data-tour="train-icon"
         >
           {run ? <Loader size={16} /> : <IconPlayerPlay size={18} />}

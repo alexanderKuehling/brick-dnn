@@ -34,6 +34,7 @@ import type { BuiltinDataset, Dataset, TrainingStatus } from '@/api';
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import type { UploadBytes } from '@/components/useUploadProgress';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { isOwnDataset } from './access';
 import { classShares, datasetDetails, formatSplit, segmentationNotes } from './format';
 import type { SourceChoice, SourceTab } from './settings';
@@ -58,41 +59,37 @@ interface DataSourcePickerProps {
   onDelete: (dataset: Dataset) => void;
 }
 
-const TABS: { value: SourceTab; label: string }[] = [
-  { value: 'random', label: 'Demo data' },
-  { value: 'builtin', label: 'Built-in' },
-  { value: 'upload', label: 'Your data' },
-];
+const TABS: SourceTab[] = ['random', 'builtin', 'upload'];
 
 export function DataSourcePicker(props: DataSourcePickerProps) {
+  const { t } = useTranslation();
   const { status, choice, onChange } = props;
 
   return (
     <Stack gap="xs">
       <SegmentedControl
         fullWidth
-        aria-label="Data source"
-        data={TABS}
+        aria-label={t('training.source.label')}
+        data={TABS.map((value) => ({ value, label: t(`training.source.tabs.${value}`) }))}
         value={choice.tab}
         onChange={(tab) => onChange({ ...choice, tab: tab as SourceTab })}
       />
 
       {choice.tab === 'random' && (
         <Text size="sm" c="dimmed">
-          Random inputs with a hidden rule to learn. Works with any network and shows whether it can
-          learn at all. Nothing is downloaded.
+          {t('training.source.random')}
         </Text>
       )}
 
       {choice.tab === 'builtin' && (
         <Radio.Group
-          label="Dataset"
+          label={t('training.source.dataset')}
           description={
             status.torchvision
               ? status.builtin_datasets.some((dataset) => dataset.download_mb === 0)
-                ? 'Downloaded to the server on first use, or generated there.'
-                : 'Downloaded to the server on first use.'
-              : 'Downloaded datasets need torchvision on the server.'
+                ? t('training.source.downloadedOrGenerated')
+                : t('training.source.downloaded')
+              : t('training.source.needsTorchvision')
           }
           value={choice.builtin}
           onChange={(id) => onChange({ ...choice, builtin: id })}
@@ -133,15 +130,24 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
 
 /** "60,000 training and 10,000 test images · 10 classes · 12 MB download". */
 function builtinDetails(dataset: BuiltinDataset): string {
-  const sizes =
-    `${dataset.train_size.toLocaleString('en-US')} training and ` +
-    `${dataset.test_size.toLocaleString('en-US')} test images`;
+  const sizes = i18n.t('training.source.sizes', {
+    train: dataset.train_size.toLocaleString(currentLocale()),
+    test: dataset.test_size.toLocaleString(currentLocale()),
+  });
   if (dataset.task === 'segmentation') {
     // Generated on the server: a class for every pixel.
     const classes = dataset.class_names.join(', ');
-    return `${sizes} with masks · ${dataset.num_classes} classes (${classes}) · no download`;
+    return i18n.t('training.source.segmentationDetails', {
+      sizes,
+      count: dataset.num_classes,
+      classes,
+    });
   }
-  return `${sizes} · ${dataset.num_classes} classes · ${dataset.download_mb} MB download`;
+  return i18n.t('training.source.details', {
+    sizes,
+    count: dataset.num_classes,
+    mb: dataset.download_mb.toLocaleString(currentLocale()),
+  });
 }
 
 /** How to pack images and masks for a segmentation dataset (shown on demand). */
@@ -456,8 +462,9 @@ function isPrepared(dataset: Dataset): boolean {
 /** Points to the Data tab, which turns messy CSV files into training data. */
 function DataTabHint() {
   // The panel is also shown without a router (e.g. in tests); then a plain link is used.
+  const { t } = useTranslation();
   const inRouter = useInRouterContext();
-  const text = 'Data tab';
+  const text = t('training.source.dataTab');
   return (
     <Group gap={6} wrap="nowrap" align="flex-start">
       <IconTableShortcut
@@ -467,7 +474,7 @@ function DataTabHint() {
         aria-hidden
       />
       <Text size="xs" c="dimmed">
-        Messy CSV? Clean, encode and analyse it in the{' '}
+        {t('training.source.messyCsv')}{' '}
         {inRouter ? (
           <Anchor component={Link} to="/data" size="xs">
             {text}

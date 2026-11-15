@@ -26,6 +26,8 @@ import type {
   TuningMethod,
   TuningMetric,
 } from '@/api';
+import { currentLanguage, currentLocale, i18n, useTranslation } from '@/i18n';
+import { numberSeparators } from '@/i18n/mantine';
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
   CLASSICAL_TUNABLES,
@@ -124,10 +126,26 @@ export interface HybridSettings {
   type?: string | null;
 }
 
+/**
+ * Select options with their labels in the current language
+ * (`training.settings.options.<group>.<value>`); options without a translation keep theirs.
+ */
+function optionsIn<T extends string>(
+  options: { value: T; label: string }[],
+  group: 'featureTraining' | 'loss'
+): { value: T; label: string }[] {
+  return options.map((option) => {
+    const key = `training.settings.options.${group}.${option.value}`;
+    return i18n.exists(key)
+      ? { ...option, label: String(i18n.t(key as 'training.settings.options.loss.cross_entropy')) }
+      : option;
+  });
+}
+
 /** Shown in the fixed fields while the search varies them. */
-const SEARCHED = 'Set by the search';
+const searched = () => i18n.t('training.settings.searched');
 /** The training settings of a hybrid network with frozen features. */
-const NOT_TRAINED = 'Not used: frozen features are not trained';
+const notTrained = () => i18n.t('training.settings.notTrained');
 
 export function SettingsForm({
   values,
@@ -145,6 +163,7 @@ export function SettingsForm({
   segmentation = null,
   metrics = null,
 }: SettingsFormProps) {
+  const { t } = useTranslation();
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
     <K extends keyof SettingsValues>(key: K) =>
@@ -161,7 +180,12 @@ export function SettingsForm({
 
   const automatic = devices.find((device) => device.id === defaultDevice)?.label;
   const deviceOptions = [
-    { value: 'auto', label: automatic ? `Automatic: ${automatic}` : 'Automatic' },
+    {
+      value: 'auto',
+      label: automatic
+        ? t('training.settings.automaticDevice', { device: automatic })
+        : t('training.settings.automatic'),
+    },
     ...devices.map((device) => ({ value: device.id, label: device.label })),
   ];
   const device = deviceOptions.some((option) => option.value === values.device)
@@ -177,7 +201,7 @@ export function SettingsForm({
 
   const nameField = (
     <TextInput
-      label="Name"
+      label={t('training.settings.name')}
       placeholder={namePlaceholder}
       value={name}
       onChange={(event) => onNameChange(event.currentTarget.value)}
@@ -186,13 +210,13 @@ export function SettingsForm({
   );
   const validationField = (
     <NumberInput
-      label="Validation split"
+      label={t('training.settings.valSplit')}
       description={
         validates
           ? undefined
           : classical
-            ? 'No validation data: the model is measured on the test rows only (without them, on its training rows).'
-            : 'No validation data: the last epoch is kept, no early stopping or search; scores only on test (or training) data.'
+            ? t('training.settings.noValClassical')
+            : t('training.settings.noVal')
       }
       value={fixedPercents ? fixedPercents[1] : values.val_split}
       disabled={fixed !== null}
@@ -209,15 +233,17 @@ export function SettingsForm({
   const testFields = (
     <div>
       <Switch
-        label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
+        label={
+          builtin && !fixed ? t('training.settings.officialTest') : t('training.settings.holdOut')
+        }
         description={
           fixed && segmentation
-            ? `This dataset brings its own split, the folders train, val and test: ${formatSplit(fixed)} images for training, validation and test. Training uses it as it is.`
+            ? t('training.settings.ownSplitImages', { split: formatSplit(fixed) })
             : fixed
-              ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
+              ? t('training.settings.ownSplitRows', { split: formatSplit(fixed) })
               : builtin
-                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
-                : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
+                ? t('training.settings.builtinTest')
+                : t('training.settings.testHint')
         }
         checked={testEnabled}
         disabled={fixed !== null || builtin}
@@ -226,7 +252,7 @@ export function SettingsForm({
       {testEnabled && (fixed !== null || !builtin) && (
         <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="xs">
           <NumberInput
-            label="Test split"
+            label={t('training.settings.testSplit')}
             value={fixedPercents ? fixedPercents[2] : values.test_split}
             disabled={fixed !== null}
             onChange={setNumber('test_split')}
@@ -245,29 +271,36 @@ export function SettingsForm({
   const maxRows = classical?.maxRows ?? null;
   const maxSamplesField = (
     <NumberInput
-      label="Max. samples"
+      label={t('training.settings.maxSamples')}
       description={
         classical
           ? maxRows !== null
-            ? `${classical.model} is fitted on at most ${maxRows.toLocaleString('en-US')} training rows on this server; larger training sets are subsampled.`
-            : 'Training rows to fit on (empty: all).'
+            ? t('training.settings.maxRowsHint', {
+                model: classical.model,
+                rows: maxRows.toLocaleString(currentLocale()),
+              })
+            : t('training.settings.maxSamplesHint')
           : undefined
       }
-      placeholder={maxRows !== null ? `All, up to ${maxRows.toLocaleString('en-US')}` : 'All'}
+      placeholder={
+        maxRows !== null
+          ? t('training.settings.allUpTo', { rows: maxRows.toLocaleString(currentLocale()) })
+          : t('training.settings.all')
+      }
       value={values.max_samples}
       onChange={setNumber('max_samples')}
       min={LIMITS.max_samples.min}
       max={maxRows ?? LIMITS.max_samples.max}
       allowDecimal={false}
       allowNegative={false}
-      thousandSeparator=","
+      thousandSeparator={numberSeparators(currentLanguage()).thousandSeparator}
       error={errors.max_samples}
     />
   );
   const seedField = (
     <NumberInput
-      label="Seed"
-      placeholder="Random"
+      label={t('training.settings.seed')}
+      placeholder={t('training.settings.random')}
       value={values.seed}
       onChange={setNumber('seed')}
       min={LIMITS.seed.min}
@@ -284,11 +317,9 @@ export function SettingsForm({
       <Stack gap="sm">
         {nameField}
         <Text size="xs" c="dimmed">
-          {classical.model} is fitted once with scikit-learn, on the CPU: only the split, the number
-          of rows and the seed apply
           {classical.optimisesKernel
-            ? '; the fit optimises the kernel hyperparameters itself.'
-            : '.'}
+            ? t('training.settings.classicalNoteKernel', { model: classical.model })
+            : t('training.settings.classicalNote', { model: classical.model })}
         </Text>
         <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
           {validationField}
@@ -299,8 +330,8 @@ export function SettingsForm({
         {type && (
           <div>
             <Switch
-              label="Hyperparameter search"
-              description="Fits the model several times with other values of its parameters and keeps the best one."
+              label={t('training.settings.search')}
+              description={t('training.settings.searchClassical')}
               checked={values.search}
               onChange={(event) => set('search')(event.currentTarget.checked)}
             />
@@ -326,23 +357,24 @@ export function SettingsForm({
       {hybrid && (
         <>
           <Text size="xs" c="dimmed">
-            Two phases: the neural layers learn{' '}
-            {hybrid.features !== null ? `${hybrid.features} features` : 'the features'} with a
-            temporary linear head on the target (the settings below), then {hybrid.model} is fitted
-            on the features of the training rows
-            {hybrid.maxRows !== null
-              ? ` (at most ${hybrid.maxRows.toLocaleString('en-US')} on this server)`
-              : ''}
-            .
+            {t(
+              hybrid.maxRows !== null
+                ? 'training.settings.hybridNoteMax'
+                : 'training.settings.hybridNote',
+              {
+                features:
+                  hybrid.features !== null
+                    ? t('training.settings.nFeatures', { count: hybrid.features })
+                    : t('training.settings.theFeatures'),
+                model: hybrid.model,
+                rows: hybrid.maxRows?.toLocaleString(currentLocale()) ?? '',
+              }
+            )}
           </Text>
           <Select
-            label="Features"
-            description={
-              frozen
-                ? 'The neural layers keep their random initial weights: nothing is trained, so the training settings (epochs, batch size, learning rate, optimizer, weight decay, early stopping) are not used.'
-                : undefined
-            }
-            data={FEATURE_TRAININGS}
+            label={t('training.settings.features')}
+            description={frozen ? t('training.settings.frozenHint') : undefined}
+            data={optionsIn(FEATURE_TRAININGS, 'featureTraining')}
             value={values.feature_training}
             onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
             allowDeselect={false}
@@ -351,13 +383,13 @@ export function SettingsForm({
       )}
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
         <NumberInput
-          label="Epochs"
+          label={t('training.settings.epochs')}
           description={
             frozen
-              ? 'Not used: the features stay random'
+              ? t('training.settings.epochsFrozen')
               : values.search && !hybrid
-                ? 'Per trial of the search'
-                : 'Passes over the training data'
+                ? t('training.settings.perTrial')
+                : t('training.settings.epochsHint')
           }
           disabled={frozen}
           value={values.epochs}
@@ -370,14 +402,16 @@ export function SettingsForm({
         />
         {segmentation ? (
           <NumberInput
-            label="Batch size"
+            label={t('training.settings.batchSize')}
             description={
               maxBatch !== null && maxBatch >= 1
-                ? `Images per optimizer step; up to ${maxBatch.toLocaleString('en-US')} fit into memory`
-                : 'Images per optimizer step (4 to 16 is usual for segmentation)'
+                ? t('training.settings.imagesPerStepMax', {
+                    max: maxBatch.toLocaleString(currentLocale()),
+                  })
+                : t('training.settings.imagesPerStep')
             }
             value={tuned.batch_size ? '' : values.segmentation_batch_size}
-            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            placeholder={tuned.batch_size ? searched() : undefined}
             disabled={tuned.batch_size || frozen}
             onChange={setNumber('segmentation_batch_size')}
             min={LIMITS.batch_size.min}
@@ -388,10 +422,10 @@ export function SettingsForm({
           />
         ) : (
           <NumberInput
-            label="Batch size"
-            description={frozen ? NOT_TRAINED : 'Samples per optimizer step'}
+            label={t('training.settings.batchSize')}
+            description={frozen ? notTrained() : t('training.settings.samplesPerStep')}
             value={tuned.batch_size ? '' : values.batch_size}
-            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            placeholder={tuned.batch_size ? searched() : undefined}
             disabled={tuned.batch_size || frozen}
             onChange={setNumber('batch_size')}
             min={LIMITS.batch_size.min}
@@ -402,10 +436,10 @@ export function SettingsForm({
           />
         )}
         <NumberInput
-          label="Learning rate"
-          description={frozen ? NOT_TRAINED : undefined}
+          label={t('training.settings.learningRate')}
+          description={frozen ? notTrained() : undefined}
           value={tuned.learning_rate ? '' : values.learning_rate}
-          placeholder={tuned.learning_rate ? SEARCHED : undefined}
+          placeholder={tuned.learning_rate ? searched() : undefined}
           disabled={tuned.learning_rate || frozen}
           onChange={setNumber('learning_rate')}
           min={0}
@@ -416,17 +450,17 @@ export function SettingsForm({
           error={errors.learning_rate}
         />
         <Select
-          label="Optimizer"
-          description={frozen ? NOT_TRAINED : undefined}
+          label={t('training.settings.optimizer')}
+          description={frozen ? notTrained() : undefined}
           data={OPTIMIZERS}
           value={tuned.optimizer ? null : values.optimizer}
-          placeholder={tuned.optimizer ? SEARCHED : undefined}
+          placeholder={tuned.optimizer ? searched() : undefined}
           disabled={tuned.optimizer || frozen}
           onChange={(value) => value && set('optimizer')(value as Optimizer)}
           allowDeselect={false}
         />
         <Select
-          label="Device"
+          label={t('training.settings.device')}
           data={deviceOptions}
           value={device}
           onChange={(value) => value && set('device')(value)}
@@ -435,9 +469,9 @@ export function SettingsForm({
         {validationField}
         {segmentation && (
           <Select
-            label="Loss"
-            description="The Dice term helps classes that cover only a few pixels"
-            data={LOSSES}
+            label={t('training.settings.loss')}
+            description={t('training.settings.lossHint')}
+            data={optionsIn(LOSSES, 'loss')}
             value={values.loss}
             onChange={(value) => value && set('loss')(value as SegmentationLoss)}
             allowDeselect={false}
@@ -451,8 +485,8 @@ export function SettingsForm({
         hybrid.type && (
           <div>
             <Switch
-              label="Hyperparameter search"
-              description={`Fits ${hybrid.model} several times with other values of its parameters on the features, and can learn the features again with other training settings in every trial; keeps the best trial.`}
+              label={t('training.settings.search')}
+              description={t('training.settings.searchHybrid', { model: hybrid.model })}
               checked={values.search}
               onChange={(event) => set('search')(event.currentTarget.checked)}
             />
@@ -472,8 +506,8 @@ export function SettingsForm({
       ) : (
         <div>
           <Switch
-            label="Hyperparameter search"
-            description="Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss)."
+            label={t('training.settings.search')}
+            description={t('training.settings.searchNeural')}
             checked={values.search}
             onChange={(event) => set('search')(event.currentTarget.checked)}
           />
@@ -492,16 +526,16 @@ export function SettingsForm({
         aria-expanded={advancedOpen}
         style={{ alignSelf: 'flex-start' }}
       >
-        Advanced settings
+        {t('training.settings.advanced')}
       </Button>
       <Collapse expanded={advancedOpen}>
         <Stack gap="sm">
           <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
             <NumberInput
-              label="Weight decay"
-              description={frozen ? NOT_TRAINED : undefined}
+              label={t('training.settings.weightDecay')}
+              description={frozen ? notTrained() : undefined}
               value={tuned.weight_decay ? '' : values.weight_decay}
-              placeholder={tuned.weight_decay ? SEARCHED : undefined}
+              placeholder={tuned.weight_decay ? searched() : undefined}
               disabled={tuned.weight_decay || frozen}
               onChange={setNumber('weight_decay')}
               min={LIMITS.weight_decay.min}
@@ -515,13 +549,9 @@ export function SettingsForm({
             {seedField}
           </SimpleGrid>
           <NumberInput
-            label="Early stopping"
-            description={
-              frozen
-                ? NOT_TRAINED
-                : 'Stop when the validation loss has not improved for this many epochs'
-            }
-            placeholder="Off"
+            label={t('training.settings.earlyStopping')}
+            description={frozen ? notTrained() : t('training.settings.earlyStoppingHint')}
+            placeholder={t('common.off')}
             disabled={frozen}
             value={values.patience}
             onChange={setNumber('patience')}
@@ -532,13 +562,13 @@ export function SettingsForm({
             error={errors.patience}
           />
           <Checkbox
-            label="Keep the weights of the best epoch"
+            label={t('training.settings.restoreBest')}
             description={
               frozen
-                ? NOT_TRAINED
+                ? notTrained()
                 : validates
-                  ? 'Test and save the weights with the lowest validation loss, not those of the last epoch.'
-                  : 'Not used without validation data: the weights of the last epoch are kept.'
+                  ? t('training.settings.restoreBestHint')
+                  : t('training.settings.restoreBestNoVal')
             }
             disabled={!validates || frozen}
             checked={values.restore_best && validates && !frozen}

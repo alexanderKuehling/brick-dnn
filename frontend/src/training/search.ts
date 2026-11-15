@@ -11,6 +11,7 @@ import type {
   TuningMetric,
   TuningRange,
 } from '@/api/types';
+import { currentLocale } from '@/i18n';
 
 // --------------------------------------------------------------------------
 // Objective metrics
@@ -150,7 +151,7 @@ export function formatMetricValue(
   if (metricInfo(name).percent) {
     return `${(value * 100).toFixed(1)}%`;
   }
-  return value.toLocaleString('en-US', { maximumSignificantDigits: 4 });
+  return value.toLocaleString(currentLocale(), { maximumSignificantDigits: 4 });
 }
 
 // --------------------------------------------------------------------------
@@ -353,7 +354,7 @@ function checkNumber(item: Tunable, value: number): string | null {
   const low = item.minExclusive ? value <= item.min : value < item.min;
   if (low || value > item.max) {
     const bound = item.minExclusive ? 'Greater than' : 'At least';
-    return `${bound} ${item.min.toLocaleString('en-US')}, at most ${item.max.toLocaleString('en-US')}`;
+    return `${bound} ${item.min.toLocaleString(currentLocale())}, at most ${item.max.toLocaleString(currentLocale())}`;
   }
   return null;
 }

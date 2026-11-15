@@ -15,6 +15,7 @@ import {
   Text,
 } from '@mantine/core';
 import { api, type Plan, type Usage } from '@/api';
+import { currentLocale } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import { BudgetEditor } from './BudgetEditor';
 import { formatCpu, formatMoney, formatResetDate, usageColor, usagePercent } from './format';
@@ -82,7 +83,7 @@ export function planLimits(plan: Plan): string {
       ? `${formatHours(plan.cpu_hours_per_month)} per month`
       : 'unlimited compute',
     plan.storage_gb !== null
-      ? `${plan.storage_gb.toLocaleString('en-US')} GB`
+      ? `${plan.storage_gb.toLocaleString(currentLocale())} GB`
       : 'unlimited storage',
   ];
   if (plan.cpu_minutes_per_run !== null) {
@@ -96,7 +97,7 @@ export function planLimits(plan: Plan): string {
 }
 
 function formatHours(hours: number): string {
-  return `${hours.toLocaleString('en-US', { maximumFractionDigits: 2 })} CPU h`;
+  return `${hours.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })} CPU h`;
 }
 
 function planPrice(plan: Plan): string {
@@ -110,7 +111,7 @@ function planPrice(plan: Plan): string {
 function otherPlan(plan: Plan): string {
   const limits = [
     plan.cpu_hours_per_month !== null ? formatHours(plan.cpu_hours_per_month) : 'unlimited',
-    plan.storage_gb !== null ? `${plan.storage_gb.toLocaleString('en-US')} GB` : null,
+    plan.storage_gb !== null ? `${plan.storage_gb.toLocaleString(currentLocale())} GB` : null,
   ].filter(Boolean);
   const price = planPrice(plan);
   return `${plan.name}${price ? ` (${price})` : ''}: ${limits.join(', ')}`;

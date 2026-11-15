@@ -5,6 +5,7 @@
  */
 import type { CompatibilityFix, GraphDocument, LayerSpec, Params } from '@/api/types';
 import { defaultParams, edgeId, LAYER_SPACING_X, newId } from '@/builder/graph';
+import { currentLocale } from '@/i18n';
 import type { EffectiveSource } from './settings';
 
 /** The parameters a fix may change without asking: the Input's data and the last layer's size. */
@@ -29,7 +30,7 @@ export function onlyInputAndOutput(fixes: CompatibilityFix[]): boolean {
 }
 
 const plural = (n: number, word: string) =>
-  `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
+  `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : 's'}`;
 
 /** "4 features", "3,072 values" (flat images), "1×28×28". */
 export function describeShape(shape: number[], images: boolean): string {

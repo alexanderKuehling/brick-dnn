@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
+import { i18n } from '@/i18n';
 import { loadDraft, saveDraft, type Draft } from './draft';
 
 /**
@@ -23,13 +24,13 @@ export function useOpenInBuilder(): (draft: Draft) => void {
         return;
       }
       modals.openConfirmModal({
-        title: 'Replace the network in the builder?',
+        title: i18n.t('builder.page.replaceInBuilder'),
         children: (
           <Text size="sm">
-            “{current.name}” is currently open in the builder. Unsaved changes to it will be lost.
+            {i18n.t('builder.page.replaceInBuilderText', { name: current.name })}
           </Text>
         ),
-        labels: { confirm: 'Replace', cancel: 'Cancel' },
+        labels: { confirm: i18n.t('builder.page.replace'), cancel: i18n.t('common.cancel') },
         onConfirm: replace,
       });
     },

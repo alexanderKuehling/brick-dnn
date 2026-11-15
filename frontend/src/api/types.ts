@@ -188,6 +188,8 @@ export interface User {
   username: string;
   email: string;
   date_joined: string;
+  /** The language saved on the account ("en", "de"); "" or missing: none chosen yet. */
+  language?: string;
 }
 
 export interface Tokens {

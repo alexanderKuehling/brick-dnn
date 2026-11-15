@@ -11,6 +11,7 @@ import {
 import { Panel } from '@xyflow/react';
 import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 import type { Analysis, LayerSpec } from '@/api/types';
+import { currentLocale, useTranslation } from '@/i18n';
 import { formatShape } from './format';
 import { flowSteps, paramFormula, shapeChange, type FlowStep, type Link } from './learning';
 
@@ -130,7 +131,7 @@ function StepCard({
         step.params !== null &&
         step.params > 0 && (
           <Text size="xs" ff="monospace">
-            {step.params.toLocaleString('en-US')} parameters
+            {step.params.toLocaleString(currentLocale())} parameters
           </Text>
         )
       )}
@@ -151,6 +152,7 @@ interface DataFlowTourProps {
  * Shown on the canvas; selecting a step centres its brick. Needs no server.
  */
 export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTourProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -187,7 +189,7 @@ export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTour
   if (!open) {
     return (
       <Panel position="bottom-center">
-        <Tooltip label="Follow one sample through the network, brick by brick">
+        <Tooltip label={t('builder.flow.tooltip')}>
           <Button
             size="xs"
             variant="default"
@@ -197,7 +199,7 @@ export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTour
               setOpen(true);
             }}
           >
-            How data flows
+            {t('builder.flow.title')}
           </Button>
         </Tooltip>
       </Panel>
@@ -215,18 +217,18 @@ export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTour
         p="sm"
         w={{ base: 'calc(100vw - 32px)', xs: 420 }}
         role="region"
-        aria-label="How data flows"
+        aria-label={t('builder.flow.title')}
       >
         <Stack gap="xs">
           <Group justify="space-between" wrap="nowrap">
             <Text size="xs" c="dimmed">
-              Step {index + 1} of {steps.length} · one sample, without the batch dimension
+              {t('builder.flow.step', { step: index + 1, count: steps.length })}
             </Text>
             <ActionIcon
               variant="subtle"
               color="gray"
               size="sm"
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={() => setOpen(false)}
             >
               <IconX size={14} />
@@ -241,11 +243,11 @@ export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTour
               disabled={index === 0}
               onClick={() => go(index - 1)}
             >
-              Back
+              {t('common.back')}
             </Button>
             <ActionIcon
               variant="light"
-              aria-label={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? t('builder.flow.pause') : t('builder.flow.play')}
               onClick={() => {
                 if (!playing && index + 1 >= steps.length) {
                   setIndex(0);
@@ -261,7 +263,7 @@ export function DataFlowTour({ analysis, specs, links, focusNode }: DataFlowTour
               disabled={index + 1 >= steps.length}
               onClick={() => go(index + 1)}
             >
-              Next
+              {t('common.next')}
             </Button>
           </Group>
         </Stack>

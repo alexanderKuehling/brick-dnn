@@ -28,6 +28,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import type { Analysis, GraphDocument } from '@/api';
+import { Trans, useTranslation } from '@/i18n';
 import { canTrain, otherStarter, trainingProject, type RunFilter } from './access';
 import { canStartTraining, trainingFamily, unavailableReason, type Family } from './classical';
 import { HistoryView } from './HistoryView';
@@ -74,6 +75,7 @@ export interface TrainingDrawerProps {
 }
 
 export default function TrainingDrawer(props: TrainingDrawerProps) {
+  const { t } = useTranslation();
   const { training } = props;
   const theme = useMantineTheme();
   const phone = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
@@ -100,17 +102,22 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
           <Drawer.Title>
             <Group gap="xs">
               {trainable ? <IconPlayerPlay size={18} /> : <IconHistory size={18} />}
-              <Text fw={600}>{trainable ? 'Train this network' : 'Trainings of this network'}</Text>
+              <Text fw={600}>
+                {trainable ? t('training.drawer.title') : t('training.drawer.titleRuns')}
+              </Text>
             </Group>
           </Drawer.Title>
           <Group gap={4} wrap="nowrap">
             {!phone && (
-              <Tooltip label={wide ? 'Back to the side panel' : 'Full width'} position="bottom">
+              <Tooltip
+                label={wide ? t('training.drawer.sidePanel') : t('training.drawer.fullWidth')}
+                position="bottom"
+              >
                 <ActionIcon
                   variant="subtle"
                   color="gray"
                   size="lg"
-                  aria-label="Full width"
+                  aria-label={t('training.drawer.fullWidth')}
                   aria-pressed={wide}
                   onClick={toggleWide}
                 >
@@ -143,6 +150,7 @@ function DrawerContent({
   filter,
   onFilterChange,
 }: TrainingDrawerProps & { filter: RunFilter; onFilterChange: (filter: RunFilter) => void }) {
+  const { t } = useTranslation();
   const { status, statusError, scope } = training;
   // Viewers of the network see its runs, but cannot start trainings in it.
   const trainable = canTrain(scope);
@@ -151,7 +159,11 @@ function DrawerContent({
 
   if (!status) {
     return statusError ? (
-      <Alert color="red" icon={<IconPlugConnectedX size={18} />} title="Training is not available">
+      <Alert
+        color="red"
+        icon={<IconPlugConnectedX size={18} />}
+        title={t('training.drawer.unavailable')}
+      >
         <Text size="sm">{statusError}</Text>
         <Button
           size="compact-sm"
@@ -160,7 +172,7 @@ function DrawerContent({
           mt="xs"
           onClick={training.reloadStatus}
         >
-          Try again
+          {t('common.retry')}
         </Button>
       </Alert>
     ) : (
@@ -189,12 +201,11 @@ function DrawerContent({
           <ThemeIcon size={48} radius="xl" variant="light">
             <IconLock size={24} />
           </ThemeIcon>
-          <Title order={4}>Log in to train</Title>
+          <Title order={4}>{t('training.drawer.loginTitle')}</Title>
           <Text size="sm" c="dimmed" maw={380}>
-            Training runs on the Brick DNN server and needs a free account, just like saving. Your
-            network stays on the canvas while you log in.
+            {t('training.drawer.loginText')}
           </Text>
-          <Button onClick={onLogin}>Log in</Button>
+          <Button onClick={onLogin}>{t('auth.logIn')}</Button>
         </Stack>
       </Stack>
     );
@@ -210,7 +221,7 @@ function DrawerContent({
       <Tabs.List mb="md">
         {trainable && (
           <Tabs.Tab value="setup" leftSection={<IconPlayerPlay size={14} />}>
-            New training
+            {t('training.drawer.newTraining')}
           </Tabs.Tab>
         )}
         <Tabs.Tab
@@ -218,7 +229,7 @@ function DrawerContent({
           leftSection={<IconHistory size={14} />}
           rightSection={training.activeRun ? <Loader size={10} /> : undefined}
         >
-          Runs
+          {t('training.drawer.runs')}
         </Tabs.Tab>
       </Tabs.List>
 
@@ -266,8 +277,7 @@ function DrawerContent({
               aria-hidden
             />
             <Text size="xs" c="dimmed">
-              You can view this network: you see how it was trained, but cannot start trainings in
-              it. To train it yourself, duplicate it.
+              {t('training.drawer.viewerNote')}
             </Text>
           </Group>
         )}
@@ -298,17 +308,22 @@ function SelectedRun({
   doc,
   onLoadNetwork,
 }: Pick<TrainingDrawerProps, 'training' | 'doc' | 'onLoadNetwork'>) {
+  const { t } = useTranslation();
   const { detail, detailError } = training;
   if (!detail) {
     return detailError ? (
-      <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot load the training">
+      <Alert
+        color="red"
+        icon={<IconAlertTriangle size={18} />}
+        title={t('training.drawer.cannotLoad')}
+      >
         <Text size="sm">{detailError}</Text>
         <Group gap="xs" mt="xs">
           <Button size="compact-sm" variant="light" color="red" onClick={training.retryDetail}>
-            Try again
+            {t('common.retry')}
           </Button>
           <Button size="compact-sm" variant="subtle" color="gray" onClick={training.showHistory}>
-            All runs
+            {t('training.drawer.allRuns')}
           </Button>
         </Group>
       </Alert>
@@ -322,7 +337,7 @@ function SelectedRun({
     <Stack gap="xs">
       {detailError && (
         <Alert color="yellow" icon={<IconPlugConnectedX size={18} />}>
-          Lost the connection to the server ({detailError}). Retrying …
+          {t('training.drawer.lostConnection', { error: detailError })}
         </Alert>
       )}
       <RunView
@@ -357,6 +372,7 @@ function Unavailable({
   torchMissing?: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   // A hybrid network needs both: PyTorch for its neural layers, scikit-learn for its model.
   const hybridWithoutSklearn = family === 'hybrid' && sklearnMissing && !torchMissing;
   if ((family === 'classical' || hybridWithoutSklearn) && !disabled) {
@@ -365,31 +381,26 @@ function Unavailable({
         <Alert
           color="yellow"
           icon={<IconAlertTriangle size={18} />}
-          title="Training is not available"
+          title={t('training.drawer.unavailable')}
         >
-          {reason ?? 'scikit-learn is not installed on the server.'}
+          {reason ?? t('training.drawer.noSklearn')}
         </Alert>
         <Stack gap="xs">
           {hybridWithoutSklearn ? (
             <Text size="sm">
-              This network is hybrid: its neural layers learn the features with PyTorch, which is
-              installed, and its classical model is fitted on them with scikit-learn, which is
-              missing on the machine of the Brick DNN backend. In the <Code>backend</Code> folder,
-              with the virtual environment active:
+              <Trans i18nKey="training.drawer.hybridNoSklearn" components={{ code: <Code /> }} />
             </Text>
           ) : (
             <Text size="sm">
-              Classical models (Gaussian processes, SVMs, gradient boosting) are fitted with
-              scikit-learn on the machine of the Brick DNN backend; they do not need PyTorch. In the{' '}
-              <Code>backend</Code> folder, with the virtual environment active:
+              <Trans i18nKey="training.drawer.classicalNoSklearn" components={{ code: <Code /> }} />
             </Text>
           )}
           <Code block>pip install -r requirements.txt</Code>
           <Text size="sm" c="dimmed">
-            The Docker image includes scikit-learn. Restart the backend and check again.
+            {t('training.drawer.dockerSklearn')}
           </Text>
           <Button variant="light" onClick={onRetry} style={{ alignSelf: 'flex-start' }}>
-            Check again
+            {t('training.drawer.checkAgain')}
           </Button>
         </Stack>
       </Stack>
@@ -400,24 +411,18 @@ function Unavailable({
       <Alert
         color={disabled ? 'gray' : 'yellow'}
         icon={<IconAlertTriangle size={18} />}
-        title="Training is not available"
+        title={t('training.drawer.unavailable')}
       >
-        {reason ??
-          (disabled
-            ? 'Training is disabled on this server.'
-            : 'PyTorch is not installed on the server.')}
+        {reason ?? (disabled ? t('training.drawer.disabled') : t('training.drawer.noTorch'))}
       </Alert>
       {!disabled && (
         <Stack gap="xs">
-          <Text size="sm">
-            Training runs on the machine of the Brick DNN backend and needs PyTorch there. To
-            install it:
-          </Text>
+          <Text size="sm">{t('training.drawer.needsTorch')}</Text>
           <Text size="sm" fw={600}>
-            Local installation
+            {t('training.drawer.local')}
           </Text>
           <Text size="sm" c="dimmed">
-            In the <Code>backend</Code> folder, with the virtual environment active:
+            <Trans i18nKey="training.drawer.inBackend" components={{ code: <Code /> }} />
           </Text>
           <Code block>pip install torch torchvision</Code>
           <Text size="sm" fw={600}>
@@ -426,16 +431,14 @@ function Unavailable({
           <Code block>BRICKDNN_INSTALL_TORCH=true docker compose up -d --build</Code>
           {family === 'hybrid' && sklearnMissing && (
             <Text size="sm">
-              This hybrid network also needs scikit-learn for its classical model:{' '}
-              <Code>pip install -r requirements.txt</Code> in the <Code>backend</Code> folder (the
-              Docker image includes it).
+              <Trans i18nKey="training.drawer.hybridAlso" components={{ code: <Code /> }} />
             </Text>
           )}
           <Text size="sm" c="dimmed">
-            Then restart the backend and check again.
+            {t('training.drawer.restart')}
           </Text>
           <Button variant="light" onClick={onRetry} style={{ alignSelf: 'flex-start' }}>
-            Check again
+            {t('training.drawer.checkAgain')}
           </Button>
         </Stack>
       )}

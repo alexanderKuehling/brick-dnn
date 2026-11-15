@@ -3,6 +3,7 @@ import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type Compatibility, type CostEstimate, type ProjectRole } from '@/api';
+import { i18n } from '@/i18n';
 import { NO_SCOPE, type TrainingScope } from './access';
 import { ANALYSIS, dataset, detail, DOC, searchDetail, STATUS, summary, TUNING } from './fixtures';
 import { DEFAULT_SETTINGS, DEFAULT_SOURCE, saveSettings } from './settings';
@@ -225,6 +226,31 @@ describe('TrainingDrawer', () => {
       config: expect.objectContaining({ epochs: 10, batch_size: 64, optimizer: 'adam' }),
     });
     expect(training.applyRun).toHaveBeenCalledWith(created);
+  });
+
+  it('is in German when German is chosen, with German numbers but English values sent', async () => {
+    await i18n.changeLanguage('de');
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    const created = detail({ status: 'starting' });
+    vi.mocked(api.training.runs.create).mockResolvedValue(created);
+    renderDrawer();
+
+    expect(await screen.findByRole('tab', { name: 'Neues Training' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Läufe' })).toBeInTheDocument();
+    expect(await screen.findByText('Bereit zum Training')).toBeInTheDocument();
+    expect(screen.getByLabelText('Epochen')).toHaveValue('10');
+    expect(screen.getByLabelText('Batchgröße')).toBeInTheDocument();
+    // The learning rate shows a decimal comma …
+    expect(screen.getByLabelText('Lernrate')).toHaveValue('0,001');
+    const start = screen.getByRole('button', { name: 'Training starten' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.click(start);
+    // … but the API gets numbers.
+    expect(api.training.runs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ learning_rate: 0.001, epochs: 10 }),
+      })
+    );
   });
 
   it('offers to open the running training when the server is busy', async () => {

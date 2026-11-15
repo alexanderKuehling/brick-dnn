@@ -1,11 +1,12 @@
 /** Formatting of sample values and column facts for the data table. */
 import type { ColumnKind } from '@/api/types';
+import { currentLocale } from '@/i18n';
 
 const NBSP = ' ';
 
 /** 1234567 → "1,234,567". */
 export function formatCount(value: number): string {
-  return value.toLocaleString('en-US');
+  return value.toLocaleString(currentLocale());
 }
 
 /**
@@ -21,9 +22,9 @@ export function formatNumber(value: number): string {
     return value.toExponential(3).replace(/\.?0+e/, 'e');
   }
   if (Number.isInteger(value)) {
-    return value.toLocaleString('en-US');
+    return value.toLocaleString(currentLocale());
   }
-  return value.toLocaleString('en-US', {
+  return value.toLocaleString(currentLocale(), {
     maximumSignificantDigits: Math.max(6, Math.floor(Math.log10(magnitude)) + 3),
   });
 }

@@ -12,6 +12,7 @@ import type {
   TuningMetric,
   TuningSpace,
 } from '@/api/types';
+import { currentLocale } from '@/i18n';
 import { isOwnDataset } from './access';
 import {
   CLASSICAL_TUNABLES,
@@ -263,7 +264,7 @@ function wholeNumber(
     return 'Enter a whole number';
   }
   if (value < min || value > max) {
-    return `Between ${min.toLocaleString('en-US')} and ${max.toLocaleString('en-US')}`;
+    return `Between ${min.toLocaleString(currentLocale())} and ${max.toLocaleString(currentLocale())}`;
   }
   return null;
 }
@@ -545,7 +546,7 @@ function validateClassical(
     const value = parseField(values.max_samples);
     errors.max_samples =
       maxRows !== null && typeof value === 'number' && value > maxRows
-        ? `At most ${maxRows.toLocaleString('en-US')} on this server`
+        ? `At most ${maxRows.toLocaleString(currentLocale())} on this server`
         : samples;
   }
   const seed = wholeNumber(values.seed, LIMITS.seed, false);
@@ -623,7 +624,7 @@ export function validateSettings(
   const tooLarge = (size: number) =>
     maxBatch !== null && size > maxBatch
       ? maxBatch >= 1
-        ? `At most ${maxBatch.toLocaleString('en-US')}: larger batches do not fit into memory`
+        ? `At most ${maxBatch.toLocaleString(currentLocale())}: larger batches do not fit into memory`
         : 'No batch fits into memory: make the Input smaller'
       : null;
   if (!tuned.batch_size && segmentation) {

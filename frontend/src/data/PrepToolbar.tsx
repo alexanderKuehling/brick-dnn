@@ -26,6 +26,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { DataSource, PrepDownloadFormat, ProjectRef, ProjectRole } from '@/api';
+import { currentLocale } from '@/i18n';
 import { UNTITLED, type SaveStatus } from './useDataPrep';
 import classes from './DataPage.module.css';
 
@@ -178,7 +179,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
           <Tooltip
             label={
               source
-                ? `Main table: ${source.filename}, ${source.n_rows.toLocaleString('en-US')} rows × ${source.n_columns.toLocaleString('en-US')} columns`
+                ? `Main table: ${source.filename}, ${source.n_rows.toLocaleString(currentLocale())} rows × ${source.n_columns.toLocaleString(currentLocale())} columns`
                 : 'Main table'
             }
           >
@@ -195,7 +196,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
             >
               {props.sourceName}
               {source &&
-                ` · ${source.n_rows.toLocaleString('en-US')} × ${source.n_columns.toLocaleString('en-US')}`}
+                ` · ${source.n_rows.toLocaleString(currentLocale())} × ${source.n_columns.toLocaleString(currentLocale())}`}
             </Badge>
           </Tooltip>
           {readOnly ? (

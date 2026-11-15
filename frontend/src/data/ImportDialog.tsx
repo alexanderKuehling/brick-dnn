@@ -41,6 +41,7 @@ import {
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import { useUploadProgress } from '@/components/useUploadProgress';
+import { currentLocale } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import classes from './DataPage.module.css';
 
@@ -153,7 +154,7 @@ const WORKBOOKS: ImportFormat[] = ['xlsx', 'xls', 'ods'];
 /** "1,200 rows × 9 columns" */
 export function tableSize(rows: number, columns: number): string {
   const plural = (n: number, word: string) =>
-    `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
+    `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : 's'}`;
   return `${plural(rows, 'row')} × ${plural(columns, 'column')}`;
 }
 

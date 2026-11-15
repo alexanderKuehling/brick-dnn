@@ -3,6 +3,7 @@
  * a CSV file, and the messages of the server per row and column.
  */
 import type { Prediction, PredictionCell, PredictionResult } from '@/api';
+import { currentLocale } from '@/i18n';
 
 /** A column of the prediction form: a feature (prepared) or a column of the source (raw). */
 export interface InputColumn {
@@ -242,5 +243,7 @@ export function formatValue(value: Prediction['value']): string {
   }
   const abs = Math.abs(value);
   const digits = abs >= 1000 ? 1 : abs >= 1 ? 3 : 4;
-  return Number(value.toFixed(digits)).toLocaleString('en-US', { maximumFractionDigits: digits });
+  return Number(value.toFixed(digits)).toLocaleString(currentLocale(), {
+    maximumFractionDigits: digits,
+  });
 }

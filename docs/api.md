@@ -108,15 +108,23 @@ curl -X POST http://localhost:8080/api/generate/?download=1 \
   -H "Content-Type: application/json" -d @my_network.json -o model.py
 ```
 
+## Languages
+
+The API answers in English. With `Accept-Language: de` (the web app sends its language with
+every request) error and validation messages and the descriptions of layers, preparation
+steps, examples and training options come in German; identifiers (layer types, parameter
+names, values) never change. Answers carry `Content-Language` and `Vary: Accept-Language`.
+The MCP server always answers in English. See [translations.md](translations.md).
+
 ## Accounts (JWT)
 
 | Method | Path                       | Body                               | Response                    |
 | ------ | -------------------------- | ---------------------------------- | --------------------------- |
-| POST   | `/api/auth/register/`      | `{username, email, password, accept_terms?}` | `201 {user, access, refresh}` |
+| POST   | `/api/auth/register/`      | `{username, email, password, accept_terms?, language?}` | `201 {user, access, refresh}`; without `language` the account gets the language of `Accept-Language` (else English) |
 | POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`, or a two-factor challenge (below) |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
-| GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined}` |
+| GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined, language}`; `language` is `"en"`, `"de"` or `""` (none chosen yet) |
 
 Send the access token as `Authorization: Bearer <access>`. Access tokens live 30 minutes,
 refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
@@ -168,6 +176,7 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 | ------ | ----------------------------- | ------------------------------------- | --------------------------- |
 | GET    | `/api/auth/account/`          | –                                     | `Account`                   |
 | PATCH  | `/api/auth/account/`          | `{email}`                             | `Account`                   |
+| PATCH  | `/api/auth/account/language/` | `{language}` (`"en"` or `"de"`)       | `{language}`: the language of the app and of e-mails, saved on the account ([translations.md](translations.md)) |
 | POST   | `/api/auth/account/password/` | `{current_password, new_password}`    | `{access, refresh}`; all other logins end |
 | GET    | `/api/auth/account/export/`   | –                                     | a ZIP file with everything stored about the account |
 | POST   | `/api/auth/account/delete/`   | `{password, username}`                | `204`: the account and everything it owns are deleted |

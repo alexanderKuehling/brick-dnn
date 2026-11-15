@@ -12,6 +12,7 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
+import { currentLocale } from '@/i18n';
 import { isClassicalRun, isHybridRun } from './classical';
 import { PARAM_LABELS } from './search';
 
@@ -54,7 +55,7 @@ export function formatMetric(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '–';
   }
-  return value.toLocaleString('en-US', { maximumSignificantDigits: 4 });
+  return value.toLocaleString(currentLocale(), { maximumSignificantDigits: 4 });
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -119,14 +120,14 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) {
     return '–';
   }
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function formatCompact(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '–';
   }
-  return value.toLocaleString('en-US', {
+  return value.toLocaleString(currentLocale(), {
     notation: 'compact',
     maximumFractionDigits: Math.abs(value) < 1000 ? 0 : 1,
   });
@@ -138,7 +139,7 @@ export function datasetDetails(dataset: Dataset): string {
   const parts: string[] = [];
   const count = (n: number | null | undefined, word: string) =>
     typeof n === 'number'
-      ? `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : word.endsWith('s') ? 'es' : 's'}`
+      ? `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : word.endsWith('s') ? 'es' : 's'}`
       : null;
   if (dataset.kind === 'csv') {
     parts.push(count(info.num_samples, 'row') ?? '', count(info.num_features, 'feature') ?? '');
@@ -186,7 +187,7 @@ export function segmentationNotes(dataset: Dataset): string | null {
     return null;
   }
   const say = (n: number | undefined, one: string, many: string) =>
-    n ? `${n.toLocaleString('en-US')} ${n === 1 ? one : many}` : null;
+    n ? `${n.toLocaleString(currentLocale())} ${n === 1 ? one : many}` : null;
   const notes = [
     say(found.unmatched_images, 'image without a mask', 'images without a mask'),
     say(found.unmatched_masks, 'mask without an image', 'masks without an image'),
@@ -200,7 +201,7 @@ export function segmentationNotes(dataset: Dataset): string | null {
 
 /** Rows of a predefined split (datasets from the Data tab): "840 / 180 / 180". */
 export function formatSplit(counts: number[]): string {
-  return counts.map((count) => count.toLocaleString('en-US')).join(' / ');
+  return counts.map((count) => count.toLocaleString(currentLocale())).join(' / ');
 }
 
 /** Shares of a predefined split in percent, rounded to one decimal: [70, 15, 15]. */

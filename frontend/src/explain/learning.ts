@@ -4,13 +4,14 @@
  * the analysis (shapes and filled-in settings).
  */
 import type { Analysis, NodeAnalysis, Params } from '@/api/types';
+import { currentLocale } from '@/i18n';
 
 export interface Link {
   source: string;
   target: string;
 }
 
-const n = (value: number) => value.toLocaleString('en-US');
+const n = (value: number) => value.toLocaleString(currentLocale());
 
 function ints(value: unknown): number[] {
   if (Array.isArray(value)) {

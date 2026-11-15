@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Alert, Anchor, Button, Center, Loader, PasswordInput, Stack, Text } from '@mantine/core';
 import { fieldError } from '@/account/fieldError';
 import { api, ApiError } from '@/api';
+import { Trans, useTranslation } from '@/i18n';
 import { AuthLayout } from './AuthLayout';
 import { useLinkParams } from './linkParams';
 
@@ -11,6 +12,7 @@ type LinkState = { checked: false } | { checked: true; valid: boolean; username:
 
 /** /reset-password#uid=…&token=…: the link from the e-mail; choose a new password. */
 export function ResetPasswordPage() {
+  const { t } = useTranslation();
   const params = useLinkParams();
   const uid = params.get('uid') ?? '';
   const token = params.get('token') ?? '';
@@ -35,7 +37,7 @@ export function ResetPasswordPage() {
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (password !== repeat) {
-      setErrors({ password: 'The two passwords are not the same.' });
+      setErrors({ password: t('auth.reset.mismatch') });
       return;
     }
     setBusy(true);
@@ -50,7 +52,7 @@ export function ResetPasswordPage() {
       } else if (err instanceof ApiError && err.status === 400) {
         setLink({ checked: true, valid: false, username: null });
       } else {
-        setErrors({ other: err instanceof Error ? err.message : 'Failed.' });
+        setErrors({ other: err instanceof Error ? err.message : t('common.failed') });
       }
     } finally {
       setBusy(false);
@@ -67,22 +69,30 @@ export function ResetPasswordPage() {
   } else if (done) {
     content = (
       <Stack>
-        <Alert color="green" icon={<IconCircleCheck size={18} />} title="Password changed">
-          Your password was changed and you were logged out everywhere. Log in with the new one.
+        <Alert
+          color="green"
+          icon={<IconCircleCheck size={18} />}
+          title={t('auth.reset.changedTitle')}
+        >
+          {t('auth.reset.changed')}
         </Alert>
         <Button component={Link} to="/login" fullWidth>
-          Log in
+          {t('auth.logIn')}
         </Button>
       </Stack>
     );
   } else if (!link.valid) {
     content = (
       <Stack>
-        <Alert color="red" icon={<IconAlertCircle size={18} />} title="This link does not work">
-          The link is invalid, has expired (it is valid for one hour) or was used already.
+        <Alert
+          color="red"
+          icon={<IconAlertCircle size={18} />}
+          title={t('auth.reset.invalidTitle')}
+        >
+          {t('auth.reset.invalid')}
         </Alert>
         <Button component={Link} to="/forgot-password" variant="light" fullWidth>
-          Ask for a new link
+          {t('auth.reset.newLink')}
         </Button>
       </Stack>
     );
@@ -92,7 +102,11 @@ export function ResetPasswordPage() {
         <Stack>
           {link.username && (
             <Text size="sm">
-              Choose a new password for <b>{link.username}</b>.
+              <Trans
+                i18nKey="auth.reset.chooseFor"
+                values={{ username: link.username }}
+                components={{ b: <b /> }}
+              />
             </Text>
           )}
           {errors.other && (
@@ -101,8 +115,8 @@ export function ResetPasswordPage() {
             </Alert>
           )}
           <PasswordInput
-            label="New password"
-            description="At least 8 characters, not too common."
+            label={t('auth.reset.newPassword')}
+            description={t('auth.passwordHint')}
             autoComplete="new-password"
             required
             value={password}
@@ -110,14 +124,14 @@ export function ResetPasswordPage() {
             error={errors.password}
           />
           <PasswordInput
-            label="Repeat the new password"
+            label={t('auth.reset.repeat')}
             autoComplete="new-password"
             required
             value={repeat}
             onChange={(e) => setRepeat(e.currentTarget.value)}
           />
           <Button type="submit" loading={busy} fullWidth mt="sm" disabled={!password || !repeat}>
-            Change password
+            {t('auth.reset.submit')}
           </Button>
         </Stack>
       </form>
@@ -126,10 +140,10 @@ export function ResetPasswordPage() {
 
   return (
     <AuthLayout
-      title="Choose a new password"
+      title={t('auth.reset.title')}
       subtitle={
         <Anchor component={Link} to="/login" size="sm">
-          Back to logging in
+          {t('auth.backToLogin')}
         </Anchor>
       }
     >

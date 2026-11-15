@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Group, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import { currentLocale } from '@/i18n';
 import {
   extent,
   formatTick,
@@ -49,7 +50,7 @@ const INSET = 8;
 const TICK_CHAR_WIDTH = 6.6;
 
 const defaultFormat = (value: number) =>
-  value.toLocaleString('en-US', { maximumSignificantDigits: 4 });
+  value.toLocaleString(currentLocale(), { maximumSignificantDigits: 4 });
 
 function LineKey({ color }: { color: string }) {
   return (

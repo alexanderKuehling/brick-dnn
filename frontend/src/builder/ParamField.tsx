@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Group, Input, NumberInput, Select, Switch, TextInput } from '@mantine/core';
 import type { ParamSpec, ParamValue } from '@/api/types';
+import { i18n } from '@/i18n';
 import { optionLabel } from './format';
 
 interface ParamFieldProps {
@@ -189,7 +190,7 @@ function ShapeField({ param, value, onChange }: Omit<ParamFieldProps, 'inferred'
   return (
     <TextInput
       label={param.label}
-      description={param.help || 'Comma separated, e.g. 1, 28, 28'}
+      description={param.help || i18n.t('builder.inspector.commaSeparated')}
       placeholder={format(param.default)}
       value={text}
       error={error}
