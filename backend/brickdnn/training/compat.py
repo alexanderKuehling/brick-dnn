@@ -26,6 +26,7 @@ from .config import (
     segmentation_memory_bytes,
 )
 from .datasets import BUILTIN_DATASETS, MAX_CLASSES, DatasetInfo
+from .losses import config_problems, search_problems
 from .reporting import TrainingError
 from .tabular import has_validation, split_sizes
 
@@ -143,25 +144,44 @@ def check_compatibility(
     dataset: DatasetInfo,
     config: TrainingConfig | None = None,
     *,
-    tuning: bool = False,
+    tuning: Any = False,
 ) -> Compatibility:
     """Check ``graph`` (a graph document or an :class:`Analysis`) against ``dataset``.
 
     For a graph document, ``fixes`` are suggested as well (an analysis cannot be changed).
     ``config`` (optional) adds the checks that depend on the training settings, e.g. the
-    row limit of classical models against Max. samples. Without validation data (see
-    :func:`.tabular.has_validation`) there is a warning, and early stopping (``patience``)
-    and a hyperparameter search (``tuning``) are errors.
+    row limit of classical models against Max. samples and the loss against the task (see
+    losses.py). Without validation data (see :func:`.tabular.has_validation`) there is a
+    warning, and early stopping (``patience``) and a hyperparameter search (``tuning``: true,
+    or the :class:`~.tuning.TuningConfig`, whose losses are checked as well) are errors.
     """
-    if isinstance(graph, Analysis):
-        result = _check(graph, dataset, config)
-        _check_validation(result, graph, dataset, config, tuning)
-        return result
-    analysis = analyze(graph)
+    analysis = graph if isinstance(graph, Analysis) else analyze(graph)
     result = _check(analysis, dataset, config)
-    _check_validation(result, analysis, dataset, config, tuning)
-    result.fixes = suggest_fixes(graph, dataset, analysis, result)
+    _check_loss(result, analysis, config, tuning)
+    _check_validation(result, analysis, dataset, config, bool(tuning))
+    if not isinstance(graph, Analysis):
+        result.fixes = suggest_fixes(graph, dataset, analysis, result)
     return result
+
+
+def _check_loss(
+    result: Compatibility, analysis: Analysis, config: TrainingConfig | None, tuning: Any
+) -> None:
+    """The loss settings and the losses of a search must fit the task (neural networks and
+    the neural layers of hybrid networks; classical models have no loss to choose)."""
+    plan = result.plan
+    if config is None or plan is None or result.errors or analysis.family == "classical":
+        return
+    search = None if isinstance(tuning, bool) else tuning
+    space = getattr(search, "neural_space" if analysis.family == "hybrid" else "space", None)
+    errors, warnings = config_problems(config, plan, set(space or ()))
+    if search is not None and not errors:
+        errors, more = search_problems(search, plan, config)
+        warnings += more
+    result.warnings.extend(warnings)
+    if errors:
+        result.errors.extend(errors)
+        result.plan = None
 
 
 def _check_validation(
@@ -800,11 +820,12 @@ def _check_segmentation(
         "lowest validation loss."
     )
     shares = [s for s in details.get("class_pixel_share") or [] if isinstance(s, (int, float))]
-    loss = config.loss if config is not None else "cross_entropy"
-    if shares and loss == "cross_entropy" and max(shares) > 0.97:
+    loss = config.loss if config is not None else "auto"
+    if shares and loss in ("auto", "cross_entropy") and max(shares) > 0.97:
         result.warnings.append(
             f"{max(shares):.0%} of the pixels are '{class_names[shares.index(max(shares))]}'. "
-            "The loss 'Cross-entropy + Dice' helps the other classes to be learned."
+            "The loss 'Cross-entropy + Dice', or a weighted cross-entropy with balanced class "
+            "weights, helps the other classes to be learned."
         )
 
     classes = n if binary else k

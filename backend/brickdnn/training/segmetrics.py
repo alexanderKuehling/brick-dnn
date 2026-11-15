@@ -24,27 +24,40 @@ class SegmentationLoss(nn.Module):
     """The cross-entropy of every pixel (two classes with one output channel: the binary
     cross-entropy on logits), averaged over the pixels that are not ignored. With ``dice``,
     the soft Dice loss is added: one minus the Dice score of the predicted probabilities,
-    averaged over the classes (of the whole batch)."""
+    averaged over the classes (of the whole batch). ``weight`` (one per class) weights the
+    cross-entropy of every pixel by its class (the mean is then divided by the sum of the
+    weights of the pixels, like ``torch.nn.functional.cross_entropy``)."""
 
-    def __init__(self, num_classes: int, binary: bool, dice: bool = False):
+    def __init__(
+        self,
+        num_classes: int,
+        binary: bool,
+        dice: bool = False,
+        weight: torch.Tensor | None = None,
+    ):
         super().__init__()
         self.num_classes = num_classes
         self.binary = binary
         self.dice = dice
+        self.weight = weight
 
     def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         valid = target != IGNORE_INDEX
+        weight = self.weight.to(output.device, output.dtype) if self.weight is not None else None
         if self.binary:
             logits = output[:, 0]
             labels = (target == 1).to(logits.dtype)
             weights = valid.to(logits.dtype)
-            pixels = weights.sum().clamp(min=1.0)
+            if weight is not None:
+                weights = weights * weight[(target == 1).long()]
+            pixels = weights.sum().clamp(min=1e-12 if weight is not None else 1.0)
             loss = (
                 F.binary_cross_entropy_with_logits(logits, labels, reduction="none") * weights
             ).sum() / pixels
             if self.dice:
-                probability = torch.sigmoid(logits) * weights
-                labels = labels * weights
+                mask = valid.to(logits.dtype)
+                probability = torch.sigmoid(logits) * mask
+                labels = labels * mask
                 overlap = (probability * labels).sum()
                 loss = (
                     loss
@@ -54,7 +67,7 @@ class SegmentationLoss(nn.Module):
             return loss
         if not bool(valid.any()):
             return output.sum() * 0.0  # a batch of ignored pixels only: nothing to learn
-        loss = F.cross_entropy(output, target, ignore_index=IGNORE_INDEX)
+        loss = F.cross_entropy(output, target, weight=weight, ignore_index=IGNORE_INDEX)
         if self.dice:
             weights = valid.unsqueeze(1).to(output.dtype)
             probability = output.softmax(dim=1) * weights

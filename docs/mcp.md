@@ -97,7 +97,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `get_project`           | read   |             | One saved network with its graph                                |
 | `save_project`          | full   | yes         | Create a network or update one (owner, editors)                 |
 | `delete_project`        | full   | yes         | Delete a network (owner only)                                   |
-| `get_training_options`  | read   |             | Whether training is available, the training queue (worker online, slots, running, waiting), datasets (summaries), default settings, search, upload limit |
+| `get_training_options`  | read   |             | Whether training is available, the training queue (worker online, slots, running, waiting), datasets (summaries), default settings, losses per task, search, upload limit |
 | `get_dataset`           | read   |             | One dataset: rows, task, classes and its columns, a page at a time |
 | `upload_dataset`        | full   |             | Store a small CSV file (sent as text) as a training dataset     |
 | `create_upload_link`    | full   |             | One-time link to upload a local file with curl (data source or training dataset) |
@@ -219,6 +219,20 @@ check_training {graph, dataset, tuning: {trials: 20, metric: "pr_auc", cv_folds:
 start_training {…same…} · get_training_run {id, include: ["trials"]}
   → tuning {metric: "pr_auc", direction: "maximize", cv_folds: 5, best_trial: {score, params}}
 ```
+
+**Losses.** The `config` of `check_training` and `start_training` takes `loss` (`auto` by
+default) and its settings `class_weights`, `focal_gamma`, `label_smoothing` and
+`huber_delta` ([training.md](training.md#losses)). `get_training_options` lists them
+compactly under `losses`: one line per task with its losses (the default marked with `*`)
+and one with the settings and their limits; `config_defaults` leaves those settings out.
+A loss of another task is an error of `check_training` (`ok: false`, with the losses that are
+possible). A network's search may try `loss` (a list) and the settings of the losses, a
+hybrid network's in `neural_space`; a network's search over several losses needs a `metric`
+other than `loss`. `get_training_run` shows `loss`: the loss the network trains with and the
+settings it uses, with the class weights it computed for `"balanced"` (before the run
+reports it, from its `config`, whose other loss settings are left out). The losses in the
+history and the trials are that loss. `generate_pytorch_code` takes `loss` and its settings
+for the CSV training loop of the script.
 
 An unknown parameter, a bad range, a grid of more than 100 combinations or a metric the data
 does not have are tool errors (`check_training`: `ok: false` for the metric) with a message

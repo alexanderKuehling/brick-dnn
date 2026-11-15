@@ -22,6 +22,31 @@
   keep working: `/?…` is redirected to `/app?…`, a `#…` that is not a section of the page
   goes on to `/app#…`, logged-in users who open `/` land in the editor, and links to `/`
   inside the app open the editor.
+- **Selectable losses of neural networks.** The training settings take a `loss` per task:
+  for classification `cross_entropy` (the default), `weighted_cross_entropy` with
+  `class_weights` (`"balanced"`, `n / (k · count)` from the class counts of the training
+  rows, or a weight per class or `{class: weight}`, checked against the classes) and `focal`
+  (`focal_gamma`, default 2, and optional class weights as alpha), with `label_smoothing`
+  (0 to 0.3) for both cross-entropies; for regression `mse` (the default, of the
+  standardised target as before), `mae` and `huber` (`huber_delta`, default 1, in standard
+  deviations of the target); for a segmentation also `weighted_cross_entropy` with balanced
+  weights from the pixel counts. `auto` (or no loss) is the default of the task, so older
+  runs and settings train as before; a loss of another task and values out of range are
+  refused with the possible ones, and a run stores the loss it trains with. The curves,
+  early stopping, the kept epoch and the search objective `loss` use the chosen loss (the run
+  view and `state.loss` say which one, with the class weights it computed), while the final
+  evaluation keeps its metrics and log loss; a regression's RMSE now comes from the squared
+  errors when the loss is not the MSE. A network's search (and a hybrid network's
+  `neural_space`) can try `loss` and its settings; a network's search over losses must be
+  ranked by another metric than the loss. Phase 1 of a hybrid network learns its features
+  with the chosen loss. The generated script builds the same loss (`loss`, `class_weights`
+  … in the options of `/api/generate/` and `generate_pytorch_code`), balanced weights
+  computed from its CSV and the focal loss as a small function. The training panel has a
+  *Loss* field with the losses of the data's task, the fields of the chosen loss and search
+  rows for them; `get_training_options` lists the losses per task, `get_training_run` the
+  run's loss, and `brickdnn train` takes `--loss`, `--class-weights`, `--focal-gamma`,
+  `--label-smoothing`, `--huber-delta` and `--tune-loss`. See docs/training.md (*Losses*,
+  with class weights against oversampling and the decision threshold).
 - **Hybrid networks: a search of the neural training settings.** The hyperparameter search
   of a hybrid network can vary the learning rate, batch size, optimizer and weight decay of
   its neural layers (`tuning.neural_space`, the space of a network), alone or together with

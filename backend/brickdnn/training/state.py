@@ -43,6 +43,15 @@ Every run lives in its own directory::
       "epochs": 10,                  # planned number of epochs (per trial in a search)
       "steps_per_epoch": 750,
       "total_params": 101770,
+      "loss": {"name": "focal", "label": "focal loss", "task": "classification",
+               "focal_gamma": 2.0,   # the loss the network trains with (see losses.py) and
+               "class_weights_from": "balanced",  # the settings it uses: class_weights
+               "class_weights": [0.51, 24.6]},    # (computed for "balanced"), focal_gamma,
+                                     # label_smoothing, huber_delta. The losses in history,
+                                     # best, test and trials are this loss. Demo data with
+                                     # outputs of several tasks adds "outputs" (the loss of
+                                     # every output); null for classical models and runs of
+                                     # older versions
       "history": [                   # one entry per finished epoch
         {"epoch": 1, "train_loss": 0.31, "val_loss": 0.15,
          "train_accuracy": 0.91, "val_accuracy": 0.95, "seconds": 12.3}
@@ -158,7 +167,7 @@ over the classes that occur in its masks or predictions. Once the weights are sa
 results of the kept weights per class and the preview images are in ``segmentation``::
 
       "segmentation": {
-        "loss": "cross_entropy",       # or "cross_entropy_dice"
+        "loss": "cross_entropy",       # or "cross_entropy_dice", "weighted_cross_entropy"
         "binary": false,               # true: one output channel (two classes)
         "ignore_index": null,          # 255 if the masks mark pixels to ignore
         "class_names": ["background", "circle"], "colors": ["#20242c", "#e5534b"],
@@ -362,6 +371,7 @@ def initial_state(epochs: int = 0, family: str = "neural") -> dict[str, Any]:
         "epochs": epochs,
         "steps_per_epoch": None,
         "total_params": None,
+        "loss": None,
         "history": [],
         "progress": None,
         "best": None,

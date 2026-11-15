@@ -11,6 +11,8 @@ brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopp
 brickdnn train graph.json --data mnist --tune --trials 20          # hyperparameter search
 brickdnn train graph.json --data mnist --tune-lr 1e-4:1e-2 --tune-batch-size 32,64
 brickdnn train graph.json --data mnist --tune --metric balanced_accuracy  # rank by another metric
+brickdnn train graph.json --data fraud.csv --loss weighted_cross_entropy --class-weights balanced
+brickdnn train graph.json --data fraud.csv --tune-loss cross_entropy,focal --metric pr_auc
 brickdnn train --example gp_regression --data houses.csv     # a classical model (scikit-learn)
 brickdnn train svm.json --data iris.csv --tune-param C=0.1:100 --tune-param kernel=rbf,linear
 brickdnn train gb.json --data fraud.csv --tune --metric pr_auc --cv-folds 5
@@ -36,7 +38,7 @@ from typing import Any, TextIO
 from .. import EXAMPLES, analyze, get_example
 from . import sklearn_installed, torch_installed
 from .compat import check_compatibility
-from .config import DEVICES, LOSSES, OPTIMIZERS, ConfigError, TrainingConfig
+from .config import DEVICES, OPTIMIZERS, ConfigError, TrainingConfig
 from .datasets import (
     BUILTIN_DATASETS,
     DEFAULT_DATA_ROOT,
@@ -49,6 +51,7 @@ from .datasets import (
     random_info,
 )
 from .job import TrainingJob
+from .losses import LOSSES
 from .objectives import DEFAULT_METRIC, METRICS, metric_error
 from .objectives import format_value as format_metric
 from .objectives import label as metric_label
@@ -474,7 +477,7 @@ def parse_values(text: str, name: str) -> dict[str, Any] | list[Any]:
             values["scale"] = scale.strip().lower()
         return values
     items = [item.strip() for item in text.split(",") if item.strip()]
-    if name == "optimizer":
+    if name in ("optimizer", "loss"):
         return items
     return [_to_number(item) for item in items]
 
@@ -549,8 +552,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--loss",
         choices=LOSSES,
-        help="segmentation only: cross_entropy (default) or cross_entropy_dice, which adds "
-        "a Dice term for classes with few pixels",
+        help="auto (default: cross_entropy, for a regression mse); classification: "
+        "cross_entropy, weighted_cross_entropy, focal; regression: mse, mae, huber; "
+        "segmentation: cross_entropy, cross_entropy_dice (adds a Dice term for classes with "
+        "few pixels), weighted_cross_entropy",
+    )
+    parser.add_argument(
+        "--class-weights",
+        metavar="WEIGHTS",
+        help="weighted_cross_entropy and focal: balanced (from the class counts of the "
+        "training rows; the default of weighted_cross_entropy), a weight per class (1,10) "
+        "or CLASS=WEIGHT pairs (fraud=10,ok=1)",
+    )
+    parser.add_argument(
+        "--focal-gamma", type=float, help="focal: 0 to 10 (default 2; 0 is the cross-entropy)"
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        type=float,
+        help="cross_entropy and weighted_cross_entropy of a classification: 0 to 0.3 (default 0)",
+    )
+    parser.add_argument(
+        "--huber-delta",
+        type=float,
+        help="huber: where the loss turns from squared to linear, in standard deviations of "
+        "the target (default 1)",
     )
     parser.add_argument(
         "--previews",
@@ -603,6 +629,14 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--tune-optimizer", metavar="VALUES", help="optimizers to try")
     search.add_argument("--tune-weight-decay", metavar="VALUES", help="weight decays to try")
     search.add_argument(
+        "--tune-loss",
+        metavar="VALUES",
+        help="losses to try, e.g. cross_entropy,focal (needs another --metric than loss)",
+    )
+    search.add_argument("--tune-focal-gamma", metavar="VALUES", help="focal gammas to try")
+    search.add_argument("--tune-label-smoothing", metavar="VALUES", help="label smoothings to try")
+    search.add_argument("--tune-huber-delta", metavar="VALUES", help="Huber deltas to try")
+    search.add_argument(
         "--tune-param",
         metavar="NAME=VALUES",
         action="append",
@@ -624,7 +658,33 @@ TUNE_OPTIONS = {
     "batch_size": "tune_batch_size",
     "optimizer": "tune_optimizer",
     "weight_decay": "tune_weight_decay",
+    "loss": "tune_loss",
+    "focal_gamma": "tune_focal_gamma",
+    "label_smoothing": "tune_label_smoothing",
+    "huber_delta": "tune_huber_delta",
 }
+
+
+def parse_class_weights(text: str | None) -> Any:
+    """``--class-weights``: "balanced", ``"1,10"`` (a weight per class) or
+    ``"fraud=10,ok=1"`` (validated by TrainingConfig)."""
+    if text is None:
+        return None
+    text = text.strip()
+    if "=" in text:
+        pairs = [item.partition("=") for item in text.split(",") if item.strip()]
+        return {name.strip(): _to_number(value) for name, _, value in pairs}
+    if "," in text or _is_number(text):
+        return [_to_number(item) for item in text.split(",") if item.strip()]
+    return text
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
 
 
 def tuning_from_args(
@@ -736,6 +796,10 @@ def main(argv: list[str] | None = None) -> int:
                 "patience": args.patience,
                 "restore_best": args.restore_best,
                 "loss": args.loss,
+                "class_weights": parse_class_weights(args.class_weights),
+                "focal_gamma": args.focal_gamma,
+                "label_smoothing": args.label_smoothing,
+                "huber_delta": args.huber_delta,
                 "feature_training": "frozen" if args.frozen_features else "pretrain",
             }
         )
@@ -753,7 +817,7 @@ def main(argv: list[str] | None = None) -> int:
         except DatasetError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        compat = check_compatibility(analysis, info, config, tuning=tuning is not None)
+        compat = check_compatibility(analysis, info, config, tuning=tuning)
         if tuning is not None and compat.ok and compat.plan is not None:
             error = metric_error(tuning.metric, compat.plan)
             if error is not None:

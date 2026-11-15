@@ -80,6 +80,7 @@ import {
   isActive,
   isClassification,
   isSegmentation,
+  lossText,
   paramLabel,
   preprocessingJson,
   reportsR2,
@@ -300,6 +301,7 @@ function NetworkRunView({
   const noValidation = state?.val_size === 0;
   const trainAccuracy = metrics?.train_accuracy ?? history.at(-1)?.train_accuracy ?? null;
   const keptNote = run.has_weights ? weightsNote(run) : null;
+  const loss = lossText(run);
   const preprocessing = run.has_weights ? preprocessingJson(run) : null;
 
   // ---------------------------------------------------------------- actions
@@ -546,6 +548,11 @@ function NetworkRunView({
                     : bestTrialNumber !== null
                       ? `Curves of the best trial (${bestTrialNumber})`
                       : null}
+                </Text>
+              )}
+              {loss && (
+                <Text size="xs" c="dimmed" mb={-8}>
+                  {`Loss: ${loss}. The curves, early stopping and the kept epoch use this loss; losses of different kinds are not comparable, so compare runs by their metrics.`}
                 </Text>
               )}
               <LineChart title="Loss" x={charts.x} series={charts.loss} yBounds={[0, Infinity]} />

@@ -945,7 +945,43 @@ export interface SegmentationLimits {
 }
 
 /** The loss of a segmentation: the cross-entropy per pixel, optionally plus a Dice term. */
-export type SegmentationLoss = 'cross_entropy' | 'cross_entropy_dice';
+export type SegmentationLoss = 'cross_entropy' | 'cross_entropy_dice' | 'weighted_cross_entropy';
+
+/**
+ * The loss of a neural network (backend/brickdnn/training/losses.py): 'auto' is the default of
+ * the task (cross-entropy, for a regression the mean squared error of the standardised target).
+ */
+export type LossName =
+  | 'auto'
+  | 'cross_entropy'
+  | 'weighted_cross_entropy'
+  | 'focal'
+  | 'cross_entropy_dice'
+  | 'mse'
+  | 'mae'
+  | 'huber';
+
+/** The task a loss is for. */
+export type LossTask = 'classification' | 'regression' | 'segmentation';
+
+/** Class weights: "balanced" (from the class counts), one weight per class, or by class. */
+export type ClassWeights = 'balanced' | number[] | Record<string, number>;
+
+/** The loss a run trains with (state.json `loss`), with the settings it uses. */
+export interface RunLoss {
+  name: Exclude<LossName, 'auto'>;
+  label: string;
+  task: LossTask;
+  /** The class weights it uses (computed for "balanced"). */
+  class_weights?: number[] | ClassWeights;
+  class_weights_from?: 'balanced' | 'given';
+  focal_gamma?: number;
+  label_smoothing?: number;
+  /** In standard deviations of the target. */
+  huber_delta?: number;
+  /** Demo data with outputs of several tasks: the loss of every output. */
+  outputs?: string[];
+}
 
 /** Capabilities of the server: GET /api/training/. */
 export interface TrainingStatus {
@@ -1212,8 +1248,16 @@ export interface TrainingConfig {
    * of the last epoch (default true; missing in older runs, which kept the last epoch).
    */
   restore_best?: boolean;
-  /** Segmentation only (missing in older runs). */
-  loss?: SegmentationLoss;
+  /**
+   * The loss (missing in older runs; before, every run said 'cross_entropy', which for a
+   * regression means the mean squared error). A run stores the loss it trains with.
+   */
+  loss?: LossName;
+  /** weighted_cross_entropy and focal (missing in older runs). */
+  class_weights?: ClassWeights | null;
+  focal_gamma?: number;
+  label_smoothing?: number;
+  huber_delta?: number;
   /** Hybrid networks only: learn the features first, or keep random ones. */
   feature_training?: FeatureTraining;
 }
@@ -1228,7 +1272,15 @@ export type FeatureTraining = 'pretrain' | 'frozen';
 export type TuningMethod = 'random' | 'grid';
 
 /** Settings a search can vary, in display order. */
-export type TunableSetting = 'learning_rate' | 'batch_size' | 'optimizer' | 'weight_decay';
+export type TunableSetting =
+  | 'learning_rate'
+  | 'batch_size'
+  | 'optimizer'
+  | 'weight_decay'
+  | 'loss'
+  | 'focal_gamma'
+  | 'label_smoothing'
+  | 'huber_delta';
 
 /**
  * Numbers between `min` and `max`, drawn log-uniformly (both > 0), or uniformly with
@@ -1258,6 +1310,10 @@ export interface TuningSpace {
   batch_size?: number[];
   optimizer?: Optimizer[];
   weight_decay?: TuningRange | number[];
+  loss?: LossName[];
+  focal_gamma?: TuningRange | number[];
+  label_smoothing?: TuningRange | number[];
+  huber_delta?: TuningRange | number[];
 }
 
 /** A value of a classical brick parameter in a search (null: e.g. no depth limit). */
@@ -1333,6 +1389,7 @@ export interface TrialParams {
   batch_size?: number;
   optimizer?: Optimizer;
   weight_decay?: number;
+  loss?: LossName;
   [param: string]: ClassicalValue | undefined;
 }
 
@@ -1640,6 +1697,11 @@ export interface RunState {
   epochs: number;
   steps_per_epoch: number | null;
   total_params: number | null;
+  /**
+   * The loss the network trains with (the losses in the curves are this loss); null for
+   * classical models, missing in runs of older versions.
+   */
+  loss?: RunLoss | null;
   /** Epochs of the running trial in a search; of the best trial once it has ended. */
   history: HistoryEntry[];
   progress: RunProgress | null;

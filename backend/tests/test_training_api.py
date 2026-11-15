@@ -284,7 +284,16 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
     assert data["max_concurrent_runs"] == 1
     assert data["tuning"] == {
         "methods": ["random", "grid"],
-        "tunable": ["learning_rate", "batch_size", "optimizer", "weight_decay"],
+        "tunable": [
+            "learning_rate",
+            "batch_size",
+            "optimizer",
+            "weight_decay",
+            "loss",
+            "focal_gamma",
+            "label_smoothing",
+            "huber_delta",
+        ],
         "max_trials": 100,
         "max_values": 20,
         "default": {
@@ -302,6 +311,14 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
     assert metrics["loss"] == ("minimize", None, False)
     assert metrics["pr_auc"] == ("maximize", "classification", True)
     assert metrics["mae"] == ("minimize", "regression", False)
+    # The losses of neural networks per task (the default first) and their settings.
+    assert data["losses"]["default"] == "auto"
+    assert data["losses"]["tasks"] == {
+        "classification": ["cross_entropy", "weighted_cross_entropy", "focal"],
+        "regression": ["mse", "mae", "huber"],
+        "segmentation": ["cross_entropy", "cross_entropy_dice", "weighted_cross_entropy"],
+    }
+    assert data["losses"]["params"]["label_smoothing"]["max"] == 0.3
     builtin = data["builtin_datasets"]
     assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes"]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]

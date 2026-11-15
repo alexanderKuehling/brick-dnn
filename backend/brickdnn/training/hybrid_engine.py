@@ -751,6 +751,7 @@ class HybridSearch(HybridRun):
         self.steps_per_epoch = phase["steps_per_epoch"]
         assert self.best_data is not None
         self.data = self.best_data
+        self.reporter.setup({"loss": run.loss_info})  # the loss of the best trial's layers
         self.reporter.search_end(
             {
                 "best_trial": best["trial"],

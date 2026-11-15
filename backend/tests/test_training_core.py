@@ -59,7 +59,12 @@ def test_config_defaults():
         "seed": None,
         "patience": None,
         "restore_best": True,
-        "loss": "cross_entropy",
+        # The default of the task (see losses.py); a run stores the loss it trains with.
+        "loss": "auto",
+        "class_weights": None,
+        "focal_gamma": 2.0,
+        "label_smoothing": 0.0,
+        "huber_delta": 1.0,
         "feature_training": "pretrain",
     }
     assert TrainingConfig.from_dict(config.to_dict()) == config
