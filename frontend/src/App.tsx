@@ -13,6 +13,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { PricingPage } from './billing/PricingPage';
 import { BuilderPage } from './builder/BuilderPage';
 import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
+import { EDITOR_PATH, RedirectToEditor } from './components/RedirectToEditor';
 import { RequireAuth } from './components/RequireAuth';
 import { DataPage } from './data/DataPage';
 import { LegalPage } from './legal/LegalPage';
@@ -42,7 +43,9 @@ export default function App() {
               </AppShell.Header>
               <AppShell.Main>
                 <MonitoredRoutes>
-                  <Route path="/" element={<BuilderPage />} />
+                  <Route path={EDITOR_PATH} element={<BuilderPage />} />
+                  {/* `/` is the landing page (frontend/landing/); in the app it leads to the editor. */}
+                  <Route path="/" element={<RedirectToEditor />} />
                   {/* One route, so switching preparations keeps the page (and its state). */}
                   <Route path="/data/:prepId?" element={<DataPage />} />
                   <Route

@@ -160,7 +160,8 @@ cd brick-dnn
 docker compose up -d
 ```
 
-Open <http://localhost:8080>. Data (accounts, saved networks, training runs) lives in the
+Open <http://localhost:8080/app> for the editor (<http://localhost:8080> is the landing
+page). Data (accounts, saved networks, training runs) lives in the
 `brickdnn-data` volume. To enable training of neural networks, build the image with PyTorch
 (CPU, about 1 GB more): `BRICKDNN_INSTALL_TORCH=true docker compose up -d --build`. Classical
 models (Gaussian processes, SVMs, gradient boosting) train in the default image. To create an admin account for the Django admin at `/admin/`:
@@ -197,7 +198,8 @@ npm install
 npm run dev
 ```
 
-The Vite dev server proxies `/api` to the backend, so no CORS setup is needed. If the API runs
+The editor is at <http://localhost:5173/app>; `/` and `/de/` are the landing pages. The Vite
+dev server proxies `/api` to the backend, so no CORS setup is needed. If the API runs
 elsewhere, start the UI with `BACKEND_URL=http://host:port npm run dev`.
 
 A `Makefile` wraps these steps (`make install`, `make install-training`, `make backend`,
@@ -347,6 +349,17 @@ backend/   Django REST API: accounts (JWT), saved and shared networks, datasets,
    └── brickdnn/data/       data preparation with pandas: imports, steps, profiles, export
 ```
 
+**Addresses.** `/` (English) and `/de/` (German) are static landing pages without the app:
+plain HTML that `frontend/landing/` turns into files at build time (with `robots.txt`,
+`sitemap.xml` and `llms.txt`), readable without JavaScript, with no cookies and nothing loaded
+from elsewhere. The editor is at `/app`; every other page of the app (`/data`, `/projects`,
+`/pricing`, `/share/…`, `/login`, …) is where it was. Old links into the editor still work:
+`/?…` is redirected to `/app?…` (nginx), a `#…` that is not a section of the landing page goes
+on to `/app#…`, and so do visitors who are logged in (a small inline script that reads the
+app's login in localStorage); inside the app, a link to `/` opens the editor. Their
+screenshots are taken again with Playwright from a local Brick DNN with real trainings, see
+[frontend/landing/screenshots/README.md](frontend/landing/screenshots/README.md).
+
 The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
 no hard-coded knowledge of layers or their parameters.
 
@@ -360,6 +373,7 @@ brick-dnn/
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
 ├── frontend/
+│   ├── landing/             static landing pages (/ and /de/), built into plain HTML
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
 │       ├── sharing/         share dialog, networks shared by link
