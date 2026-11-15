@@ -319,10 +319,30 @@ uptime check opens an issue. **Mind the disk**: every backup on the server's dis
 --list` shows their sizes. Without Hetzner's backups these copies are on the same disk as the
 site: they help after a mistake or a broken database, not after losing the server.
 
-**Offsite copies to S3-compatible storage** (Hetzner Object Storage, Backblaze B2 …) are not
-built in: the image has no S3 client (`boto3`). With shell access, `rclone` on the server can
-copy the folder after the daily backup (for example at 05:00 from root's crontab):
-`rclone sync /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups remote:bucket/brickdnn`.
+**Offsite copies** are not built in (the image has no storage client), but `rclone` on the
+server copies the backup folder to any storage it supports: Infomaniak Swiss Backup and other
+OpenStack Swift storage, S3-compatible storage (Hetzner Object Storage, Backblaze B2 …) and
+more. brickdnn.com copies to Swiss Backup this way:
+
+1. `sudo apt-get install -y rclone`, then put the provider's `rclone.conf` into
+   `/root/.config/rclone/` (Swiss Backup offers it for download per device), readable by root
+   only (`chmod 600`), with the password filled in. Keep the password in a password manager as
+   well: without it the copies are lost with the server. It does not belong in GitHub or `.env`.
+2. `sudo rclone listremotes` names the remote; `sudo rclone mkdir REMOTE:brickdnn-backups`
+   creates the container.
+3. A first copy, by hand:
+   `sudo rclone copy /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups REMOTE:brickdnn-backups -v`.
+4. Every six hours from root's crontab (`sudo crontab -e`), one line:
+
+   ```
+   0 */6 * * * rclone copy /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups REMOTE:brickdnn-backups --log-file /var/log/rclone-backup.log && rclone delete REMOTE:brickdnn-backups --min-age 35d --log-file /var/log/rclone-backup.log
+   ```
+
+`copy`, not `sync`: a backup deleted on the server (by the rotation, a mistake or an attacker)
+stays in the offsite copy, and `delete --min-age 35d` keeps that store from growing without
+end. Every six hours because the daily backup runs ten minutes after the clean-up service
+starts and then once a day, so its time moves with every deploy; only new files are
+transferred. `sudo tail /var/log/rclone-backup.log` shows the last runs.
 
 ```bash
 $C exec cleanup python manage.py backup --list   # the backups, newest first
