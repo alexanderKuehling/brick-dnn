@@ -320,7 +320,7 @@ folder holds password hashes and the secret key: it is readable by the app's use
 copies of it should be kept as carefully. `/api/health/` reports `backup: failed` when the last
 backup failed or the newest is older than 50 hours (`BRICKDNN_BACKUP_MAX_AGE_HOURS`), so the
 uptime check opens an issue. **Mind the disk**: every backup on the server's disk takes space
-(7 + 4 backups of up to 1 GB of files on brickdnn.com); `$C exec cleanup python manage.py backup
+(3 + 2 backups of up to 1 GB of files on brickdnn.com, which copies them offsite); `$C exec cleanup python manage.py backup
 --list` shows their sizes. Without Hetzner's backups these copies are on the same disk as the
 site: they help after a mistake or a broken database, not after losing the server.
 

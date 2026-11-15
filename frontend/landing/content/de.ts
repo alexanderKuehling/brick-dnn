@@ -73,7 +73,7 @@ export const de: LandingContent = {
       },
       {
         term: 'Was es kostet',
-        html: `Bauen, Prüfen und Code-Export sind kostenlos und ohne Konto möglich. Der kostenlose Tarif enthält Training auf dem Server (${cpuHours(free.cpuHoursPerMonth)} im Monat, ${free.storageGb} GB Speicher). Die kostenpflichtigen Tarife kosten ${paidPrices} im Monat, inklusive Umsatzsteuer.`,
+        html: `Bauen, Prüfen und Code-Export sind kostenlos und ohne Konto möglich. Der kostenlose Tarif enthält Training auf dem Server (${cpuHours(free.cpuHoursPerMonth)} im Monat, ${number(free.storageGb)} GB Speicher). Die kostenpflichtigen Tarife kosten ${paidPrices} im Monat, inklusive Umsatzsteuer.`,
       },
       {
         term: 'Wo die Daten liegen',
@@ -286,7 +286,7 @@ export const de: LandingContent = {
       plan.name,
       euro(plan.price),
       cpuHours(plan.cpuHoursPerMonth),
-      `${plan.storageGb} GB`,
+      `${number(plan.storageGb)} GB`,
       cpuTime(plan.cpuMinutesPerRun),
       String(plan.concurrentTrainings),
     ],
@@ -317,7 +317,7 @@ export const de: LandingContent = {
       },
       {
         question: 'Was kostet Brick DNN?',
-        html: `Bauen, Prüfen und Exportieren sind kostenlos. Der kostenlose Tarif enthält ${cpuHours(free.cpuHoursPerMonth)} Training im Monat und ${free.storageGb} GB Speicher. Tarife mit mehr Rechenzeit und Speicher kosten ${paidPrices} im Monat, inklusive Umsatzsteuer.`,
+        html: `Bauen, Prüfen und Exportieren sind kostenlos. Der kostenlose Tarif enthält ${cpuHours(free.cpuHoursPerMonth)} Training im Monat und ${number(free.storageGb)} GB Speicher. Tarife mit mehr Rechenzeit und Speicher kosten ${paidPrices} im Monat, inklusive Umsatzsteuer.`,
       },
       {
         question: 'Kann ich Brick DNN in einer Lehrveranstaltung oder für die Forschung nutzen?',

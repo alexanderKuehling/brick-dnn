@@ -278,6 +278,11 @@
   the charts and metrics.
 
 ### Changed
+- **brickdnn.com: smaller storage quotas, fewer local backups.** The plans now include 0.5 GB
+  (Free), 3 GB (Starter), 10 GB (Plus) and 50 GB (Pro) instead of 1 / 5 / 20 / 100 GB, so that
+  the storage the plans promise fits the server's disk; compute and prices are unchanged. The
+  server keeps 3 daily and 2 weekly backups instead of 7 and 4, as they are copied offsite to
+  Swiss Backup every six hours. The landing pages and docs/training.md show the new quotas.
 - **Validation and test data are optional.** In the Data tab (*Target & split*) the validation
   and the test share may each be 0 % (both 0: every row is a training row); the split bar shows
   an empty part as *none*, a note explains the consequences, and the readiness check no longer
