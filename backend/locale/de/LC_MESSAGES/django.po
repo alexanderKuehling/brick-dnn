@@ -1,0 +1,3040 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Brick DNN\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: brick_dnn_core/accounts.py:633
+msgid "The current password is wrong."
+msgstr "Das aktuelle Passwort ist falsch."
+
+#: brick_dnn_core/accounts.py:726
+msgid "Your plan has no compute beyond its monthly allowance."
+msgstr ""
+"Ihr Tarif enthält keine Rechenzeit über das monatliche Kontingent hinaus."
+
+#: brick_dnn_core/accounts.py:730
+msgid ""
+"Compute beyond the allowance needs a subscription that is paid and not cancelled."
+msgstr ""
+"Rechenzeit über das Kontingent hinaus erfordert ein bezahltes, nicht gekündigtes Abonnement."
+
+#: brick_dnn_core/accounts.py:773
+msgid "The password is wrong."
+msgstr "Das Passwort ist falsch."
+
+#: brick_dnn_core/accounts.py:778
+msgid "Type your username exactly to confirm."
+msgstr "Geben Sie zur Bestätigung Ihren Benutzernamen genau so ein."
+
+#: brick_dnn_core/legal.py:34
+msgid "Imprint"
+msgstr "Impressum"
+
+#: brick_dnn_core/legal.py:35
+msgid "Privacy policy"
+msgstr "Datenschutzerklärung"
+
+#: brick_dnn_core/legal.py:36
+msgid "Terms of use"
+msgstr "Nutzungsbedingungen"
+
+#: brick_dnn_core/legal.py:37
+msgid "Refund policy"
+msgstr "Erstattung"
+
+#: brick_dnn_core/legal.py:147
+msgid "This page has not been set up on this server."
+msgstr "Diese Seite ist auf diesem Server nicht eingerichtet."
+
+#: brick_dnn_core/mail.py:84
+msgid "Hello,"
+msgstr "Hallo,"
+
+#: brick_dnn_core/notices.py:62
+msgid ""
+"If this was not you, change your password right away and turn on two-factor authentication on your account page, or ask the operator of the site for help."
+msgstr ""
+"Falls Sie das nicht waren, ändern Sie sofort Ihr Passwort und schalten Sie auf Ihrer Kontoseite die Zwei-Faktor-Authentifizierung ein, oder bitten Sie den Betreiber der Seite um Hilfe."
+
+#: brick_dnn_core/notices.py:47
+msgid ""
+"You get this e-mail because of your account “%(username)s” at %(site)s."
+msgstr ""
+"Sie erhalten diese E-Mail wegen Ihres Kontos „%(username)s“ bei %(site)s."
+
+#: brick_dnn_core/notices.py:54
+msgid "Hello %(username)s,"
+msgstr "Hallo %(username)s,"
+
+#: brick_dnn_core/notices.py:58
+msgid "Open your account"
+msgstr "Zu Ihrem Konto"
+
+#: brick_dnn_core/notices.py:154
+msgid "Your password was changed"
+msgstr "Ihr Passwort wurde geändert"
+
+#: brick_dnn_core/notices.py:164
+msgid "Your e-mail address was changed"
+msgstr "Ihre E-Mail-Adresse wurde geändert"
+
+#: brick_dnn_core/notices.py:180
+msgid "Two-factor authentication turned on"
+msgstr "Zwei-Faktor-Authentifizierung eingeschaltet"
+
+#: brick_dnn_core/notices.py:181
+msgid ""
+"Two-factor authentication is now on for your account: logging in needs a code from your authenticator app. Keep your recovery codes in a safe place."
+msgstr ""
+"Die Zwei-Faktor-Authentifizierung ist für Ihr Konto jetzt eingeschaltet: Zum Anmelden brauchen Sie einen Code aus Ihrer Authenticator-App. Bewahren Sie Ihre Wiederherstellungscodes sicher auf."
+
+#: brick_dnn_core/notices.py:186
+msgid "Two-factor authentication turned off"
+msgstr "Zwei-Faktor-Authentifizierung ausgeschaltet"
+
+#: brick_dnn_core/notices.py:187
+msgid ""
+"Two-factor authentication was turned off for your account: logging in needs only your password now."
+msgstr ""
+"Die Zwei-Faktor-Authentifizierung wurde für Ihr Konto ausgeschaltet: Zum Anmelden genügt jetzt Ihr Passwort."
+
+#: brick_dnn_core/notices.py:198
+msgid "A new API token was created"
+msgstr "Ein neues API-Token wurde erstellt"
+
+#: brick_dnn_core/notices.py:215
+msgid "An app was connected to your account"
+msgstr "Eine App wurde mit Ihrem Konto verbunden"
+
+#: brick_dnn_core/notices.py:155
+msgid ""
+"The password of your account was changed. All other logins were ended."
+msgstr ""
+"Das Passwort Ihres Kontos wurde geändert. Alle anderen Anmeldungen wurden beendet."
+
+#: brick_dnn_core/notices.py:96
+msgid "Confirm your e-mail address"
+msgstr "Bestätigen Sie Ihre E-Mail-Adresse"
+
+#: brick_dnn_core/notices.py:124
+msgid "Reset your password"
+msgstr "Passwort zurücksetzen"
+
+#: brick_dnn_core/notices.py:166
+msgid ""
+"The e-mail address of your account was changed from %(old)s to %(new)s. Further e-mails go to the new address."
+msgstr ""
+"Die E-Mail-Adresse Ihres Kontos wurde von %(old)s in %(new)s geändert. Weitere E-Mails gehen an die neue Adresse."
+
+#: brick_dnn_core/notices.py:200
+msgid ""
+"An API token named “%(name)s” was created for your account. Scripts and AI assistants can use it to work with your networks and data. You can delete it on the page API tokens."
+msgstr ""
+"Für Ihr Konto wurde ein API-Token namens „%(name)s“ erstellt. Skripte und KI-Assistenten können damit auf Ihre Netze und Daten zugreifen. Sie können es auf der Seite API-Token löschen."
+
+#: brick_dnn_core/notices.py:217
+msgid ""
+"The app “%(app)s” was connected to your account (OAuth) and can now use your networks and data through the MCP server. You can disconnect it on the page API tokens."
+msgstr ""
+"Die App „%(app)s“ wurde mit Ihrem Konto verbunden (OAuth) und kann jetzt über den MCP-Server auf Ihre Netze und Daten zugreifen. Sie können die Verbindung auf der Seite API-Token trennen."
+
+#: brick_dnn_core/notices.py:239
+msgid "Your account will be deleted"
+msgstr "Ihr Konto wird gelöscht"
+
+#: brick_dnn_core/notices.py:105
+msgid "Confirm my e-mail address"
+msgstr "E-Mail-Adresse bestätigen"
+
+#: brick_dnn_core/notices.py:127
+msgid ""
+"Someone asked to reset the password of your account. If it was you, choose a new password with this link. It is valid for one hour and works once."
+msgstr ""
+"Jemand hat angefordert, das Passwort Ihres Kontos zurückzusetzen. Wenn Sie das waren, legen Sie mit diesem Link ein neues Passwort fest. Er gilt eine Stunde und funktioniert einmal."
+
+#: brick_dnn_core/notices.py:132
+msgid "Choose a new password"
+msgstr "Neues Passwort festlegen"
+
+#: brick_dnn_core/notices.py:134
+msgid ""
+"If you did not ask for this, ignore this e-mail: your password stays as it is. Two-factor authentication, if you turned it on, stays on after a reset."
+msgstr ""
+"Falls Sie das nicht angefordert haben, ignorieren Sie diese E-Mail: Ihr Passwort bleibt unverändert. Eine eingeschaltete Zwei-Faktor-Authentifizierung bleibt auch nach dem Zurücksetzen eingeschaltet."
+
+#: brick_dnn_core/notices.py:252
+msgid ""
+"To keep it, simply log in before then. If you do not need it any more, you do not have to do anything; you can also download your data on the account page first."
+msgstr ""
+"Um es zu behalten, melden Sie sich einfach vorher an. Wenn Sie es nicht mehr brauchen, müssen Sie nichts tun; Sie können vorher auch Ihre Daten auf der Kontoseite herunterladen."
+
+#: brick_dnn_core/notices.py:258
+msgid "Log in to keep my account"
+msgstr "Anmelden und Konto behalten"
+
+#: brick_dnn_core/notices.py:99
+msgid ""
+"Please confirm that %(email)s is the e-mail address of your account. Open the link and log in if you are asked to."
+msgstr ""
+"Bitte bestätigen Sie, dass %(email)s die E-Mail-Adresse Ihres Kontos ist. Öffnen Sie den Link und melden Sie sich an, falls Sie dazu aufgefordert werden."
+
+#: brick_dnn_core/notices.py:107
+msgid ""
+"The link is valid for %(days)d days. If you did not sign up or change your address, ignore this e-mail: nothing changes without the link."
+msgstr ""
+"Der Link gilt %(days)d Tage. Falls Sie sich nicht registriert oder Ihre Adresse nicht geändert haben, ignorieren Sie diese E-Mail: Ohne den Link ändert sich nichts."
+
+#: brick_dnn_core/notices.py:242
+msgid ""
+"Nobody has used your account for a long time. Accounts that are not used for %(days)d days are deleted with everything in them: your networks, data and trainings. Yours will be deleted on or after %(date)s."
+msgstr ""
+"Ihr Konto wurde lange nicht benutzt. Konten, die %(days)d Tage lang nicht benutzt werden, werden mit allem gelöscht, was darin ist: Ihren Netzen, Daten und Trainings. Ihres wird am %(date)s oder danach gelöscht."
+
+#: brick_dnn_core/notices.py:250
+msgid "j F Y"
+msgstr "j. F Y"
+
+#: brick_dnn_core/recovery.py:59
+msgid ""
+"Password reset is not available on this server: it sends no e-mail. Ask its operator for help."
+msgstr ""
+"Auf diesem Server kann das Passwort nicht zurückgesetzt werden: Er verschickt keine E-Mails. Wenden Sie sich an den Betreiber."
+
+#: brick_dnn_core/recovery.py:62
+msgid ""
+"If an account with this username or e-mail address exists and its e-mail address may receive reset links, we sent a link to it. It is valid for one hour."
+msgstr ""
+"Falls es ein Konto mit diesem Benutzernamen oder dieser E-Mail-Adresse gibt und an dessen Adresse Links zum Zurücksetzen gehen dürfen, haben wir einen Link dorthin geschickt. Er gilt eine Stunde."
+
+#: brick_dnn_core/recovery.py:66
+msgid "This link is invalid or has expired. Ask for a new one."
+msgstr "Dieser Link ist ungültig oder abgelaufen. Fordern Sie einen neuen an."
+
+#: brick_dnn_core/recovery.py:184
+msgid ""
+"This link is for another account. Log in with the account it was sent to."
+msgstr ""
+"Dieser Link gehört zu einem anderen Konto. Melden Sie sich mit dem Konto an, an das er geschickt wurde."
+
+#: brick_dnn_core/recovery.py:191
+msgid "This link is for an e-mail address the account does not use any more."
+msgstr ""
+"Dieser Link gehört zu einer E-Mail-Adresse, die das Konto nicht mehr verwendet."
+
+#: brick_dnn_core/recovery.py:216
+msgid "Add an e-mail address first."
+msgstr "Hinterlegen Sie zuerst eine E-Mail-Adresse."
+
+#: brick_dnn_core/recovery.py:367
+msgid "Your password was changed. Log in with the new one."
+msgstr "Ihr Passwort wurde geändert. Melden Sie sich mit dem neuen an."
+
+#: brick_dnn_core/recovery.py:209
+msgid "This server sends no e-mail, so addresses cannot be confirmed."
+msgstr ""
+"Dieser Server verschickt keine E-Mails, daher können Adressen nicht bestätigt werden."
+
+#: brick_dnn_core/recovery.py:218
+msgid "Your e-mail address is confirmed already."
+msgstr "Ihre E-Mail-Adresse ist bereits bestätigt."
+
+#: brick_dnn_core/recovery.py:220
+msgid "We sent a link to %(email)s."
+msgstr "Wir haben einen Link an %(email)s geschickt."
+
+#: brick_dnn_core/serializers.py:81
+msgid "An account with this e-mail address exists already."
+msgstr "Es gibt bereits ein Konto mit dieser E-Mail-Adresse."
+
+#: brick_dnn_core/serializers.py:67
+msgid "Enter your e-mail address."
+msgstr "Geben Sie Ihre E-Mail-Adresse ein."
+
+#: brick_dnn_core/serializers.py:106
+msgid "A user with that username already exists."
+msgstr "Dieser Benutzername ist bereits vergeben."
+
+#: brick_dnn_core/serializers.py:113
+msgid "Please agree to the terms of use to create an account."
+msgstr ""
+"Bitte stimmen Sie den Nutzungsbedingungen zu, um ein Konto zu erstellen."
+
+#: brick_dnn_core/two_factor.py:348
+msgid "The login has expired. Log in again."
+msgstr "Die Anmeldung ist abgelaufen. Melden Sie sich erneut an."
+
+#: brick_dnn_core/two_factor.py:401
+msgid "The code is wrong or was used already."
+msgstr "Der Code ist falsch oder wurde bereits verwendet."
+
+#: brick_dnn_core/two_factor.py:423
+msgid "Two-factor authentication is on already."
+msgstr "Die Zwei-Faktor-Authentifizierung ist bereits eingeschaltet."
+
+#: brick_dnn_core/two_factor.py:447
+msgid "Start the setup first."
+msgstr "Starten Sie zuerst die Einrichtung."
+
+#: brick_dnn_core/two_factor.py:491
+msgid "Two-factor authentication is off."
+msgstr "Die Zwei-Faktor-Authentifizierung ist ausgeschaltet."
+
+#: brick_dnn_core/two_factor.py:455
+msgid "The code is wrong. Check the app."
+msgstr "Der Code ist falsch. Prüfen Sie die App."
+
+#: brick_dnn_core/views.py:115
+msgid "Registration is disabled on this server."
+msgstr "Die Registrierung ist auf diesem Server deaktiviert."
+
+#: brick_dnn_core/templates/brick_dnn_core/email/base.html
+msgid "If the button does not work, copy this address into your browser:"
+msgstr ""
+"Falls der Button nicht funktioniert, kopieren Sie diese Adresse in Ihren Browser:"
+
+#: catalog
+msgid ""
+"Entry point of the network. The shape excludes the batch dimension, e.g. [784] for flat features, [3, 32, 32] for RGB images or [64] for 64 token ids."
+msgstr ""
+"Einstiegspunkt des Netzes. Die Form ohne die Batch-Dimension, z. B. [784] für flache Merkmale, [3, 32, 32] für RGB-Bilder oder [64] für 64 Token-IDs."
+
+#: catalog
+msgid "Shape"
+msgstr "Form"
+
+#: catalog
+msgid "Tensor shape without the batch dimension."
+msgstr "Tensor-Form ohne die Batch-Dimension."
+
+#: catalog
+msgid "Data type"
+msgstr "Datentyp"
+
+#: catalog
+msgid "Use 'long' for integer token ids that feed an Embedding layer."
+msgstr ""
+"'long' für ganzzahlige Token-IDs, die in eine Embedding-Schicht gehen."
+
+#: catalog
+msgid "Fully connected layer: y = xWᵀ + b. Applied to the last dimension."
+msgstr ""
+"Vollständig verbundene Schicht: y = xWᵀ + b. Wirkt auf die letzte Dimension."
+
+#: catalog
+msgid "Input features"
+msgstr "Eingabemerkmale"
+
+#: catalog
+msgid "Leave empty to infer it from the input shape."
+msgstr "Leer lassen, um den Wert aus der Eingabeform abzuleiten."
+
+#: catalog
+msgid "Output features"
+msgstr "Ausgabemerkmale"
+
+#: catalog
+msgid "Bias"
+msgstr "Bias"
+
+#: catalog
+msgid "Input"
+msgstr "Eingabe"
+
+#: catalog
+msgid "Flattens all dimensions except the batch into one feature vector."
+msgstr ""
+"Fasst alle Dimensionen außer der Batch-Dimension zu einem Merkmalsvektor zusammen."
+
+#: catalog
+msgid ""
+"Reshapes the tensor (batch dimension excluded). One entry may be -1 to infer it, e.g. [784] → [1, 28, 28]."
+msgstr ""
+"Formt den Tensor um (ohne Batch-Dimension). Ein Eintrag darf -1 sein und wird dann abgeleitet, z. B. [784] → [1, 28, 28]."
+
+#: catalog
+msgid "Target shape"
+msgstr "Zielform"
+
+#: catalog
+msgid "Shape without the batch dimension. Use -1 once to infer a dimension."
+msgstr ""
+"Form ohne die Batch-Dimension. -1 einmal verwenden, um eine Dimension abzuleiten."
+
+#: catalog
+msgid ""
+"Randomly zeroes elements with probability p during training (regularisation)."
+msgstr ""
+"Setzt während des Trainings Elemente zufällig mit Wahrscheinlichkeit p auf null (Regularisierung)."
+
+#: catalog
+msgid "Drop probability"
+msgstr "Dropout-Wahrscheinlichkeit"
+
+#: catalog
+msgid "Element-wise non-linearity such as ReLU, GELU or Sigmoid."
+msgstr "Elementweise Nichtlinearität wie ReLU, GELU oder Sigmoid."
+
+#: catalog
+msgid "Function"
+msgstr "Funktion"
+
+#: catalog
+msgid ""
+"1-D convolution over (channels, length), e.g. for audio or time series."
+msgstr "1-D-Faltung über (Kanäle, Länge), z. B. für Audio oder Zeitreihen."
+
+#: catalog
+msgid "Input channels"
+msgstr "Eingabekanäle"
+
+#: catalog
+msgid "Output channels (filters)"
+msgstr "Ausgabekanäle (Filter)"
+
+#: catalog
+msgid "Kernel size"
+msgstr "Kernelgröße"
+
+#: catalog
+msgid "Stride"
+msgstr "Schrittweite (Stride)"
+
+#: catalog
+msgid "Padding"
+msgstr "Padding"
+
+#: catalog
+msgid "'same' keeps the spatial size, 'valid' adds no padding."
+msgstr ""
+"'same' behält die räumliche Größe bei, 'valid' fügt kein Padding hinzu."
+
+#: catalog
+msgid "Padding size"
+msgstr "Padding-Größe"
+
+#: catalog
+msgid ""
+"2-D convolution over (channels, height, width), the workhorse of image models."
+msgstr ""
+"2-D-Faltung über (Kanäle, Höhe, Breite), das Arbeitspferd der Bildmodelle."
+
+#: catalog
+msgid ""
+"Transposed 2-D convolution: upsamples (channels, height, width) with learned weights, e.g. in the decoder of a U-Net or an autoencoder. Kernel 2 with stride 2 doubles the size."
+msgstr ""
+"Transponierte 2-D-Faltung: vergrößert (Kanäle, Höhe, Breite) mit gelernten Gewichten, z. B. im Decoder eines U-Nets oder Autoencoders. Kernel 2 mit Stride 2 verdoppelt die Größe."
+
+#: catalog
+msgid "Removes this many rows and columns from every side of the output."
+msgstr "Entfernt so viele Zeilen und Spalten an jeder Seite der Ausgabe."
+
+#: catalog
+msgid "Output padding"
+msgstr "Ausgabe-Padding"
+
+#: catalog
+msgid ""
+"Extra rows and columns on one side of the output (must be below the stride)."
+msgstr ""
+"Zusätzliche Zeilen und Spalten an einer Seite der Ausgabe (muss kleiner als der Stride sein)."
+
+#: catalog
+msgid "Downsamples (channels, length) by taking the maximum in each window."
+msgstr ""
+"Verkleinert (Kanäle, Länge), indem es in jedem Fenster das Maximum nimmt."
+
+#: catalog
+msgid "Leave empty to use the kernel size."
+msgstr "Leer lassen, um die Kernelgröße zu verwenden."
+
+#: catalog
+msgid ""
+"Downsamples (channels, height, width) by taking the maximum in each window."
+msgstr ""
+"Verkleinert (Kanäle, Höhe, Breite), indem es in jedem Fenster das Maximum nimmt."
+
+#: catalog
+msgid "Downsamples (channels, height, width) by averaging each window."
+msgstr ""
+"Verkleinert (Kanäle, Höhe, Breite), indem es über jedes Fenster mittelt."
+
+#: catalog
+msgid ""
+"Averages each channel down to a fixed output size regardless of the input size. Output size 1×1 gives global average pooling."
+msgstr ""
+"Mittelt jeden Kanal auf eine feste Ausgabegröße, unabhängig von der Eingabegröße. Ausgabegröße 1×1 ergibt Global Average Pooling."
+
+#: catalog
+msgid "Output size"
+msgstr "Ausgabegröße"
+
+#: catalog
+msgid "Batch normalisation for (features) or (channels, length) inputs."
+msgstr ""
+"Batch-Normalisierung für Eingaben der Form (Merkmale) oder (Kanäle, Länge)."
+
+#: catalog
+msgid "Features / channels"
+msgstr "Merkmale / Kanäle"
+
+#: catalog
+msgid "Batch normalisation for (channels, height, width) inputs."
+msgstr "Batch-Normalisierung für Eingaben der Form (Kanäle, Höhe, Breite)."
+
+#: catalog
+msgid "Normalises over the last dimension. Standard in Transformers."
+msgstr "Normalisiert über die letzte Dimension. Standard in Transformern."
+
+#: catalog
+msgid "Features"
+msgstr "Merkmale"
+
+#: catalog
+msgid ""
+"Maps integer token ids to dense vectors. Needs an Input with data type 'long'."
+msgstr ""
+"Bildet ganzzahlige Token-IDs auf dichte Vektoren ab. Braucht eine Eingabe mit Datentyp 'long'."
+
+#: catalog
+msgid "Vocabulary size"
+msgstr "Vokabulargröße"
+
+#: catalog
+msgid "Embedding size"
+msgstr "Embedding-Größe"
+
+#: catalog
+msgid ""
+"Adds a learned position vector to every step of a (sequence, features) tensor, so that Transformers know the order of the tokens."
+msgstr ""
+"Addiert zu jedem Schritt eines Tensors (Sequenz, Merkmale) einen gelernten Positionsvektor, damit Transformer die Reihenfolge der Token kennen."
+
+#: catalog
+msgid "Max. sequence length"
+msgstr "Max. Sequenzlänge"
+
+#: catalog
+msgid "Vanilla recurrent layer over a (sequence, features) input."
+msgstr "Einfache rekurrente Schicht über eine Eingabe (Sequenz, Merkmale)."
+
+#: catalog
+msgid "Hidden size"
+msgstr "Größe des Hidden State"
+
+#: catalog
+msgid "Stacked layers"
+msgstr "Gestapelte Schichten"
+
+#: catalog
+msgid "Bidirectional"
+msgstr "Bidirektional"
+
+#: catalog
+msgid "Return sequences"
+msgstr "Sequenzen ausgeben"
+
+#: catalog
+msgid ""
+"Output every time step (sequence, features) instead of only the last one."
+msgstr "Jeden Zeitschritt ausgeben (Sequenz, Merkmale) statt nur den letzten."
+
+#: catalog
+msgid "Long short-term memory layer over a (sequence, features) input."
+msgstr "Long-Short-Term-Memory-Schicht über eine Eingabe (Sequenz, Merkmale)."
+
+#: catalog
+msgid "Gated recurrent unit layer over a (sequence, features) input."
+msgstr "Gated-Recurrent-Unit-Schicht über eine Eingabe (Sequenz, Merkmale)."
+
+#: catalog
+msgid ""
+"Stack of self-attention encoder blocks over a (sequence, features) input."
+msgstr ""
+"Stapel von Self-Attention-Encoder-Blöcken über eine Eingabe (Sequenz, Merkmale)."
+
+#: catalog
+msgid "Model dimension"
+msgstr "Modelldimension"
+
+#: catalog
+msgid "Attention heads"
+msgstr "Attention-Heads"
+
+#: catalog
+msgid "Feed-forward size"
+msgstr "Größe des Feed-Forward-Netzes"
+
+#: catalog
+msgid "Dropout"
+msgstr "Dropout"
+
+#: catalog
+msgid ""
+"Reduces a (sequence, features) tensor to (features) by taking the mean, max, first or last step. Typical before a classification head."
+msgstr ""
+"Reduziert einen Tensor (Sequenz, Merkmale) auf (Merkmale) über den Mittelwert, das Maximum, den ersten oder den letzten Schritt. Typisch vor einem Klassifikationskopf."
+
+#: catalog
+msgid "Mode"
+msgstr "Modus"
+
+#: catalog
+msgid ""
+"Element-wise sum of two or more tensors of equal shape (residual connections)."
+msgstr ""
+"Elementweise Summe von zwei oder mehr Tensoren gleicher Form (Residualverbindungen)."
+
+#: catalog
+msgid ""
+"Concatenates two or more tensors along one dimension (batch excluded; -1 = last dimension). Inputs are joined in connection order."
+msgstr ""
+"Verkettet zwei oder mehr Tensoren entlang einer Dimension (ohne Batch; -1 = letzte Dimension). Die Eingaben werden in der Reihenfolge der Verbindungen aneinandergehängt."
+
+#: catalog
+msgid "Dimension"
+msgstr "Dimension"
+
+#: catalog
+msgid "RBF kernel"
+msgstr "RBF-Kernel"
+
+#: catalog
+msgid ""
+"Radial basis function (squared exponential) kernel for smooth functions. The most common kernel of Gaussian processes."
+msgstr ""
+"Radiale-Basisfunktion-Kernel (quadratisch exponentiell) für glatte Funktionen. Der häufigste Kernel von Gauß-Prozessen."
+
+#: catalog
+msgid "Length scale"
+msgstr "Längenskala"
+
+#: catalog
+msgid ""
+"How far apart (in standardised feature units) inputs still look alike. Initial value: the Gaussian process optimises it unless it is fixed."
+msgstr ""
+"Wie weit Eingaben (in standardisierten Merkmalseinheiten) auseinanderliegen dürfen und noch ähnlich wirken. Startwert: Der Gauß-Prozess optimiert ihn, sofern er nicht festgelegt ist."
+
+#: catalog
+msgid "Hyperparameters"
+msgstr "Hyperparameter"
+
+#: catalog
+msgid ""
+"optimize: the Gaussian process fits them to the training data, starting from the values above (within 1e-05 … 1e+05); custom bounds: within the bounds below; fixed: they keep these values."
+msgstr ""
+"optimize: Der Gauß-Prozess passt sie an die Trainingsdaten an, ausgehend von den Werten oben (zwischen 1e-05 … 1e+05); custom bounds: innerhalb der Grenzen unten; fixed: Sie behalten diese Werte."
+
+#: catalog
+msgid "Length scale: lower bound"
+msgstr "Längenskala: untere Grenze"
+
+#: catalog
+msgid "Length scale: upper bound"
+msgstr "Längenskala: obere Grenze"
+
+#: catalog
+msgid "Matérn kernel"
+msgstr "Matérn-Kernel"
+
+#: catalog
+msgid ""
+"Like RBF, but for rougher functions: ν = 0.5 is the exponential kernel, 1.5 gives once and 2.5 twice differentiable functions."
+msgstr ""
+"Wie RBF, aber für rauere Funktionen: ν = 0,5 ist der Exponentialkernel, 1,5 ergibt einmal und 2,5 zweimal differenzierbare Funktionen."
+
+#: catalog
+msgid "Smoothness ν"
+msgstr "Glattheit ν"
+
+#: catalog
+msgid "Smaller values give rougher functions (ν is not optimised)."
+msgstr "Kleinere Werte ergeben rauere Funktionen (ν wird nicht optimiert)."
+
+#: catalog
+msgid "Rational quadratic kernel"
+msgstr "Rational-quadratischer Kernel"
+
+#: catalog
+msgid ""
+"A mixture of RBF kernels of different length scales; alpha weights the mixture."
+msgstr ""
+"Eine Mischung von RBF-Kerneln verschiedener Längenskalen; alpha gewichtet die Mischung."
+
+#: catalog
+msgid "Alpha"
+msgstr "Alpha"
+
+#: catalog
+msgid "Weighting of large and small length scales (large values: like RBF)."
+msgstr "Gewichtung großer und kleiner Längenskalen (große Werte: wie RBF)."
+
+#: catalog
+msgid "Alpha: lower bound"
+msgstr "Alpha: untere Grenze"
+
+#: catalog
+msgid "Alpha: upper bound"
+msgstr "Alpha: obere Grenze"
+
+#: catalog
+msgid "Periodic kernel"
+msgstr "Periodischer Kernel"
+
+#: catalog
+msgid ""
+"Exp-sine-squared kernel for periodic functions: the periodicity is the distance after which the function repeats."
+msgstr ""
+"Exp-Sine-Squared-Kernel für periodische Funktionen: Die Periodizität ist der Abstand, nach dem sich die Funktion wiederholt."
+
+#: catalog
+msgid "Periodicity"
+msgstr "Periodizität"
+
+#: catalog
+msgid ""
+"Period in standardised feature units (the features are standardised before the kernel sees them)."
+msgstr ""
+"Periode in standardisierten Merkmalseinheiten (die Merkmale werden standardisiert, bevor der Kernel sie sieht)."
+
+#: catalog
+msgid "Periodicity: lower bound"
+msgstr "Periodizität: untere Grenze"
+
+#: catalog
+msgid "Periodicity: upper bound"
+msgstr "Periodizität: obere Grenze"
+
+#: catalog
+msgid "Dot product kernel"
+msgstr "Skalarprodukt-Kernel"
+
+#: catalog
+msgid ""
+"Linear kernel σ₀² + x·x′ (Bayesian linear regression). Multiply it with itself for polynomial trends."
+msgstr ""
+"Linearer Kernel σ₀² + x·x′ (bayessche lineare Regression). Mit sich selbst multipliziert für polynomiale Trends."
+
+#: catalog
+msgid "Sigma₀"
+msgstr "Sigma₀"
+
+#: catalog
+msgid "Inhomogeneity (offset)."
+msgstr "Inhomogenität (Offset)."
+
+#: catalog
+msgid "Sigma₀: lower bound"
+msgstr "Sigma₀: untere Grenze"
+
+#: catalog
+msgid "Sigma₀: upper bound"
+msgstr "Sigma₀: obere Grenze"
+
+#: catalog
+msgid "White noise kernel"
+msgstr "Weißes-Rauschen-Kernel"
+
+#: catalog
+msgid ""
+"Independent noise on every sample. Add it (KernelSum) to learn how noisy the targets are."
+msgstr ""
+"Unabhängiges Rauschen auf jeder Stichprobe. Addieren Sie ihn (KernelSum), um zu lernen, wie verrauscht die Zielwerte sind."
+
+#: catalog
+msgid "Noise level"
+msgstr "Rauschniveau"
+
+#: catalog
+msgid ""
+"Noise variance (of the standardised targets if Normalize targets is on)."
+msgstr ""
+"Rauschvarianz (der standardisierten Zielwerte, wenn Normalize targets eingeschaltet ist)."
+
+#: catalog
+msgid "Noise level: lower bound"
+msgstr "Rauschniveau: untere Grenze"
+
+#: catalog
+msgid "Noise level: upper bound"
+msgstr "Rauschniveau: obere Grenze"
+
+#: catalog
+msgid "Constant kernel"
+msgstr "Konstanter Kernel"
+
+#: catalog
+msgid ""
+"A constant: multiply another kernel with it (KernelProduct) to scale that kernel, add it (KernelSum) for a constant offset."
+msgstr ""
+"Eine Konstante: Multiplizieren Sie einen anderen Kernel damit (KernelProduct), um ihn zu skalieren, oder addieren Sie sie (KernelSum) für einen konstanten Offset."
+
+#: catalog
+msgid "Constant"
+msgstr "Konstante"
+
+#: catalog
+msgid "Constant: lower bound"
+msgstr "Konstante: untere Grenze"
+
+#: catalog
+msgid "Constant: upper bound"
+msgstr "Konstante: obere Grenze"
+
+#: catalog
+msgid "Kernel sum"
+msgstr "Kernel-Summe"
+
+#: catalog
+msgid ""
+"Adds two or more kernels, e.g. RBF + WhiteKernel for a smooth function with noise."
+msgstr ""
+"Addiert zwei oder mehr Kernel, z. B. RBF + WhiteKernel für eine glatte Funktion mit Rauschen."
+
+#: catalog
+msgid "Kernels"
+msgstr "Kernel"
+
+#: catalog
+msgid "Kernel product"
+msgstr "Kernel-Produkt"
+
+#: catalog
+msgid ""
+"Multiplies two or more kernels, e.g. ConstantKernel × RBF to scale a kernel, or RBF × ExpSineSquared for a slowly changing periodic pattern."
+msgstr ""
+"Multipliziert zwei oder mehr Kernel, z. B. ConstantKernel × RBF, um einen Kernel zu skalieren, oder RBF × ExpSineSquared für ein sich langsam änderndes periodisches Muster."
+
+#: catalog
+msgid "Gaussian process regression"
+msgstr "Gauß-Prozess-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with its uncertainty. Connect the Input (features) and optionally a kernel; without one it uses ConstantKernel × RBF + WhiteKernel. Fitting takes O(n³): for up to a few thousand training rows."
+msgstr ""
+"Sagt eine Zahl mit ihrer Unsicherheit vorher. Verbinden Sie die Eingabe (Merkmale) und optional einen Kernel; ohne Kernel wird ConstantKernel × RBF + WhiteKernel verwendet. Das Anpassen braucht O(n³): für bis zu einige Tausend Trainingszeilen."
+
+#: catalog
+msgid ""
+"Added to the diagonal of the kernel matrix: keeps the fit numerically stable. To learn the noise of the targets, add a WhiteKernel instead."
+msgstr ""
+"Wird zur Diagonale der Kernelmatrix addiert und hält die Anpassung numerisch stabil. Um das Rauschen der Zielwerte zu lernen, fügen Sie stattdessen einen WhiteKernel hinzu."
+
+#: catalog
+msgid "Normalize targets"
+msgstr "Zielwerte normalisieren"
+
+#: catalog
+msgid ""
+"Standardise the targets before fitting (recommended unless they are already centred around 0 with variance 1)."
+msgstr ""
+"Standardisiert die Zielwerte vor dem Anpassen (empfohlen, außer sie sind bereits um 0 zentriert mit Varianz 1)."
+
+#: catalog
+msgid "Optimizer restarts"
+msgstr "Neustarts des Optimierers"
+
+#: catalog
+msgid ""
+"Fit the kernel hyperparameters again from this many random starting points and keep the best fit (slower, but less likely to get stuck)."
+msgstr ""
+"Passt die Kernel-Hyperparameter erneut von so vielen zufälligen Startpunkten aus an und behält die beste Anpassung (langsamer, bleibt aber seltener hängen)."
+
+#: catalog
+msgid "Kernel"
+msgstr "Kernel"
+
+#: catalog
+msgid "Gaussian process classification"
+msgstr "Gauß-Prozess-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with class probabilities (Laplace approximation; with more than two classes one Gaussian process per class). Connect the Input (features) and optionally a kernel; without one it uses ConstantKernel × RBF. The classes come from the data. Fitting takes O(n³) per class: for up to about two thousand training rows."
+msgstr ""
+"Klassifiziert mit Klassenwahrscheinlichkeiten (Laplace-Approximation; bei mehr als zwei Klassen ein Gauß-Prozess pro Klasse). Verbinden Sie die Eingabe (Merkmale) und optional einen Kernel; ohne Kernel wird ConstantKernel × RBF verwendet. Die Klassen kommen aus den Daten. Das Anpassen braucht O(n³) pro Klasse: für bis zu etwa zweitausend Trainingszeilen."
+
+#: catalog
+msgid "Support vector regression"
+msgstr "Support-Vector-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with an ε-insensitive support vector machine. Connect the Input (features). Fitting takes O(n²) or more: for up to tens of thousands of training rows."
+msgstr ""
+"Sagt eine Zahl mit einer ε-insensitiven Support Vector Machine vorher. Verbinden Sie die Eingabe (Merkmale). Das Anpassen braucht O(n²) oder mehr: für bis zu einige Zehntausend Trainingszeilen."
+
+#: catalog
+msgid ""
+"The SVM's own kernel (kernel bricks only work with Gaussian processes)."
+msgstr ""
+"Der eigene Kernel der SVM (Kernel-Bausteine funktionieren nur mit Gauß-Prozessen)."
+
+#: catalog
+msgid "C (regularisation)"
+msgstr "C (Regularisierung)"
+
+#: catalog
+msgid ""
+"Larger values fit the training data more closely, smaller ones regularise more."
+msgstr ""
+"Größere Werte passen sich enger an die Trainingsdaten an, kleinere regularisieren stärker."
+
+#: catalog
+msgid "Gamma"
+msgstr "Gamma"
+
+#: catalog
+msgid ""
+"Coefficient of the rbf, poly and sigmoid kernels: scale = 1 / (features × variance), auto = 1 / features, or a value."
+msgstr ""
+"Koeffizient der Kernel rbf, poly und sigmoid: scale = 1 / (Merkmale × Varianz), auto = 1 / Merkmale, oder ein Wert."
+
+#: catalog
+msgid "Gamma value"
+msgstr "Gamma-Wert"
+
+#: catalog
+msgid "Degree"
+msgstr "Grad"
+
+#: catalog
+msgid "Coef0"
+msgstr "Coef0"
+
+#: catalog
+msgid "Independent term of the poly and sigmoid kernels."
+msgstr "Unabhängiger Term der Kernel poly und sigmoid."
+
+#: catalog
+msgid "Epsilon"
+msgstr "Epsilon"
+
+#: catalog
+msgid ""
+"Errors smaller than this (in the units of the target) are not penalised."
+msgstr ""
+"Fehler kleiner als dieser Wert (in Einheiten des Zielwerts) werden nicht bestraft."
+
+#: catalog
+msgid "Support vector classification"
+msgstr "Support-Vector-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with a support vector machine; Platt scaling turns its scores into class probabilities. Connect the Input (features); the classes come from the data. Fitting takes O(n²) or more: for up to tens of thousands of training rows."
+msgstr ""
+"Klassifiziert mit einer Support Vector Machine; Platt-Skalierung macht aus ihren Scores Klassenwahrscheinlichkeiten. Verbinden Sie die Eingabe (Merkmale); die Klassen kommen aus den Daten. Das Anpassen braucht O(n²) oder mehr: für bis zu einige Zehntausend Trainingszeilen."
+
+#: catalog
+msgid "Class weights"
+msgstr "Klassengewichte"
+
+#: catalog
+msgid ""
+"balanced: weight the classes inversely to their frequency (for imbalanced data)."
+msgstr ""
+"balanced: gewichtet die Klassen umgekehrt proportional zu ihrer Häufigkeit (für unausgewogene Daten)."
+
+#: catalog
+msgid "Gradient boosting regression"
+msgstr "Gradient-Boosting-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with gradient-boosted decision trees (histogram-based): a strong baseline for tabular data. Connect the Input (features). The time to fit grows about linearly with the rows: for hundreds of thousands of training rows and more."
+msgstr ""
+"Sagt eine Zahl mit gradient-geboosteten Entscheidungsbäumen (histogrammbasiert) vorher: eine starke Baseline für Tabellendaten. Verbinden Sie die Eingabe (Merkmale). Die Zeit zum Anpassen wächst etwa linear mit den Zeilen: für Hunderttausende Trainingszeilen und mehr."
+
+#: catalog
+msgid "Learning rate"
+msgstr "Lernrate"
+
+#: catalog
+msgid ""
+"How much each tree corrects the trees before it. Smaller values need more iterations but often generalise better."
+msgstr ""
+"Wie stark jeder Baum die Bäume vor ihm korrigiert. Kleinere Werte brauchen mehr Iterationen, generalisieren aber oft besser."
+
+#: catalog
+msgid "Max. iterations"
+msgstr "Max. Iterationen"
+
+#: catalog
+msgid ""
+"Boosting iterations: one tree each (a classifier with more than two classes fits one tree per class and iteration). Early stopping may end sooner."
+msgstr ""
+"Boosting-Iterationen: je ein Baum (ein Klassifikator mit mehr als zwei Klassen passt pro Klasse und Iteration einen Baum an). Early Stopping kann früher enden."
+
+#: catalog
+msgid "Max. leaves per tree"
+msgstr "Max. Blätter pro Baum"
+
+#: catalog
+msgid ""
+"Limits the size of every tree. More leaves capture more interactions between the features."
+msgstr ""
+"Begrenzt die Größe jedes Baums. Mehr Blätter erfassen mehr Wechselwirkungen zwischen den Merkmalen."
+
+#: catalog
+msgid "Max. depth"
+msgstr "Max. Tiefe"
+
+#: catalog
+msgid "Empty: no limit (Max. leaves per tree limits the trees instead)."
+msgstr ""
+"Leer: keine Grenze (stattdessen begrenzt Max. Blätter pro Baum die Bäume)."
+
+#: catalog
+msgid "Min. rows per leaf"
+msgstr "Min. Zeilen pro Blatt"
+
+#: catalog
+msgid ""
+"Every leaf holds at least this many training rows. Larger values regularise more."
+msgstr ""
+"Jedes Blatt enthält mindestens so viele Trainingszeilen. Größere Werte regularisieren stärker."
+
+#: catalog
+msgid "L2 regularisation"
+msgstr "L2-Regularisierung"
+
+#: catalog
+msgid "Penalises large leaf values (0: none)."
+msgstr "Bestraft große Blattwerte (0: keine)."
+
+#: catalog
+msgid "Early stopping"
+msgstr "Early Stopping"
+
+#: catalog
+msgid ""
+"Hold out 10 % of the training rows and stop when the loss on them has not improved for 10 iterations. auto: on above 10,000 training rows."
+msgstr ""
+"Hält 10 % der Trainingszeilen zurück und stoppt, wenn sich der Verlust darauf 10 Iterationen lang nicht verbessert hat. auto: an bei mehr als 10.000 Trainingszeilen."
+
+#: catalog
+msgid "Random state"
+msgstr "Zufallsstartwert"
+
+#: catalog
+msgid ""
+"Seed for the rows early stopping holds out and for the sample the feature bins are computed from (above 200,000 rows). The same seed gives the same model."
+msgstr ""
+"Startwert (Seed) für die Zeilen, die Early Stopping zurückhält, und für die Stichprobe, aus der die Merkmals-Bins berechnet werden (ab 200.000 Zeilen). Derselbe Seed ergibt dasselbe Modell."
+
+#: catalog
+msgid "Gradient boosting classification"
+msgstr "Gradient-Boosting-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with gradient-boosted decision trees (histogram-based), with class probabilities: a strong baseline for tabular data. Connect the Input (features); the classes come from the data. For rare classes, set Class weights to balanced. The time to fit grows about linearly with the rows: for hundreds of thousands of training rows and more."
+msgstr ""
+"Klassifiziert mit gradient-geboosteten Entscheidungsbäumen (histogrammbasiert) mit Klassenwahrscheinlichkeiten: eine starke Baseline für Tabellendaten. Verbinden Sie die Eingabe (Merkmale); die Klassen kommen aus den Daten. Für seltene Klassen setzen Sie Klassengewichte auf balanced. Die Zeit zum Anpassen wächst etwa linear mit den Zeilen: für Hunderttausende Trainingszeilen und mehr."
+
+#: catalog
+msgid ""
+"balanced: weight the classes inversely to their frequency (for imbalanced data, e.g. a few percent of positives)."
+msgstr ""
+"balanced: gewichtet die Klassen umgekehrt proportional zu ihrer Häufigkeit (für unausgewogene Daten, z. B. wenige Prozent Positive)."
+
+#: catalog
+msgid "Voting classifier"
+msgstr "Voting-Klassifikator"
+
+#: catalog
+msgid ""
+"Combines two or more classifiers: soft voting averages their class probabilities, hard voting counts the classes they predict. Connect the Input to every model and every model to this brick. Fitting takes as long as fitting all of them."
+msgstr ""
+"Kombiniert zwei oder mehr Klassifikatoren: Soft Voting mittelt ihre Klassenwahrscheinlichkeiten, Hard Voting zählt die vorhergesagten Klassen. Verbinden Sie die Eingabe mit jedem Modell und jedes Modell mit diesem Baustein. Das Anpassen dauert so lange wie das aller Modelle."
+
+#: catalog
+msgid "Voting"
+msgstr "Abstimmung"
+
+#: catalog
+msgid ""
+"soft: average the class probabilities of the models (usually better); hard: the class most models predict. Hard voting has no probabilities: the share of the votes stands in for them."
+msgstr ""
+"soft: mittelt die Klassenwahrscheinlichkeiten der Modelle (meist besser); hard: die Klasse, die die meisten Modelle vorhersagen. Hard Voting hat keine Wahrscheinlichkeiten: Der Stimmenanteil steht dafür."
+
+#: catalog
+msgid "Weights"
+msgstr "Gewichte"
+
+#: catalog
+msgid ""
+"One whole number per model, in the order in which the models are connected (the brick lists them), e.g. 2, 1, 1. Empty: every model counts the same."
+msgstr ""
+"Eine ganze Zahl pro Modell, in der Reihenfolge, in der die Modelle verbunden sind (der Baustein listet sie auf), z. B. 2, 1, 1. Leer: Jedes Modell zählt gleich."
+
+#: catalog
+msgid "Models"
+msgstr "Modelle"
+
+#: catalog
+msgid "Voting regression"
+msgstr "Voting-Regression"
+
+#: catalog
+msgid ""
+"Averages the predictions of two or more regression models, optionally weighted. Connect the Input to every model and every model to this brick. Fitting takes as long as fitting all of them."
+msgstr ""
+"Mittelt die Vorhersagen von zwei oder mehr Regressionsmodellen, optional gewichtet. Verbinden Sie die Eingabe mit jedem Modell und jedes Modell mit diesem Baustein. Das Anpassen dauert so lange wie das aller Modelle."
+
+#: catalog
+msgid "Stacking classifier"
+msgstr "Stacking-Klassifikator"
+
+#: catalog
+msgid ""
+"Combines two or more classifiers: a logistic regression learns from their cross-validated class probabilities how much to trust each model. Connect the Input to every model and every model to this brick. Every model is fitted once per fold and once more."
+msgstr ""
+"Kombiniert zwei oder mehr Klassifikatoren: Eine logistische Regression lernt aus ihren kreuzvalidierten Klassenwahrscheinlichkeiten, wie sehr sie jedem Modell vertrauen kann. Verbinden Sie die Eingabe mit jedem Modell und jedes Modell mit diesem Baustein. Jedes Modell wird einmal pro Fold und einmal zusätzlich angepasst."
+
+#: catalog
+msgid "Cross-validation folds"
+msgstr "Folds der Kreuzvalidierung"
+
+#: catalog
+msgid ""
+"The final estimator learns from predictions that the models make for rows they were not fitted on: every model is fitted once per fold, and once more on all training rows."
+msgstr ""
+"Der finale Schätzer lernt aus Vorhersagen, die die Modelle für Zeilen machen, an die sie nicht angepasst wurden: Jedes Modell wird einmal pro Fold und noch einmal auf allen Trainingszeilen angepasst."
+
+#: catalog
+msgid "Pass the features through"
+msgstr "Merkmale durchreichen"
+
+#: catalog
+msgid ""
+"The final estimator also gets the features, not only the predictions of the models."
+msgstr ""
+"Der finale Schätzer bekommt auch die Merkmale, nicht nur die Vorhersagen der Modelle."
+
+#: catalog
+msgid "Stacking regression"
+msgstr "Stacking-Regression"
+
+#: catalog
+msgid ""
+"Combines two or more regression models: a ridge regression (RidgeCV) learns from their cross-validated predictions how to weigh them. Connect the Input to every model and every model to this brick. Every model is fitted once per fold and once more."
+msgstr ""
+"Kombiniert zwei oder mehr Regressionsmodelle: Eine Ridge-Regression (RidgeCV) lernt aus ihren kreuzvalidierten Vorhersagen, wie sie sie gewichtet. Verbinden Sie die Eingabe mit jedem Modell und jedes Modell mit diesem Baustein. Jedes Modell wird einmal pro Fold und einmal zusätzlich angepasst."
+
+#: catalog
+msgid ""
+"A classic multi-layer perceptron for 28×28 digits flattened to 784 features."
+msgstr ""
+"Ein klassisches mehrschichtiges Perzeptron für 28×28-Ziffern, flach gemacht zu 784 Merkmalen."
+
+#: catalog
+msgid ""
+"Two convolution blocks followed by a classifier head: about 99% test accuracy on MNIST."
+msgstr ""
+"Zwei Faltungsblöcke, gefolgt von einem Klassifikationskopf: etwa 99 % Testgenauigkeit auf MNIST."
+
+#: catalog
+msgid ""
+"A ResNet-style block with a skip connection merged by Add, then global average pooling."
+msgstr ""
+"Ein Block im ResNet-Stil mit einer Skip-Verbindung, die Add zusammenführt, dann Global Average Pooling."
+
+#: catalog
+msgid ""
+"An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one score per class for every pixel: it trains on the built-in Shapes dataset (background, square, circle, triangle) as it is, or on your own images with masks."
+msgstr ""
+"Ein Encoder, der das Bild dreimal halbiert, ein Decoder, der es mit ConvTranspose2d wieder vergrößert, und Skip-Verbindungen (Concat), die die Details hinüberreichen. Die Ausgabe ist ein Score pro Klasse für jedes Pixel: Es trainiert unverändert auf dem eingebauten Datensatz Shapes (Hintergrund, Quadrat, Kreis, Dreieck) oder auf Ihren eigenen Bildern mit Masken."
+
+#: catalog
+msgid ""
+"Classification with a U-Net: the encoder, decoder and skip connections of the U-Net example, then AdaptiveAvgPool2d, Flatten and Linear give 10 class scores. Fashion-MNIST's 28×28 images are resized to 32×32 so that three halvings fit (32 → 16 → 8 → 4), and the filters are halved (16/32/64, bottleneck 128) so that it trains on a CPU server. For this task a plain CNN such as the Small CNN example is smaller and faster; this one shows how a segmentation network becomes a classifier."
+msgstr ""
+"Klassifikation mit einem U-Net: Encoder, Decoder und Skip-Verbindungen des U-Net-Beispiels, danach ergeben AdaptiveAvgPool2d, Flatten und Linear 10 Klassen-Scores. Die 28×28-Bilder von Fashion-MNIST werden auf 32×32 vergrößert, damit drei Halbierungen passen (32 → 16 → 8 → 4), und die Filter sind halbiert (16/32/64, Engpass 128), damit es auf einem CPU-Server trainiert. Für diese Aufgabe ist ein einfaches CNN wie das Beispiel Small CNN kleiner und schneller; dieses zeigt, wie aus einem Segmentierungsnetz ein Klassifikator wird."
+
+#: catalog
+msgid ""
+"Token ids → embeddings → bidirectional LSTM → positive/negative sentiment."
+msgstr ""
+"Token-IDs → Embeddings → bidirektionales LSTM → positive/negative Stimmung."
+
+#: catalog
+msgid ""
+"A small Transformer encoder with learned positional embeddings and mean pooling."
+msgstr ""
+"Ein kleiner Transformer-Encoder mit gelernten Positions-Embeddings und Mean Pooling."
+
+#: catalog
+msgid ""
+"Predicts one number from 8 numeric features. The generated script can train on a CSV file."
+msgstr ""
+"Sagt eine Zahl aus 8 numerischen Merkmalen vorher. Das erzeugte Skript kann auf einer CSV-Datei trainieren."
+
+#: catalog
+msgid ""
+"Combines an image and a vector of metadata with Concat, e.g. for price prediction from a photo and attributes."
+msgstr ""
+"Kombiniert ein Bild und einen Vektor mit Metadaten über Concat, z. B. für eine Preisvorhersage aus einem Foto und Attributen."
+
+#: catalog
+msgid ""
+"A classical model (scikit-learn): predicts one number from 8 features with its uncertainty. The kernel is a scaled RBF plus white noise, whose hyperparameters are fitted to the data. Train it on a small CSV file (up to a few thousand rows)."
+msgstr ""
+"Ein klassisches Modell (scikit-learn): sagt eine Zahl aus 8 Merkmalen mit ihrer Unsicherheit vorher. Der Kernel ist ein skalierter RBF plus weißes Rauschen, dessen Hyperparameter an die Daten angepasst werden. Trainieren Sie es auf einer kleinen CSV-Datei (bis zu einigen Tausend Zeilen)."
+
+#: catalog
+msgid ""
+"A classical model (scikit-learn): a support vector machine with an RBF kernel classifies rows of 4 numeric features (e.g. the iris flowers) and gives class probabilities. The classes come from the target column of the data."
+msgstr ""
+"Ein klassisches Modell (scikit-learn): Eine Support Vector Machine mit RBF-Kernel klassifiziert Zeilen mit 4 numerischen Merkmalen (z. B. die Iris-Blüten) und gibt Klassenwahrscheinlichkeiten aus. Die Klassen kommen aus der Zielspalte der Daten."
+
+#: catalog
+msgid ""
+"A classical model (scikit-learn) for seasonal data, e.g. a value over time: a slowly changing periodic pattern (RBF × ExpSineSquared) plus a smooth trend (RBF) and noise. Set the periodicity to the season length in standardised units of the time feature."
+msgstr ""
+"Ein klassisches Modell (scikit-learn) für saisonale Daten, z. B. einen Wert über die Zeit: ein sich langsam änderndes periodisches Muster (RBF × ExpSineSquared) plus ein glatter Trend (RBF) und Rauschen. Setzen Sie die Periodizität auf die Saisonlänge in standardisierten Einheiten des Zeitmerkmals."
+
+#: catalog
+msgid ""
+"A classical model (scikit-learn): gradient-boosted decision trees classify rows of 30 numeric features and give class probabilities. A strong baseline for large tables; balanced class weights help with rare classes (e.g. a few percent of fraud cases). The classes come from the target column of the data."
+msgstr ""
+"Ein klassisches Modell (scikit-learn): Gradient-geboostete Entscheidungsbäume klassifizieren Zeilen mit 30 numerischen Merkmalen und geben Klassenwahrscheinlichkeiten aus. Eine starke Baseline für große Tabellen; ausgeglichene Klassengewichte helfen bei seltenen Klassen (z. B. wenigen Prozent Betrugsfällen). Die Klassen kommen aus der Zielspalte der Daten."
+
+#: catalog
+msgid ""
+"An ensemble of classical models (scikit-learn): gradient boosting, a support vector machine and a Gaussian process classify rows of 4 numeric features (e.g. the iris flowers), and soft voting averages their class probabilities. Every model takes the features from the Input; the dotted connections into the voting brick carry the models themselves. The classes come from the target column of the data."
+msgstr ""
+"Ein Ensemble klassischer Modelle (scikit-learn): Gradient Boosting, eine Support Vector Machine und ein Gauß-Prozess klassifizieren Zeilen mit 4 numerischen Merkmalen (z. B. die Iris-Blüten), und Soft Voting mittelt ihre Klassenwahrscheinlichkeiten. Jedes Modell bekommt die Merkmale von der Eingabe; die gepunkteten Verbindungen in den Voting-Baustein tragen die Modelle selbst. Die Klassen kommen aus der Zielspalte der Daten."
+
+#: catalog
+msgid ""
+"An ensemble of classical models (scikit-learn) that predicts a number from 8 numeric features (e.g. house prices): gradient boosting, a support vector machine and a Gaussian process with an RBF + noise kernel, combined by stacking. A ridge regression learns from their predictions for rows they were not fitted on (5-fold cross-validation) how to weigh them. The dotted connections into the stacking brick carry the models themselves."
+msgstr ""
+"Ein Ensemble klassischer Modelle (scikit-learn), das eine Zahl aus 8 numerischen Merkmalen vorhersagt (z. B. Hauspreise): Gradient Boosting, eine Support Vector Machine und ein Gauß-Prozess mit RBF- plus Rausch-Kernel, kombiniert durch Stacking. Eine Ridge-Regression lernt aus ihren Vorhersagen für Zeilen, an die sie nicht angepasst wurden (5-fache Kreuzvalidierung), wie sie sie gewichtet. Die gepunkteten Verbindungen in den Stacking-Baustein tragen die Modelle selbst."
+
+#: catalog
+msgid ""
+"A hybrid network for tables of 8 numeric features: an MLP learns 32 features (first with a temporary linear head on the target), then gradient-boosted trees are fitted on them and predict the class. Set the Input to the number of feature columns of your data."
+msgstr ""
+"Ein hybrides Netz für Tabellen mit 8 numerischen Merkmalen: Ein MLP lernt 32 Merkmale (zuerst mit einem temporären linearen Kopf auf der Zielspalte), dann werden gradient-geboostete Bäume darauf angepasst und sagen die Klasse vorher. Setzen Sie die Eingabe auf die Anzahl der Merkmalsspalten Ihrer Daten."
+
+#: catalog
+msgid "Combine data"
+msgstr "Daten kombinieren"
+
+#: catalog
+msgid "Columns"
+msgstr "Spalten"
+
+#: catalog
+msgid "Rows"
+msgstr "Zeilen"
+
+#: catalog
+msgid "Missing values"
+msgstr "Fehlende Werte"
+
+#: catalog
+msgid "Outliers & clipping"
+msgstr "Ausreißer & Begrenzen"
+
+#: catalog
+msgid "Transform numbers"
+msgstr "Zahlen transformieren"
+
+#: catalog
+msgid "Feature engineering"
+msgstr "Feature Engineering"
+
+#: catalog
+msgid "Encode categories"
+msgstr "Kategorien kodieren"
+
+#: catalog
+msgid "Dates & times"
+msgstr "Datum & Uhrzeit"
+
+#: catalog
+msgid "Target & balance"
+msgstr "Zielspalte & Ausgleich"
+
+#: catalog
+msgid "Feature selection"
+msgstr "Merkmalsauswahl"
+
+#: catalog
+msgid "Join another table"
+msgstr "Andere Tabelle verknüpfen (Join)"
+
+#: catalog
+msgid "Add the columns of another imported table by matching key columns."
+msgstr ""
+"Fügt die Spalten einer anderen importierten Tabelle über passende Schlüsselspalten hinzu."
+
+#: catalog
+msgid "Table"
+msgstr "Tabelle"
+
+#: catalog
+msgid "Keep"
+msgstr "Behalten"
+
+#: catalog
+msgid "Which rows to keep when a key has no match."
+msgstr ""
+"Welche Zeilen behalten werden, wenn ein Schlüssel keine Entsprechung hat."
+
+#: catalog
+msgid "All rows of this table (left join)"
+msgstr "Alle Zeilen dieser Tabelle (Left Join)"
+
+#: catalog
+msgid "Only matching rows (inner join)"
+msgstr "Nur passende Zeilen (Inner Join)"
+
+#: catalog
+msgid "All rows of both tables (outer join)"
+msgstr "Alle Zeilen beider Tabellen (Outer Join)"
+
+#: catalog
+msgid "All rows of the other table (right join)"
+msgstr "Alle Zeilen der anderen Tabelle (Right Join)"
+
+#: catalog
+msgid "Key columns here"
+msgstr "Schlüsselspalten hier"
+
+#: catalog
+msgid "Key columns there"
+msgstr "Schlüsselspalten dort"
+
+#: catalog
+msgid "Same number and order as the key columns here."
+msgstr "Gleiche Anzahl und Reihenfolge wie die Schlüsselspalten hier."
+
+#: catalog
+msgid "The same names as here"
+msgstr "Dieselben Namen wie hier"
+
+#: catalog
+msgid "Suffix for duplicate names"
+msgstr "Suffix für doppelte Namen"
+
+#: catalog
+msgid "Added to columns of the other table whose names exist here already."
+msgstr ""
+"Wird an Spalten der anderen Tabelle angehängt, deren Namen es hier schon gibt."
+
+#: catalog
+msgid "Append rows"
+msgstr "Zeilen anhängen"
+
+#: catalog
+msgid "Add the rows of another imported table with the same columns below."
+msgstr ""
+"Hängt die Zeilen einer anderen importierten Tabelle mit denselben Spalten unten an."
+
+#: catalog
+msgid "Add a column with the table name"
+msgstr "Spalte mit dem Tabellennamen hinzufügen"
+
+#: catalog
+msgid "Marks every row with the name of the table it comes from."
+msgstr "Markiert jede Zeile mit dem Namen der Tabelle, aus der sie stammt."
+
+#: catalog
+msgid "Column name"
+msgstr "Spaltenname"
+
+#: catalog
+msgid "Drop columns"
+msgstr "Spalten entfernen"
+
+#: catalog
+msgid "Remove columns that should not be used, e.g. IDs or free text."
+msgstr ""
+"Entfernt Spalten, die nicht verwendet werden sollen, z. B. IDs oder Freitext."
+
+#: catalog
+msgid "Keep only some columns"
+msgstr "Nur einige Spalten behalten"
+
+#: catalog
+msgid "Keep the chosen columns (and the target) and drop all others."
+msgstr ""
+"Behält die gewählten Spalten (und die Zielspalte) und entfernt alle anderen."
+
+#: catalog
+msgid "Columns to keep"
+msgstr "Zu behaltende Spalten"
+
+#: catalog
+msgid "The target column is always kept."
+msgstr "Die Zielspalte wird immer behalten."
+
+#: catalog
+msgid "Rename columns"
+msgstr "Spalten umbenennen"
+
+#: catalog
+msgid "Give columns new names."
+msgstr "Gibt Spalten neue Namen."
+
+#: catalog
+msgid "New names"
+msgstr "Neue Namen"
+
+#: catalog
+msgid "Current name → new name."
+msgstr "Aktueller Name → neuer Name."
+
+#: catalog
+msgid "Change type"
+msgstr "Typ ändern"
+
+#: catalog
+msgid "Change the type of columns, e.g. read text as numbers or dates."
+msgstr ""
+"Ändert den Typ von Spalten, z. B. um Text als Zahlen oder Datumswerte zu lesen."
+
+#: catalog
+msgid "New type"
+msgstr "Neuer Typ"
+
+#: catalog
+msgid ""
+"Values that cannot be converted become missing; the step says how many. Dates become seconds since 1970 as numbers, and vice versa."
+msgstr ""
+"Werte, die sich nicht umwandeln lassen, werden zu fehlenden Werten; der Schritt sagt, wie viele. Datumswerte werden zu Sekunden seit 1970 als Zahlen und umgekehrt."
+
+#: catalog
+msgid "Numbers"
+msgstr "Zahlen"
+
+#: catalog
+msgid "Categories"
+msgstr "Kategorien"
+
+#: catalog
+msgid "True/false"
+msgstr "Wahr/falsch"
+
+#: catalog
+msgid "Dates"
+msgstr "Datumswerte"
+
+#: catalog
+msgid "Free text"
+msgstr "Freitext"
+
+#: catalog
+msgid "Decimal comma (1.234,5)"
+msgstr "Dezimalkomma (1.234,5)"
+
+#: catalog
+msgid "Ignore units and thousands separators"
+msgstr "Einheiten und Tausendertrennzeichen ignorieren"
+
+#: catalog
+msgid ""
+"Reads the number in values like '$1,200', '12 kg' or '45 %' (1200, 12 and 45): text before and after the number and thousands separators are ignored."
+msgstr ""
+"Liest die Zahl in Werten wie '$1,200', '12 kg' oder '45 %' (1200, 12 und 45): Text vor und nach der Zahl sowie Tausendertrennzeichen werden ignoriert."
+
+#: catalog
+msgid "Date format"
+msgstr "Datumsformat"
+
+#: catalog
+msgid "e.g. %d.%m.%Y for 31.01.2024. Empty: detect the format."
+msgstr "z. B. %d.%m.%Y für 31.01.2024. Leer: Format erkennen."
+
+#: catalog
+msgid "Formula"
+msgstr "Formel"
+
+#: catalog
+msgid ""
+"Compute a new column from other columns, e.g. weight / height ** 2, or from text, e.g. the deck of a cabin: map(upper(left(`Cabin`, 1)), {\"A\": 1, …})."
+msgstr ""
+"Berechnet eine neue Spalte aus anderen Spalten, z. B. weight / height ** 2, oder aus Text, z. B. das Deck einer Kabine: map(upper(left(`Cabin`, 1)), {\"A\": 1, …})."
+
+#: catalog
+msgid "New column"
+msgstr "Neue Spalte"
+
+#: catalog
+msgid "An existing column is replaced."
+msgstr "Eine vorhandene Spalte wird ersetzt."
+
+#: catalog
+msgid ""
+"Columns by name (`my column` in backticks), numbers, text in quotes, + - * / // % **, comparisons (give 1/0; text with == and !=), and, or, not, and log, log1p, exp, sqrt, abs, round, floor, ceil, min(a, b), max(a, b), clip(x, lo, hi), where(cond, a, b), isnull(x). Text: left(x, n), right(x, n), mid(x, start, length), upper, lower, strip, len, contains(x, \"text\") (also startswith, endswith; ignore_case=1), replace(x, \"old\", \"new\"), extract(x, \"pattern\"), split_part(x, \" \", k), concat(a, b, …), to_number, to_text, map(x, {\"A\": 1, …}, default), coalesce(a, b, …). A missing input gives a missing result."
+msgstr ""
+"Spalten über ihren Namen (`meine Spalte` in Backticks), Zahlen, Text in Anführungszeichen, + - * / // % **, Vergleiche (ergeben 1/0; Text mit == und !=), and, or, not sowie log, log1p, exp, sqrt, abs, round, floor, ceil, min(a, b), max(a, b), clip(x, lo, hi), where(cond, a, b), isnull(x). Text: left(x, n), right(x, n), mid(x, start, length), upper, lower, strip, len, contains(x, \"text\") (auch startswith, endswith; ignore_case=1), replace(x, \"old\", \"new\"), extract(x, \"pattern\"), split_part(x, \" \", k), concat(a, b, …), to_number, to_text, map(x, {\"A\": 1, …}, default), coalesce(a, b, …). Eine fehlende Eingabe ergibt ein fehlendes Ergebnis."
+
+#: catalog
+msgid "Replace values"
+msgstr "Werte ersetzen"
+
+#: catalog
+msgid "Replace values with others, e.g. fix spellings or merge categories."
+msgstr ""
+"Ersetzt Werte durch andere, z. B. um Schreibweisen zu korrigieren oder Kategorien zusammenzufassen."
+
+#: catalog
+msgid "Replacements"
+msgstr "Ersetzungen"
+
+#: catalog
+msgid ""
+"Old value → new value; leave the new value empty to mark it as missing. Numbers are compared as numbers in numeric columns."
+msgstr ""
+"Alter Wert → neuer Wert; lassen Sie den neuen Wert leer, um ihn als fehlend zu markieren. In Zahlenspalten werden Zahlen als Zahlen verglichen."
+
+#: catalog
+msgid "Extract from text"
+msgstr "Aus Text extrahieren"
+
+#: catalog
+msgid ""
+"Take a part of a text column into a new column, e.g. the deck letter of a cabin (C85 → C), and optionally map it to numbers (A → 1, B → 2 …)."
+msgstr ""
+"Übernimmt einen Teil einer Textspalte in eine neue Spalte, z. B. den Deck-Buchstaben einer Kabine (C85 → C), und bildet ihn optional auf Zahlen ab (A → 1, B → 2 …)."
+
+#: catalog
+msgid "Text column"
+msgstr "Textspalte"
+
+#: catalog
+msgid "Take"
+msgstr "Übernehmen"
+
+#: catalog
+msgid "Values without such a part (too few words, no match) become missing."
+msgstr ""
+"Werte ohne einen solchen Teil (zu wenige Wörter, kein Treffer) werden zu fehlenden Werten."
+
+#: catalog
+msgid "The first characters"
+msgstr "Die ersten Zeichen"
+
+#: catalog
+msgid "The last characters"
+msgstr "Die letzten Zeichen"
+
+#: catalog
+msgid "The match of a pattern (regular expression)"
+msgstr "Den Treffer eines Musters (regulärer Ausdruck)"
+
+#: catalog
+msgid "A word"
+msgstr "Ein Wort"
+
+#: catalog
+msgid "Characters"
+msgstr "Zeichen"
+
+#: catalog
+msgid "How many characters to take."
+msgstr "Wie viele Zeichen übernommen werden."
+
+#: catalog
+msgid "Pattern"
+msgstr "Muster"
+
+#: catalog
+msgid ""
+"A regular expression (Python), e.g. [A-Z] for the first capital letter or \\d+ for the first number. With a group in brackets the first group is taken, else the whole match. At most 200 characters."
+msgstr ""
+"Ein regulärer Ausdruck (Python), z. B. [A-Z] für den ersten Großbuchstaben oder \\d+ für die erste Zahl. Mit einer Gruppe in Klammern wird die erste Gruppe übernommen, sonst der ganze Treffer. Höchstens 200 Zeichen."
+
+#: catalog
+msgid "Word number"
+msgstr "Wortnummer"
+
+#: catalog
+msgid ""
+"1 is the first word, 2 the second; -1 is the last word. Words are split by spaces."
+msgstr ""
+"1 ist das erste Wort, 2 das zweite; -1 ist das letzte Wort. Wörter werden an Leerzeichen getrennt."
+
+#: catalog
+msgid "Trim spaces first"
+msgstr "Zuerst Leerzeichen entfernen"
+
+#: catalog
+msgid ""
+"Remove spaces at the start and the end of every value before taking the part."
+msgstr ""
+"Entfernt Leerzeichen am Anfang und Ende jedes Werts, bevor der Teil übernommen wird."
+
+#: catalog
+msgid "Case"
+msgstr "Groß-/Kleinschreibung"
+
+#: catalog
+msgid "Of the part taken, before the mapping."
+msgstr "Des übernommenen Teils, vor der Abbildung."
+
+#: catalog
+msgid "Keep as it is"
+msgstr "Unverändert lassen"
+
+#: catalog
+msgid "UPPER CASE"
+msgstr "GROSSBUCHSTABEN"
+
+#: catalog
+msgid "lower case"
+msgstr "kleinbuchstaben"
+
+#: catalog
+msgid "Map to new values"
+msgstr "Auf neue Werte abbilden"
+
+#: catalog
+msgid ""
+"Optional: part → new value, e.g. A → 1, B → 2. If every new value is a number, the new column holds numbers. Parts not listed become missing. Empty: the parts themselves, as categories."
+msgstr ""
+"Optional: Teil → neuer Wert, z. B. A → 1, B → 2. Sind alle neuen Werte Zahlen, enthält die neue Spalte Zahlen. Nicht aufgeführte Teile werden zu fehlenden Werten. Leer: die Teile selbst, als Kategorien."
+
+#: catalog
+msgid "Remove atypical rows"
+msgstr "Untypische Zeilen entfernen"
+
+#: catalog
+msgid ""
+"Remove rows whose values are all unusually close to the column medians (filler or synthetic rows), or unusually far from them. Runs before the split, on all rows."
+msgstr ""
+"Entfernt Zeilen, deren Werte alle ungewöhnlich nah an den Medianen der Spalten liegen (Füll- oder synthetische Zeilen) oder ungewöhnlich weit davon entfernt. Läuft vor der Aufteilung, auf allen Zeilen."
+
+#: catalog
+msgid "Measure on"
+msgstr "Messen anhand"
+
+#: catalog
+msgid ""
+"Distances and spreads use these number columns (never the target or ID columns). In wide tables most columns without any correlated partner are noise, and noise columns drown the differences between rows; Automatic uses the columns with a strong partner (largest |Spearman r| ≥ 0.3) in tables with more than 20 number columns."
+msgstr ""
+"Abstände und Streuungen verwenden diese Zahlenspalten (nie die Zielspalte oder ID-Spalten). In breiten Tabellen sind die meisten Spalten ohne korrelierten Partner Rauschen, und Rauschspalten überdecken die Unterschiede zwischen Zeilen; Automatisch verwendet in Tabellen mit mehr als 20 Zahlenspalten die Spalten mit einem starken Partner (größtes |Spearman-r| ≥ 0,3)."
+
+#: catalog
+msgid "Automatic (partnered columns in wide tables)"
+msgstr "Automatisch (Spalten mit Partner in breiten Tabellen)"
+
+#: catalog
+msgid "Columns with a strong partner"
+msgstr "Spalten mit einem starken Partner"
+
+#: catalog
+msgid "All number columns"
+msgstr "Alle Zahlenspalten"
+
+#: catalog
+msgid "Columns I choose"
+msgstr "Von mir gewählte Spalten"
+
+#: catalog
+msgid "Remove rows that are"
+msgstr "Zeilen entfernen, die"
+
+#: catalog
+msgid ""
+"The spread of a row is the median of |robust z| over its values; ordinary rows have about 0.67. Too typical rows (near 0) are often filler or synthetic rows with made-up labels."
+msgstr ""
+"Die Streuung einer Zeile ist der Median von |robustem z| über ihre Werte; gewöhnliche Zeilen haben etwa 0,67. Zu typische Zeilen (nahe 0) sind oft Füll- oder synthetische Zeilen mit erfundenen Labels."
+
+#: catalog
+msgid "Too typical: every value close to its median"
+msgstr "Zu typisch sind: jeder Wert nah an seinem Median"
+
+#: catalog
+msgid "Unusual: values far from the medians"
+msgstr "Ungewöhnlich sind: Werte weit von den Medianen"
+
+#: catalog
+msgid "Spread threshold"
+msgstr "Schwellenwert der Streuung"
+
+#: catalog
+msgid ""
+"Rows with a spread below (too typical) or above (unusual) this value are removed. Empty: the gap the Rows analysis finds between a small cluster and the other rows (nothing is removed if there is no clear gap)."
+msgstr ""
+"Zeilen mit einer Streuung unter (zu typisch) oder über (ungewöhnlich) diesem Wert werden entfernt. Leer: die Lücke, die die Zeilenanalyse zwischen einem kleinen Cluster und den übrigen Zeilen findet (ohne klare Lücke wird nichts entfernt)."
+
+#: catalog
+msgid "Find near-duplicate groups"
+msgstr "Gruppen fast gleicher Zeilen finden"
+
+#: catalog
+msgid ""
+"Add a column that numbers groups of rows that are near twins of each other (e.g. repeated measurements of one person). Keep the groups together in the split (Target & split). Runs before the split, on all rows."
+msgstr ""
+"Fügt eine Spalte hinzu, die Gruppen von Zeilen nummeriert, die einander fast gleichen (z. B. wiederholte Messungen einer Person). Halten Sie die Gruppen bei der Aufteilung zusammen (Zielspalte & Aufteilung). Läuft vor der Aufteilung, auf allen Zeilen."
+
+#: catalog
+msgid "Compare rows on"
+msgstr "Zeilen vergleichen anhand"
+
+#: catalog
+msgid "NN ratio threshold"
+msgstr "Schwellenwert des NN-Verhältnisses"
+
+#: catalog
+msgid ""
+"Two rows are near twins if one is among the 10 nearest rows of the other and their distance is below this share of the typical distance between two rows. Empty: the valley the Rows analysis finds between rows with a near twin and the others (no groups if there is none)."
+msgstr ""
+"Zwei Zeilen sind fast gleich, wenn eine unter den 10 nächsten Zeilen der anderen ist und ihr Abstand unter diesem Anteil des typischen Abstands zweier Zeilen liegt. Leer: das Tal, das die Zeilenanalyse zwischen Zeilen mit fast gleichem Zwilling und den übrigen findet (ohne Tal keine Gruppen)."
+
+#: catalog
+msgid "Name of the new column"
+msgstr "Name der neuen Spalte"
+
+#: catalog
+msgid "Drop rows"
+msgstr "Zeilen entfernen"
+
+#: catalog
+msgid ""
+"Remove rows picked by hand, e.g. in Analysis → Rows: by the values of an ID column, or by their row numbers."
+msgstr ""
+"Entfernt von Hand gewählte Zeilen, z. B. in Analyse → Zeilen: über die Werte einer ID-Spalte oder über ihre Zeilennummern."
+
+#: catalog
+msgid "Pick rows by"
+msgstr "Zeilen wählen über"
+
+#: catalog
+msgid ""
+"Values of an ID column stay right when earlier steps change. Row numbers (0 = first row) count the rows as they are right before this step."
+msgstr ""
+"Werte einer ID-Spalte bleiben richtig, wenn sich frühere Schritte ändern. Zeilennummern (0 = erste Zeile) zählen die Zeilen so, wie sie direkt vor diesem Schritt sind."
+
+#: catalog
+msgid "Values of a column (e.g. an id)"
+msgstr "Werte einer Spalte (z. B. einer ID)"
+
+#: catalog
+msgid "Row numbers"
+msgstr "Zeilennummern"
+
+#: catalog
+msgid "Column"
+msgstr "Spalte"
+
+#: catalog
+msgid "Values"
+msgstr "Werte"
+
+#: catalog
+msgid "Remove duplicates"
+msgstr "Duplikate entfernen"
+
+#: catalog
+msgid "Remove rows that repeat another row (in all or in some columns)."
+msgstr ""
+"Entfernt Zeilen, die eine andere Zeile wiederholen (in allen oder in einigen Spalten)."
+
+#: catalog
+msgid "Compare"
+msgstr "Vergleichen"
+
+#: catalog
+msgid "Rows count as duplicates if they agree in these columns."
+msgstr ""
+"Zeilen gelten als Duplikate, wenn sie in diesen Spalten übereinstimmen."
+
+#: catalog
+msgid "All columns"
+msgstr "Alle Spalten"
+
+#: catalog
+msgid "The first occurrence"
+msgstr "Das erste Vorkommen"
+
+#: catalog
+msgid "The last occurrence"
+msgstr "Das letzte Vorkommen"
+
+#: catalog
+msgid "Filter rows"
+msgstr "Zeilen filtern"
+
+#: catalog
+msgid "Keep only the rows that meet a condition."
+msgstr "Behält nur die Zeilen, die eine Bedingung erfüllen."
+
+#: catalog
+msgid "Keep rows where the value"
+msgstr "Zeilen behalten, deren Wert"
+
+#: catalog
+msgid "Rows with a missing value only pass “is missing”."
+msgstr "Zeilen mit fehlendem Wert erfüllen nur „fehlt“."
+
+#: catalog
+msgid "equals"
+msgstr "gleich ist"
+
+#: catalog
+msgid "does not equal"
+msgstr "ungleich ist"
+
+#: catalog
+msgid "is greater than"
+msgstr "größer ist als"
+
+#: catalog
+msgid "is at least"
+msgstr "mindestens ist"
+
+#: catalog
+msgid "is less than"
+msgstr "kleiner ist als"
+
+#: catalog
+msgid "is at most"
+msgstr "höchstens ist"
+
+#: catalog
+msgid "is between"
+msgstr "zwischen liegt"
+
+#: catalog
+msgid "is one of"
+msgstr "einer von ist"
+
+#: catalog
+msgid "is not one of"
+msgstr "keiner von ist"
+
+#: catalog
+msgid "contains (ignoring case)"
+msgstr "enthält (ohne Groß-/Kleinschreibung)"
+
+#: catalog
+msgid "is missing"
+msgstr "fehlt"
+
+#: catalog
+msgid "is not missing"
+msgstr "nicht fehlt"
+
+#: catalog
+msgid "Value"
+msgstr "Wert"
+
+#: catalog
+msgid "and"
+msgstr "und"
+
+#: catalog
+msgid "Drop rows with missing values"
+msgstr "Zeilen mit fehlenden Werten entfernen"
+
+#: catalog
+msgid "Remove rows that have missing values in some or all columns."
+msgstr ""
+"Entfernt Zeilen, die in einigen oder allen Spalten fehlende Werte haben."
+
+#: catalog
+msgid "Drop a row if"
+msgstr "Zeile entfernen, wenn"
+
+#: catalog
+msgid "Any of the columns is missing"
+msgstr "Eine der Spalten fehlt"
+
+#: catalog
+msgid "All of them are missing"
+msgstr "Alle fehlen"
+
+#: catalog
+msgid "Sort rows"
+msgstr "Zeilen sortieren"
+
+#: catalog
+msgid ""
+"Sort the rows by a column, e.g. by date before filling gaps with the previous value."
+msgstr ""
+"Sortiert die Zeilen nach einer Spalte, z. B. nach Datum, bevor Lücken mit dem vorherigen Wert gefüllt werden."
+
+#: catalog
+msgid "Sort by"
+msgstr "Sortieren nach"
+
+#: catalog
+msgid "Largest / newest first"
+msgstr "Größte / neueste zuerst"
+
+#: catalog
+msgid "Mark values as missing"
+msgstr "Werte als fehlend markieren"
+
+#: catalog
+msgid "Treat placeholder values like -999, ? or unknown as missing values."
+msgstr "Behandelt Platzhalter wie -999, ? oder unknown als fehlende Werte."
+
+#: catalog
+msgid "Placeholder values"
+msgstr "Platzhalterwerte"
+
+#: catalog
+msgid ""
+"e.g. -999, ?, unknown. Numbers are compared as numbers in numeric columns."
+msgstr ""
+"z. B. -999, ?, unknown. In Zahlenspalten werden Zahlen als Zahlen verglichen."
+
+#: catalog
+msgid "Drop mostly empty columns"
+msgstr "Überwiegend leere Spalten entfernen"
+
+#: catalog
+msgid "Remove columns with many missing values in the training rows."
+msgstr "Entfernt Spalten mit vielen fehlenden Werten in den Trainingszeilen."
+
+#: catalog
+msgid "Drop if more missing than"
+msgstr "Entfernen, wenn mehr fehlt als"
+
+#: catalog
+msgid ""
+"Share of missing values in the training rows, e.g. 0.5 = more than half. The target is never dropped."
+msgstr ""
+"Anteil fehlender Werte in den Trainingszeilen, z. B. 0,5 = mehr als die Hälfte. Die Zielspalte wird nie entfernt."
+
+#: catalog
+msgid "Fill missing values"
+msgstr "Fehlende Werte auffüllen"
+
+#: catalog
+msgid "Replace missing values, e.g. with the median of the training rows."
+msgstr "Ersetzt fehlende Werte, z. B. durch den Median der Trainingszeilen."
+
+#: catalog
+msgid "All columns with missing values"
+msgstr "Alle Spalten mit fehlenden Werten"
+
+#: catalog
+msgid "Fill with"
+msgstr "Auffüllen mit"
+
+#: catalog
+msgid ""
+"Mean, median, most frequent value and KNN are learned from the training rows. KNN uses the average of the k most similar training rows (standardised numeric columns). Previous / next value and interpolation follow the row order (sort the rows first) and fill training, validation and test rows separately, so no value crosses the split."
+msgstr ""
+"Mittelwert, Median, häufigster Wert und KNN werden aus den Trainingszeilen gelernt. KNN verwendet den Mittelwert der k ähnlichsten Trainingszeilen (standardisierte Zahlenspalten). Vorheriger / nächster Wert und Interpolation folgen der Zeilenreihenfolge (sortieren Sie die Zeilen zuerst) und füllen Trainings-, Validierungs- und Testzeilen getrennt, sodass kein Wert die Aufteilung überschreitet."
+
+#: catalog
+msgid "Mean"
+msgstr "Mittelwert"
+
+#: catalog
+msgid "Median"
+msgstr "Median"
+
+#: catalog
+msgid "Most frequent value"
+msgstr "Häufigster Wert"
+
+#: catalog
+msgid "A fixed value"
+msgstr "Ein fester Wert"
+
+#: catalog
+msgid "Nearest neighbours (KNN)"
+msgstr "Nächste Nachbarn (KNN)"
+
+#: catalog
+msgid "Previous value (forward fill)"
+msgstr "Vorheriger Wert (Forward Fill)"
+
+#: catalog
+msgid "Next value (backward fill)"
+msgstr "Nächster Wert (Backward Fill)"
+
+#: catalog
+msgid "Linear interpolation"
+msgstr "Lineare Interpolation"
+
+#: catalog
+msgid "Neighbours"
+msgstr "Nachbarn"
+
+#: catalog
+msgid "Add a column that marks filled values"
+msgstr "Spalte hinzufügen, die aufgefüllte Werte markiert"
+
+#: catalog
+msgid ""
+"Adds <column>_missing (1 where a value was missing), so the network can still see where values were filled in."
+msgstr ""
+"Fügt <Spalte>_missing hinzu (1, wo ein Wert fehlte), damit das Netz weiterhin sieht, wo Werte aufgefüllt wurden."
+
+#: catalog
+msgid "Handle outliers"
+msgstr "Ausreißer behandeln"
+
+#: catalog
+msgid ""
+"Find unusual values with the IQR rule, z-scores, MAD or quantiles of the training rows, then clip, remove, blank or flag them."
+msgstr ""
+"Findet ungewöhnliche Werte mit der IQR-Regel, z-Werten, MAD oder Quantilen der Trainingszeilen und begrenzt, entfernt, leert oder markiert sie dann."
+
+#: catalog
+msgid "All numeric columns"
+msgstr "Alle Zahlenspalten"
+
+#: catalog
+msgid "Find outliers with"
+msgstr "Ausreißer finden mit"
+
+#: catalog
+msgid ""
+"IQR: outside Q1 − k·IQR … Q3 + k·IQR, robust and the usual choice. Z-score: more than z standard deviations from the mean, for roughly normal data. MAD: robust z-score around the median. Quantiles: a fixed share at each end."
+msgstr ""
+"IQR: außerhalb von Q1 − k·IQR … Q3 + k·IQR, robust und die übliche Wahl. z-Wert: mehr als z Standardabweichungen vom Mittelwert, für annähernd normalverteilte Daten. MAD: robuster z-Wert um den Median. Quantile: ein fester Anteil an jedem Ende."
+
+#: catalog
+msgid "IQR rule (Tukey fences)"
+msgstr "IQR-Regel (Tukey-Zäune)"
+
+#: catalog
+msgid "Z-score"
+msgstr "z-Wert"
+
+#: catalog
+msgid "Median absolute deviation (MAD)"
+msgstr "Mediane absolute Abweichung (MAD)"
+
+#: catalog
+msgid "Quantiles"
+msgstr "Quantile"
+
+#: catalog
+msgid "k (IQR multiplier)"
+msgstr "k (IQR-Faktor)"
+
+#: catalog
+msgid ""
+"Values below Q1 − k·IQR or above Q3 + k·IQR are outliers (IQR = Q3 − Q1, the range of the middle half). 1.5 is Tukey's rule, 3 finds only extreme values."
+msgstr ""
+"Werte unter Q1 − k·IQR oder über Q3 + k·IQR sind Ausreißer (IQR = Q3 − Q1, die Spanne der mittleren Hälfte). 1,5 ist Tukeys Regel, 3 findet nur extreme Werte."
+
+#: catalog
+msgid "Z-score limit"
+msgstr "Grenze des z-Werts"
+
+#: catalog
+msgid ""
+"Values more than this many standard deviations from the mean are outliers."
+msgstr ""
+"Werte, die mehr als so viele Standardabweichungen vom Mittelwert entfernt sind, sind Ausreißer."
+
+#: catalog
+msgid "Modified z-score limit"
+msgstr "Grenze des modifizierten z-Werts"
+
+#: catalog
+msgid ""
+"Modified z-score = 0.6745 · (x − median) / MAD, where MAD is the median distance to the median. Outliers do not inflate it; 3.5 is the usual limit."
+msgstr ""
+"Modifizierter z-Wert = 0,6745 · (x − Median) / MAD, wobei MAD der mediane Abstand zum Median ist. Ausreißer blähen ihn nicht auf; 3,5 ist die übliche Grenze."
+
+#: catalog
+msgid "Lower quantile"
+msgstr "Unteres Quantil"
+
+#: catalog
+msgid ""
+"Share of the training values below the lower bound, e.g. 0.01 = 1st percentile."
+msgstr ""
+"Anteil der Trainingswerte unter der unteren Grenze, z. B. 0,01 = 1. Perzentil."
+
+#: catalog
+msgid "Upper quantile"
+msgstr "Oberes Quantil"
+
+#: catalog
+msgid ""
+"Share of the training values below the upper bound, e.g. 0.99 = 99th percentile."
+msgstr ""
+"Anteil der Trainingswerte unter der oberen Grenze, z. B. 0,99 = 99. Perzentil."
+
+#: catalog
+msgid "Then"
+msgstr "Dann"
+
+#: catalog
+msgid ""
+"Flag adds a 0/1 column '<column>_outlier' and keeps the values. Set to missing lets a later 'Fill missing values' step replace them."
+msgstr ""
+"Markieren fügt eine 0/1-Spalte '<Spalte>_outlier' hinzu und behält die Werte. Auf fehlend setzen lässt einen späteren Schritt „Fehlende Werte auffüllen“ sie ersetzen."
+
+#: catalog
+msgid "Clip them to the bounds"
+msgstr "Auf die Grenzen begrenzen"
+
+#: catalog
+msgid "Remove their rows"
+msgstr "Ihre Zeilen entfernen"
+
+#: catalog
+msgid "Set them to missing"
+msgstr "Auf fehlend setzen"
+
+#: catalog
+msgid "Add a column that marks them"
+msgstr "Spalte hinzufügen, die sie markiert"
+
+#: catalog
+msgid "Remove from"
+msgstr "Entfernen aus"
+
+#: catalog
+msgid ""
+"Removing rows from the validation and test data makes the results look better than they will be on new data. Only do it for values that are errors."
+msgstr ""
+"Zeilen aus den Validierungs- und Testdaten zu entfernen, lässt die Ergebnisse besser aussehen, als sie auf neuen Daten sein werden. Tun Sie das nur für Werte, die Fehler sind."
+
+#: catalog
+msgid "Training rows only"
+msgstr "Nur Trainingszeilen"
+
+#: catalog
+msgid "All rows"
+msgstr "Alle Zeilen"
+
+#: catalog
+msgid "Clip values"
+msgstr "Werte begrenzen"
+
+#: catalog
+msgid ""
+"Limit values to a range, e.g. the 1st to 99th percentile of the training rows."
+msgstr ""
+"Begrenzt Werte auf einen Bereich, z. B. das 1. bis 99. Perzentil der Trainingszeilen."
+
+#: catalog
+msgid "Bounds"
+msgstr "Grenzen"
+
+#: catalog
+msgid ""
+"Values below the lower bound are set to the lower bound, values above the upper bound to the upper bound (winsorising). Rows are kept."
+msgstr ""
+"Werte unter der unteren Grenze werden auf die untere Grenze gesetzt, Werte über der oberen Grenze auf die obere (Winsorisierung). Die Zeilen bleiben erhalten."
+
+#: catalog
+msgid "Fixed values"
+msgstr "Feste Werte"
+
+#: catalog
+msgid "Mean ± k standard deviations"
+msgstr "Mittelwert ± k Standardabweichungen"
+
+#: catalog
+msgid "Lower bound"
+msgstr "Untere Grenze"
+
+#: catalog
+msgid "Leave empty for no lower bound."
+msgstr "Leer lassen für keine untere Grenze."
+
+#: catalog
+msgid "Upper bound"
+msgstr "Obere Grenze"
+
+#: catalog
+msgid "Leave empty for no upper bound."
+msgstr "Leer lassen für keine obere Grenze."
+
+#: catalog
+msgid "k (standard deviations)"
+msgstr "k (Standardabweichungen)"
+
+#: catalog
+msgid "Bounds are mean − k·std and mean + k·std of the training values."
+msgstr ""
+"Die Grenzen sind Mittelwert − k·Std. und Mittelwert + k·Std. der Trainingswerte."
+
+#: catalog
+msgid "Scale numbers"
+msgstr "Zahlen skalieren"
+
+#: catalog
+msgid ""
+"Bring numbers to a common scale: standard, min–max, robust or max-abs. Training standardises all features anyway, so this matters for robust or min–max scaling and for the exported data."
+msgstr ""
+"Bringt Zahlen auf eine gemeinsame Skala: Standard, Min-Max, robust oder Max-Abs. Das Training standardisiert ohnehin alle Merkmale; wichtig ist das daher für robuste oder Min-Max-Skalierung und für die exportierten Daten."
+
+#: catalog
+msgid "Method"
+msgstr "Methode"
+
+#: catalog
+msgid ""
+"Standard: (x − mean) / std. Min–max: the training minimum and maximum become the ends of the range. Robust: (x − median) / IQR, little affected by outliers. Max-abs: x / max |x|, keeps zeros and signs."
+msgstr ""
+"Standard: (x − Mittelwert) / Std. Min-Max: Minimum und Maximum der Trainingswerte werden zu den Enden des Bereichs. Robust: (x − Median) / IQR, wenig von Ausreißern beeinflusst. Max-Abs: x / max |x|, behält Nullen und Vorzeichen."
+
+#: catalog
+msgid "Standard (mean 0, std 1)"
+msgstr "Standard (Mittelwert 0, Std. 1)"
+
+#: catalog
+msgid "Min–max (to a range)"
+msgstr "Min-Max (auf einen Bereich)"
+
+#: catalog
+msgid "Robust (median 0, IQR 1)"
+msgstr "Robust (Median 0, IQR 1)"
+
+#: catalog
+msgid "Max-abs (to -1 … 1)"
+msgstr "Max-Abs (auf -1 … 1)"
+
+#: catalog
+msgid "Range from"
+msgstr "Bereich von"
+
+#: catalog
+msgid "Range to"
+msgstr "Bereich bis"
+
+#: catalog
+msgid ""
+"Apply log, square root, a power transform (Yeo-Johnson, Box-Cox) or another function, e.g. to make skewed numbers more symmetric."
+msgstr ""
+"Wendet Logarithmus, Quadratwurzel, eine Potenztransformation (Yeo-Johnson, Box-Cox) oder eine andere Funktion an, z. B. um schiefe Verteilungen symmetrischer zu machen."
+
+#: catalog
+msgid ""
+"log(1 + x) works for counts and amounts with zeros. Yeo-Johnson and Box-Cox pick the power λ that makes the training values most normal (maximum likelihood); Box-Cox needs values > 0, Yeo-Johnson works for all values."
+msgstr ""
+"log(1 + x) funktioniert für Anzahlen und Beträge mit Nullen. Yeo-Johnson und Box-Cox wählen die Potenz λ, die die Trainingswerte am ehesten normalverteilt macht (Maximum Likelihood); Box-Cox braucht Werte > 0, Yeo-Johnson funktioniert für alle Werte."
+
+#: catalog
+msgid "Logarithm, ln(x)"
+msgstr "Logarithmus, ln(x)"
+
+#: catalog
+msgid "log(1 + x)"
+msgstr "log(1 + x)"
+
+#: catalog
+msgid "Square root"
+msgstr "Quadratwurzel"
+
+#: catalog
+msgid "Square, x²"
+msgstr "Quadrat, x²"
+
+#: catalog
+msgid "Reciprocal, 1 / x"
+msgstr "Kehrwert, 1 / x"
+
+#: catalog
+msgid "Absolute value"
+msgstr "Betrag"
+
+#: catalog
+msgid "Exponential, eˣ"
+msgstr "Exponentialfunktion, eˣ"
+
+#: catalog
+msgid "Yeo-Johnson (power, any values)"
+msgstr "Yeo-Johnson (Potenz, beliebige Werte)"
+
+#: catalog
+msgid "Box-Cox (power, positive values)"
+msgstr "Box-Cox (Potenz, positive Werte)"
+
+#: catalog
+msgid "Replace the column"
+msgstr "Spalte ersetzen"
+
+#: catalog
+msgid "Suffix of the new column"
+msgstr "Suffix der neuen Spalte"
+
+#: catalog
+msgid "The new column is called <column><suffix>, e.g. income_log."
+msgstr "Die neue Spalte heißt <Spalte><Suffix>, z. B. income_log."
+
+#: catalog
+msgid "Quantile transform"
+msgstr "Quantiltransformation"
+
+#: catalog
+msgid ""
+"Replace numbers by their rank among the training values, mapped to a uniform or normal distribution. Robust against outliers and skew."
+msgstr ""
+"Ersetzt Zahlen durch ihren Rang unter den Trainingswerten, abgebildet auf eine Gleich- oder Normalverteilung. Robust gegen Ausreißer und Schiefe."
+
+#: catalog
+msgid "Output distribution"
+msgstr "Zielverteilung"
+
+#: catalog
+msgid ""
+"Uniform: the share of training values below the value. Normal: that share mapped through the inverse normal CDF."
+msgstr ""
+"Gleichverteilt: der Anteil der Trainingswerte unter dem Wert. Normal: dieser Anteil, abgebildet über die inverse Verteilungsfunktion der Normalverteilung."
+
+#: catalog
+msgid "Uniform (0 … 1)"
+msgstr "Gleichverteilt (0 … 1)"
+
+#: catalog
+msgid "Normal (mean 0, std 1)"
+msgstr "Normal (Mittelwert 0, Std. 1)"
+
+#: catalog
+msgid ""
+"How many quantiles of the training values are stored; values in between are interpolated. At most the number of training values is used."
+msgstr ""
+"Wie viele Quantile der Trainingswerte gespeichert werden; Werte dazwischen werden interpoliert. Höchstens so viele, wie es Trainingswerte gibt."
+
+#: catalog
+msgid "Bin numbers"
+msgstr "Zahlen in Klassen einteilen"
+
+#: catalog
+msgid "Group a number column into ranges (bins), e.g. age groups."
+msgstr ""
+"Teilt eine Zahlenspalte in Bereiche (Klassen) ein, z. B. Altersgruppen."
+
+#: catalog
+msgid "Bins"
+msgstr "Klassen"
+
+#: catalog
+msgid ""
+"Equal counts: about the same number of training rows per bin. Equal width: the training range split into equally wide bins. Every bin includes its upper edge; values beyond the training range go to the first or last bin."
+msgstr ""
+"Gleiche Anzahl: etwa gleich viele Trainingszeilen pro Klasse. Gleiche Breite: der Bereich der Trainingswerte in gleich breite Klassen geteilt. Jede Klasse enthält ihre obere Grenze; Werte außerhalb des Trainingsbereichs kommen in die erste oder letzte Klasse."
+
+#: catalog
+msgid "Equal counts (quantiles)"
+msgstr "Gleiche Anzahl (Quantile)"
+
+#: catalog
+msgid "Equal width"
+msgstr "Gleiche Breite"
+
+#: catalog
+msgid "Own cut points"
+msgstr "Eigene Grenzen"
+
+#: catalog
+msgid "Number of bins"
+msgstr "Anzahl der Klassen"
+
+#: catalog
+msgid "Cut points"
+msgstr "Grenzen"
+
+#: catalog
+msgid "e.g. 18, 30, 65 → 4 bins: up to 18, 18–30, 30–65 and above 65."
+msgstr "z. B. 18, 30, 65 → 4 Klassen: bis 18, 18–30, 30–65 und über 65."
+
+#: catalog
+msgid "Result"
+msgstr "Ergebnis"
+
+#: catalog
+msgid ""
+"Bin numbers keep the order; categories can be one-hot encoded afterwards."
+msgstr ""
+"Klassennummern behalten die Reihenfolge; Kategorien lassen sich danach One-hot-kodieren."
+
+#: catalog
+msgid "Bin number (0, 1, 2 …)"
+msgstr "Klassennummer (0, 1, 2 …)"
+
+#: catalog
+msgid "Category (range as text)"
+msgstr "Kategorie (Bereich als Text)"
+
+#: catalog
+msgid "New column name"
+msgstr "Name der neuen Spalte"
+
+#: catalog
+msgid "Default: <column>_bin."
+msgstr "Standard: <Spalte>_bin."
+
+#: catalog
+msgid "Combine columns (row-wise)"
+msgstr "Spalten kombinieren (zeilenweise)"
+
+#: catalog
+msgid ""
+"New columns from several number or yes/no columns per row: sum, mean, minimum, maximum, standard deviation, product, or how many have a value or are not 0 (e.g. the number of risk flags set)."
+msgstr ""
+"Neue Spalten aus mehreren Zahlen- oder Ja/Nein-Spalten pro Zeile: Summe, Mittelwert, Minimum, Maximum, Standardabweichung, Produkt oder wie viele einen Wert haben bzw. ungleich 0 sind (z. B. die Anzahl gesetzter Risikomerkmale)."
+
+#: catalog
+msgid "At least two number or yes/no columns; yes/no counts as 1/0."
+msgstr "Mindestens zwei Zahlen- oder Ja/Nein-Spalten; Ja/Nein zählt als 1/0."
+
+#: catalog
+msgid "Operations"
+msgstr "Operationen"
+
+#: catalog
+msgid ""
+"One new column per operation. The standard deviation is the population one (0 for a single value). Non-zero counts the values that are present and not 0."
+msgstr ""
+"Eine neue Spalte pro Operation. Die Standardabweichung ist die der Grundgesamtheit (0 für einen einzelnen Wert). „Ungleich 0“ zählt die Werte, die vorhanden und nicht 0 sind."
+
+#: catalog
+msgid "Sum"
+msgstr "Summe"
+
+#: catalog
+msgid "Minimum"
+msgstr "Minimum"
+
+#: catalog
+msgid "Maximum"
+msgstr "Maximum"
+
+#: catalog
+msgid "Standard deviation"
+msgstr "Standardabweichung"
+
+#: catalog
+msgid "Count of values present"
+msgstr "Anzahl vorhandener Werte"
+
+#: catalog
+msgid "Count of non-zero values (e.g. flags set)"
+msgstr "Anzahl der Werte ungleich 0 (z. B. gesetzte Merkmale)"
+
+#: catalog
+msgid "Product"
+msgstr "Produkt"
+
+#: catalog
+msgid ""
+"With one operation the name of the new column, with several the start of every name (<name>_sum, <name>_mean …). Empty: the column names joined by '_' (row_sum … for more than 3 columns)."
+msgstr ""
+"Bei einer Operation der Name der neuen Spalte, bei mehreren der Anfang jedes Namens (<Name>_sum, <Name>_mean …). Leer: die Spaltennamen mit '_' verbunden (row_sum … bei mehr als 3 Spalten)."
+
+#: catalog
+msgid ""
+"Leave them out: the result of the values present (a row without any value gets a missing result; its counts are 0). Missing if any value is missing: a row with a missing input gets a missing result in every new column."
+msgstr ""
+"Weglassen: das Ergebnis der vorhandenen Werte (eine Zeile ganz ohne Wert ergibt ein fehlendes Ergebnis; ihre Anzahlen sind 0). Fehlend, wenn ein Wert fehlt: Eine Zeile mit fehlender Eingabe ergibt in jeder neuen Spalte ein fehlendes Ergebnis."
+
+#: catalog
+msgid "Leave them out"
+msgstr "Weglassen"
+
+#: catalog
+msgid "Missing if any value is missing"
+msgstr "Fehlend, wenn ein Wert fehlt"
+
+#: catalog
+msgid "Pairwise interactions"
+msgstr "Paarweise Wechselwirkungen"
+
+#: catalog
+msgid ""
+"New columns for pairs of number columns: a × b, a / b, a − b and a + b, e.g. amount / account balance."
+msgstr ""
+"Neue Spalten für Paare von Zahlenspalten: a × b, a / b, a − b und a + b, z. B. Betrag / Kontostand."
+
+#: catalog
+msgid "Number or yes/no columns. Every pair of them is combined."
+msgstr "Zahlen- oder Ja/Nein-Spalten. Jedes Paar davon wird kombiniert."
+
+#: catalog
+msgid "Combine with"
+msgstr "Kombinieren mit"
+
+#: catalog
+msgid ""
+"If given, every column of the first list is combined with every column of this list instead."
+msgstr ""
+"Falls angegeben, wird stattdessen jede Spalte der ersten Liste mit jeder Spalte dieser Liste kombiniert."
+
+#: catalog
+msgid "Pairs within the first list"
+msgstr "Paare innerhalb der ersten Liste"
+
+#: catalog
+msgid ""
+"Names: a*b, a/b, a-b, a+b. Division: a 0 or missing denominator gives a missing value (as do results too large for a number)."
+msgstr ""
+"Namen: a*b, a/b, a-b, a+b. Division: Ein Nenner von 0 oder ein fehlender Nenner ergibt einen fehlenden Wert (ebenso Ergebnisse, die für eine Zahl zu groß sind)."
+
+#: catalog
+msgid "a × b"
+msgstr "a × b"
+
+#: catalog
+msgid "a / b"
+msgstr "a / b"
+
+#: catalog
+msgid "a − b"
+msgstr "a − b"
+
+#: catalog
+msgid "a + b"
+msgstr "a + b"
+
+#: catalog
+msgid "Both directions"
+msgstr "Beide Richtungen"
+
+#: catalog
+msgid "Also b / a and b − a (division and subtraction depend on the order)."
+msgstr ""
+"Auch b / a und b − a (Division und Subtraktion hängen von der Reihenfolge ab)."
+
+#: catalog
+msgid "Most new columns"
+msgstr "Höchstens so viele neue Spalten"
+
+#: catalog
+msgid ""
+"The step stops with an error instead of adding more columns than this: n columns have n·(n − 1)/2 pairs."
+msgstr ""
+"Der Schritt bricht mit einem Fehler ab, statt mehr Spalten hinzuzufügen: n Spalten ergeben n·(n − 1)/2 Paare."
+
+#: catalog
+msgid "Group statistics"
+msgstr "Gruppenstatistiken"
+
+#: catalog
+msgid ""
+"Statistics of a number column per group of a category column, learned from the training rows: mean, median, spread, count, rows per group, and how far a row is from its group's mean, e.g. the amount relative to the usual amount of the merchant category."
+msgstr ""
+"Statistiken einer Zahlenspalte pro Gruppe einer Kategoriespalte, gelernt aus den Trainingszeilen: Mittelwert, Median, Streuung, Anzahl, Zeilen pro Gruppe und wie weit eine Zeile vom Mittelwert ihrer Gruppe entfernt ist, z. B. der Betrag im Verhältnis zum üblichen Betrag der Händlerkategorie."
+
+#: catalog
+msgid "Group by"
+msgstr "Gruppieren nach"
+
+#: catalog
+msgid ""
+"A category or yes/no column; several columns form one group per combination of their values. Change number codes to a category first."
+msgstr ""
+"Eine Kategorie- oder Ja/Nein-Spalte; mehrere Spalten bilden eine Gruppe pro Kombination ihrer Werte. Wandeln Sie Zahlencodes zuerst in eine Kategorie um."
+
+#: catalog
+msgid "Value column"
+msgstr "Wertespalte"
+
+#: catalog
+msgid ""
+"The number column to describe per group (not the target). Only “Rows per group” works without one."
+msgstr ""
+"Die Zahlenspalte, die pro Gruppe beschrieben wird (nicht die Zielspalte). Nur „Zeilen pro Gruppe“ funktioniert ohne sie."
+
+#: catalog
+msgid "Statistics"
+msgstr "Statistiken"
+
+#: catalog
+msgid ""
+"One new column each, named like amount_mean_by_category (rows: rows_by_category). Standard deviation: population (0 for one value). Difference: value − group mean. Ratio: value / group mean (a group mean of 0 gives a missing value)."
+msgstr ""
+"Je eine neue Spalte, benannt wie amount_mean_by_category (Zeilen: rows_by_category). Standardabweichung: Grundgesamtheit (0 für einen Wert). Differenz: Wert − Gruppenmittelwert. Verhältnis: Wert / Gruppenmittelwert (ein Gruppenmittelwert von 0 ergibt einen fehlenden Wert)."
+
+#: catalog
+msgid "Count of values"
+msgstr "Anzahl der Werte"
+
+#: catalog
+msgid "Rows per group (frequency)"
+msgstr "Zeilen pro Gruppe (Häufigkeit)"
+
+#: catalog
+msgid "Difference from the group mean"
+msgstr "Differenz zum Gruppenmittelwert"
+
+#: catalog
+msgid "Ratio to the group mean"
+msgstr "Verhältnis zum Gruppenmittelwert"
+
+#: catalog
+msgid "Groups not in the training rows"
+msgstr "Gruppen, die nicht in den Trainingszeilen vorkommen"
+
+#: catalog
+msgid ""
+"For groups that do not occur in the training rows (and rows without a group value): the statistic of all training rows, or a missing value. Counts and rows per group are 0 for them."
+msgstr ""
+"Für Gruppen, die in den Trainingszeilen nicht vorkommen (und Zeilen ohne Gruppenwert): die Statistik aller Trainingszeilen oder ein fehlender Wert. Anzahlen und Zeilen pro Gruppe sind für sie 0."
+
+#: catalog
+msgid "Use the overall training value"
+msgstr "Den Wert aller Trainingszeilen verwenden"
+
+#: catalog
+msgid "Missing value"
+msgstr "Fehlender Wert"
+
+#: catalog
+msgid "Min. rows per group"
+msgstr "Min. Zeilen pro Gruppe"
+
+#: catalog
+msgid ""
+"Groups with fewer training values are treated as unseen, so that a few rows do not decide a statistic."
+msgstr ""
+"Gruppen mit weniger Trainingswerten gelten als unbekannt, damit wenige Zeilen keine Statistik bestimmen."
+
+#: catalog
+msgid "Turn categories into numbers, e.g. one column per category (one-hot)."
+msgstr ""
+"Wandelt Kategorien in Zahlen um, z. B. eine Spalte pro Kategorie (One-hot)."
+
+#: catalog
+msgid "All categorical columns"
+msgstr "Alle Kategoriespalten"
+
+#: catalog
+msgid ""
+"One-hot: a 0/1 column '<column>=<category>' per category, the usual choice. Ordinal: the category's number in alphabetical order (unseen: -1). Frequency: the category's share of the training rows (unseen: 0). Target mean: the smoothed mean of the target per category (unseen: the overall mean). Categories come from the training rows; missing values stay missing (one-hot: all 0)."
+msgstr ""
+"One-hot: eine 0/1-Spalte '<Spalte>=<Kategorie>' pro Kategorie, die übliche Wahl. Ordinal: die Nummer der Kategorie in alphabetischer Reihenfolge (unbekannt: -1). Häufigkeit: der Anteil der Kategorie an den Trainingszeilen (unbekannt: 0). Target Mean: der geglättete Mittelwert der Zielspalte pro Kategorie (unbekannt: der Gesamtmittelwert). Die Kategorien kommen aus den Trainingszeilen; fehlende Werte bleiben fehlend (One-hot: alle 0)."
+
+#: catalog
+msgid "One-hot"
+msgstr "One-hot"
+
+#: catalog
+msgid "Ordinal (category index)"
+msgstr "Ordinal (Kategorie-Index)"
+
+#: catalog
+msgid "Frequency"
+msgstr "Häufigkeit"
+
+#: catalog
+msgid "Target mean"
+msgstr "Target Mean (Mittelwert der Zielspalte)"
+
+#: catalog
+msgid "Drop the first category"
+msgstr "Erste Kategorie weglassen"
+
+#: catalog
+msgid ""
+"Leaves out the column of the first category (alphabetically), which the others imply. Only needed for linear models without regularisation."
+msgstr ""
+"Lässt die Spalte der ersten Kategorie (alphabetisch) weg, die sich aus den anderen ergibt. Nur für lineare Modelle ohne Regularisierung nötig."
+
+#: catalog
+msgid "Max. categories per column"
+msgstr "Max. Kategorien pro Spalte"
+
+#: catalog
+msgid ""
+"Only the most frequent categories get their own column; all others (and unseen ones) are marked in '<column>_other'."
+msgstr ""
+"Nur die häufigsten Kategorien bekommen eine eigene Spalte; alle anderen (und unbekannte) werden in '<Spalte>_other' markiert."
+
+#: catalog
+msgid "Smoothing"
+msgstr "Glättung"
+
+#: catalog
+msgid ""
+"(sum of the target in the category + smoothing · overall mean) / (rows of the category + smoothing). Pulls rare categories towards the overall mean, so the model does not learn the noise of a few rows. Training rows get out-of-fold values (learned from the other training rows, 5 folds), so a row never sees its own target."
+msgstr ""
+"(Summe der Zielwerte in der Kategorie + Glättung · Gesamtmittelwert) / (Zeilen der Kategorie + Glättung). Zieht seltene Kategorien zum Gesamtmittelwert, damit das Modell nicht das Rauschen weniger Zeilen lernt. Trainingszeilen bekommen Out-of-Fold-Werte (gelernt aus den anderen Trainingszeilen, 5 Folds), sodass eine Zeile nie ihren eigenen Zielwert sieht."
+
+#: catalog
+msgid "Group rare categories"
+msgstr "Seltene Kategorien zusammenfassen"
+
+#: catalog
+msgid ""
+"Merge categories that are rare in the training rows into one label such as 'Other'."
+msgstr ""
+"Fasst Kategorien, die in den Trainingszeilen selten sind, unter einem Label wie 'Other' zusammen."
+
+#: catalog
+msgid "Minimum share"
+msgstr "Mindestanteil"
+
+#: catalog
+msgid ""
+"Categories with a smaller share of the training rows (0.01 = 1 %) are merged, as are categories that only appear in validation or test rows."
+msgstr ""
+"Kategorien mit kleinerem Anteil an den Trainingszeilen (0,01 = 1 %) werden zusammengefasst, ebenso Kategorien, die nur in Validierungs- oder Testzeilen vorkommen."
+
+#: catalog
+msgid "New label"
+msgstr "Neues Label"
+
+#: catalog
+msgid "Date parts"
+msgstr "Datumsbestandteile"
+
+#: catalog
+msgid "Split dates into year, month, weekday … columns."
+msgstr "Teilt Datumswerte in Spalten für Jahr, Monat, Wochentag … auf."
+
+#: catalog
+msgid "All date columns"
+msgstr "Alle Datumsspalten"
+
+#: catalog
+msgid "Parts"
+msgstr "Bestandteile"
+
+#: catalog
+msgid ""
+"Each part becomes a number column '<column>_<part>'. Weekday: Monday = 0 … Sunday = 6."
+msgstr ""
+"Jeder Bestandteil wird zu einer Zahlenspalte '<Spalte>_<Bestandteil>'. Wochentag: Montag = 0 … Sonntag = 6."
+
+#: catalog
+msgid "Year"
+msgstr "Jahr"
+
+#: catalog
+msgid "Quarter"
+msgstr "Quartal"
+
+#: catalog
+msgid "Month"
+msgstr "Monat"
+
+#: catalog
+msgid "Day"
+msgstr "Tag"
+
+#: catalog
+msgid "Weekday"
+msgstr "Wochentag"
+
+#: catalog
+msgid "Day of year"
+msgstr "Tag im Jahr"
+
+#: catalog
+msgid "Hour"
+msgstr "Stunde"
+
+#: catalog
+msgid "Minute"
+msgstr "Minute"
+
+#: catalog
+msgid "Weekend (0/1)"
+msgstr "Wochenende (0/1)"
+
+#: catalog
+msgid "Timestamp (seconds since 1970)"
+msgstr "Zeitstempel (Sekunden seit 1970)"
+
+#: catalog
+msgid "Cyclical encoding (sin/cos)"
+msgstr "Zyklische Kodierung (sin/cos)"
+
+#: catalog
+msgid ""
+"Month, weekday, hour and day of year become a sin and a cos column instead of one number, so December is next to January and Sunday next to Monday."
+msgstr ""
+"Monat, Wochentag, Stunde und Tag im Jahr werden zu einer sin- und einer cos-Spalte statt einer Zahl, sodass Dezember neben Januar und Sonntag neben Montag liegt."
+
+#: catalog
+msgid "Drop the original column"
+msgstr "Ursprüngliche Spalte entfernen"
+
+#: catalog
+msgid "Balance classes"
+msgstr "Klassen ausgleichen"
+
+#: catalog
+msgid ""
+"Even out the class counts of the training rows by repeating rows of rare classes or dropping rows of common ones. Validation and test rows stay as they are."
+msgstr ""
+"Gleicht die Klassengrößen der Trainingszeilen aus, indem Zeilen seltener Klassen wiederholt oder Zeilen häufiger Klassen entfernt werden. Validierungs- und Testzeilen bleiben unverändert."
+
+#: catalog
+msgid ""
+"Oversampling draws random copies of training rows until every class has as many rows as the largest one. Undersampling keeps a random subset of every class as large as the smallest one. Both are seeded with the split seed."
+msgstr ""
+"Oversampling zieht zufällige Kopien von Trainingszeilen, bis jede Klasse so viele Zeilen hat wie die größte. Undersampling behält von jeder Klasse eine zufällige Teilmenge so groß wie die kleinste. Beide verwenden den Seed der Aufteilung."
+
+#: catalog
+msgid "Oversample (repeat rows of smaller classes)"
+msgstr "Oversampling (Zeilen kleinerer Klassen wiederholen)"
+
+#: catalog
+msgid "Undersample (drop rows of larger classes)"
+msgstr "Undersampling (Zeilen größerer Klassen entfernen)"
+
+#: catalog
+msgid "Select features"
+msgstr "Merkmale auswählen"
+
+#: catalog
+msgid ""
+"Drop features that are constant, near-duplicates of others, mostly missing or unrelated to the target, judged on the training rows. Never drops the target."
+msgstr ""
+"Entfernt Merkmale, die konstant sind, fast Duplikate anderer, überwiegend fehlend oder ohne Zusammenhang mit der Zielspalte, beurteilt an den Trainingszeilen. Entfernt nie die Zielspalte."
+
+#: catalog
+msgid "Drop features"
+msgstr "Merkmale entfernen"
+
+#: catalog
+msgid ""
+"Of two strongly correlated features, the one less associated with the target is dropped (without a target, the later one). Association: |Pearson r|, the correlation ratio η or Cramér's V, from 0 (none) to 1. No strong partner: number features whose strongest correlation with any other number feature stays below a threshold; it needs no target."
+msgstr ""
+"Von zwei stark korrelierten Merkmalen wird das weniger mit der Zielspalte zusammenhängende entfernt (ohne Zielspalte das spätere). Zusammenhang: |Pearson-r|, das Korrelationsverhältnis η oder Cramérs V, von 0 (keiner) bis 1. Kein starker Partner: Zahlenmerkmale, deren stärkste Korrelation mit einem anderen Zahlenmerkmal unter einem Schwellenwert bleibt; das braucht keine Zielspalte."
+
+#: catalog
+msgid "That correlate strongly with another feature"
+msgstr "Die stark mit einem anderen Merkmal korrelieren"
+
+#: catalog
+msgid "With (almost) no variance"
+msgstr "Mit (fast) keiner Varianz"
+
+#: catalog
+msgid "With many missing values"
+msgstr "Mit vielen fehlenden Werten"
+
+#: catalog
+msgid "With little association with the target"
+msgstr "Mit wenig Zusammenhang mit der Zielspalte"
+
+#: catalog
+msgid "That correlate with no other feature (noise)"
+msgstr "Die mit keinem anderen Merkmal korrelieren (Rauschen)"
+
+#: catalog
+msgid "Max. |correlation|"
+msgstr "Max. |Korrelation|"
+
+#: catalog
+msgid ""
+"Pairs of number features with |Pearson r| above this lose one feature."
+msgstr ""
+"Paare von Zahlenmerkmalen mit |Pearson-r| über diesem Wert verlieren ein Merkmal."
+
+#: catalog
+msgid "Min. variance"
+msgstr "Min. Varianz"
+
+#: catalog
+msgid ""
+"Number features with a variance up to this are dropped, as are other features with a single value. The variance depends on the scale of the column; 0 drops only constant features."
+msgstr ""
+"Zahlenmerkmale mit einer Varianz bis zu diesem Wert werden entfernt, ebenso andere Merkmale mit nur einem Wert. Die Varianz hängt von der Skala der Spalte ab; 0 entfernt nur konstante Merkmale."
+
+#: catalog
+msgid "Max. share missing"
+msgstr "Max. Anteil fehlender Werte"
+
+#: catalog
+msgid ""
+"Features missing in a larger share of the training rows (0.5 = 50 %) are dropped."
+msgstr ""
+"Merkmale, die in einem größeren Anteil der Trainingszeilen fehlen (0,5 = 50 %), werden entfernt."
+
+#: catalog
+msgid "Min. association"
+msgstr "Min. Zusammenhang"
+
+#: catalog
+msgid ""
+"Number and category features less associated with the target are dropped. Text and date columns are kept."
+msgstr ""
+"Zahlen- und Kategoriemerkmale mit weniger Zusammenhang mit der Zielspalte werden entfernt. Text- und Datumsspalten bleiben erhalten."
+
+#: catalog
+msgid "Min. |correlation| with the strongest partner"
+msgstr "Min. |Korrelation| mit dem stärksten Partner"
+
+#: catalog
+msgid ""
+"Number and yes/no features whose strongest |correlation| with every other number feature is below this are dropped, as are constant ones. Unrelated columns reach about 0.1 by chance with a few hundred rows: the histogram in Analysis → Relationships shows where the gap is. Other columns are kept."
+msgstr ""
+"Zahlen- und Ja/Nein-Merkmale, deren stärkste |Korrelation| mit jedem anderen Zahlenmerkmal unter diesem Wert liegt, werden entfernt, ebenso konstante. Unabhängige Spalten erreichen bei einigen Hundert Zeilen zufällig etwa 0,1: Das Histogramm unter Analyse → Zusammenhänge zeigt, wo die Lücke ist. Andere Spalten bleiben erhalten."
+
+#: catalog
+msgid "Correlation"
+msgstr "Korrelation"
+
+#: catalog
+msgid "Spearman ρ (any monotonic relation)"
+msgstr "Spearman ρ (jeder monotone Zusammenhang)"
+
+#: catalog
+msgid "Pearson r (linear relations)"
+msgstr "Pearson r (lineare Zusammenhänge)"
+
+#: catalog
+msgid "CPU"
+msgstr "CPU"
+
+#: catalog
+msgid "Handwritten digits 0-9, grayscale 28×28."
+msgstr "Handgeschriebene Ziffern 0–9, Graustufen 28×28."
+
+#: catalog
+msgid "Clothing items in 10 classes, grayscale 28×28."
+msgstr "Kleidungsstücke in 10 Klassen, Graustufen 28×28."
+
+#: catalog
+msgid ""
+"Small colour photos in 10 classes (planes, cars, animals …), RGB 32×32."
+msgstr ""
+"Kleine Farbfotos in 10 Klassen (Flugzeuge, Autos, Tiere …), RGB 32×32."
+
+#: catalog
+msgid ""
+"Segmentation: squares, circles and triangles on noisy backgrounds, with a class for every pixel. Generated, RGB 64×64."
+msgstr ""
+"Segmentierung: Quadrate, Kreise und Dreiecke auf verrauschtem Hintergrund, mit einer Klasse für jedes Pixel. Generiert, RGB 64×64."
+
+#: catalog
+msgid "loss"
+msgstr "Verlust"
+
+#: catalog
+msgid "accuracy"
+msgstr "Genauigkeit"
+
+#: catalog
+msgid "balanced accuracy"
+msgstr "Balanced Accuracy"
+
+#: catalog
+msgid "macro F1"
+msgstr "Makro-F1"
+
+#: catalog
+msgid "ROC AUC"
+msgstr "ROC AUC"
+
+#: catalog
+msgid "PR AUC"
+msgstr "PR AUC"
+
+#: catalog
+msgid "RMSE"
+msgstr "RMSE"
+
+#: catalog
+msgid "MAE"
+msgstr "MAE"
+
+#: catalog
+msgid "R²"
+msgstr "R²"
+
+#: catalog
+msgid "learning rate"
+msgstr "Lernrate"
+
+#: catalog
+msgid "How much each tree corrects the ones before."
+msgstr "Wie stark jeder Baum die vorherigen korrigiert."
+
+#: catalog
+msgid "max. iterations"
+msgstr "max. Iterationen"
+
+#: catalog
+msgid "max. leaves per tree"
+msgstr "max. Blätter pro Baum"
+
+#: catalog
+msgid "max. depth"
+msgstr "max. Tiefe"
+
+#: catalog
+msgid "null (no limit) is allowed in a list."
+msgstr "null (keine Grenze) ist in einer Liste erlaubt."
+
+#: catalog
+msgid "min. rows per leaf"
+msgstr "min. Zeilen pro Blatt"
+
+#: catalog
+msgid "A log range needs a minimum above 0; a list may hold 0."
+msgstr ""
+"Ein logarithmischer Bereich braucht ein Minimum über 0; eine Liste darf 0 enthalten."
+
+#: catalog
+msgid "class weights"
+msgstr "Klassengewichte"
+
+#: catalog
+msgid "balanced weights the classes inversely to their frequency."
+msgstr ""
+"balanced gewichtet die Klassen umgekehrt proportional zu ihrer Häufigkeit."
+
+#: catalog
+msgid "C"
+msgstr "C"
+
+#: catalog
+msgid "Larger values fit the training rows more closely."
+msgstr "Größere Werte passen sich enger an die Trainingszeilen an."
+
+#: catalog
+msgid "gamma"
+msgstr "gamma"
+
+#: catalog
+msgid ""
+"Numbers (the Gamma value of the brick), or scale and auto in a list. The linear kernel does not use it."
+msgstr ""
+"Zahlen (der Gamma-Wert des Bausteins) oder scale und auto in einer Liste. Der lineare Kernel verwendet ihn nicht."
+
+#: catalog
+msgid "kernel"
+msgstr "kernel"
+
+#: catalog
+msgid "epsilon"
+msgstr "epsilon"
+
+#: catalog
+msgid "alpha"
+msgstr "alpha"
+
+#: catalog
+msgid "Added to the diagonal of the kernel matrix."
+msgstr "Wird zur Diagonale der Kernelmatrix addiert."
+
+#: catalog
+msgid "normalize targets"
+msgstr "Zielwerte normalisieren"
+
+#: catalog
+msgid "optimizer restarts"
+msgstr "Neustarts des Optimierers"
+
+#: catalog
+msgid ""
+"The fit optimises the kernel hyperparameters itself; a search can only vary alpha, normalize_y and the optimizer restarts."
+msgstr ""
+"Die Anpassung optimiert die Kernel-Hyperparameter selbst; eine Suche kann nur alpha, normalize_y und die Neustarts des Optimierers variieren."
+
+#: catalog
+msgid ""
+"The fit optimises the kernel hyperparameters itself; a search can only vary the optimizer restarts."
+msgstr ""
+"Die Anpassung optimiert die Kernel-Hyperparameter selbst; eine Suche kann nur die Neustarts des Optimierers variieren."

@@ -7,7 +7,7 @@ are deleted are skipped, and those accounts are deleted as before). With ``DEBUG
 would have been sent are logged instead, links included, for trying things out.
 
 All e-mails share one layout (``templates/brick_dnn_core/email/``), plain text and simple
-HTML, in English like the app. Requests do not wait for the SMTP server: messages are handed
+HTML, in the active language (notices.py writes each in the recipient's language). Requests do not wait for the SMTP server: messages are handed
 to it in a background thread (``BRICKDNN_EMAIL_BACKGROUND``), so a slow provider delays no
 answer and "forgot password" answers as fast for unknown addresses. Failures are logged, never
 shown to the user as an error. Commands that need to know whether a mail went out (the
@@ -24,6 +24,8 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template.loader import render_to_string
+from django.utils import translation
+from django.utils.translation import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,8 @@ class Message:
     action: tuple[str, str] | None = None
     # Paragraphs after the button, e.g. "If this was not you, ...".
     after: list[str] = field(default_factory=list)
-    greeting: str = "Hello,"
+    # Empty: "Hello," in the active language.
+    greeting: str = ""
     # Why the recipient gets this e-mail (small print at the end).
     reason: str = ""
     base_url: str = ""
@@ -78,7 +81,8 @@ class Message:
             "site_name": settings.SITE_NAME,
             "site_url": base,
             "site_domain": site_domain(base),
-            "greeting": self.greeting,
+            "greeting": self.greeting or _("Hello,"),
+            "language": translation.get_language() or "en",
             "paragraphs": self.paragraphs,
             "action": self.action,
             "after": self.after,

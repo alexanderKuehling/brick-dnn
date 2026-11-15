@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.utils import translation
+from django.utils.translation import gettext, gettext_lazy
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
@@ -29,10 +31,10 @@ from rest_framework.response import Response
 logger = logging.getLogger(__name__)
 
 PAGES = {
-    "imprint": "Imprint",
-    "privacy": "Privacy policy",
-    "terms": "Terms of use",
-    "refund": "Refund policy",
+    "imprint": gettext_lazy("Imprint"),
+    "privacy": gettext_lazy("Privacy policy"),
+    "terms": gettext_lazy("Terms of use"),
+    "refund": gettext_lazy("Refund policy"),
 }
 # Larger files are ignored (and logged): legal texts are a few dozen kilobytes.
 MAX_BYTES = 512 * 1024
@@ -49,7 +51,7 @@ class LegalPage:
     def to_dict(self) -> dict[str, Any]:
         return {
             "page": self.page,
-            "title": PAGES[self.page],
+            "title": str(PAGES[self.page]),
             "content": self.content,
             "version": self.version,
             "updated_at": self.updated_at,
@@ -61,12 +63,20 @@ def legal_dirs() -> list[Path]:
     return [Path(part) for part in str(settings.LEGAL_DIR).split(os.pathsep) if part.strip()]
 
 
-def read_page(page: str) -> LegalPage | None:
+def read_page(page: str, language: str | None = None) -> LegalPage | None:
     """The page from ``<folder>/<page>.md`` of the first folder of ``LEGAL_DIR`` that has a
-    non-empty one, or None if it is not set up."""
+    non-empty one, or None if it is not set up.
+
+    With ``language`` (e.g. ``"de"``) a translation ``<page>.<language>.md`` in a folder comes
+    first (docs/privacy.md, "Legal pages in several languages"). The version that sign-up
+    stores is always the one of ``<page>.md``."""
     if page not in PAGES:
         return None
     for folder in legal_dirs():
+        if language:
+            found = _read_file(page, folder / f"{page}.{language}.md")
+            if found is not None:
+                return found
         found = _read_file(page, folder / f"{page}.md")
         if found is not None:
             return found
@@ -131,10 +141,10 @@ def legal_index(request: Request) -> Response:
 @api_view(["GET"])
 def legal_page(request: Request, page: str) -> Response:
     """One page as Markdown (public): ``{"page", "title", "content", "version", "updated_at"}``."""
-    found = read_page(page)
+    found = read_page(page, translation.get_language())
     if found is None:
         return Response(
-            {"detail": "This page has not been set up on this server."},
+            {"detail": gettext("This page has not been set up on this server.")},
             status=status.HTTP_404_NOT_FOUND,
         )
     return Response(found.to_dict())

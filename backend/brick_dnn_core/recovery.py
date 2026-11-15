@@ -38,6 +38,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.translation import gettext, gettext_lazy
 from rest_framework import serializers, status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -55,14 +56,14 @@ VERIFY_DAYS = 7
 VERIFY_SALT = "brickdnn.verify-email"
 RESET_MAILS_PER_HOUR = 3
 
-UNAVAILABLE = (
+UNAVAILABLE = gettext_lazy(
     "Password reset is not available on this server: it sends no e-mail. Ask its operator for help."
 )
-RESET_SENT = (
+RESET_SENT = gettext_lazy(
     "If an account with this username or e-mail address exists and its e-mail address may "
     "receive reset links, we sent a link to it. It is valid for one hour."
 )
-INVALID_LINK = "This link is invalid or has expired. Ask for a new one."
+INVALID_LINK = gettext_lazy("This link is invalid or has expired. Ask for a new one.")
 
 
 # --------------------------------------------------------------------------- #
@@ -180,12 +181,14 @@ class VerifyEmailView(AccountApiView):
         user = request.user
         if data.get("u") != user.pk:
             return _error(
-                "This link is for another account. Log in with the account it was sent to.",
+                gettext(
+                    "This link is for another account. Log in with the account it was sent to."
+                ),
                 code="other_account",
             )
         if not user.email or data.get("e") != user.email.lower():
             return _error(
-                "This link is for an e-mail address the account does not use any more.",
+                gettext("This link is for an e-mail address the account does not use any more."),
                 code="other_address",
             )
         if not is_verified(user):
@@ -202,15 +205,19 @@ class ResendVerificationView(AccountApiView):
         user = request.user
         if not mail.enabled():
             return Response(
-                {"detail": "This server sends no e-mail, so addresses cannot be confirmed."},
+                {
+                    "detail": gettext(
+                        "This server sends no e-mail, so addresses cannot be confirmed."
+                    )
+                },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         if not user.email:
-            return _error("Add an e-mail address first.")
+            return _error(gettext("Add an e-mail address first."))
         if is_verified(user):
-            return Response({"detail": "Your e-mail address is confirmed already."})
+            return Response({"detail": gettext("Your e-mail address is confirmed already.")})
         send_verification(user, request)
-        return Response({"detail": f"We sent a link to {user.email}."})
+        return Response({"detail": gettext("We sent a link to %(email)s.") % {"email": user.email}})
 
 
 def _error(detail: str, code: str = "invalid_link") -> Response:
@@ -357,7 +364,7 @@ class PasswordResetConfirmView(APIView):
         logger.info("Account #%s reset its password with an e-mail link.", user.pk)
         return Response(
             {
-                "detail": "Your password was changed. Log in with the new one.",
+                "detail": gettext("Your password was changed. Log in with the new one."),
                 "username": user.get_username(),
             }
         )

@@ -121,6 +121,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # The language of the request (Accept-Language): English or German (languages.py).
+    "brick_dnn_core.languages.ApiLocaleMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Logs what AI agents do with API tokens (after the response, see agent_activity.py).
@@ -162,7 +164,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "en-us"
+# English unless a request asks for German (Accept-Language, see brick_dnn_core/languages.py).
+LANGUAGE_CODE = "en"
+LANGUAGES = [("en", "English"), ("de", "Deutsch")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True

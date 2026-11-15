@@ -62,6 +62,8 @@ urlpatterns = [
     # The own account: e-mail, password, data export, deletion (website login only).
     path("auth/account/", accounts.AccountView.as_view(), name="account"),
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
+    # The language of the app and of e-mails (languages.py).
+    path("auth/account/language/", accounts.LanguageView.as_view(), name="account-language"),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
     # Confirming the e-mail address with the link from the e-mail, sending the link again.
