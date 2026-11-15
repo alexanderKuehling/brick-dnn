@@ -366,8 +366,8 @@ plain HTML that `frontend/landing/` turns into files at build time (with `robots
 from elsewhere. The editor is at `/app`; every other page of the app (`/data`, `/projects`,
 `/pricing`, `/share/…`, `/login`, …) is where it was. Old links into the editor still work:
 `/?…` is redirected to `/app?…` (nginx), a `#…` that is not a section of the landing page goes
-on to `/app#…`, and so do visitors who are logged in (a small inline script that reads the
-app's login in localStorage); inside the app, a link to `/` opens the editor. Their
+on to `/app#…` (a small inline script); inside the app, a link to `/` opens the editor.
+Visitors who are logged in see the landing page too, with *Open the editor* in its header. Their
 screenshots are taken again with Playwright from a local Brick DNN with real trainings, see
 [frontend/landing/screenshots/README.md](frontend/landing/screenshots/README.md).
 

@@ -60,8 +60,8 @@
   its language links, structured data or a file it refers to.
   **The editor moved to `/app`**; every other page of the app keeps its address. Old links
   keep working: `/?…` is redirected to `/app?…`, a `#…` that is not a section of the page
-  goes on to `/app#…`, logged-in users who open `/` land in the editor, and links to `/`
-  inside the app open the editor.
+  goes on to `/app#…`, and links to `/` inside the app open the editor. The landing page
+  is shown to logged-in users too; its header leads to the editor.
 - **Selectable losses of neural networks.** The training settings take a `loss` per task:
   for classification `cross_entropy` (the default), `weighted_cross_entropy` with
   `class_weights` (`"balanced"`, `n / (k · count)` from the class counts of the training

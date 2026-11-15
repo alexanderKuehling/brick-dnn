@@ -102,19 +102,17 @@ export const SECTION_IDS = [
 
 /**
  * The only script of the landing pages, inline in <head> so that it runs before anything is
- * shown. It sends to the editor (/app, with query and hash):
- * - old links into the editor on `/` (`/?…` – nginx redirects those already – or a `#…` that
- *   is not a section of the page);
- * - users who are logged in: the app keeps their tokens in localStorage (`brickdnn:tokens`,
- *   src/api/client.ts), and the refresh token has not expired yet. Only read in the browser:
- *   no cookies, nothing is sent anywhere.
+ * shown. It sends old links into the editor on `/` on to the editor (/app, with query and
+ * hash): `/?…` (nginx redirects those already) or a `#…` that is not a section of the page.
+ * Everybody else stays on the landing page, logged in or not; its header leads to the editor.
+ * It reads and stores nothing.
  *
  * nginx.conf allows exactly this script by its hash (Content-Security-Policy of `/` and `/de/`);
  * landing.test.ts checks that the hash there is this script's.
  */
 export const INLINE_SCRIPT = `(function(){var l=location,h=l.hash.slice(1),s=${JSON.stringify([
   ...SECTION_IDS,
-])},go=l.pathname=='/'&&(l.search||h&&s.indexOf(h)<0);if(!go)try{var t=JSON.parse(localStorage.getItem('brickdnn:tokens')).refresh.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');go=JSON.parse(atob(t)).exp*1e3>Date.now()}catch(e){}if(go)l.replace('${EDITOR_PATH}'+l.search+l.hash)})();`;
+])},go=l.pathname=='/'&&(l.search||h&&s.indexOf(h)<0);if(go)l.replace('${EDITOR_PATH}'+l.search+l.hash)})();`;
 
 /** The CSP source that allows INLINE_SCRIPT, e.g. `'sha256-…'`. */
 export function inlineScriptHash(): string {
