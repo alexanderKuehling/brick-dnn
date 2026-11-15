@@ -61,11 +61,14 @@ services:
     mem_limit: ${BRICKDNN_WORKER_MEMORY:-1792m}
     memswap_limit: ${BRICKDNN_WORKER_MEMORY:-1792m}
 
-  # Live editing only passes small messages on: little CPU and memory.
+  # Live editing only passes small messages on: little CPU and memory (about 120 MB). Like
+  # the backend, it gets the CPU before the trainings when both want it, so that live edits
+  # and pings are answered at once while trainings keep the CPUs busy.
   realtime:
     environment:
       BRICKDNN_NUM_PROXIES: 2
     cpus: "0.5"
+    cpu_shares: 2048
     mem_limit: 256m
     memswap_limit: 256m
 

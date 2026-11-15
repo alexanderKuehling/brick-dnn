@@ -163,7 +163,7 @@ share of the server:
 | --- | --- | --- | --- |
 | `worker`: the trainings (`manage.py training_worker` and one process per training) | at most 3/4, and the last to get the CPU when the server is busy | what is left of 3/4 of the memory after the backend's share | 1.5 CPUs, 1.8 GB |
 | `backend`: Django (API, data preparation, predictions) | a quarter, at least 1 and at most 2; before the worker when both want the CPU | about a third of those 3/4, at least 1 GB and at most 3 GB | 1 CPU, 1 GB |
-| `realtime` (live editing, Daphne) and `redis` | half a CPU | 256 MB, 64 MB | the same |
+| `realtime` (live editing, Daphne) and `redis` | half a CPU; `realtime` before the worker when both want the CPU | 256 MB, 64 MB | the same |
 | `cleanup` (deletes old data once a day, sleeps in between) | half a CPU | 256 MB | the same |
 | `caddy` and `frontend` (nginx) | the CPU first when it is busy | the rest, shared with the system; killed last | about 350 MB |
 
@@ -255,6 +255,7 @@ $C logs cleanup                # what the daily clean-up deleted
 $C exec backend python manage.py purge_old_data --dry-run   # what it would delete now
 $C logs -f --tail 100 worker   # what the training worker starts, stops and puts back
 $C exec backend python manage.py training_queue   # who waits, who trains, the last 7 days
+$C logs realtime | grep "Live connection closed"   # why live connections closed (see below)
 ```
 
 **The training queue** is also in the Django admin, without a shell: `https://DOMAIN/admin/` →
@@ -388,3 +389,65 @@ heartbeat, the database's error message) are shown to staff accounts: log in to 
 administrator and open `https://DOMAIN/api/health/`. For scripts, set a secret
 `BRICKDNN_HEALTH_TOKEN=…` in `/opt/brick-dnn/.env` (`$C up -d`) and send it as header:
 `curl -H "X-Health-Token: …" https://DOMAIN/api/health/`.
+
+## Troubleshooting: live editing drops
+
+The live badge of the builder only says *Offline* after a connection has stayed down for 8
+seconds; shorter drops are reconnected without notice. Every closed connection leaves one line
+in the log of the `realtime` container, with the close code, why it closed and how long it was
+open (when the server closed it, the reason says so and names the code it sent):
+
+```bash
+$C logs -t --since 24h realtime | grep "Live connection closed"
+# … Live connection closed: project 12, user 3, code 1006 (connection lost: network, proxy or ping timeout), after 1312 s, 410 messages
+# … Live connection closed: project 12, user 5, code 1001 (going away: page closed or reloaded), after 95 s, 31 messages
+# … Live connection closed: project 12, user 3, code 1011 (closed by the server with 1011: server error (OperationalError)), after 40 s, 12 messages
+
+# How often each kind happened (the part in brackets):
+$C logs --since 24h realtime | grep -o "code [0-9]* ([^)]*" | sort | uniq -c | sort -rn
+# Errors behind "server error" (also in Sentry, if it is set up):
+$C logs --since 24h realtime | grep -B2 -A20 "Live editing: error"
+# Restarts and out-of-memory kills of the realtime container:
+docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' $($C ps -q realtime)
+docker stats --no-stream $($C ps -q realtime)
+```
+
+In the browser, the developer tools' console shows the client's side at the *Verbose* level:
+`[live] connection closed {code, reason, wasClean, seconds}` and `[live] reconnecting: …`
+(e.g. after a missed change, or when the page came back from the background and the
+connection did not answer).
+
+What the codes mean:
+
+| Code in the log | Cause | What to do |
+| --- | --- | --- |
+| 1000 after about 86400 s | Daphne ends every connection after a day (`--websocket_timeout`) | nothing; the client reconnects |
+| 1001 | the tab was closed or reloaded | nothing |
+| 1006 *connection lost* | network gone (phones, Wi-Fi changes), a tab suspended in the background that no longer answered Daphne's ping (after 30 s of silence plus 30 s), or a proxy closed it | many at the same second: a restart of `frontend`, `realtime` or `caddy` (compare with `$C ps` and the times of deploys) |
+| *closed by the server with 1011: server error* | an error in the consumer, mostly the database (Supabase unreachable, SQLite locked by a training) or Redis | the traceback before the line; `$C logs redis` |
+| *with 4401* | no or an expired login (the client refreshes its token once) | many: the clocks of server and clients, `SIMPLE_JWT` lifetimes |
+| *with 4429: more than 30 messages a second* | a client sent too much (the web app sends at most about 20 a second) | a client bug or abuse |
+| *with 4403 / 4404* | access removed, project deleted | nothing |
+
+Further causes and what is set up against them:
+
+- **Deploys.** Every deploy builds a new frontend image (the release is built into the app) and
+  so restarts nginx, and with backend changes also `realtime`: every live connection drops
+  once and reconnects within seconds. A day with many deploys looks like drops every few
+  minutes in the log, all at the same times.
+- **Reloads of Caddy** (`caddy reload`, a changed Caddyfile) keep WebSockets open for up to 5
+  more minutes (`stream_close_delay`); a restart of the `caddy` container closes them at once.
+  Certificate renewals close nothing.
+- **nginx** passes `/api/ws/` on with HTTP/1.1 and the `Upgrade`/`Connection` headers, without
+  buffering (upgraded connections are passed through), with timeouts of an hour; clients ping
+  every 25 seconds, so these timeouts never end a working connection. It looks the address of
+  `realtime` up again at least every 10 seconds, so reconnects reach a `realtime` container
+  that was restarted on its own.
+- **A busy server.** `realtime` has half a CPU and 256 MB (it uses about 120 MB) and gets the
+  CPU before the trainings, like the backend. The login (auth message) has 10 seconds to
+  arrive; the database work after it no longer counts, so a slow database after a deploy,
+  when every client logs in again at once, does not close connections with 4401.
+- **The channel layer** (Redis) keeps at most 500 messages per connection for 30 seconds. A
+  client that falls behind loses messages, notices the gap in the versions and loads the
+  project again (`[live] reconnecting: missed a change`); the `realtime` log says
+  `… channels over capacity in group project-…` at the same time.

@@ -1,7 +1,13 @@
 # HTTPS for Brick DNN: Caddy gets and renews the certificates from Let's Encrypt itself.
 # BRICKDNN_DOMAIN comes from .env (e.g. brickdnn.com, or 203-0-113-7.sslip.io without a domain).
 {$BRICKDNN_DOMAIN} {
-	reverse_proxy frontend:80
+	reverse_proxy frontend:80 {
+		# A config reload (caddy reload, a changed Caddyfile) would close every WebSocket of
+		# live editing at once; they get 5 minutes to end by themselves instead. Certificate
+		# renewals do not reload the config and close nothing. WebSockets need no
+		# flush_interval: Caddy copies upgraded connections without buffering.
+		stream_close_delay 5m
+	}
 	header Strict-Transport-Security "max-age=31536000"
 }
 

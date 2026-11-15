@@ -18,6 +18,10 @@ Protocol (JSON messages over ``/api/ws/projects/<id>/``), client → server:
 - ``{"type": "presence", "state": {…}}`` (e.g. selected layers, a layer being dragged)
 - ``{"type": "ping"}``
 
+Every closed connection is logged (INFO, logger ``brick_dnn_core.live``) with its close code,
+why it closed and how long it was open, e.g. ``Live connection closed: project 7, user 3,
+code 1006 (connection lost: network, proxy or ping timeout), after 312 s, 41 messages``.
+
 Server → client: ``hello``, ``ops`` (applied ops with ``version``, ``by`` and the sender's
 ``client_id`` and ``id``), ``rejected`` (none of the ops could be applied), ``replaced`` (the
 whole project changed, e.g. saved through the REST API or MCP, or a version was restored),
@@ -38,6 +42,7 @@ from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
+from channels.exceptions import ChannelFull, StopConsumer
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
@@ -64,6 +69,21 @@ CLOSE_UNAUTHORIZED = 4401
 CLOSE_FORBIDDEN = 4403
 CLOSE_NOT_FOUND = 4404
 CLOSE_TOO_FAST = 4429
+CLOSE_SERVER_ERROR = 1011
+
+# What the codes the server does not choose itself mean, for the log.
+CLOSE_CODES = {
+    1000: "closed normally",
+    1001: "going away: page closed or reloaded",
+    1005: "closed without a code",
+    1006: "connection lost: network, proxy or ping timeout",
+    1011: "server error",
+    1012: "server restart",
+    CLOSE_UNAUTHORIZED: "not logged in",
+    CLOSE_FORBIDDEN: "access removed",
+    CLOSE_NOT_FOUND: "no such project or no access",
+    CLOSE_TOO_FAST: "too many messages",
+}
 
 
 def group_name(project_id: int) -> str:
@@ -370,7 +390,11 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         self.client_id = uuid.uuid4().hex[:12]
         self.presence: dict[str, Any] | None = None
         self.tokens = float(RATE_BURST)
-        self.last_refill = time.monotonic()
+        self.last_refill = self.opened_at = time.monotonic()
+        self.received = 0
+        self.in_group = False
+        # Why the server closed the connection (for the log); None: the client or the network.
+        self.close_reason: str | None = None
         await self.accept()
         self.auth_timer = asyncio.get_running_loop().call_later(
             AUTH_TIMEOUT, lambda: asyncio.ensure_future(self._auth_timeout())
@@ -378,14 +402,75 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
 
     async def _auth_timeout(self) -> None:
         if self.user is None:
-            await self.close(code=CLOSE_UNAUTHORIZED)
+            await self._close(CLOSE_UNAUTHORIZED, f"no auth message within {AUTH_TIMEOUT} s")
+
+    @classmethod
+    async def decode_json(cls, text_data: str) -> Any:
+        # Not JSON: ignored like any other malformed message (instead of a server error).
+        try:
+            return await super().decode_json(text_data)
+        except ValueError:
+            return None
+
+    async def _close(self, code: int, reason: str) -> None:
+        """Close from the server's side; the reason goes into the log line of the close."""
+        if self.close_reason is None:
+            self.close_reason = f"with {code}: {reason}"
+        await self.close(code=code)
+
+    async def dispatch(self, message: dict[str, Any]) -> None:
+        # An error in a handler would otherwise end the consumer at once: Daphne closes the
+        # socket (1011) without disconnect(), so the others would never hear that we left.
+        try:
+            await super().dispatch(message)
+        except StopConsumer:
+            raise
+        except Exception as exc:
+            if message.get("type") == "websocket.disconnect":
+                raise
+            logger.exception(
+                "Live editing: error in %s for project %s",
+                message.get("type"),
+                getattr(self, "project_id", None),
+            )
+            await self._close(CLOSE_SERVER_ERROR, f"server error ({type(exc).__name__})")
 
     async def disconnect(self, code: int) -> None:
         if getattr(self, "auth_timer", None) is not None:
             self.auth_timer.cancel()
-        if getattr(self, "user", None) is not None:
-            await self.channel_layer.group_discard(group_name(self.project_id), self.channel_name)
-            await self._broadcast({"type": "peer.left", "client_id": self.client_id})
+        self._log_close(code)
+        if getattr(self, "in_group", False):
+            try:
+                await self.channel_layer.group_discard(
+                    group_name(self.project_id), self.channel_name
+                )
+                if self.user is not None:
+                    await self._broadcast({"type": "peer.left", "client_id": self.client_id})
+            except Exception:
+                logger.warning(
+                    "Live editing: could not tell project %s that a client left",
+                    self.project_id,
+                    exc_info=True,
+                )
+
+    def _log_close(self, code: int) -> None:
+        opened_at = getattr(self, "opened_at", None)
+        duration = time.monotonic() - opened_at if opened_at is not None else 0.0
+        reason = getattr(self, "close_reason", None)
+        if reason is None:
+            reason = CLOSE_CODES.get(code, "closed by the client")
+        else:
+            reason = f"closed by the server {reason}"
+        user = getattr(self, "user", None)
+        logger.info(
+            "Live connection closed: project %s, user %s, code %s (%s), after %.0f s, %d messages",
+            getattr(self, "project_id", None),
+            user.pk if user is not None else "-",
+            code,
+            reason,
+            duration,
+            getattr(self, "received", 0),
+        )
 
     def _within_rate(self) -> bool:
         now = time.monotonic()
@@ -397,17 +482,23 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         return True
 
     async def receive_json(self, content: Any, **kwargs) -> None:
+        self.received += 1
         if not self._within_rate():
-            await self.close(code=CLOSE_TOO_FAST)
+            await self._close(
+                CLOSE_TOO_FAST,
+                f"more than {RATE_PER_SECOND} messages a second (burst {RATE_BURST})",
+            )
             return
         if not isinstance(content, dict):
             return
         kind = content.get("type")
         if self.user is None:
             if kind == "auth":
+                # The client was in time: a slow database must not close the connection.
+                self.auth_timer.cancel()
                 await self._authenticate(content.get("token"))
             else:
-                await self.close(code=CLOSE_UNAUTHORIZED)
+                await self._close(CLOSE_UNAUTHORIZED, f"{kind!r} before the auth message")
             return
         if kind == "ops":
             await self._ops(content)
@@ -429,18 +520,19 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
     async def _authenticate(self, token: Any) -> None:
         user = await database_sync_to_async(_user_from_token)(token)
         if user is None:
-            await self.close(code=CLOSE_UNAUTHORIZED)
+            await self._close(CLOSE_UNAUTHORIZED, "invalid or expired token")
             return
         # Join the room before loading, so no change between loading and joining is missed
         # (messages from the room are handled after this one; older ones carry a lower
         # version than the hello and are ignored by the client).
         await self.channel_layer.group_add(group_name(self.project_id), self.channel_name)
+        self.in_group = True
         loaded = await database_sync_to_async(_load)(self.project_id, user)
         if loaded is None:
             await self.channel_layer.group_discard(group_name(self.project_id), self.channel_name)
-            await self.close(code=CLOSE_NOT_FOUND)
+            self.in_group = False
+            await self._close(CLOSE_NOT_FOUND, "no such project or no access")
             return
-        self.auth_timer.cancel()
         self.user = user
         state, self.role = loaded
         await self.send_json(
@@ -479,7 +571,7 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
                     self.project_id, self.user, ops
                 )
             except Project.DoesNotExist:
-                await self.close(code=CLOSE_NOT_FOUND)
+                await self._close(CLOSE_NOT_FOUND, "the project was deleted")
                 return
             if not applied:
                 await self.send_json({"type": "rejected", "id": message_id, "version": version})
@@ -514,24 +606,27 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
             {"type": "joined", "client_id": event["client_id"], "user": event["user"]}
         )
         # Introduce ourselves to the newcomer only, with what we have selected etc.
-        await self.channel_layer.send(
-            event["channel"],
-            {
-                "type": "peer.here",
-                "client_id": self.client_id,
-                "user": _user_ref(self.user),
-            },
-        )
+        introductions = [
+            {"type": "peer.here", "client_id": self.client_id, "user": _user_ref(self.user)}
+        ]
         if self.presence is not None:
-            await self.channel_layer.send(
-                event["channel"],
+            introductions.append(
                 {
                     "type": "peer.presence",
                     "client_id": self.client_id,
                     "user": _user_ref(self.user),
                     "state": self.presence,
-                },
+                }
             )
+        for introduction in introductions:
+            try:
+                await self.channel_layer.send(event["channel"], introduction)
+            except ChannelFull:
+                # The newcomer is not reading (gone, or far behind): its problem, not ours.
+                logger.info(
+                    "Live editing: channel of a newcomer full in project %s", self.project_id
+                )
+                return
 
     async def peer_here(self, event: dict[str, Any]) -> None:
         await self.send_json({**event, "type": "joined"})
@@ -549,7 +644,7 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
         self.role = event["role"]
         await self.send_json({"type": "access", "role": self.role})
         if self.role is None:
-            await self.close(code=CLOSE_FORBIDDEN)
+            await self._close(CLOSE_FORBIDDEN, "access removed")
 
     async def project_history(self, event: dict[str, Any]) -> None:
         await self.send_json({"type": "history"})
@@ -559,4 +654,4 @@ class ProjectConsumer(AsyncJsonWebsocketConsumer):
 
     async def project_deleted(self, event: dict[str, Any]) -> None:
         await self.send_json({"type": "deleted"})
-        await self.close(code=CLOSE_NOT_FOUND)
+        await self._close(CLOSE_NOT_FOUND, "the project was deleted")

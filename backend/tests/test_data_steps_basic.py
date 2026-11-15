@@ -173,6 +173,30 @@ def test_cast_to_boolean_and_dates():
     assert values(back.table, "day")[0] == pd.Timestamp("2024-01-31").timestamp()
 
 
+def test_cast_numbers_to_dates_with_numpy_raising_on_overflow():
+    # pandas rounds the fractions of missing values with unit="s" from uninitialised memory,
+    # under its own np.errstate(over="raise"): leftover large numbers made this fail at
+    # random. Missing and out-of-range values must simply become missing, both in the step
+    # and in its pandas code, whatever numpy's error state is.
+    source = table({"ts": [0.0, 86_400.5, 1e300, np.nan, -np.inf, -9.1e9]})
+    expected = [
+        pd.Timestamp("1970-01-01"),
+        pd.Timestamp("1970-01-02 00:00:00.5"),
+        None,
+        None,
+        None,
+        pd.Timestamp("1681-08-18 22:13:20"),
+    ]
+    for _ in range(20):
+        # What freed arrays leave behind, numpy hands out again for small arrays.
+        leftovers = [np.full(len(expected), 1e300) for _ in range(20)]
+        del leftovers
+        with np.errstate(all="raise"):
+            dates = check_code(source, "cast", {"columns": ["ts"], "to": "datetime"})
+        assert values(dates.table, "ts") == expected
+        assert dates.table.kinds["ts"] == "datetime"
+
+
 def test_cast_errors(people):
     with pytest.raises(DataError, match="cannot be turned into true/false"):
         apply(people, "cast", {"columns": ["joined"], "to": "boolean"})

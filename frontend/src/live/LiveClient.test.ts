@@ -24,6 +24,8 @@ const update = (id: string, params: Record<string, number>): LiveOp => ({
 });
 
 let getToken: ReturnType<typeof vi.fn<LiveClientOptions['getToken']>>;
+/** Stopped after each test, so that no client listens to page events of the next one. */
+let clients: LiveClient[] = [];
 
 function setup(options: Partial<LiveClientOptions> = {}) {
   const client = new LiveClient({
@@ -36,6 +38,7 @@ function setup(options: Partial<LiveClientOptions> = {}) {
   const received: ServerMessage[] = [];
   client.subscribe((message) => received.push(message));
   client.start();
+  clients.push(client);
   return { client, received };
 }
 
@@ -55,6 +58,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clients.forEach((client) => client.stop());
+  clients = [];
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -216,6 +222,68 @@ describe('LiveClient', () => {
     const socket = await connect();
     await vi.advanceTimersByTimeAsync(25000);
     expect(socket.messages('ping')).toHaveLength(1);
+  });
+
+  it('logs why a connection closed and how long it was open', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    setup();
+    const socket = await connect();
+    await vi.advanceTimersByTimeAsync(61000);
+    socket.drop(1006);
+    expect(debug).toHaveBeenCalledWith('[live]', 'connection closed', {
+      code: 1006,
+      reason: undefined,
+      wasClean: undefined,
+      seconds: 61,
+    });
+  });
+
+  it('checks the connection and reconnects at once when the page comes back', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    let visibility: DocumentVisibilityState = 'hidden';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    const show = () => {
+      visibility = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    const { client } = setup();
+    const socket = await connect();
+
+    // A live connection that answers stays.
+    show();
+    expect(socket.messages('ping')).toHaveLength(1);
+    socket.receive({ type: 'pong' });
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    // One that died while the tab was suspended (no close event) is replaced.
+    visibility = 'hidden';
+    show();
+    expect(socket.messages('ping')).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(socket.closedByClient).toBe(1000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(debug).toHaveBeenCalledWith(
+      '[live]',
+      'reconnecting: no answer within 10000 ms after the page came back'
+    );
+
+    // A reconnect waiting for its backoff starts at once.
+    const second = FakeWebSocket.last;
+    second.open();
+    second.receive(hello());
+    second.drop(1006);
+    expect(client.status).toBe('offline');
+    visibility = 'hidden';
+    show();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+
+    client.stop();
+    show(); // No listener any more.
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(FakeWebSocket.instances).toHaveLength(3);
   });
 
   it('gets the state again when it missed a change, and ignores old ones', async () => {

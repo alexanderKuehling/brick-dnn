@@ -5,6 +5,11 @@
  * token after network drops), batches ops, keeps them until the server has confirmed them
  * (and sends them again after a reconnect), throttles presence and keeps the list of peers.
  * Messages from the server are passed on to subscribers.
+ *
+ * When the page comes back to the foreground (phones suspend background tabs, and their
+ * sockets may have died meanwhile without a close event), a pending reconnect starts at once
+ * and a live connection is checked with a ping. Closes and reconnects are logged with
+ * `console.debug` (close code, reason, how long the connection was open).
  */
 import type { ProjectRole, UserRef } from '@/api/types';
 import { appendOps } from './ops';
@@ -60,6 +65,11 @@ export interface LiveClientOptions {
   /** At most one presence message per this time. */
   presenceMs?: number;
   pingMs?: number;
+  /**
+   * After the page comes back to the foreground: reconnect if nothing arrives within this
+   * time after a ping.
+   */
+  wakeCheckMs?: number;
   /** Delay before reconnect attempt `attempt` (0, 1, …). */
   backoff?: (attempt: number) => number;
   /** Ops that were not confirmed before the page was closed (from the draft). */
@@ -76,6 +86,12 @@ const OPEN = 1;
 function defaultBackoff(attempt: number): number {
   const base = Math.min(15000, 500 * 2 ** attempt);
   return base * (0.75 + Math.random() * 0.5);
+}
+
+/** Connection events for the browser console (its "Verbose" level). */
+function debug(...args: unknown[]): void {
+  // eslint-disable-next-line no-console
+  console.debug('[live]', ...args);
 }
 
 let messageCounter = 0;
@@ -113,6 +129,10 @@ export class LiveClient {
   private presenceTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When the current socket was created and when it last received a message. */
+  private openedAt = 0;
+  private receivedAt = 0;
   private readonly messageListeners = new Set<(message: ServerMessage) => void>();
   private readonly changeListeners = new Set<() => void>();
 
@@ -122,6 +142,7 @@ export class LiveClient {
       batchMs: 120,
       presenceMs: 100,
       pingMs: 25000,
+      wakeCheckMs: 10000,
       backoff: defaultBackoff,
       ...options,
     };
@@ -133,6 +154,9 @@ export class LiveClient {
   start(): void {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', this.onOnline);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.onVisibilityChange);
     }
     void this.connect();
   }
@@ -146,10 +170,11 @@ export class LiveClient {
   }
 
   /** Get the current state again: reconnect, the server answers with `hello`. */
-  resync(): void {
+  resync(reason = 'resync'): void {
     if (this.stopped) {
       return;
     }
+    debug(`reconnecting: ${reason}`);
     this.dropSocket();
     this.setStatus(this.everLive ? 'offline' : 'connecting');
     void this.connect();
@@ -237,12 +262,37 @@ export class LiveClient {
 
   private readonly onOnline = () => {
     // Back online: do not wait for the backoff.
+    this.reconnectNow();
+  };
+
+  private readonly onVisibilityChange = () => {
+    if (typeof document === 'undefined' || document.visibilityState !== 'visible') {
+      return;
+    }
+    // Back in the foreground: a suspended tab may have missed the close of its socket, or
+    // waited for a reconnect that its throttled timers delayed.
+    this.reconnectNow();
+    const socket = this.socket;
+    if (this.status !== 'live' || !socket || this.wakeTimer !== null) {
+      return;
+    }
+    const pingedAt = Date.now();
+    this.send({ type: 'ping' });
+    this.wakeTimer = setTimeout(() => {
+      this.wakeTimer = null;
+      if (this.socket === socket && this.receivedAt < pingedAt) {
+        this.resync(`no answer within ${this.options.wakeCheckMs} ms after the page came back`);
+      }
+    }, this.options.wakeCheckMs);
+  };
+
+  private reconnectNow(): void {
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
       void this.connect();
     }
-  };
+  }
 
   private async connect(): Promise<void> {
     const force = this.forceToken;
@@ -272,11 +322,13 @@ export class LiveClient {
       return;
     }
     this.socket = socket;
+    this.openedAt = Date.now();
     socket.onopen = () => this.send({ type: 'auth', token }, true);
     socket.onmessage = (event) => {
       if (this.socket !== socket) {
         return;
       }
+      this.receivedAt = Date.now();
       let message: ServerMessage;
       try {
         message = JSON.parse(String(event.data)) as ServerMessage;
@@ -287,6 +339,12 @@ export class LiveClient {
     };
     socket.onclose = (event) => {
       if (this.socket === socket) {
+        debug('connection closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          seconds: Math.round((Date.now() - this.openedAt) / 1000),
+        });
         this.closed(event.code);
       }
     };
@@ -360,6 +418,7 @@ export class LiveClient {
     }
     this.stopped = true;
     this.endReason = reason;
+    debug(`ended: ${reason}`);
     for (const timer of [this.batchTimer, this.presenceTimer, this.reconnectTimer]) {
       if (timer !== null) {
         clearTimeout(timer);
@@ -370,6 +429,9 @@ export class LiveClient {
     this.reconnectTimer = null;
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.onOnline);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
     }
     this.dropSocket();
     this.setStatus('ended');
@@ -387,6 +449,10 @@ export class LiveClient {
       clearInterval(this.pingTimer);
       this.pingTimer = null;
     }
+    if (this.wakeTimer !== null) {
+      clearTimeout(this.wakeTimer);
+      this.wakeTimer = null;
+    }
   }
 
   // ------------------------------------------------------------ messages
@@ -402,7 +468,7 @@ export class LiveClient {
         }
         if (this.version !== null && message.version > this.version + 1) {
           // We missed a change: get the whole state again.
-          this.resync();
+          this.resync(`missed a change (version ${this.version} -> ${message.version})`);
           return;
         }
         this.version = message.version;
@@ -418,7 +484,7 @@ export class LiveClient {
           // undoes them on the canvas.
           this.sent = this.sent.filter((pending) => pending.id !== message.id);
           this.emit(message);
-          this.resync();
+          this.resync(`ops ${message.type}`);
           return;
         }
         break;

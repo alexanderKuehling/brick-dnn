@@ -766,6 +766,27 @@
   is only shown as offline once it has stayed down for 8 seconds; changes made meanwhile show
   as *Saving…* and are sent after the reconnect. The agent activity page says *Reconnecting…*
   only after two failed polls in a row.
+- **Fewer and better explained live-editing drops.** Every closed live connection is logged by
+  the `realtime` service with its close code, the reason and how long it was open
+  (`Live connection closed: …`; deploy/server/README.md, *Troubleshooting: live editing
+  drops*), and the browser console shows the client's side (`[live] …`, *Verbose* level). An
+  error in the server (e.g. the database) now closes the connection cleanly with 1011, so the
+  others see that person leave instead of keeping a ghost; text that is not JSON is ignored
+  instead of closing the connection. The 10 seconds for the login only count until the auth
+  message arrives, so a slow database (every client logging in again after a deploy) no
+  longer closes connections with 4401. When a page comes back from the background, a waiting
+  reconnect starts at once and a live connection is checked with a ping (reconnected if it
+  does not answer within 10 seconds). Daphne pings only connections that were quiet for 30
+  seconds (clients ping every 25) and drops them 30 seconds later if they do not answer; nginx
+  looks up the `realtime` container again after it restarted; Caddy keeps WebSockets open for
+  5 minutes when its config is reloaded (`stream_close_delay`); and `realtime` gets the CPU
+  before the trainings, like the backend.
+- **Numbers to dates no longer fail at random.** *Change type* to date from seconds since 1970
+  (and its pandas script) could raise `FloatingPointError: overflow encountered in multiply`
+  when the column had missing or out-of-range values: pandas 2.x rounds the fractions of
+  missing values from uninitialised memory under its own `np.errstate(over="raise")`. Missing
+  and out-of-range values are now converted as 0 and set to missing afterwards, so they always
+  become missing dates, whatever numpy's error settings are.
 - **Worker errors during a deploy.** The training worker started with the new code while the
   web server was still migrating the database and failed on columns that did not exist yet
   (e.g. `column ... does not exist`, reported to Sentry). It now waits until the database has

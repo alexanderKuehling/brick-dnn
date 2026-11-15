@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import re
+import time
+
 import pytest
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
@@ -9,6 +13,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
+from brick_dnn_core import live
 from brick_dnn_core.live import OpError, apply_op
 from brick_dnn_core.models import Project, ProjectMember
 from brick_dnn_site.asgi import application
@@ -356,5 +361,156 @@ def test_newcomers_see_presence_and_history_is_announced_once(setup):
         assert await c.receive_nothing(timeout=0.5)
         await a.disconnect()
         await c.disconnect()
+
+    async_to_sync(run)()
+
+
+# --------------------------------------------------------------------------- #
+# Closing: logged with code, reason and duration; errors close cleanly
+# --------------------------------------------------------------------------- #
+
+
+def closes(caplog) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Live connection closed")
+    ]
+
+
+async def next_of_output(ws: WebsocketCommunicator, kind: str) -> dict:
+    """The next raw ASGI message of a kind (e.g. websocket.close), skipping sent JSON."""
+    for _ in range(20):
+        message = await ws.receive_output(timeout=5)
+        if message["type"] == kind:
+            return message
+    raise AssertionError(f"no {kind}")
+
+
+@pytestmark_db
+def test_closes_are_logged_with_code_reason_and_duration(setup, caplog, monkeypatch):
+    project, ada, _, _ = setup
+    caplog.set_level(logging.INFO, logger="brick_dnn_core.live")
+    monkeypatch.setattr(live, "AUTH_TIMEOUT", 0.2)
+
+    async def run():
+        a, _ = await joined(project.pk, ada)
+        await a.send_json_to({"type": "ping"})
+        assert (await next_of(a, "pong"))["type"] == "pong"
+        await a.disconnect(code=1001)  # the tab was closed
+
+        forged = connect(project.pk)
+        await forged.connect()
+        await forged.send_json_to({"type": "auth", "token": "not-a-jwt"})
+        assert (await forged.receive_output(timeout=5))["code"] == 4401
+        await forged.disconnect(code=4401)
+
+        silent = connect(project.pk)
+        await silent.connect()
+        assert (await silent.receive_output(timeout=5))["code"] == 4401
+        await silent.disconnect(code=4401)
+
+        lost = connect(project.pk)
+        await lost.connect()
+        await lost.disconnect(code=1006)
+
+    async_to_sync(run)()
+    lines = closes(caplog)
+    assert len(lines) == 4, lines
+    assert lines[0].startswith(
+        f"Live connection closed: project {project.pk}, user {ada.pk}, "
+        "code 1001 (going away: page closed or reloaded), after "
+    )
+    assert re.search(r"after \d+ s, 2 messages$", lines[0]), lines[0]
+    assert (
+        "user -, code 4401 (closed by the server with 4401: invalid or expired token)" in lines[1]
+    )
+    assert "code 4401 (closed by the server with 4401: no auth message within 0.2 s)" in lines[2]
+    assert "code 1006 (connection lost: network, proxy or ping timeout)" in lines[3]
+
+
+@pytestmark_db
+def test_too_many_messages_close_the_connection_and_say_why(setup, caplog, monkeypatch):
+    project, ada, _, _ = setup
+    caplog.set_level(logging.INFO, logger="brick_dnn_core.live")
+    monkeypatch.setattr(live, "RATE_BURST", 4)
+    monkeypatch.setattr(live, "RATE_PER_SECOND", 0.01)
+
+    async def run():
+        a, _ = await joined(project.pk, ada)  # the auth message is the first of the burst
+        await a.send_to(text_data="not json")  # ignored, not a server error
+        await a.send_json_to({"type": "ping"})
+        assert (await next_of(a, "pong"))["type"] == "pong"
+        await a.send_json_to({"type": "ping"})  # the fourth message: the last of the burst
+        assert (await next_of(a, "pong"))["type"] == "pong"
+        await a.send_json_to({"type": "ping"})  # one too many
+        assert await next_of_output(a, "websocket.close") == {
+            "type": "websocket.close",
+            "code": 4429,
+        }
+        await a.disconnect(code=4429)
+
+    async_to_sync(run)()
+    [line] = closes(caplog)
+    assert (
+        "code 4429 (closed by the server with 4429: more than 0.01 messages a second (burst 4))"
+        in line
+    )
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@pytestmark_db
+def test_an_error_closes_cleanly_and_the_others_hear_of_it(setup, caplog, monkeypatch):
+    from django.db import OperationalError
+
+    project, ada, bob, _ = setup
+    caplog.set_level(logging.INFO, logger="brick_dnn_core.live")
+
+    def locked(*args, **kwargs):
+        raise OperationalError("database is locked")
+
+    monkeypatch.setattr(live, "apply_ops", locked)
+
+    async def run():
+        a, hello_a = await joined(project.pk, ada)
+        b, _ = await joined(project.pk, bob)
+        await next_of(a, "joined")
+        await a.send_json_to(
+            {"type": "ops", "id": "m1", "ops": [{"op": "set_meta", "name": "Lost"}]}
+        )
+        assert (await next_of_output(a, "websocket.close"))["code"] == 1011
+        await a.disconnect(code=1011)
+        # Ada's client reconnects and sends the change again; bob sees her leave meanwhile.
+        assert (await next_of(b, "left"))["client_id"] == hello_a["client_id"]
+        await b.disconnect()
+
+    async_to_sync(run)()
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errors and errors[0].exc_info is not None
+    assert "Live editing: error in websocket.receive" in errors[0].getMessage()
+    assert (
+        "code 1011 (closed by the server with 1011: server error (OperationalError))"
+        in closes(caplog)[0]
+    )
+
+
+@pytestmark_db
+def test_a_slow_database_does_not_time_the_login_out(setup, monkeypatch):
+    project, ada, _, _ = setup
+    monkeypatch.setattr(live, "AUTH_TIMEOUT", 0.2)
+    load = live._load
+
+    def slow_load(*args):
+        time.sleep(0.5)  # longer than the time to send the auth message
+        return load(*args)
+
+    monkeypatch.setattr(live, "_load", slow_load)
+
+    async def run():
+        a, hello = await joined(project.pk, ada)
+        assert hello["role"] == "owner"
+        await a.send_json_to({"type": "ping"})
+        assert (await next_of(a, "pong"))["type"] == "pong"
+        await a.disconnect()
 
     async_to_sync(run)()

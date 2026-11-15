@@ -288,7 +288,7 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       if (role === 'viewer') {
         // Changes that were not confirmed cannot be saved any more: get the current state.
         getClient()?.dropPending();
-        getClient()?.resync();
+        getClient()?.resync('now a viewer');
         notifications.show({
           title: `You can only view “${name}” now`,
           message: 'You still see the changes of the others as they happen.',
