@@ -5,6 +5,9 @@
 # quarters of the server, which the worker's CPUs and threads default to) and, with the
 # deploy.sh of this version, BRICKDNN_WEB_* and BRICKDNN_WORKER_*. Without the latter the fixed
 # defaults below apply, which fit a server with 2 CPUs and 4 GB.
+# SENTRY_AUTH_TOKEN in .env (by hand or from GitHub) reaches the frontend build as the build
+# secret sentry_auth_token of docker-compose.yml, which uploads the source maps to Sentry
+# (docs/monitoring.md).
 
 # At most 3 × 10 MB of logs per container (Caddy's own; the others are in docker-compose.yml).
 x-logging: &logging

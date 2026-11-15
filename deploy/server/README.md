@@ -121,6 +121,7 @@ Deploy server → Run workflow*) or push to `main`.
 | `BRICKDNN_EMAIL_USER` | SMTP login |
 | `BRICKDNN_EMAIL_PASSWORD` | SMTP password or key |
 | `BRICKDNN_ADMIN_EMAIL` | your address for server errors |
+| `SENTRY_AUTH_TOKEN` | Sentry token for uploading the app's source maps while the image is built ([monitoring](../../docs/monitoring.md#readable-stack-traces-in-the-browser)) |
 
 - A variable or secret that is **not set leaves `.env` as it is**; deleting one in GitHub does
   not delete it on the server (do that in `.env`). A value set in GitHub wins over the same
@@ -128,20 +129,27 @@ Deploy server → Run workflow*) or push to `main`.
 - Values may contain any character except `'` and line breaks (they are written in single
   quotes, which Docker Compose takes literally, `$` included); with one of those the deploy
   stops and nothing changes.
-- Other names cannot be set this way: the server only accepts the ones above.
+- Other names cannot be set this way: the server only accepts the ones above, and refuses the
+  whole deploy for any other name.
 - The settings travel on stdin of the SSH connection, base64-encoded, and never appear on a
   command line or in the log of the workflow.
 
-**Servers set up before this existed** need the new deploy script once (their copy ignores
-the settings):
+**Names added later** (`SENTRY_AUTH_TOKEN`) are only sent once the server's deploy script
+knows them. The workflow first asks it (`ssh deploy@SERVER settings-names`, which prints the
+names it takes) and leaves out the others with a warning in the workflow's summary: the
+deploy goes on with the rest. A copy of the script from before this question answers with its
+usage; the workflow then sends only the names it has always sent. To take the new names,
+install the current script once on the server:
 
 ```bash
-ssh root@SERVER install -m 755 /opt/brick-dnn/deploy/server/deploy.sh /usr/local/bin/brickdnn-deploy
+ssh SERVER 'cd /opt/brick-dnn && sudo -u deploy git fetch -q origin main && sudo -u deploy git show origin/main:deploy/server/deploy.sh > /tmp/brickdnn-deploy.new && sudo install -m 755 /tmp/brickdnn-deploy.new /usr/local/bin/brickdnn-deploy'
 ```
 
-Run it after a deploy that contains this change, then deploy again. The same goes for the
-Sentry settings, which came later: copy the script again once after the deploy that added
-them. Every deploy also writes `BRICKDNN_SENTRY_RELEASE=brick-dnn@<commit>` into `.env`.
+and deploy again. Every deploy also writes `BRICKDNN_SENTRY_RELEASE=brick-dnn@<commit>` into
+`.env`.
+
+Even older copies need the same: from before settings from GitHub, they ignore all of them;
+from before the Sentry settings, they refuse a deploy that sends one.
 
 ## CPU and memory: the site comes first
 
