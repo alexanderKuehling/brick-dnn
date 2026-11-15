@@ -146,7 +146,7 @@ def test_capabilities_list_shapes_and_the_limits(web, training_dir, monkeypatch)
         "max_images": 20_000,
         "max_input_side": 512,
         "batch_memory_mb": 900,
-        "losses": ["cross_entropy", "cross_entropy_dice"],
+        "losses": ["cross_entropy", "cross_entropy_dice", "weighted_cross_entropy"],
     }
     # Without torchvision, Shapes still passes the check; MNIST does not.
     check = web.post("/api/training/check/", {"graph": NET, "dataset": SHAPES}, format="json")
@@ -294,9 +294,14 @@ def test_datasets_over_mcp_are_compact(mcp, web, user, training_dir):
     del files["masks/011.png"]
     dataset_id = upload(web, "squares.zip", zip_bytes(files), name="Squares").data["id"]
     options, size = answer(mcp, "get_training_options")
-    assert size < 6500  # with the hyperparameter search options (about 1,800 bytes)
+    # With the hyperparameter search options (about 1,800 bytes) and the losses per task
+    # with their settings (about 560 bytes).
+    assert size < 7100
     assert options["segmentation"]["max_classes"] == 32
-    assert options["config_defaults"]["loss"] == "cross_entropy"
+    assert options["config_defaults"]["loss"] == "auto"  # cross_entropy for a segmentation
+    assert options["losses"]["segmentation"] == (
+        "cross_entropy*, cross_entropy_dice, weighted_cross_entropy"
+    )
     shapes = options["builtin_datasets"][-1]
     assert (shapes["id"], shapes["task"], shapes["available"]) == ("shapes", "segmentation", True)
     assert options["your_datasets"] == [

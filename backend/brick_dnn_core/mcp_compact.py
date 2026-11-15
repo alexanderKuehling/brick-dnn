@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from brickdnn.training import objectives
+from brickdnn.training import losses, objectives
 
 from .models import Dataset, TrainingRun
 
@@ -280,6 +280,33 @@ def tuning_options(tuning: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+def loss_options(found: dict[str, Any]) -> dict[str, str]:
+    """The losses of get_training_options (``found``: losses.capabilities()): one line per
+    task (the default marked with *) and one for the settings of the losses."""
+    lines = {
+        task: ", ".join([f"{names[0]}*", *names[1:]])
+        for task, names in (found.get("tasks") or {}).items()
+    }
+    params = found.get("params") or {}
+
+    def limits(name: str) -> str:
+        info = params.get(name) or {}
+        low = f"{info.get('min', 0):g}"
+        return f"{'>' if info.get('min_exclusive') else ''}{low}-{info.get('max', 0):g} ({info.get('default', 0):g})"
+
+    lines["settings"] = (
+        "class_weights balanced|[w per class]|{class: w} (weighted_cross_entropy, default "
+        f"balanced; focal: alpha); focal_gamma {limits('focal_gamma')}; label_smoothing "
+        f"{limits('label_smoothing')}, cross-entropies; huber_delta {limits('huber_delta')}, "
+        "in target std"
+    )
+    lines["note"] = (
+        "*: the default (auto). The chosen loss is in the curves, early stopping and "
+        "objective loss: rank a search over losses by another metric."
+    )
+    return lines
+
+
 def _example(value: Any) -> str:
     if isinstance(value, dict):
         return f"{value.get('min'):g}:{value.get('max'):g}"
@@ -452,6 +479,8 @@ def run_detail(
     state = state or {}
     plan = run.plan if isinstance(run.plan, dict) else {}
     config = run.config if isinstance(run.config, dict) else {}
+    # The loss with the settings it uses (see run_loss); the other settings are left out.
+    config = {k: v for k, v in config.items() if k not in losses.PARAMS}
     started, finished = state.get("started_at"), state.get("finished_at")
     from .training_service import decision_threshold
 
@@ -466,6 +495,7 @@ def run_detail(
         "plan": _short(plan.get("summary")),
         "dataset": _dataset_name(run),
         "config": {k: v for k, v in config.items() if v is not None},
+        "loss": run_loss(run, state),
         "epochs": {"done": run.epochs_done, "total": _epochs(run)},
         "progress": state.get("progress") if run.status in ("running", "preparing") else None,
         "best": run.best or state.get("best"),
@@ -569,6 +599,26 @@ def run_detail(
     if missing:
         detail["more"] = f"include: {missing} adds these parts (history is downsampled)."
     return _no_none(detail)
+
+
+def run_loss(run: TrainingRun, state: dict[str, Any]) -> dict[str, Any] | None:
+    """The loss a neural network trains with (state.json ``loss``: with the class weights
+    it computed); before the run reports it, from its settings. None for classical models
+    and ensembles."""
+    if isinstance(state.get("loss"), dict):
+        return state["loss"]
+    config = run.config if isinstance(run.config, dict) else {}
+    plan = run.plan if isinstance(run.plan, dict) else {}
+    tasks = losses.plan_tasks(plan)
+    if run.kind == "ensemble" or _family(run) == "classical" or len(tasks) != 1:
+        return None
+    from brickdnn.training.config import TrainingConfig
+
+    try:
+        settings = TrainingConfig.from_dict(config)
+    except ValueError:
+        return None
+    return losses.describe(settings, tasks[0])
 
 
 def _per_class(names: list[Any], values: Any) -> dict[str, Any] | None:
