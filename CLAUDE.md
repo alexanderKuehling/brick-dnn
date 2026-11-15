@@ -2,7 +2,7 @@
 
 ## Commits, pull requests and GitHub posts
 
-- Both of us are named on every commit: Alexander Kühling <alexander.kuehling@brickdnn.com> as the
+- Both of us are named on every commit: Alexander Kühling <alexander.kuehling@gmx.net> as the
   author, and Claude as co-author with a `Co-Authored-By: Claude … <noreply@anthropic.com>`
   trailer.
 - No other Claude attribution: no "Generated with Claude Code" line and no `Claude-Session: …`
