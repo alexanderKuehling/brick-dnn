@@ -4,6 +4,7 @@ terms at sign-up."""
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -53,13 +54,19 @@ def test_no_legal_pages_by_default(legal_dir):
     response = client.get("/api/legal/")
     assert response.status_code == 200
     assert response.data == {
-        "pages": {"imprint": False, "privacy": False, "terms": False, "refund": False},
+        "pages": {
+            "imprint": False,
+            "privacy": False,
+            "terms": False,
+            "refund": False,
+            "accessibility": False,
+        },
         "terms_version": None,
         "privacy_version": None,
         "accept_terms_required": False,
         "retention": {"unused_uploads_days": 0, "inactive_accounts_days": 0},
     }
-    for page in ("imprint", "privacy", "terms", "refund"):
+    for page in ("imprint", "privacy", "terms", "refund", "accessibility"):
         response = client.get(f"/api/legal/{page}/")
         assert response.status_code == 404
         assert response.data["detail"] == "This page has not been set up on this server."
@@ -72,7 +79,13 @@ def test_pages_come_from_the_legal_dir(legal_dir, settings):
     client = APIClient()
 
     info = client.get("/api/legal/").data
-    assert info["pages"] == {"imprint": True, "privacy": False, "terms": True, "refund": False}
+    assert info["pages"] == {
+        "imprint": True,
+        "privacy": False,
+        "terms": True,
+        "refund": False,
+        "accessibility": False,
+    }
     assert info["terms_version"] == terms_version
     assert info["accept_terms_required"] is True
     assert info["retention"] == {"unused_uploads_days": 90, "inactive_accounts_days": 0}
@@ -102,7 +115,13 @@ def test_empty_and_oversized_files_are_ignored(legal_dir, monkeypatch):
     write(legal_dir, "privacy", PRIVACY)
     monkeypatch.setattr(legal, "MAX_BYTES", 10)
     pages = APIClient().get("/api/legal/").data["pages"]
-    assert pages == {"imprint": False, "privacy": False, "terms": False, "refund": False}
+    assert pages == {
+        "imprint": False,
+        "privacy": False,
+        "terms": False,
+        "refund": False,
+        "accessibility": False,
+    }
 
 
 def test_several_folders_first_one_wins(settings, tmp_path):
@@ -119,6 +138,7 @@ def test_several_folders_first_one_wins(settings, tmp_path):
         "privacy": True,
         "terms": False,
         "refund": False,
+        "accessibility": False,
     }
     assert client.get("/api/legal/imprint/").data["content"] == IMPRINT.strip()
     assert "Vom Server." in client.get("/api/legal/privacy/").data["content"]
@@ -232,3 +252,33 @@ def test_refund_policy_page(legal_dir):
     assert page["page"] == "refund"
     assert page["title"] == "Refund policy"
     assert "14 days." in page["content"]
+
+
+def test_accessibility_statement_page(legal_dir):
+    write(legal_dir, "accessibility", "# Accessibility statement\n\nPartially accessible.\n")
+    write(
+        legal_dir,
+        "accessibility.de",
+        "# Erklärung zur Barrierefreiheit\n\nTeilweise barrierefrei.\n",
+    )
+    client = APIClient()
+    assert client.get("/api/legal/").data["pages"]["accessibility"] is True
+    page = client.get("/api/legal/accessibility/").data
+    assert page["page"] == "accessibility"
+    assert page["title"] == "Accessibility statement"
+    assert "Partially accessible." in page["content"]
+    german = client.get("/api/legal/accessibility/", HTTP_ACCEPT_LANGUAGE="de").data
+    assert german["title"] == "Erklärung zur Barrierefreiheit"
+    assert "Teilweise barrierefrei." in german["content"]
+
+
+def test_accessibility_statement_of_brickdnn_com_has_both_languages():
+    """The statement in the repository: German and English, with a contact and a date."""
+    text = (
+        Path(__file__).resolve().parents[2] / "deploy/sites/brickdnn.com/legal/accessibility.md"
+    ).read_text(encoding="utf-8")
+    assert "## English" in text and "## Deutsch" in text
+    assert "Erklärung zur Barrierefreiheit" in text
+    assert "teilweise barrierefrei" in text
+    assert "alexander.kuehling@brickdnn.com" in text
+    assert "Stand" in text

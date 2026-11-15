@@ -50,7 +50,9 @@ export function useLegalInfo(): State {
 /** The legal pages the server has, in menu order. */
 export function legalPages(info: State): LegalPageName[] {
   return info
-    ? (['imprint', 'privacy', 'terms', 'refund'] as const).filter((page) => info.pages[page])
+    ? (['imprint', 'privacy', 'terms', 'refund', 'accessibility'] as const).filter(
+        (page) => info.pages[page]
+      )
     : [];
 }
 

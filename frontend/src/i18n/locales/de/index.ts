@@ -1,6 +1,7 @@
 /** Die deutschen Texte: dieselben Schlüssel wie `../en` (Sie-Form, übliche ML-Fachbegriffe). */
 import type { en } from '../en';
 import type { Messages } from '../types';
+import { a11y } from './a11y';
 import { auth, legal } from './auth';
 import { builder } from './builder';
 import { common } from './common';
@@ -20,4 +21,5 @@ export const de: Messages<typeof en> = {
   projects,
   ui,
   data,
+  a11y,
 };

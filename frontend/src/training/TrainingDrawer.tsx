@@ -28,6 +28,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import type { Analysis, GraphDocument } from '@/api';
+import { useReturnFocusOnClose } from '@/components/useReturnFocus';
 import { i18n, Trans, useTranslation } from '@/i18n';
 import { canTrain, otherStarter, trainingProject, type RunFilter } from './access';
 import { canStartTraining, trainingFamily, unavailableReason, type Family } from './classical';
@@ -84,6 +85,8 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
   const trainable = canTrain(training.scope);
   // On phones the panel always fills the screen.
   const [wide, setWide] = useState(readWide);
+  // The focus goes back to the Train button when the panel closes.
+  useReturnFocusOnClose(training.opened);
   const toggleWide = () => {
     setWide(!wide);
     writeWide(!wide);
@@ -126,7 +129,7 @@ export default function TrainingDrawer(props: TrainingDrawerProps) {
               </Tooltip>
             )}
             {/* As before, the dialog's first focus goes to closing it. */}
-            <Drawer.CloseButton data-autofocus />
+            <Drawer.CloseButton data-autofocus aria-label={t('common.close')} />
           </Group>
         </Drawer.Header>
         <Drawer.Body className={layout.panel}>

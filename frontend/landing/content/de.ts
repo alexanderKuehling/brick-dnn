@@ -341,6 +341,7 @@ export const de: LandingContent = {
       privacy: 'Datenschutz',
       terms: 'Nutzungsbedingungen',
       refund: 'Erstattung',
+      accessibility: 'Barrierefreiheit',
     },
     legalNote: '',
     source: 'Quellcode auf GitHub',

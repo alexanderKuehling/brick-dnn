@@ -38,6 +38,13 @@ export interface BuilderContextValue {
   inputFit?: InputFit | null;
   /** The connections (for the receptive fields in the inspector). */
   links?: { source: string; target: string }[];
+  /**
+   * Connecting without dragging (the inspector's "Connections", for keyboards): whether
+   * `source` can feed `target`, and connect or disconnect them. Missing: view only.
+   */
+  canConnect?: (source: string, target: string) => boolean;
+  connect?: (source: string, target: string) => void;
+  disconnect?: (source: string, target: string) => void;
 }
 
 export const BuilderContext = createContext<BuilderContextValue | null>(null);

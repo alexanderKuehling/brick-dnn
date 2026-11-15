@@ -38,6 +38,7 @@ import {
   type UserRef,
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { useReturnFocus } from '@/components/useReturnFocus';
 import { i18n, useTranslation } from '@/i18n';
 import { ProjectDataPanel } from './ProjectDataPanel';
 import { MEMBER_ROLE_OPTIONS, ROLE_LABELS, shareUrl } from './roles';
@@ -88,6 +89,8 @@ export function ShareDialog({
   onLeave,
   initialTab = 'people',
 }: ShareDialogProps) {
+  // Removed when it closes: the focus goes back to the Share button.
+  useReturnFocus();
   useTranslation();
   const { user } = useAuth();
   const [tab, setTab] = useState<ShareTab>(initialTab);

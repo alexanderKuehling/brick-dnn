@@ -2,6 +2,7 @@
  * The English texts: the reference for every other language. Each area of the app has a file
  * of its own (the same name in `../de`).
  */
+import { a11y } from './a11y';
 import { auth, legal } from './auth';
 import { builder } from './builder';
 import { common } from './common';
@@ -21,4 +22,5 @@ export const en = {
   projects,
   ui,
   data,
+  a11y,
 };

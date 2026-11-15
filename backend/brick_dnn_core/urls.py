@@ -141,7 +141,9 @@ urlpatterns = [
     # Imprint, privacy policy, terms of use: Markdown files on the server (public).
     path("legal/", legal.legal_index, name="legal"),
     re_path(
-        r"^legal/(?P<page>imprint|privacy|terms|refund)/$", legal.legal_page, name="legal-page"
+        r"^legal/(?P<page>imprint|privacy|terms|refund|accessibility)/$",
+        legal.legal_page,
+        name="legal-page",
     ),
     # Networks shared by link (see projects.py).
     path("shared/<str:token>/", projects.SharedProjectView.as_view(), name="shared-project"),

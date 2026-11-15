@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useId, useMemo, useRef, useState } from 'react';
 import { IconChartDots3, IconSearch, IconTopologyStar3 } from '@tabler/icons-react';
 import { Group, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
 import type { LayerCatalog, LayerSpec } from '@/api/types';
@@ -34,7 +34,12 @@ interface PaletteProps {
 
 export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
   const { t } = useTranslation();
+  const hintId = useId();
   const [query, setQuery] = useState('');
+  // The layers are one stop of the Tab key; the arrow keys move between them (a roving
+  // tab index), so the canvas is a few key presses away and not forty.
+  const [active, setActive] = useState<string | null>(null);
+  const list = useRef<HTMLDivElement>(null);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -50,6 +55,33 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
       .map((category) => ({ category, layers: matches.filter((l) => l.category === category) }))
       .filter((group) => group.layers.length > 0);
   }, [catalog, query]);
+  const visible = useMemo(() => groups.flatMap((group) => group.layers), [groups]);
+  const current = visible.some((spec) => spec.type === active)
+    ? active
+    : (visible[0]?.type ?? null);
+  const focusItem = (type: string | undefined) => {
+    if (!type) {
+      return;
+    }
+    setActive(type);
+    list.current?.querySelector<HTMLElement>(`[data-palette-type="${CSS.escape(type)}"]`)?.focus();
+  };
+  const onItemKey = (event: React.KeyboardEvent, type: string) => {
+    const index = visible.findIndex((spec) => spec.type === type);
+    const next: Record<string, number> = {
+      ArrowDown: Math.min(visible.length - 1, index + 1),
+      ArrowRight: Math.min(visible.length - 1, index + 1),
+      ArrowUp: Math.max(0, index - 1),
+      ArrowLeft: Math.max(0, index - 1),
+      Home: 0,
+      End: visible.length - 1,
+    };
+    if (event.key in next) {
+      event.preventDefault();
+      focusItem(visible[next[event.key]]?.type);
+    }
+  };
+
   // Neural layers and classical bricks get a heading each, if the server has both.
   const sectioned = useMemo(() => catalog.layers.some(isClassicalSpec), [catalog]);
   const sectionOf = (layers: LayerSpec[]): Section | null => {
@@ -67,8 +99,25 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
         leftSection={<IconSearch size={16} />}
         value={query}
         onChange={(event) => setQuery(event.currentTarget.value)}
+        // Enter adds the first layer found, the down arrow goes to the list.
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && query.trim() && visible[0]) {
+            event.preventDefault();
+            onAdd(visible[0]);
+          } else if (event.key === 'ArrowDown' && visible[0]) {
+            event.preventDefault();
+            focusItem(current ?? visible[0].type);
+          }
+        }}
+        aria-describedby={hintId}
       />
-      <ScrollArea style={{ flex: 1 }} offsetScrollbars type="auto">
+      <ScrollArea
+        style={{ flex: 1 }}
+        offsetScrollbars
+        type="auto"
+        viewportRef={list}
+        viewportProps={{ role: 'group', 'aria-label': t('builder.toolbar.layers') }}
+      >
         {groups.map(({ category, layers }, index) => {
           const section = sectionOf(layers);
           const previous = index > 0 ? sectionOf(groups[index - 1].layers) : null;
@@ -95,6 +144,9 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
                   <PaletteItem
                     key={spec.type}
                     spec={spec}
+                    tabbable={spec.type === current}
+                    onFocus={() => setActive(spec.type)}
+                    onKeyDown={(event) => onItemKey(event, spec.type)}
                     onAdd={onAdd}
                     onDrop={onDrop}
                     onDragStart={onDragStart}
@@ -110,7 +162,7 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
           </Text>
         )}
       </ScrollArea>
-      <Text size="xs" c="dimmed" className={classes.hint}>
+      <Text size="xs" c="dimmed" className={classes.hint} id={hintId}>
         {t('builder.palette.hint')}
       </Text>
     </Stack>
@@ -138,12 +190,24 @@ function SectionHeading({ section }: { section: Section }) {
 
 interface PaletteItemProps {
   spec: LayerSpec;
+  /** The item the Tab key stops at (the others are reached with the arrow keys). */
+  tabbable?: boolean;
+  onFocus?: () => void;
+  onKeyDown?: (event: React.KeyboardEvent) => void;
   onAdd: (spec: LayerSpec) => void;
   onDrop?: (spec: LayerSpec, point: Point) => void;
   onDragStart?: () => void;
 }
 
-function PaletteItem({ spec, onAdd, onDrop, onDragStart }: PaletteItemProps) {
+function PaletteItem({
+  spec,
+  tabbable = true,
+  onFocus,
+  onKeyDown,
+  onAdd,
+  onDrop,
+  onDragStart,
+}: PaletteItemProps) {
   const color = categoryColor(spec.category);
   const itemColor = `var(--mantine-color-${color}-6)`;
   const style = { '--item-color': itemColor } as React.CSSProperties;
@@ -170,6 +234,10 @@ function PaletteItem({ spec, onAdd, onDrop, onDragStart }: PaletteItemProps) {
       <UnstyledButton
         className={classes.item}
         style={style}
+        tabIndex={tabbable ? 0 : -1}
+        data-palette-type={spec.type}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
         onPointerDown={(event) => {
           dragged.current = false;
           if (onDrop) {

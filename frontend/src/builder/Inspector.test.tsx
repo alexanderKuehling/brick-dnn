@@ -291,7 +291,9 @@ describe('Inspector of classical bricks', () => {
 
   it('summarises a classical network', () => {
     renderBrick(null);
-    expect(screen.getByText('Gaussian process regression')).toBeInTheDocument();
+    expect(screen.getByText('Classical model (scikit-learn)').nextSibling).toHaveTextContent(
+      'Gaussian process regression'
+    );
     expect(screen.getByText('Hyperparameters the fit optimises').nextSibling).toHaveTextContent(
       '2'
     );
@@ -331,7 +333,9 @@ describe('Inspector of classical bricks', () => {
 
   it('summarises an ensemble', () => {
     renderBrick(null, VOTING_ANALYSIS);
-    expect(screen.getByText('Voting classifier')).toBeInTheDocument();
+    expect(screen.getByText('Classical model (scikit-learn)').nextSibling).toHaveTextContent(
+      'Voting classifier'
+    );
     expect(screen.getByText('2 models').nextSibling).toHaveTextContent('gb, svc');
     expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
     expect(screen.getByText(/the dotted connections carry the models/)).toBeInTheDocument();

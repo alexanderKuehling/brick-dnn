@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import {
+  IconAccessible,
   IconActivity,
   IconBrandGithub,
   IconChevronDown,
@@ -30,6 +31,7 @@ import {
   Menu,
   Tooltip,
   UnstyledButton,
+  VisuallyHidden,
 } from '@mantine/core';
 import { api, type LegalPageName } from '@/api';
 import { usePendingApprovals } from '@/approvals/pending';
@@ -51,6 +53,7 @@ const LEGAL_ICONS: Record<LegalPageName, React.ReactNode> = {
   privacy: <IconShieldLock size={16} />,
   terms: <IconFileText size={16} />,
   refund: <IconReceiptRefund size={16} />,
+  accessibility: <IconAccessible size={16} />,
 };
 
 export function AppHeader() {
@@ -80,10 +83,11 @@ export function AppHeader() {
         <UnstyledButton component={Link} to={EDITOR_PATH} aria-label={t('nav.home')}>
           <Logo />
         </UnstyledButton>
-        <Group gap={4} visibleFrom="sm">
+        <Group gap={4} visibleFrom="sm" component="nav" aria-label={t('a11y.mainNav')}>
           <Button
             component={Link}
             to={EDITOR_PATH}
+            aria-current={navVariant(EDITOR_PATH) === 'light' ? 'page' : undefined}
             variant={navVariant(EDITOR_PATH)}
             size="compact-md"
             color="gray"
@@ -94,6 +98,7 @@ export function AppHeader() {
             component={Link}
             to="/data"
             variant={navVariant('/data')}
+            aria-current={navVariant('/data') === 'light' ? 'page' : undefined}
             size="compact-md"
             color="gray"
           >
@@ -104,6 +109,7 @@ export function AppHeader() {
               component={Link}
               to="/projects"
               variant={navVariant('/projects')}
+              aria-current={navVariant('/projects') === 'light' ? 'page' : undefined}
               size="compact-md"
               color="gray"
             >
@@ -115,6 +121,7 @@ export function AppHeader() {
               component={Link}
               to="/pricing"
               variant={navVariant('/pricing')}
+              aria-current={navVariant('/pricing') === 'light' ? 'page' : undefined}
               size="compact-md"
               color="gray"
             >
@@ -210,6 +217,8 @@ export function AppHeader() {
                     disabled={pending === 0}
                     offset={2}
                     data-testid="approvals-indicator"
+                    // The count is part of the button's text below.
+                    aria-hidden
                   >
                     <Avatar size={22} color="brick" radius="xl">
                       {user.username.slice(0, 1).toUpperCase()}
@@ -217,16 +226,15 @@ export function AppHeader() {
                   </Indicator>
                 }
                 rightSection={<IconChevronDown size={14} />}
-                aria-label={
-                  pending > 0
-                    ? t('nav.userWaiting', { user: user.username, count: pending })
-                    : user.username
-                }
               >
-                {/* Phones show only the avatar. */}
-                <Box component="span" visibleFrom="xs">
-                  {user.username}
-                </Box>
+                {/* Phones show only the avatar; the name stays the button's text, so that
+                    what is shown is part of what is read out (WCAG 2.5.3). */}
+                <span className="sr-only-below-xs">{user.username}</span>
+                {pending > 0 && (
+                  <VisuallyHidden>
+                    {t('nav.userWaiting', { user: '', count: pending })}
+                  </VisuallyHidden>
+                )}
               </Button>
             </Menu.Target>
             <Menu.Dropdown>

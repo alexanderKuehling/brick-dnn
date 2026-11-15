@@ -1,4 +1,4 @@
-import { cleanup, render, screen, userEvent, waitFor, within } from '@test-utils';
+import { axeViolations, cleanup, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -450,6 +450,23 @@ describe('TrainingDrawer', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^Log/ }));
     expect(screen.getByText(/Downloading MNIST/)).toBeInTheDocument();
+  });
+
+  it('has no serious axe violations in the setup and in a run', async () => {
+    vi.mocked(api.training.check).mockResolvedValue(READY);
+    renderDrawer();
+    await screen.findByText(/Demo data: random inputs/);
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+    cleanup();
+
+    const run = detail();
+    renderDrawer({
+      training: controller({ view: 'run', selectedRunId: run.id, detail: run, activeRun: run }),
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Values per epoch' }));
+    await screen.findByRole('table');
+    expect(await axeViolations()).toEqual([]);
   });
 
   it('shows why the server ended a run, not the last state of the process', () => {

@@ -330,7 +330,13 @@ export const en: LandingContent = {
   footer: {
     tagline: 'Neural networks from bricks, with readable PyTorch code.',
     legalLabel: 'Legal',
-    legal: { imprint: 'Imprint', privacy: 'Privacy', terms: 'Terms', refund: 'Refund policy' },
+    legal: {
+      imprint: 'Imprint',
+      privacy: 'Privacy',
+      terms: 'Terms',
+      refund: 'Refund policy',
+      accessibility: 'Accessibility',
+    },
     legalNote: 'Imprint, privacy policy and terms are in German.',
     source: 'Source code on GitHub',
     contact: 'Contact',
