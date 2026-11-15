@@ -143,12 +143,75 @@ follows the data.
 | Seed | random | Fix it for reproducible runs |
 | Early stopping (patience) | off | Stop when the validation loss has not improved for this many epochs (needs validation data) |
 | Keep the best weights | on | Test and save the weights of the epoch with the lowest validation loss, not those of the last epoch (without validation data the last epoch is always kept) |
-| Loss | Cross-entropy | Segmentation only: *Cross-entropy + Dice* for classes with few pixels |
+| Loss | Automatic | The default of the task, or a loss of it, see [Losses](#losses) |
 | Features | Learn them | [Hybrid networks](#hybrid-networks) only: learn the features with a temporary head (`pretrain`), or keep random ones (`frozen`) |
 
-The loss is chosen from the task: cross-entropy for classification (the network should end
-with raw scores, not Softmax), mean squared error for regression, the cross-entropy of every
-pixel for a [segmentation](#image-segmentation).
+### Losses
+
+By default (*Loss: Automatic*, `loss: "auto"`) the loss follows the task: cross-entropy for
+classification (the network should end with raw scores, not Softmax), mean squared error for
+regression, the cross-entropy of every pixel for a [segmentation](#image-segmentation). Runs
+and settings of older versions keep exactly that (their settings say `cross_entropy` for every
+task, which a regression reads as the mean squared error). A run stores the loss it trains
+with in its settings. The training settings offer the losses of the task of the data (the
+check finds it) instead:
+
+| Task | Loss | `loss` | Settings | When |
+| ---- | ---- | ------ | -------- | ---- |
+| Classification | Cross-entropy | `cross_entropy` (default) | `label_smoothing` | The usual choice: the log loss of the predicted probabilities |
+| Classification | Weighted cross-entropy | `weighted_cross_entropy` | `class_weights` (default `"balanced"`), `label_smoothing` | Imbalanced classes (fraud at 2 %, rare diagnoses): the rare classes count more |
+| Classification | Focal loss | `focal` | `focal_gamma` (default 2), optional `class_weights` | Many easy and few hard samples: well-classified samples count less (`focal_gamma` 0 is the cross-entropy) |
+| Regression | Mean squared error | `mse` (default) | | The usual choice; large errors count most |
+| Regression | Mean absolute error | `mae` | | Outliers in the target: every error counts by its size |
+| Regression | Huber loss | `huber` | `huber_delta` (default 1) | Squared for small errors, linear beyond `huber_delta`: a compromise of both |
+| Segmentation | Cross-entropy | `cross_entropy` (default) | | The usual choice |
+| Segmentation | Cross-entropy + Dice | `cross_entropy_dice` | | Classes that cover only a few pixels |
+| Segmentation | Weighted cross-entropy | `weighted_cross_entropy` | `class_weights` (default `"balanced"`, from the pixel counts) | Pixels of rare classes count more |
+
+- **Class weights** (`class_weights`): `"balanced"` weighs every class by
+  `n / (k · count)`, from the class counts of the training rows (`n` rows, `k` classes that
+  occur; a segmentation counts the pixels of the training images, without ignored ones), so
+  every class counts as much as a whole; or a list with one weight per class (`[1, 25]`), or
+  `{"fraud": 25}` with class names or indices (missing classes get 1). The weighted
+  cross-entropy is the weighted mean over the samples (like PyTorch's `CrossEntropyLoss`
+  with `weight`); for the focal loss the weights are its alpha. A list must have one weight
+  per class, and named classes must exist: the check says what is wrong. The run shows the
+  weights it computed.
+- **Label smoothing** (`label_smoothing`, 0 to 0.3, default 0): the target gives this share
+  to all classes evenly (`torch.nn.CrossEntropyLoss(label_smoothing=…)`), which keeps the
+  network from becoming overconfident. Only with the two cross-entropies of a classification.
+- **Focal gamma** (`focal_gamma`, 0 to 10): the focal loss is
+  `−alpha · (1 − p)^gamma · log(p)` (`p`: the predicted probability of the true class),
+  averaged over the samples.
+- **Huber delta** (`huber_delta`, above 0 up to 10): in **standard deviations of the
+  target**, because the target of a regression is standardised (see
+  [Regression metrics](#regression-metrics)): 1 means one standard deviation.
+- Settings of another loss are ignored (the check warns about class weights or label
+  smoothing that the loss does not use). A loss of another task is refused with the list of
+  possible ones, e.g. *"The loss 'mae' is for regression, and this is a classification.
+  Possible: auto, cross_entropy, weighted_cross_entropy, focal."*
+
+**Class weights, oversampling or the decision threshold.** On imbalanced data (2 % fraud)
+there are three levers. *Class weights* (or the focal loss) change what the network learns:
+mistakes on the rare class cost more, without copying rows. *Oversampling* in the
+[Data tab](data-preparation.md) does something similar by repeating the rare rows of the
+training split, which also changes the class shares the network sees and makes epochs
+longer. The *decision threshold* (see [binary classification](#metrics-of-the-finished-model))
+changes nothing in training: it moves the point where a probability counts as positive, which
+is often enough on its own. Weights and oversampling shift the predicted probabilities
+towards the rare class, so after either one the threshold needs a new look; combining both is
+rarely needed.
+
+**The loss in the results.** The training and validation loss in the curves, the tiles,
+*Values per epoch*, the trials and `history` is the chosen loss, and the run view says which
+one. Losses of different kinds are not comparable (a focal loss is smaller than the
+cross-entropy of the same model, a mean absolute error is no squared one), so compare runs
+with different losses by their metrics. [Early stopping and the kept
+epoch](#early-stopping-and-the-kept-weights) and the default [objective
+metric](#the-objective-metric) `loss` use the chosen loss. The [final
+evaluation](#metrics-of-the-finished-model) keeps its metrics: the log loss there is always
+the cross-entropy of the predicted probabilities, and a regression's RMSE comes from the
+squared errors, whatever the loss.
 
 ### Validation and test data
 
@@ -207,11 +270,12 @@ training part only. With *Max. samples*, validation and test data shrink in prop
 
 ### Regression metrics
 
-The loss of a regression is the mean squared error of the standardised target (the target
-minus its mean on the training data, divided by its standard deviation there), so it does not
-depend on the units of the data. Every regression run, of a neural network or a
-[classical model](#classical-models), also reports two numbers on the validation data (per
-epoch) and on the test data:
+The loss of a regression is, by default, the mean squared error of the standardised target
+(the target minus its mean on the training data, divided by its standard deviation there), so
+it does not depend on the units of the data; the mean absolute error and the Huber loss (see
+[Losses](#losses)) are computed on the standardised target as well. Every regression run, of
+a neural network or a [classical model](#classical-models), also reports two numbers on the
+validation data (per epoch) and on the test data:
 
 - **RMSE**, the root mean squared error in the units of the target column (a price in euros,
   a temperature in °C …).
@@ -256,7 +320,7 @@ get none, and runs of older versions show nothing new.
   unbalanced they are), **macro F1** (the mean F1 over the classes that occur in the true or
   predicted labels) and **weighted F1** (weighted by support).
 - **Log loss**: the cross-entropy of the predicted probabilities, the classification loss of
-  both families.
+  both families. With another [loss](#losses) it differs from the run's loss.
 - **Top-3 / top-5 accuracy**: the share of rows whose true class is among the 3 (5) most
   probable ones; only with more than 3 (5) classes.
 
@@ -311,10 +375,11 @@ turned back first):
   scatter plot of predicted against actual values (up to 500 evenly spaced rows; on the
   dashed line the prediction is exact).
 
-**Loss**: the loss of the kept epoch on the training rows (the mean over the batches of that
-epoch, as in the curves; classical models: the fitted model on its training rows), on the
-validation rows and on the test rows. Per epoch, the train and validation loss and, for
-classification, the train and validation accuracy are in the curves and in *Values per epoch*.
+**Loss**: the run's [loss](#losses) of the kept epoch on the training rows (the mean over the
+batches of that epoch, as in the curves; classical models: the fitted model on its training
+rows), on the validation rows and on the test rows. Per epoch, the train and validation loss
+and, for classification, the train and validation accuracy are in the curves and in *Values
+per epoch*.
 
 The evaluation costs one more pass over the validation rows (the test rows are collected while
 they are tested). It is stored in the run state (`evaluation`, see the [REST API](api.md)).
@@ -323,10 +388,10 @@ they are tested). It is stored in the run state (`evaluation`, see the [REST API
 
 Training longer does not always help: once the network starts to memorise the training data
 (overfitting), the validation loss goes up again. Brick DNN therefore remembers the weights of
-the epoch with the **lowest validation loss** and keeps those at the end: they are measured on
-the test set and saved as `weights.pt`, and the run view says which epoch they come from
-(`weights_epoch` in the run state). Switch *Keep the best weights* off (`restore_best: false`,
-`--no-restore-best`) to keep the weights of the last epoch instead.
+the epoch with the **lowest validation loss** (of the chosen [loss](#losses)) and keeps those
+at the end: they are measured on the test set and saved as `weights.pt`, and the run view says
+which epoch they come from (`weights_epoch` in the run state). Switch *Keep the best weights*
+off (`restore_best: false`, `--no-restore-best`) to keep the weights of the last epoch instead.
 
 With **early stopping** (*Patience* N, `patience`, `--patience N`), the training ends when the
 validation loss has not improved for N epochs in a row, for example *"Stopped early after epoch
@@ -346,6 +411,15 @@ settings and otherwise the normal settings (every trial runs the full number of 
   as a range (for example 0.0001 to 0.01) and drawn on a logarithmic scale; batch sizes and
   optimizers as lists of values to choose from. If the lists only allow fewer combinations
   than trials, each combination is tried once.
+- **The loss** can be searched too: `loss` as a list of losses of the task
+  (`["cross_entropy", "weighted_cross_entropy", "focal"]`), and `focal_gamma`,
+  `label_smoothing` and `huber_delta` as lists or ranges (`{"min": 0, "max": 3}`, drawn
+  evenly; `"scale": "log"` on a log scale). A setting of a loss needs that loss in the
+  trials. Losses of different kinds cannot be compared, so a search over the loss is
+  refused with the objective metric `loss`: rank it by PR AUC, balanced accuracy, macro F1
+  or, for a regression, RMSE or MAE. Searching only a setting of one loss (say
+  `focal_gamma`) by the loss is allowed with a warning, since the setting changes the loss
+  itself.
 - **Grid search** tries every combination of the listed values, at most 100 (in the editor,
   the learning rates are then picked from a list as well).
 - All trials use the same training and validation data and start from the same initial
@@ -373,7 +447,7 @@ the API, `--metric` on the command line). Its direction follows from the metric:
 
 | Metric | `metric` | Better | For |
 | ------ | -------- | ------ | --- |
-| Loss (log loss / cross-entropy, or the MSE of the standardised target) | `loss` (default) | lower | every task |
+| Loss (the run's [loss](#losses): by default the cross-entropy, or the MSE of the standardised target) | `loss` (default) | lower | every task |
 | Accuracy | `accuracy` | higher | classification |
 | Balanced accuracy | `balanced_accuracy` | higher | classification |
 | Macro F1 | `macro_f1` | higher | classification |
@@ -388,9 +462,10 @@ networks that get a [final evaluation](#metrics-of-the-finished-model); not segm
 are computed like there. The check refuses a metric the data does not have, e.g. *"The
 objective metric ROC AUC needs two classes, this data has 3. Possible: loss, accuracy, …"*. On
 imbalanced data, balanced accuracy, macro F1 or PR AUC rank the trials better than the
-accuracy. Within a trial of a neural network the kept epoch is still the one with the lowest
-validation loss (early stopping and *Keep the best weights* are unchanged); the metric only
-ranks the trials. Metrics that are not in the history (balanced accuracy, macro F1, the AUCs,
+accuracy, and they are the metrics to compare trials (or runs) with different
+[losses](#losses). Within a trial of a neural network the kept epoch is still the one with
+the lowest validation loss (early stopping and *Keep the best weights* are unchanged); the
+metric only ranks the trials. Metrics that are not in the history (balanced accuracy, macro F1, the AUCs,
 MAE) cost one more pass over the validation data per trial. Every trial stores its value as
 `score` (see the [REST API](api.md)); the run view shows it in a column of the trial table and
 names the metric and its direction above it. Runs of older versions have no `score`: their
@@ -703,10 +778,12 @@ file, both with the reason; classical models do not segment.
   in batches of 16 are only three optimizer steps per epoch. A batch that would need more than
   `BRICKDNN_SEGMENTATION_MEMORY_MB` (default 900 MB) is refused before the start with the
   batch size that fits, e.g. 52 for the U-Net example at 64×64 and 13 at 128×128.
-- **Loss.** *Cross-entropy* of every pixel, or *Cross-entropy + Dice* (`loss`:
-  `cross_entropy_dice`), which adds one minus the Dice score of the predicted probabilities.
-  The Dice term helps when a class covers only a few pixels; the check suggests it when one
-  class has more than 97 % of the pixels.
+- **Loss.** *Cross-entropy* of every pixel, *Cross-entropy + Dice* (`loss`:
+  `cross_entropy_dice`), which adds one minus the Dice score of the predicted probabilities,
+  or the *weighted cross-entropy* (`weighted_cross_entropy`) with balanced class weights from
+  the pixel counts of the training images (or `class_weights`), see [Losses](#losses). The
+  Dice term or the weights help when a class covers only a few pixels; the check suggests
+  them when one class has more than 97 % of the pixels.
 - **Time.** CPU time grows with the number of pixels. On an otherwise idle CPU, the U-Net
   example needs about 0.05 CPU seconds per training image and epoch at 64×64 (about four
   times that at 128×128): ten epochs on Shapes take about 3 CPU minutes, on a busy machine
@@ -941,11 +1018,12 @@ boosting (hybrid)* is a good start. Such a network needs PyTorch and scikit-lear
 **Two phases**, in one run:
 
 1. **Learning the features.** The neural layers get a temporary `Linear` head after the
-   boundary: one output per class with the cross-entropy loss if the classical model is a
-   classifier, one output with the mean squared error of the standardised target if it is a
-   regression model. They are trained like a network of their own, with the normal settings
-   (epochs, batch size, learning rate, optimizer, weight decay, device, early stopping, the
-   kept weights). Their curves are the run's curves. Then the head is dropped. With
+   boundary: one output per class if the classical model is a classifier, one output for the
+   standardised target if it is a regression model, trained with the chosen
+   [loss](#losses) (by default the cross-entropy, or the mean squared error; e.g. the focal
+   loss for rare classes). They are trained like a network of their own, with the normal
+   settings (epochs, batch size, learning rate, optimizer, weight decay, device, early
+   stopping, the kept weights). Their curves are the run's curves. Then the head is dropped. With
    *Features: Frozen random features* (`feature_training: "frozen"`, `--frozen-features`)
    nothing is trained: the random initial weights (fixed by the seed) make the features, a
    quick baseline for what the learning adds.
@@ -974,12 +1052,15 @@ classical model, the training settings of its neural layers, or both:
   [classical model](#searching-a-classical-model) on those features, compared on the
   validation rows or by cross-validation.
 - **The neural settings** (*Search the training settings of the neural layers*,
-  `neural_space`: learning rate, batch size, optimizer and weight decay, given like for a
-  [network](#hyperparameter-search)): every trial learns the features again with its
+  `neural_space`: learning rate, batch size, optimizer, weight decay and the loss with its
+  settings, given like for a [network](#hyperparameter-search)): every trial learns the
+  features again with its
   settings (the data is prepared once and every trial starts from the same initial weights),
   fits the classical model on them with the trial's parameters (those of the brick if
   `space` searches none) and is ranked by the objective metric of that model on the
-  validation rows. Such a search needs validation rows and learned features (not frozen
+  validation rows. Its objective `loss` is the classical model's loss, which does not
+  depend on the loss of the neural layers, so it may rank a search over losses. Such a
+  search needs validation rows and learned features (not frozen
   ones), and it cannot cross-validate: the features of the training rows were learned from
   those rows, so a cross-validation on them would favour the settings that memorise them.
 - **Both**: each trial combines neural settings and parameters of the model (a grid tries
@@ -1074,11 +1155,13 @@ includes it) and save the fitted model as `<name>.joblib`.
 
 Options: `--epochs`, `--batch-size`, `--lr`, `--optimizer`, `--weight-decay`, `--val-split`,
 `--test-split`, `--device`, `--max-samples`, `--seed`, `--patience N` (early stopping),
-`--no-restore-best` (keep the weights of the last epoch), `--frozen-features` (a hybrid
+`--no-restore-best` (keep the weights of the last epoch), `--loss NAME` (see
+[Losses](#losses)) with `--class-weights balanced|1,25|fraud=25`, `--focal-gamma`,
+`--label-smoothing` and `--huber-delta`, `--frozen-features` (a hybrid
 network: fit the classical model on random features), `--save weights.pt` (a hybrid network:
 `<name>.joblib` and its neural layers in `<name>.features.pt`), `--data-root`
 (download folder for built-in datasets, default `~/.cache/brickdnn/datasets`), and for a
-segmentation `--loss cross_entropy_dice` and `--previews DIR` (write the
+segmentation `--previews DIR` (write the
 [predictions](#seeing-the-predictions) for eight validation images into a folder). Press
 <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop; the weights of the best epoch so far are saved anyway.
 
@@ -1100,6 +1183,8 @@ brickdnn train net.json --data houses.csv --search grid --tune-lr 0.01,0.001 --t
 | `--tune-batch-size VALUES` | Batch sizes to try (list) |
 | `--tune-optimizer VALUES` | Optimizers to try, e.g. `adam,adamw,sgd` |
 | `--tune-weight-decay VALUES` | Weight decays to try |
+| `--tune-loss VALUES` | Losses to try, e.g. `cross_entropy,focal` (with a `--metric` other than `loss`) |
+| `--tune-focal-gamma`, `--tune-label-smoothing`, `--tune-huber-delta VALUES` | Settings of the losses to try |
 | `--metric NAME` | What ranks the trials (default `loss`; see [the objective metric](#the-objective-metric)) |
 | `--tune-param NAME=VALUES` | Classical models: a parameter of the model brick, a list or a range `MIN:MAX` (`MIN:MAX:linear` drawn evenly); repeat it for several |
 | `--cv-folds K` | Classical models: compare the trials by K-fold cross-validation on the training rows |

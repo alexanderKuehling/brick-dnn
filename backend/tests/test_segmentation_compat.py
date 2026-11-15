@@ -356,11 +356,11 @@ def test_batches_that_do_not_fit_into_memory(monkeypatch):
 
 
 def test_loss_setting():
-    assert TrainingConfig().loss == "cross_entropy"
+    assert TrainingConfig().loss == "auto"  # cross_entropy for a segmentation
     assert TrainingConfig.from_dict({"loss": "Cross_Entropy_Dice"}).loss == "cross_entropy_dice"
-    assert TrainingConfig.from_dict({"loss": ""}).loss == "cross_entropy"
-    with pytest.raises(ConfigError, match="Loss must be one of: cross_entropy, cross_entropy_dice"):
-        TrainingConfig.from_dict({"loss": "focal"})
+    assert TrainingConfig.from_dict({"loss": ""}).loss == "auto"
+    with pytest.raises(ConfigError, match="Loss must be one of: auto, cross_entropy, "):
+        TrainingConfig.from_dict({"loss": "dice"})
 
 
 def test_estimate_counts_the_images_of_a_segmentation():

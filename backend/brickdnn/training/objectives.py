@@ -3,9 +3,11 @@ NumPy needed to read the definitions).
 
 Every search ranks its trials by one metric on the rows that compare them: the validation
 rows, or with cross-validation (classical models) the out-of-fold predictions on the
-training rows. The default is the loss (the cross-entropy of the predicted probabilities,
-i.e. the log loss, or the mean squared error of the standardised target), which is lower
-for better models. The other metrics need a single class output (classification) or a
+training rows. The default is the loss (of a neural network the loss it trains with, see
+losses.py: by default the cross-entropy of the predicted probabilities, i.e. the log loss,
+or the mean squared error of the standardised target), which is lower for better models.
+Losses of different kinds are not comparable, so a network's search over losses is ranked
+by another metric. The other metrics need a single class output (classification) or a
 single value output (regression), like the final evaluation (see evaluation.py), and their
 direction follows from the metric: accuracy, balanced accuracy, macro F1, ROC AUC, PR AUC
 and R² are maximised, RMSE and MAE minimised. ROC AUC and PR AUC need two classes.

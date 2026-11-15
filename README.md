@@ -47,10 +47,13 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   CIFAR-10, a CSV file, a folder of images or images with masks, and watch loss and accuracy
   live. Training runs
   in PyTorch on the backend machine (CUDA, Apple GPU or CPU), never in the browser. Brick DNN
-  checks beforehand whether network and data fit and says what to change. Hold out a test set,
+  checks beforehand whether network and data fit and says what to change. Choose the
+  **loss** of the task: cross-entropy, weighted cross-entropy with balanced or given class
+  weights and focal loss for imbalanced classes (with label smoothing), mean squared error,
+  mean absolute error or Huber loss for regressions. Hold out a test set,
   stop early when the validation loss no longer improves (the weights of the best epoch are
-  kept), let a **hyperparameter search** find a good learning rate, batch size or optimizer
-  (or, for a classical model, the parameters of its brick, with cross-validation on the
+  kept), let a **hyperparameter search** find a good learning rate, batch size, optimizer or
+  loss (or, for a classical model, the parameters of its brick, with cross-validation on the
   training rows), ranked by the loss or a metric such as balanced accuracy, ROC AUC, PR AUC,
   MAE or R², and download the trained weights together with the matching script. With Docker, trainings
   wait in a **queue** and a separate worker container trains them, so the site stays

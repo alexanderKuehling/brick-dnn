@@ -3,6 +3,7 @@ import type {
   HistoryEntry,
   Optimizer,
   RunDetail,
+  RunLoss,
   RunMetrics,
   RunQueue,
   RunStatus,
@@ -220,6 +221,10 @@ export const TUNABLE_SETTINGS: TunableSetting[] = [
   'batch_size',
   'optimizer',
   'weight_decay',
+  'loss',
+  'focal_gamma',
+  'label_smoothing',
+  'huber_delta',
 ];
 
 export const SETTING_LABELS: Record<TunableSetting, string> = {
@@ -227,6 +232,22 @@ export const SETTING_LABELS: Record<TunableSetting, string> = {
   batch_size: 'Batch size',
   optimizer: 'Optimizer',
   weight_decay: 'Weight decay',
+  loss: 'Loss',
+  focal_gamma: 'Focal gamma',
+  label_smoothing: 'Label smoothing',
+  huber_delta: 'Huber delta',
+};
+
+/** The losses by name (backend/brickdnn/training/losses.py). */
+export const LOSS_NAMES: Record<string, string> = {
+  auto: 'Automatic',
+  cross_entropy: 'Cross-entropy',
+  weighted_cross_entropy: 'Weighted cross-entropy',
+  focal: 'Focal loss',
+  cross_entropy_dice: 'Cross-entropy + Dice',
+  mse: 'Mean squared error',
+  mae: 'Mean absolute error',
+  huber: 'Huber loss',
 };
 
 const OPTIMIZER_LABELS: Record<Optimizer, string> = { adam: 'Adam', adamw: 'AdamW', sgd: 'SGD' };
@@ -238,6 +259,9 @@ export function formatSetting(name: TunableSetting, value: number | string | und
   }
   if (name === 'optimizer') {
     return OPTIMIZER_LABELS[value as Optimizer] ?? String(value);
+  }
+  if (name === 'loss') {
+    return LOSS_NAMES[String(value)] ?? String(value);
   }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return String(value);
@@ -293,8 +317,9 @@ export function describeParams(params: TrialParams): string {
   }
   return TUNABLE_SETTINGS.filter((name) => params[name] !== undefined)
     .map((name) => {
-      const value = formatSetting(name, params[name]);
-      return name === 'optimizer' ? value : `${SETTING_LABELS[name].toLowerCase()} ${value}`;
+      const value = formatSetting(name, params[name] as number | string);
+      const plain = name === 'optimizer' || name === 'loss';
+      return plain ? value : `${SETTING_LABELS[name].toLowerCase()} ${value}`;
     })
     .join(', ');
 }
@@ -353,6 +378,62 @@ export function formatParam(name: string, value: unknown): string {
     return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(3)));
   }
   return String(value);
+}
+
+/**
+ * The loss a network trains with and the settings it uses, e.g. "Focal loss (gamma 2,
+ * balanced class weights 0.51, 24.6)": from the run's state, before that from its settings
+ * (runs of older versions said "cross_entropy" for every task: a regression's is the mean
+ * squared error). Null for classical models, ensembles and when it is not known.
+ */
+export function lossText(run: RunDetail): string | null {
+  if (run.kind === 'ensemble' || run.family === 'ensemble' || isClassicalRun(run)) {
+    return null;
+  }
+  const found: RunLoss | null | undefined = run.state?.loss;
+  const config = run.config;
+  const task = run.task ?? run.state?.task ?? null;
+  let name = found?.name ?? config.loss ?? 'auto';
+  if (name === 'auto' || (name === 'cross_entropy' && task === 'regression')) {
+    name =
+      task === 'regression' ? 'mse' : task === 'demo' || task === null ? 'auto' : 'cross_entropy';
+  }
+  if (name === 'auto') {
+    return null;
+  }
+  const parts: string[] = [];
+  const gamma = found
+    ? found.focal_gamma
+    : name === 'focal'
+      ? (config.focal_gamma ?? 2)
+      : undefined;
+  if (gamma !== undefined) {
+    parts.push(`gamma ${gamma}`);
+  }
+  const smoothing = found ? found.label_smoothing : config.label_smoothing;
+  if (smoothing && ['cross_entropy', 'weighted_cross_entropy'].includes(name)) {
+    parts.push(`label smoothing ${smoothing}`);
+  }
+  const delta = found
+    ? found.huber_delta
+    : name === 'huber'
+      ? (config.huber_delta ?? 1)
+      : undefined;
+  if (delta !== undefined) {
+    parts.push(`delta ${delta} standard deviations`);
+  }
+  const weights = found?.class_weights;
+  if (found?.class_weights_from && Array.isArray(weights)) {
+    const shown = weights.slice(0, 6).map((weight) => formatParam('weight', weight));
+    const more = weights.length > 6 ? ' …' : '';
+    const from =
+      found.class_weights_from === 'balanced' ? 'balanced class weights' : 'class weights';
+    parts.push(`${from} ${shown.join(', ')}${more}`);
+  } else if (found?.class_weights_from) {
+    parts.push('class weights given');
+  }
+  const label = LOSS_NAMES[name] ?? found?.label ?? name;
+  return parts.length > 0 ? `${label} (${parts.join(', ')})` : label;
 }
 
 /** "search · 10 trials" or "grid search · 6 trials". */

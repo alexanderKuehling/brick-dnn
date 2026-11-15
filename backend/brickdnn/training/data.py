@@ -162,6 +162,64 @@ class ImageFileSource:
         return [self.transform(images)], [self.labels[indices]]
 
 
+# Labels are counted in chunks of this many values (masks hold one per pixel).
+COUNT_CHUNK = 1 << 22
+
+
+def _stored_labels(source: Any, index: int) -> torch.Tensor | None:
+    """The targets ``index`` of every sample of ``source`` without loading its inputs, if
+    the source keeps them (None: they are only known batch by batch). Masks are counted at
+    their stored size."""
+    if isinstance(source, Subset):
+        labels = _stored_labels(source.source, index)
+        return labels[source.indices] if labels is not None else None
+    if isinstance(source, TensorSource):
+        return source.targets[index]
+    if index == 0 and isinstance(getattr(source, "labels", None), torch.Tensor):
+        return source.labels  # ImageFileSource
+    if index == 0 and isinstance(getattr(source, "masks", None), torch.Tensor):
+        return source.masks  # segdata.MaskTensorSource
+    return None
+
+
+def _masks_of(source: Any) -> Callable[[torch.Tensor], torch.Tensor] | None:
+    """Reads only the masks of samples (segmentation files), if the source can."""
+    if isinstance(source, Subset):
+        inner = _masks_of(source.source)
+        return (lambda indices: inner(source.indices[indices])) if inner is not None else None
+    return getattr(source, "masks_of", None)
+
+
+def class_counts(
+    source: Source, index: int, num_classes: int, batch_size: int = 256
+) -> list[float]:
+    """How often every one of ``num_classes`` classes occurs in the targets ``index`` of
+    ``source`` (class indices, or the pixels of masks; other values such as ignored pixels
+    are not counted). Sources that only read their samples batch by batch are read once
+    (segmentation files: only their masks)."""
+    counts = torch.zeros(num_classes, dtype=torch.float64)
+
+    def add(labels: torch.Tensor) -> None:
+        flat = labels.reshape(-1)
+        for start in range(0, len(flat), COUNT_CHUNK):
+            chunk = flat[start : start + COUNT_CHUNK].long()
+            chunk = chunk[(chunk >= 0) & (chunk < num_classes)]
+            counts.add_(torch.bincount(chunk, minlength=num_classes).double())
+
+    stored = _stored_labels(source, index)
+    if stored is not None:
+        add(stored)
+        return counts.tolist()
+    order = torch.arange(len(source))
+    masks_of = _masks_of(source)
+    for indices in order.split(batch_size):
+        if index == 0 and masks_of is not None:
+            add(masks_of(indices))
+        else:
+            add(source.batch(indices)[1][index])
+    return counts.tolist()
+
+
 def iterate_batches(
     source: Source,
     batch_size: int,

@@ -292,7 +292,12 @@ Recurrent layers and `TransformerEncoder` expect `(sequence, features)` and use
   `{"state_dict": ..., "preprocessing": {"columns", "target", "mean", "std", "task",
   "num_classes"}}`, and `--predict new.csv` loads it, prepares the rows of another CSV file
   the same way (columns by name if both files have a header line, otherwise the first
-  columns) and prints one prediction per row.
+  columns) and prints one prediction per row. The options `loss`, `class_weights`,
+  `focal_gamma`, `label_smoothing` and `huber_delta` (like the [training
+  settings](training.md#losses)) choose another loss: the script then has them as constants
+  with `make_loss()`, computes balanced class weights from the training rows of its CSV file
+  and defines `focal_loss()`; Huber's delta is multiplied by the standard deviation of the
+  training targets, because the script does not standardise them.
 
 For a classical model the script uses scikit-learn instead of PyTorch:
 

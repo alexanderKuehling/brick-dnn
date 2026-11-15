@@ -34,6 +34,7 @@ import { CLASSICAL_TUNABLES, planMetrics } from './search';
 import {
   effectiveSource,
   loadSettings,
+  lossScopeFor,
   maxSegmentationBatch,
   saveSettings,
   toConfig,
@@ -186,6 +187,20 @@ export function SetupView({
     () => (segmentationSource ? { maxBatch } : null),
     [segmentationSource, maxBatch]
   );
+  // The losses the form offers follow the task of the data (from the check; a segmentation
+  // knows its task before); classical models have none.
+  const checkedPlan = compatibility.fresh ? (check?.plan ?? null) : null;
+  const classicalModel = classical !== null;
+  const lossScope = useMemo(() => {
+    if (classicalModel) {
+      return null;
+    }
+    const scope = lossScopeFor(checkedPlan);
+    if (segmentationSource) {
+      return scope?.task === 'segmentation' ? scope : { task: 'segmentation' as const };
+    }
+    return scope;
+  }, [classicalModel, checkedPlan, segmentationSource]);
   // Datasets made in the Data tab bring their own split; the share fields are not used.
   const predefinedSplit = choice.tab === 'upload' ? (upload?.info.predefined_split ?? null) : null;
   const errors = validateSettings(settings, {
@@ -194,6 +209,7 @@ export function SetupView({
     segmentation,
     validationRows: predefinedSplit && predefinedSplit.length === 3 ? predefinedSplit[1] : null,
     metrics: metrics && metrics.map((metric) => metric.name),
+    loss: lossScope,
   });
   if (builtinSource) {
     // Built-in datasets always test on their official test images: the test share is not used.
@@ -223,16 +239,17 @@ export function SetupView({
           classical: isClassical,
           hybrid: isHybrid,
           segmentation: segmentationSource,
+          loss: lossScope,
         }
       ),
-    [settings, knownDevice, builtinSource, isClassical, isHybrid, segmentationSource]
+    [settings, knownDevice, builtinSource, isClassical, isHybrid, segmentationSource, lossScope]
   );
   const tuning = useMemo(
     () =>
       (isClassical || isHybrid) && !searchType
         ? null
-        : toTuning(settings, searchType, { hybrid: isHybrid }),
-    [settings, isClassical, isHybrid, searchType]
+        : toTuning(settings, searchType, { hybrid: isHybrid, loss: lossScope }),
+    [settings, isClassical, isHybrid, searchType, lossScope]
   );
   const cost = useCostEstimate(
     doc,
@@ -388,6 +405,7 @@ export function SetupView({
         hybrid={hybrid}
         segmentation={segmentation}
         metrics={metrics}
+        loss={lossScope}
       />
 
       {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}

@@ -103,6 +103,17 @@ it keeps `--predict` to use a downloaded `.joblib` file. A hybrid network gets b
 (`--csv`, `--frozen`) and `--predict` with `--weights features.pt --save model.joblib`; see
 [graph-format.md](graph-format.md#generated-code).
 
+`options` may also hold the loss of the CSV training loop of a neural network, like the
+training settings ([training.md](training.md#losses)): `loss` (`auto`, the default; for one
+output per class `cross_entropy`, `weighted_cross_entropy`, `focal`; for one output `mse`,
+`mae`, `huber`), `class_weights` (`"balanced"`, computed from the CSV in the script, or a
+weight per class; `{class: weight}` takes the class indices of the script), `focal_gamma`,
+`label_smoothing` and `huber_delta`. The script then has them as constants (`LOSS`,
+`CLASS_WEIGHTS`, …) with `make_loss()` and, for classification, `focal_loss()`. The script
+does not standardise the target of a regression, so it multiplies Huber's delta by the
+standard deviation of the training targets. A loss that does not fit the outputs is a `400`.
+The training loop of a hybrid network's script keeps its default losses.
+
 ```bash
 curl -X POST http://localhost:8080/api/generate/?download=1 \
   -H "Content-Type: application/json" -d @my_network.json -o model.py
@@ -448,9 +459,22 @@ images, `test_split` is not used for them),
 `device` (`auto`, `cpu`, `cuda`, `mps`), `max_samples`, `seed`, `patience` (early stopping:
 stop when the validation loss has not improved for this many epochs, 1–1000; `null`, the
 default, trains every epoch), `restore_best` (default `true`: test and save the weights of
-the epoch with the lowest validation loss instead of the last one) and, for a segmentation,
-`loss` (`cross_entropy`, the default, or `cross_entropy_dice`); missing values use the
-defaults.
+the epoch with the lowest validation loss instead of the last one) and the loss of a neural
+network (see [training.md](training.md#losses)): `loss` is `auto` (the default: the default
+of the task) or, for classification, `cross_entropy`, `weighted_cross_entropy`, `focal`, for
+regression `mse`, `mae`, `huber`, for a segmentation `cross_entropy`, `cross_entropy_dice`,
+`weighted_cross_entropy`; `class_weights` (`"balanced"`, the default of
+`weighted_cross_entropy`; a list with one weight per class; or `{"class": weight}`; also the
+alpha of `focal`), `focal_gamma` (0–10, default 2), `label_smoothing` (0–0.3, default 0;
+the cross-entropies of a classification) and `huber_delta` (above 0 to 10, default 1, in
+standard deviations of the target). A loss of another task, class weights that do not fit
+the classes and values out of range are errors of the check (`ok: false`) and of the start
+(`400`), e.g. "The loss 'mae' is for regression, and this is a classification. Possible:
+auto, cross_entropy, weighted_cross_entropy, focal."; settings that the loss does not use
+are a warning. A run stores the loss it trains with in its `config` (`auto` becomes the
+default of the task; runs of older versions say `cross_entropy` for every task, which for a
+regression is `mse`). Missing values use the defaults; `GET /api/training/` lists the losses
+per task under `losses` (`{default, tasks, labels, params}`).
 
 `tuning` (optional) turns the run into a hyperparameter search, see
 [training.md](training.md#hyperparameter-search):
@@ -470,7 +494,11 @@ defaults.
 
 `method` is `random` (default) or `grid` (every combination; lists only, at most 100).
 `learning_rate` and `weight_decay` take a list or a range `{min, max}` (log-uniform, min > 0),
-`batch_size` and `optimizer` a list (at most 20 values each). Settings that are not in `space`
+`batch_size` and `optimizer` a list (at most 20 values each); `loss` a list of losses of the
+task, `focal_gamma`, `label_smoothing` and `huber_delta` a list or a range `{min, max}` drawn
+evenly (`"scale": "log"`: log-uniform). A setting of a loss needs that loss in the trials, and
+a search over several losses needs a `metric` other than `loss` (losses of different kinds
+are not comparable): otherwise the check refuses it. Settings that are not in `space`
 keep their `config` value; `{}` uses the default space (learning rate 1e-4…1e-2, batch size
 32/64/128). `GET /api/training/` lists the limits and defaults under `tuning`.
 
@@ -848,8 +876,11 @@ A run's `status` is `starting`, `preparing` (loading or downloading data), `runn
 `completed`, `stopped` or `failed`. `GET /api/training/runs/<id>/` includes `state` with the
 per-epoch `history` (`train_loss`, `val_loss`, `train_accuracy`, `val_accuracy`, `val_rmse`),
 the current `progress`, the `best` epoch, `weights_epoch` (the epoch whose weights are tested
-and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`
-and the last log lines. Poll it about once per second while a run is active. `state.family`
+and saved, set when the epochs are over), `stopped_early`, the `test` result, `preprocessing`,
+`loss` (the loss the network trains with, `{name, label, task}` and the settings it uses:
+`class_weights` as computed for `"balanced"` with `class_weights_from`, `focal_gamma`,
+`label_smoothing`, `huber_delta`; the losses in `history`, `best`, `test` and the trials are
+this loss; `null` for classical models) and the last log lines. Poll it about once per second while a run is active. `state.family`
 is `neural`, `classical` or `hybrid`; a classical run is fitted once: it has no `progress`, a
 single `history` entry when the fit is done, and
 `state.classical` holds `estimator`, `label`, `max_rows`, `rows` (fitted on), `subsampled_from`,

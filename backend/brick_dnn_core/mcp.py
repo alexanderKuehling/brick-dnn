@@ -34,7 +34,9 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
+from brickdnn.codegen import LOSS_OPTIONS
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
+from brickdnn.training import losses as training_losses
 from brickdnn.training.config import TrainingConfig
 
 from . import approvals, budgets, downloads, ensembles, history, raw_predictions
@@ -345,7 +347,7 @@ def analyze_network(request: Request, args: dict[str, Any]) -> Any:
 def generate_pytorch_code(request: Request, args: dict[str, Any]) -> Any:
     options = {
         key: args[key]
-        for key in ("class_name", "include_main", "include_training")
+        for key in ("class_name", "include_main", "include_training", *LOSS_OPTIONS)
         if args.get(key) is not None
     }
     status_code, payload = service.generate({"graph": args["graph"], "options": options})
@@ -435,8 +437,13 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
             for dataset in visible_datasets(request.user).select_related("owner")
         ],
         "dataset_reference": DATASET_SCHEMA["description"],
-        "config_defaults": TrainingConfig().to_dict(),
+        # Without the settings of the losses: they are under losses.
+        "config_defaults": {
+            k: v for k, v in TrainingConfig().to_dict().items() if k not in training_losses.PARAMS
+        },
         "tuning": compact.tuning_options(capabilities["tuning"]),
+        # The losses of neural networks per task and their settings (config).
+        "losses": compact.loss_options(capabilities["losses"]),
         "classical": compact.classical_options(capabilities["classical"]),
         # Segmentation (a class for every pixel): its limits. The ZIP layout of a dataset is
         # in the description of create_upload_link.
@@ -1297,13 +1304,20 @@ TOOLS: dict[str, Tool] = {
             "(class_name does not apply). A hybrid network gets both: the neural layers as "
             "class FeatureExtractor (or class_name), the training of the features with a "
             "temporary head, the feature extraction, make_model() and --predict with both "
-            "saved files.",
+            "saved files. loss (and class_weights, focal_gamma, label_smoothing, "
+            "huber_delta, as in the training config) sets the loss of a network's CSV "
+            "training loop.",
             generate_pytorch_code,
             {
                 "graph": GRAPH_SCHEMA,
                 "class_name": {"type": "string", "description": "Default: NeuralNetwork"},
                 "include_main": {"type": "boolean", "description": "Default: true"},
                 "include_training": {"type": "boolean", "description": "Default: true"},
+                "loss": {"type": "string", "description": "Default: auto"},
+                "class_weights": {"description": '"balanced", [weight per class] or {class: w}'},
+                "focal_gamma": {"type": "number"},
+                "label_smoothing": {"type": "number"},
+                "huber_delta": {"type": "number"},
             },
             ("graph",),
         ),
@@ -1848,11 +1862,15 @@ TOOLS: dict[str, Tool] = {
             "(queue: its position and the estimated wait) and trains when a worker is "
             "free; stop_training cancels it. config overrides the defaults from "
             "get_training_options "
-            "(epochs, batch_size, learning_rate, …); tuning turns the run into a "
+            "(epochs, batch_size, learning_rate, …; loss: auto or one of the task's losses "
+            "there, with class_weights, focal_gamma, label_smoothing, huber_delta); tuning "
+            "turns the run into a "
             "hyperparameter search: {method: random|grid, trials, metric (default loss; "
             "accuracy, balanced_accuracy, macro_f1, roc_auc and pr_auc for two classes, rmse, "
             "mae, r2), space}. A neural network's space holds training settings "
-            "({learning_rate: {min, max}, batch_size: [32, 64]}). A classical model is fitted "
+            "({learning_rate: {min, max}, batch_size: [32, 64], loss: [cross_entropy, focal], "
+            "focal_gamma: [1, 2]}; a search over losses needs a metric other than loss). A "
+            "classical model is fitted "
             "once (no epochs): only val_split, test_split, max_samples and seed apply, and its "
             "space holds parameters of the model brick ({C: {min: 0.1, max: 100}, kernel: "
             "[rbf, linear]}; ranges are log-scaled unless scale: linear) plus cv_folds "
