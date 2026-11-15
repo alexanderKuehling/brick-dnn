@@ -5,9 +5,16 @@
  */
 import type { Lang, PlanFacts } from '../site.ts';
 
+/** A screenshot of the app (images/<id>-<width>.webp, made by screenshots/shoot.mjs). */
+export interface Shot {
+  id: string;
+  alt: string;
+}
+
 export interface Item {
   title: string;
   html: string;
+  image?: Shot;
 }
 
 export interface Question {
@@ -40,7 +47,7 @@ export interface LandingContent {
     secondary: string;
     /** Short facts under the buttons. */
     facts: string[];
-    imageAlt: string;
+    image: Shot;
     caption: string;
   };
   glance: { title: string; items: { term: string; html: string }[] };

@@ -4,7 +4,7 @@
  */
 import { de } from './content/de.ts';
 import { en } from './content/en.ts';
-import type { LandingContent } from './content/types.ts';
+import type { Item, LandingContent } from './content/types.ts';
 import {
   absolute,
   APP_PAGES,
@@ -29,13 +29,52 @@ export interface Assets {
   favicon: string;
   /** The PNG logo for the Organization in the JSON-LD. */
   logo: { src: string; width: number; height: number };
-  screenshot: {
-    /** Smallest first; `src` is the first. */
-    sources: { src: string; width: number }[];
-    width: number;
-    height: number;
-  };
+  /** The screenshots by id (see Shot), each in several widths. */
+  images: Record<string, ImageAsset>;
   ogImage: { src: string; width: number; height: number };
+}
+
+export interface ImageAsset {
+  /** Narrowest first. */
+  sources: { src: string; width: number; height: number }[];
+}
+
+/** The screenshot ids a page shows: the hero's and those of the sections' items. */
+export function shotIds(c: LandingContent): string[] {
+  const ids = [c.hero.image.id];
+  for (const item of [...c.useCases.items, ...c.steps.items, ...c.features.items]) {
+    if (item.image) {
+      ids.push(item.image.id);
+    }
+  }
+  return [...new Set(ids)];
+}
+
+/** Where an image is shown, for `sizes`: the width it takes on the page. */
+const SIZES = {
+  hero: '(min-width: 72rem) 68rem, calc(100vw - 2.5rem)',
+  row: '(min-width: 72rem) 37rem, (min-width: 60rem) 55vw, calc(100vw - 2.5rem)',
+  tile: '(min-width: 72rem) 33rem, (min-width: 52rem) 45vw, calc(100vw - 2.5rem)',
+  step: '(min-width: 60rem) 21rem, calc(100vw - 2.5rem)',
+};
+
+/**
+ * An <img> of a screenshot with all its widths. The width and height attributes are those of
+ * the file closest to `display` (they give the proportions, CSS sets the size). Below the fold
+ * it loads lazily.
+ */
+export function picture(
+  asset: ImageAsset,
+  alt: string,
+  sizes: keyof typeof SIZES,
+  display: number,
+  eager = false
+): string {
+  const srcset = asset.sources.map((s) => `${s.src} ${s.width}w`).join(', ');
+  const base =
+    asset.sources.find((s) => s.width >= display) ?? asset.sources[asset.sources.length - 1];
+  const loading = eager ? 'fetchpriority="high"' : 'loading="lazy"';
+  return `<img src="${base.src}" srcset="${srcset}" sizes="${SIZES[sizes]}" width="${base.width}" height="${base.height}" alt="${escapeHtml(alt)}" ${loading} decoding="async">`;
 }
 
 export function escapeHtml(text: string): string {
@@ -118,7 +157,7 @@ export function structuredData(c: LandingContent, assets: Assets): object {
         isAccessibleForFree: true,
         license: LICENSE_URL,
         codeRepository: REPOSITORY_URL,
-        screenshot: absolute(assets.screenshot.sources[assets.screenshot.sources.length - 1].src),
+        screenshot: shotIds(c).map((id) => absolute(assets.images[id].sources.at(-1)!.src)),
         featureList: c.featureList,
         publisher: { '@id': organization },
         offers: PLANS.map((plan) => ({
@@ -179,7 +218,7 @@ ${alternates()}
 <meta property="og:locale" content="${c.locale}">
 <meta property="og:locale:alternate" content="${alt.locale}">
 <meta property="og:image" content="${og}">
-<meta property="og:image:type" content="image/png">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="${assets.ogImage.width}">
 <meta property="og:image:height" content="${assets.ogImage.height}">
 <meta property="og:image:alt" content="${escapeHtml(c.ogImageAlt)}">
@@ -213,15 +252,36 @@ ${body}
 </div></section>`;
 }
 
-function items(list: { title: string; html: string }[], cls: string, tag = 'ul'): string {
+function items(list: Item[], cls: string, tag = 'ul'): string {
   return `<${tag} class="${cls}">${list
     .map((item) => `<li><h3>${escapeHtml(item.title)}</h3><p>${item.html}</p></li>`)
     .join('\n')}</${tag}>`;
 }
 
+/**
+ * Items with a screenshot each: `rows` (text and image side by side, alternating), `steps`
+ * (the image under the text) or `tiles` (the image above).
+ */
+function illustrated(list: Item[], kind: 'rows' | 'steps' | 'tiles', assets: Assets): string {
+  const tag = kind === 'steps' ? 'ol' : 'ul';
+  const sizes = kind === 'rows' ? 'row' : kind === 'steps' ? 'step' : 'tile';
+  const display = kind === 'rows' ? 592 : kind === 'steps' ? 336 : 528;
+  return `<${tag} class="${kind}">${list
+    .map((item) => {
+      const image = item.image
+        ? `<figure class="frame">${picture(assets.images[item.image.id], item.image.alt, sizes, display)}</figure>`
+        : '';
+      const text = `<h3>${escapeHtml(item.title)}</h3><p>${item.html}</p>`;
+      return kind === 'tiles'
+        ? `<li>${image}${text}</li>`
+        : `<li><div class="text">${text}</div>${image}</li>`;
+    })
+    .join('\n')}</${tag}>`;
+}
+
 function body(c: LandingContent, assets: Assets): string {
-  const shot = assets.screenshot;
-  const srcset = shot.sources.map((s) => `${s.src} ${s.width}w`).join(', ');
+  const withImage = c.features.items.filter((item) => item.image);
+  const withoutImage = c.features.items.filter((item) => !item.image);
   const pricingRows = PLANS.map((plan) => {
     const [name, ...cells] = c.pricing.row(plan);
     return `<tr><th scope="row">${escapeHtml(name)}</th>${cells
@@ -253,7 +313,7 @@ ${languageSwitch(c, c.footer.language)}
 <p class="cta"><a class="button" href="${EDITOR_PATH}">${escapeHtml(c.hero.primary)}</a> <a class="button secondary" href="/pricing">${escapeHtml(c.hero.secondary)}</a></p>
 <ul class="facts">${c.hero.facts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>
 <figure class="shot">
-<img src="${shot.sources[0].src}" srcset="${srcset}" sizes="(min-width: 72rem) 68rem, calc(100vw - 2.5rem)" width="${shot.width}" height="${shot.height}" alt="${escapeHtml(c.hero.imageAlt)}" fetchpriority="high" decoding="async">
+${picture(assets.images[c.hero.image.id], c.hero.image.alt, 'hero', 1280, true)}
 <figcaption>${escapeHtml(c.hero.caption)}</figcaption>
 </figure>
 </div></section>
@@ -270,16 +330,17 @@ ${section(
   'use-cases',
   c.useCases.title,
   `<p class="intro">${escapeHtml(c.useCases.intro)}</p>
-${items(c.useCases.items, 'cases')}`
+${illustrated(c.useCases.items, 'rows', assets)}`
 )}
 
-${section('how-it-works', c.steps.title, items(c.steps.items, 'steps', 'ol'))}
+${section('how-it-works', c.steps.title, illustrated(c.steps.items, 'steps', assets))}
 
 ${section(
   'features',
   c.features.title,
   `<p class="intro">${escapeHtml(c.features.intro)}</p>
-${items(c.features.items, 'grid')}`
+${illustrated(withImage, 'tiles', assets)}
+${items(withoutImage, 'grid')}`
 )}
 
 ${section(
