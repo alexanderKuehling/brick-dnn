@@ -131,6 +131,11 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   in German (generated code and API values keep their point); layer types, parameter names
   and the code stay as they are. See [docs/translations.md](docs/translations.md), also for
   adding a translation.
+- **Accessible**: aims at WCAG 2.2 AA in both languages and themes. Networks can be built with
+  the keyboard alone (palette with arrow keys, layers selected, moved and deleted on the
+  canvas, connections made in the properties panel), changes are announced to screen readers,
+  and charts have a text summary and a table. Checked with axe-core in the tests; see
+  [docs/accessibility.md](docs/accessibility.md) and the statement at `/accessibility`.
 - **Standalone generator**: the `brickdnn` Python package has no dependencies and comes with a
   CLI, so you can generate models from JSON in scripts or CI.
 - **A short guide** on the first visit (palette, connections, the analysis, code and export,

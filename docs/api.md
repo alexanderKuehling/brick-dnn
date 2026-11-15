@@ -240,7 +240,7 @@ with a valid `Paddle-Signature` (`403` otherwise), at most 256 KB, and
 
 | Method | Path                    | Response                                                       |
 | ------ | ----------------------- | -------------------------------------------------------------- |
-| GET    | `/api/legal/`           | `{pages: {imprint, privacy, terms}, terms_version, privacy_version, accept_terms_required, retention: {unused_uploads_days, inactive_accounts_days}}` |
+| GET    | `/api/legal/`           | `{pages: {imprint, privacy, terms, refund, accessibility}, terms_version, privacy_version, accept_terms_required, retention: {unused_uploads_days, inactive_accounts_days}}` |
 | GET    | `/api/legal/<page>/`    | `{page, title, content, version, updated_at}`; `404` if the page is not set up |
 
 `<page>` is `imprint`, `privacy` or `terms`; `content` is the operator's Markdown file and
