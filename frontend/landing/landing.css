@@ -18,6 +18,7 @@
   --accent-text: #2f29c2;
   --on-accent: #fff;
   --shadow: 0 1px 2px rgb(16, 24, 40, 0.04), 0 16px 40px -20px rgb(16, 24, 40, 0.28);
+  --shadow-soft: 0 1px 2px rgb(16, 24, 40, 0.05), 0 10px 28px -18px rgb(16, 24, 40, 0.3);
   --font: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, sans-serif;
   --mono: ui-monospace, 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -36,6 +37,7 @@
     --accent-hover: #2f29c2;
     --accent-text: #b0acf1;
     --shadow: 0 1px 2px rgb(0, 0, 0, 0.3), 0 16px 40px -20px rgb(0, 0, 0, 0.7);
+    --shadow-soft: 0 1px 2px rgb(0, 0, 0, 0.3), 0 10px 28px -18px rgb(0, 0, 0, 0.6);
   }
 }
 
@@ -389,28 +391,97 @@ h2 + .faq {
   margin-top: 2rem;
 }
 
-.cases,
+.rows,
 .steps,
+.tiles,
 .grid,
 .faq {
   display: grid;
   gap: 2.25rem 3rem;
 }
 
-.cases {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-}
-
-.cases li {
-  padding-top: 1.1rem;
-  border-top: 2px solid var(--accent-text);
-}
-
-.cases p,
+.rows p,
 .steps p,
+.tiles p,
 .grid p,
 .faq p {
   color: var(--muted);
+}
+
+/* Screenshots: one frame for all, no browser chrome. */
+
+.frame {
+  margin: 0;
+}
+
+.frame img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Use cases: text and screenshot side by side, alternating. */
+
+.rows {
+  gap: 3.5rem;
+}
+
+.rows li {
+  display: grid;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.rows h3 {
+  font-size: 1.25rem;
+}
+
+.rows .text {
+  max-width: 34rem;
+}
+
+@media (min-width: 60rem) {
+  .rows {
+    gap: 5rem;
+  }
+
+  .rows li {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 4rem;
+  }
+
+  .rows li:nth-child(even) {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+
+  .rows li:nth-child(even) .text {
+    order: 2;
+  }
+}
+
+/* Small screenshots of the same proportions under the steps and above the feature tiles. */
+
+.steps .frame {
+  margin-top: 1.25rem;
+}
+
+.tiles .frame {
+  margin-bottom: 1.1rem;
+}
+
+.steps .frame img,
+.tiles .frame img {
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  object-position: left top;
+}
+
+.tiles {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 3rem 2.5rem;
+  margin-bottom: 3.5rem;
 }
 
 .glance {

@@ -48,10 +48,16 @@
   is stored, the plans with their prices, an offer for teaching and research and an FAQ. They
   are static HTML made at build time (`frontend/landing/`), readable without JavaScript, with
   canonical and `hreflang` links, Open Graph and Twitter meta with a static image, JSON-LD
-  (`SoftwareApplication` with the plans as offers, `FAQPage`, `Organization`), a real
-  screenshot of the editor, no web fonts, no cookies, nothing loaded from elsewhere and a
-  strict Content-Security-Policy. The build also writes `robots.txt`, `sitemap.xml` and
-  `llms.txt`, and fails if a landing page lacks its language links or structured data.
+  (`SoftwareApplication` with the plans as offers, `FAQPage`, `Organization`), no web fonts,
+  no cookies, nothing loaded from elsewhere and a strict Content-Security-Policy. Every use
+  case, step and main feature has a screenshot of the app with real results (data
+  preparation, training curves, a confusion matrix, a hyperparameter search, permutation
+  importance, segmentation masks, live editing, the agent activity of an MCP client), as WebP
+  in several widths and loaded lazily below the fold. `frontend/landing/screenshots/` takes
+  them again with Playwright from a local Brick DNN: it creates the data and trainings
+  through the API and MCP, then shoots and encodes every picture (README there). The build
+  also writes `robots.txt`, `sitemap.xml` and `llms.txt`, and fails if a landing page lacks
+  its language links, structured data or a file it refers to.
   **The editor moved to `/app`**; every other page of the app keeps its address. Old links
   keep working: `/?…` is redirected to `/app?…`, a `#…` that is not a section of the page
   goes on to `/app#…`, logged-in users who open `/` land in the editor, and links to `/`

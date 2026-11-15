@@ -48,8 +48,10 @@ export const en: LandingContent = {
       'Open source, Apache 2.0',
       'Servers in Switzerland',
     ],
-    imageAlt:
-      'The Brick DNN editor: a palette of layers on the left, a convolutional network on the canvas with the output shape of every layer, and the settings of the selected layer on the right.',
+    image: {
+      id: 'editor',
+      alt: 'The Brick DNN editor: a palette of layers on the left, a convolutional network on the canvas with the output shape of every layer, and the settings of the selected layer on the right.',
+    },
     caption:
       'A convolutional network for MNIST in the editor. Every layer shows its output shape and number of parameters.',
   },
@@ -86,22 +88,42 @@ export const en: LandingContent = {
       {
         title: 'Teaching deep learning',
         html: 'Students connect layers and see how the shape of the data changes from layer to layer, with plain messages when something does not fit, e.g. <q>Kernel size 7 is larger than the padded input size 4</q>. <em>How data flows</em> steps one sample through the network; the inspector shows how a layer’s parameters add up and its receptive field. For group work, networks can be shared and edited together live.',
+        image: {
+          id: 'data-flow',
+          alt: '“How data flows” in the editor: a card steps one sample through a CNN and shows how max pooling turns 32 × 28 × 28 values into 32 × 14 × 14, below the layers on the canvas.',
+        },
       },
       {
         title: 'Tabular research data',
         html: 'Import CSV, Excel, Parquet or JSON files, clean them in recorded steps (missing values, outliers, categories, dates) and check whether the data is ready for training. Compare gradient boosting, support vector machines and Gaussian processes with neural networks on the same fixed train, validation and test split, and explain predictions with Shapley values or permutation importance.',
+        image: {
+          id: 'data-prep',
+          alt: 'A preparation of field-trial data in the Data tab: on the left the steps that fill in missing values, clip outliers and encode categories, each with what it did; on the right the prepared table with a distribution in every column header.',
+        },
       },
       {
         title: 'Image segmentation',
         html: 'Train a U-Net, or any network that keeps the image size, on a ZIP file of images and masks, or on the built-in <em>Shapes</em> dataset without uploading anything. Each epoch reports mean IoU, Dice and pixel accuracy, and the predicted masks are shown next to the true ones.',
+        image: {
+          id: 'segmentation',
+          alt: 'Predictions of a U-Net trained on the built-in Shapes dataset: for each validation image the image, the true mask, the predicted mask and an overlay, with IoU and pixel accuracy.',
+        },
       },
       {
         title: 'Reproducible code for papers',
         html: 'Every model exports as a self-contained Python file: an <code>nn.Module</code> with named layers for PyTorch, or a scikit-learn script for classical models and ensembles. The data preparation exports as a pandas script. The code runs without Brick DNN and can be published together with the paper.',
+        image: {
+          id: 'code-export',
+          alt: 'The code dialog with the generated PyTorch module of a small CNN: the layers in __init__ and the forward method, ready to download as a Python file.',
+        },
       },
       {
         title: 'An AI assistant that builds and trains',
         html: 'Connect Claude or another MCP client to your account with OAuth. The assistant can build and check networks, prepare data, start trainings and make predictions. You decide whether it may change things or only read, can give it a monthly budget and see each of its actions in a log.',
+        image: {
+          id: 'agent-activity',
+          alt: 'The agent activity page: the calls an AI assistant made through the MCP server with an API token, such as analysing a network, reading a training run and generating code, each with its result and duration.',
+        },
       },
     ],
   },
@@ -111,14 +133,26 @@ export const en: LandingContent = {
       {
         title: 'Build',
         html: 'Drag layers onto the canvas and connect them, or start from an example: MLP, CNN, residual block, U-Net, LSTM, Transformer, gradient boosting or an ensemble. Fields such as <code>in_features</code> are filled in from the incoming tensor.',
+        image: {
+          id: 'build',
+          alt: 'A voting ensemble in the builder: one input connected to gradient boosting, a support vector machine and a Gaussian process, combined by a voting classifier.',
+        },
       },
       {
         title: 'Train',
         html: 'Choose demo data, MNIST, Fashion-MNIST, CIFAR-10 or your own CSV or image files. Brick DNN checks beforehand whether network and data fit, then trains on the server with live loss and metric curves, early stopping and an optional hyperparameter search.',
+        image: {
+          id: 'training-setup',
+          alt: 'The training panel with a prepared dataset selected and the check “Ready to train: classification into 2 classes from 18 features”.',
+        },
       },
       {
         title: 'Export',
         html: 'Download the PyTorch or scikit-learn script, the trained weights and the prepared data. The code is yours: read it, change it and run it wherever you like.',
+        image: {
+          id: 'export',
+          alt: 'The end of a finished run: buttons to download the weights, the preprocessing and the script, or to load the network into the editor.',
+        },
       },
     ],
   },
@@ -128,7 +162,51 @@ export const en: LandingContent = {
     items: [
       {
         title: 'Shape inference and checks',
-        html: 'Every layer shows its output shape and parameter count while you build. Mistakes are marked before anything runs.',
+        html: 'Every layer shows its output shape and parameter count while you build. Mistakes are marked before anything runs, with a message that says what to change.',
+        image: {
+          id: 'checks',
+          alt: 'A CNN with a mistake: a Conv2d layer is marked red with the message “Kernel size 16 is larger than the (padded) input size 14”, and the layers after it have no shape.',
+        },
+      },
+      {
+        title: 'Training on the server',
+        html: 'A queue, early stopping that keeps the best weights, and loss and metric curves for every epoch while the network learns.',
+        image: {
+          id: 'training-curves',
+          alt: 'Loss and accuracy per epoch of a small CNN trained on MNIST, for the training and the validation data, under the test accuracy of 98.6 %.',
+        },
+      },
+      {
+        title: 'Evaluation on held-out data',
+        html: 'Test data measured once after training: accuracy, balanced accuracy, F1 and a confusion matrix; for two classes also ROC and PR curves and a decision threshold you can move.',
+        image: {
+          id: 'evaluation',
+          alt: 'The confusion matrix of the CNN on 3,000 validation images of MNIST: true digits in the rows, predicted digits in the columns, almost all on the diagonal.',
+        },
+      },
+      {
+        title: 'Hyperparameter search',
+        html: 'Random or grid search over learning rate, batch size and optimizer, or over a classical model’s parameters with cross-validation, ranked by the loss or by a metric such as balanced accuracy, ROC AUC, PR AUC, MAE or R².',
+        image: {
+          id: 'search-results',
+          alt: 'The trials of a random search for a gradient boosting model: learning rate, depth, rows per leaf and class weights of each trial with its cross-validated loss, accuracy and PR AUC; the best trial is highlighted.',
+        },
+      },
+      {
+        title: 'Explanations',
+        html: 'Saliency maps, Grad-CAM and occlusion for images; Shapley values, integrated gradients and permutation importance for tables; the output of every layer for one sample.',
+        image: {
+          id: 'explain',
+          alt: 'Permutation importance of the gradient boosting model: how much the validation accuracy drops when one feature is shuffled, most for rainfall, then temperature and nitrogen.',
+        },
+      },
+      {
+        title: 'Working together',
+        html: 'Share a network with people or with a link, edit it together live, comment on it and go back to earlier versions.',
+        image: {
+          id: 'collaboration',
+          alt: 'A network shared by two people: their avatars and a live badge in the toolbar, the layer the other person selected marked with her name, and her question about it in the comments panel.',
+        },
       },
       {
         title: 'Real graphs',
@@ -141,18 +219,6 @@ export const en: LandingContent = {
       {
         title: 'Data preparation',
         html: 'CSV, Excel, OpenDocument, JSON, Parquet and Feather files or a link. Join, fill in, clip outliers, scale, encode and split dates, with charts for every step and a readiness check.',
-      },
-      {
-        title: 'Training on the server',
-        html: 'A queue, a held-out test set, early stopping and hyperparameter search, ranked by the loss or by metrics such as balanced accuracy, ROC AUC, MAE or R².',
-      },
-      {
-        title: 'Explanations',
-        html: 'Saliency maps, Grad-CAM and occlusion for images; Shapley values, integrated gradients and permutation importance for tables; the output of every layer for one sample.',
-      },
-      {
-        title: 'Working together',
-        html: 'Share a network with people or with a link, edit it together live, comment on it and go back to earlier versions.',
       },
       {
         title: 'MCP server and REST API',
