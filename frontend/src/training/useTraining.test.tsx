@@ -16,6 +16,8 @@ vi.mock('@/api', async (importOriginal) => {
       training: {
         status: vi.fn(),
         runs: { list: vi.fn(), get: vi.fn() },
+        // The dataset list is loaded once training is available (useDatasets).
+        datasets: { list: vi.fn(() => Promise.resolve([])) },
       },
     },
   };

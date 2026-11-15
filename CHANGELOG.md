@@ -755,6 +755,10 @@
   without one keep working.
 
 ### Fixed
+- **Dataset list loading forever.** Opening the training panel from the Data tab ("Train with
+  this data") could leave the list of datasets on a spinner: the request of the panel was
+  dropped when training became available in the same moment, and no new one was made. The
+  list is now loaded whenever training becomes available.
 - **"Object.hasOwn is not a function" in older browsers** (reported by Sentry): Mantine calls
   `Object.hasOwn`, which Safari before 15.4 and Chrome before 93 lack, so the app failed while
   rendering. A small polyfill (`frontend/src/polyfills.ts`) now runs first, before Sentry and
