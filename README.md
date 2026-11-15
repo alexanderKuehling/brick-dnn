@@ -202,6 +202,15 @@ A `Makefile` wraps these steps (`make install`, `make install-training`, `make b
 To try the training queue, start the API and, in another terminal, the worker
 (`python manage.py training_worker`), both with `BRICKDNN_TRAINING_WORKER=true`.
 
+### Supported browsers
+
+Chrome and Edge 105+, Firefox 121+ and Safari 15.4+ (macOS and iOS), all from 2022 or 2023:
+the first versions with what the app needs, such as `structuredClone` and CSS `:has()` (a few
+tints and layouts need newer ones and are plainer before). The production build is made for
+exactly these (`build.target` in `frontend/vite.config.mjs`): newer JavaScript and CSS syntax
+is rewritten for them, but missing built-in functions are not added, apart from the few in
+`frontend/src/polyfills.ts` that libraries call (`Object.hasOwn`).
+
 ## How to use it
 
 1. Drag an **Input** layer onto the canvas and set its shape **without the batch dimension**,
@@ -398,6 +407,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_SEGMENTATION_MEMORY_MB` | `900`                   | Memory a batch of a segmentation training may need; larger batches are refused ([docs/training.md](docs/training.md#settings-memory-and-time)) |
 | `BRICKDNN_PUBLIC_URL`          | from each request          | Public address, e.g. `https://brickdnn.com` (OAuth issuer, links in e-mails) |
 | `BRICKDNN_SENTRY_DSN` / `_FRONTEND_DSN` | – (off)         | Report errors of the server and the browser app to Sentry, without personal data ([docs/monitoring.md](docs/monitoring.md)) |
+| `SENTRY_AUTH_TOKEN`            | – (no upload)              | Sentry token (secret): the frontend build uploads its source maps for readable browser stack traces ([docs/monitoring.md](docs/monitoring.md#readable-stack-traces-in-the-browser)) |
 | `BRICKDNN_EMAIL_HOST` / `_PORT` | – (no e-mail) / `587`     | SMTP server of an e-mail provider: password reset, confirming addresses, notices ([docs/email.md](docs/email.md)) |
 | `BRICKDNN_EMAIL_USER` / `_PASSWORD` | –                     | SMTP login and password (secret; only in `.env`)     |
 | `BRICKDNN_EMAIL_FROM` / `_REPLY_TO` | `Brick DNN <no-reply@localhost>` / – | Sender of the e-mails, e.g. `Brick DNN <no-reply@brickdnn.com>` |

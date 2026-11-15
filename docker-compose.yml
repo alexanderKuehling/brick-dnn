@@ -252,6 +252,9 @@ services:
         VITE_SENTRY_ENVIRONMENT: ${BRICKDNN_SENTRY_ENVIRONMENT:-}
         VITE_SENTRY_RELEASE: ${BRICKDNN_SENTRY_RELEASE:-}
         VITE_SENTRY_TRACES_SAMPLE_RATE: ${BRICKDNN_SENTRY_TRACES_SAMPLE_RATE:-}
+      # Uploads the source maps to Sentry while building (docs/monitoring.md); empty: none.
+      secrets:
+        - sentry_auth_token
     ports:
       - "${BRICKDNN_PORT:-8080}:80"
     depends_on:
@@ -259,6 +262,11 @@ services:
       - realtime
     logging: *logging
     restart: unless-stopped
+
+# Build secrets: only there while an image is built, never in the image (frontend/Dockerfile).
+secrets:
+  sentry_auth_token:
+    environment: SENTRY_AUTH_TOKEN
 
 volumes:
   brickdnn-data:

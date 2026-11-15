@@ -2,9 +2,9 @@ name: Deploy server
 
 # Deploys backend and frontend to the server after CI passed on main, see
 # deploy/server/README.md. Needs the repository secret DEPLOY_SSH_KEY and the variables
-# DEPLOY_HOST, DEPLOY_URL and DEPLOY_KNOWN_HOSTS; without DEPLOY_HOST it does nothing. Paddle
-# and e-mail settings set as repository variables and secrets go to the server's .env with
-# every deploy (deploy/server/README.md, "Settings from GitHub").
+# DEPLOY_HOST, DEPLOY_URL and DEPLOY_KNOWN_HOSTS; without DEPLOY_HOST it does nothing. Paddle,
+# e-mail and Sentry settings set as repository variables and secrets go to the server's .env
+# with every deploy (deploy/server/README.md, "Settings from GitHub").
 on:
   workflow_run:
     workflows: [CI]
@@ -52,30 +52,52 @@ jobs:
           BRICKDNN_SENTRY_FRONTEND_DSN: ${{ vars.BRICKDNN_SENTRY_FRONTEND_DSN }}
           BRICKDNN_SENTRY_ENVIRONMENT: ${{ vars.BRICKDNN_SENTRY_ENVIRONMENT }}
           BRICKDNN_SENTRY_TRACES_SAMPLE_RATE: ${{ vars.BRICKDNN_SENTRY_TRACES_SAMPLE_RATE }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          names="BRICKDNN_PADDLE_ENV BRICKDNN_PADDLE_CLIENT_TOKEN BRICKDNN_PADDLE_PRICES
+          # The names every copy of deploy.sh on a server takes ...
+          old_names="BRICKDNN_PADDLE_ENV BRICKDNN_PADDLE_CLIENT_TOKEN BRICKDNN_PADDLE_PRICES
             BRICKDNN_PADDLE_OVERAGE_PRODUCT BRICKDNN_PADDLE_API_KEY BRICKDNN_PADDLE_WEBHOOK_SECRET
             BRICKDNN_EMAIL_HOST BRICKDNN_EMAIL_PORT BRICKDNN_EMAIL_USER BRICKDNN_EMAIL_PASSWORD
             BRICKDNN_EMAIL_FROM BRICKDNN_EMAIL_REPLY_TO BRICKDNN_ADMIN_EMAIL BRICKDNN_PUBLIC_URL
             BRICKDNN_REQUIRE_2FA_FOR_STAFF BRICKDNN_SENTRY_DSN BRICKDNN_SENTRY_FRONTEND_DSN
             BRICKDNN_SENTRY_ENVIRONMENT BRICKDNN_SENTRY_TRACES_SAMPLE_RATE"
+          # ... and the ones added since (new names go here).
+          names="$old_names SENTRY_AUTH_TOKEN"
+          server() {
+            # The key may only run deploy.sh on the server, which deploys commits of main only.
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+              "deploy@$HOST" "$@"
+          }
+          # deploy.sh refuses the whole deploy for a name it does not know, so only the names
+          # the server's copy takes are sent. It lists them; older copies answer with their
+          # usage instead, and take the old names.
+          if reply="$(server settings-names </dev/null 2>/dev/null)" &&
+            [ "$(head -n 1 <<<"$reply")" = "brickdnn-settings-names 1" ]; then
+            accepted=" $(tail -n +2 <<<"$reply" | tr '\n' ' ') "
+          else
+            accepted=" $(echo $old_names) "
+          fi
+          send=""
+          for name in $names; do
+            [ -n "${!name}" ] || continue
+            if [[ "$accepted" == *" $name "* ]]; then
+              send="$send $name"
+            else
+              echo "::warning::$name is set in GitHub but was not sent: the deploy script on the server does not take it yet. Install the new one (deploy/server/README.md, Settings from GitHub)."
+            fi
+          done
           # The settings go on stdin (never on the command line or into the log), base64 so
           # that any character arrives unchanged; deploy.sh checks the names and the values.
           {
             echo "brickdnn-settings 1"
-            for name in $names; do
-              if [ -n "${!name}" ]; then
-                printf '%s=%s\n' "$name" "$(printf '%s' "${!name}" | base64 -w0)"
-              fi
+            for name in $send; do
+              printf '%s=%s\n' "$name" "$(printf '%s' "${!name}" | base64 -w0)"
             done
-          } |
-            # The key may only run deploy.sh on the server, which deploys commits of main only.
-            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
-              "deploy@$HOST" "$SHA"
+          } | server "$SHA"
       - name: Check that the site answers
         env:
           URL: ${{ vars.DEPLOY_URL }}
