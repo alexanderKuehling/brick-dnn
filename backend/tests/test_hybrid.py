@@ -489,25 +489,97 @@ def test_demo_data_and_the_runner(tmp_path):
     assert sum(answer["outputs"][0][0]) == pytest.approx(1.0)
 
 
-def test_stopping_while_the_features_are_learned_keeps_nothing(tmp_path):
-    path = classification_csv(tmp_path / "mail.csv")
-    job = TrainingJob(
-        graph=hybrid_graph(),
+class StopAfterEpochs(HybridRecorder):
+    """Asks to stop once ``epochs`` epochs are done (and keeps asking)."""
+
+    def __init__(self, epochs):
+        super().__init__()
+        self.epochs = epochs
+
+    def should_stop(self):
+        return len(self.history) >= self.epochs
+
+
+def stop_job(path, tuning=None, **config):
+    return TrainingJob(
+        graph=hybrid_graph("SVC"),
         dataset=inspect_csv(path),
-        config=TrainingConfig.from_dict({"seed": 1, "epochs": 50}),
+        config=TrainingConfig.from_dict({"seed": 1, "epochs": 50, "test_split": 0.2, **config}),
         path=str(path),
+        tuning=tuning,
     )
 
-    class StopInEpoch(HybridRecorder):
-        def should_stop(self):
-            return bool(self.history)
 
-    reporter = StopInEpoch()
-    result = train(job, reporter, tmp_path / "m.joblib")
+@pytest.fixture
+def _check_stop_every_batch(monkeypatch):
+    from brickdnn.training import engine
+
+    monkeypatch.setattr(engine, "STOP_CHECK_INTERVAL", 0.0)
+
+
+@pytest.mark.usefixtures("_check_stop_every_batch")
+def test_stopping_while_the_features_are_learned_keeps_them_with_the_model(tmp_path):
+    path = classification_csv(tmp_path / "mail.csv")
+    reporter = StopAfterEpochs(3)
+    result = train(stop_job(path), reporter, tmp_path / "m.joblib")
+    assert result.status == "stopped" and result.weights is True, result.message
+    assert reporter.finished == ("stopped", result.message, True)
+    # The best of the three epochs is kept, as a stopped network keeps it.
+    assert len(result.history) == 3 and result.weights_epoch in (1, 2, 3)
+    assert reporter.kept == {"weights_epoch": result.weights_epoch, "stopped_early": False}
+    assert result.message.startswith("Stopped after 3 of 50 epochs. Kept the weights of epoch")
+    assert "Kept the 6 features learned so far with SVC fitted on them (not tested): " in (
+        result.message
+    )
+    assert "validation accuracy" in result.message
+    assert ("running", "Stopped: fitting SVC on the features learned so far …") in (
+        reporter.statuses
+    )
+    # Measured on the training and validation rows, not tested or evaluated.
+    assert reporter.info["classical"]["validation"]["accuracy"] is not None
+    assert reporter.test is None and reporter.evaluation is None
+    # Both files, which predict like those of a finished run.
+    bundle = joblib.load(tmp_path / "m.joblib")
+    checkpoint = torch.load(tmp_path / "weights.pt", weights_only=True)
+    assert bundle["hybrid"]["features"] == 6 and bundle["class_names"] == ["eggs", "ham", "spam"]
+    x = (np.array([[2.0, 0, 0, 0]]) - checkpoint["preprocessing"]["mean"]) / checkpoint[
+        "preprocessing"
+    ]["std"]
+    with torch.no_grad():
+        features = _extractor(hybrid_graph("SVC"), checkpoint)(torch.tensor(x, dtype=torch.float32))
+    assert bundle["model"].predict_proba(features.double().numpy()).shape == (1, 3)
+
+
+@pytest.mark.usefixtures("_check_stop_every_batch")
+def test_a_stop_before_the_first_epoch_or_with_a_slow_fit_keeps_nothing(tmp_path, monkeypatch):
+    from brickdnn.training import hybrid_engine
+
+    path = classification_csv(tmp_path / "mail.csv")
+    result = train(stop_job(path), StopAfterEpochs(0), tmp_path / "m.joblib")
     assert result.status == "stopped" and result.weights is False
-    assert "nothing was saved" in result.message
-    assert reporter.finished[0] == "stopped"
-    assert not (tmp_path / "m.joblib").exists()
+    assert result.message == hybrid_engine.STOPPED_FEATURES
+    # A fit that is estimated to take longer than a stop may take is not started.
+    monkeypatch.setattr(hybrid_engine, "STOP_FIT_CPU_SECONDS", 0.0)
+    reporter = StopAfterEpochs(2)
+    result = train(stop_job(path), reporter, tmp_path / "m.joblib")
+    assert result.status == "stopped" and result.weights is False
+    assert result.message.startswith("Stopped after 2 of 50 epochs.")
+    assert "Fitting SVC on the features learned so far would take too long after a stop" in (
+        result.message
+    )
+    assert result.message.endswith("nothing was saved.")
+    assert not (tmp_path / "m.joblib").exists() and not (tmp_path / "weights.pt").exists()
+
+
+@pytest.mark.usefixtures("_check_stop_every_batch")
+def test_a_stop_before_the_search_of_the_classical_model_fits_its_brick(tmp_path):
+    path = classification_csv(tmp_path / "mail.csv")
+    tuning = TuningConfig.from_dict({"space": {"C": [1, 10]}}, "SVC", hybrid=True)
+    reporter = StopAfterEpochs(2)
+    result = train(stop_job(path, tuning), reporter, tmp_path / "m.joblib")
+    assert result.status == "stopped" and result.weights is True, result.message
+    assert "The search of the classical model had not started." in result.message
+    assert reporter.trials == [] and result.trials == []
 
 
 # --------------------------------------------------------------------------- #

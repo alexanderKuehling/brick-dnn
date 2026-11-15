@@ -47,7 +47,9 @@ import {
   OPTIMIZERS,
   parseField,
   plannedClassicalTrials,
+  plannedHybridTrials,
   plannedTrials,
+  searchesNeural,
   tunedSettings,
   WEIGHT_DECAY_PRESETS,
   type SegmentationScope,
@@ -87,7 +89,8 @@ interface SettingsFormProps {
   classical?: ClassicalSettings | null;
   /**
    * A hybrid network: the network settings apply to its neural layers, which learn the
-   * features; the search varies the parameters of its classical model.
+   * features; the search varies the parameters of its classical model and/or the training
+   * settings of the neural layers.
    */
   hybrid?: HybridSettings | null;
   /**
@@ -123,6 +126,8 @@ export interface HybridSettings {
 
 /** Shown in the fixed fields while the search varies them. */
 const SEARCHED = 'Set by the search';
+/** The training settings of a hybrid network with frozen features. */
+const NOT_TRAINED = 'Not used: frozen features are not trained';
 
 export function SettingsForm({
   values,
@@ -148,8 +153,9 @@ export function SettingsForm({
   // Keep unfinished input ("0.00") as typed; converting it would reset the field.
   const setNumber = (key: keyof SettingsValues) => (value: number | string) =>
     onChange({ ...values, [key]: value });
-  // A hybrid network's search varies its classical model, not the training settings.
-  const tuned = tunedSettings(hybrid ? { ...values, search: false } : values);
+  // A hybrid network's search varies the training settings only if it searches the neural
+  // layers too; frozen features use none of them.
+  const tuned = tunedSettings(hybrid ? { ...values, search: searchesNeural(values) } : values);
   const frozen = hybrid !== null && values.feature_training === 'frozen';
   const maxBatch = segmentation?.maxBatch ?? null;
 
@@ -331,6 +337,11 @@ export function SettingsForm({
           </Text>
           <Select
             label="Features"
+            description={
+              frozen
+                ? 'The neural layers keep their random initial weights: nothing is trained, so the training settings (epochs, batch size, learning rate, optimizer, weight decay, early stopping) are not used.'
+                : undefined
+            }
             data={FEATURE_TRAININGS}
             value={values.feature_training}
             onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
@@ -367,7 +378,7 @@ export function SettingsForm({
             }
             value={tuned.batch_size ? '' : values.segmentation_batch_size}
             placeholder={tuned.batch_size ? SEARCHED : undefined}
-            disabled={tuned.batch_size}
+            disabled={tuned.batch_size || frozen}
             onChange={setNumber('segmentation_batch_size')}
             min={LIMITS.batch_size.min}
             max={LIMITS.batch_size.max}
@@ -378,10 +389,10 @@ export function SettingsForm({
         ) : (
           <NumberInput
             label="Batch size"
-            description="Samples per optimizer step"
+            description={frozen ? NOT_TRAINED : 'Samples per optimizer step'}
             value={tuned.batch_size ? '' : values.batch_size}
             placeholder={tuned.batch_size ? SEARCHED : undefined}
-            disabled={tuned.batch_size}
+            disabled={tuned.batch_size || frozen}
             onChange={setNumber('batch_size')}
             min={LIMITS.batch_size.min}
             max={LIMITS.batch_size.max}
@@ -392,9 +403,10 @@ export function SettingsForm({
         )}
         <NumberInput
           label="Learning rate"
+          description={frozen ? NOT_TRAINED : undefined}
           value={tuned.learning_rate ? '' : values.learning_rate}
           placeholder={tuned.learning_rate ? SEARCHED : undefined}
-          disabled={tuned.learning_rate}
+          disabled={tuned.learning_rate || frozen}
           onChange={setNumber('learning_rate')}
           min={0}
           max={LIMITS.learning_rate.max}
@@ -405,10 +417,11 @@ export function SettingsForm({
         />
         <Select
           label="Optimizer"
+          description={frozen ? NOT_TRAINED : undefined}
           data={OPTIMIZERS}
           value={tuned.optimizer ? null : values.optimizer}
           placeholder={tuned.optimizer ? SEARCHED : undefined}
-          disabled={tuned.optimizer}
+          disabled={tuned.optimizer || frozen}
           onChange={(value) => value && set('optimizer')(value as Optimizer)}
           allowDeselect={false}
         />
@@ -438,8 +451,8 @@ export function SettingsForm({
         hybrid.type && (
           <div>
             <Switch
-              label={`Hyperparameter search of ${hybrid.model}`}
-              description="Learns the features once, then fits the classical model several times with other values of its parameters and keeps the best one."
+              label="Hyperparameter search"
+              description={`Fits ${hybrid.model} several times with other values of its parameters on the features, and can learn the features again with other training settings in every trial; keeps the best trial.`}
               checked={values.search}
               onChange={(event) => set('search')(event.currentTarget.checked)}
             />
@@ -451,6 +464,7 @@ export function SettingsForm({
                 model={hybrid.type}
                 validates={validates}
                 metrics={metrics}
+                hybrid={{ model: hybrid.model, frozen }}
               />
             )}
           </div>
@@ -485,9 +499,10 @@ export function SettingsForm({
           <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
             <NumberInput
               label="Weight decay"
+              description={frozen ? NOT_TRAINED : undefined}
               value={tuned.weight_decay ? '' : values.weight_decay}
               placeholder={tuned.weight_decay ? SEARCHED : undefined}
-              disabled={tuned.weight_decay}
+              disabled={tuned.weight_decay || frozen}
               onChange={setNumber('weight_decay')}
               min={LIMITS.weight_decay.min}
               max={LIMITS.weight_decay.max}
@@ -501,8 +516,13 @@ export function SettingsForm({
           </SimpleGrid>
           <NumberInput
             label="Early stopping"
-            description="Stop when the validation loss has not improved for this many epochs"
+            description={
+              frozen
+                ? NOT_TRAINED
+                : 'Stop when the validation loss has not improved for this many epochs'
+            }
             placeholder="Off"
+            disabled={frozen}
             value={values.patience}
             onChange={setNumber('patience')}
             min={LIMITS.patience.min}
@@ -514,12 +534,14 @@ export function SettingsForm({
           <Checkbox
             label="Keep the weights of the best epoch"
             description={
-              validates
-                ? 'Test and save the weights with the lowest validation loss, not those of the last epoch.'
-                : 'Not used without validation data: the weights of the last epoch are kept.'
+              frozen
+                ? NOT_TRAINED
+                : validates
+                  ? 'Test and save the weights with the lowest validation loss, not those of the last epoch.'
+                  : 'Not used without validation data: the weights of the last epoch are kept.'
             }
-            disabled={!validates}
-            checked={values.restore_best && validates}
+            disabled={!validates || frozen}
+            checked={values.restore_best && validates && !frozen}
             onChange={(event) => set('restore_best')(event.currentTarget.checked)}
           />
         </Stack>
@@ -581,7 +603,6 @@ function MetricField({
 
 function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) {
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
-  const numbers = (list: string[]) => list.map(Number);
   const grid = values.search_method === 'grid';
   const trials = plannedTrials(values);
   const epochs = parseField(values.epochs);
@@ -623,92 +644,7 @@ function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) 
           )}
         </Group>
 
-        <SearchRow
-          label="Learning rate"
-          checked={values.tune_learning_rate}
-          onToggle={(checked) => update({ tune_learning_rate: checked })}
-          fixed={formatField('learning_rate', values.learning_rate)}
-        >
-          {grid ? (
-            <MultiSelect
-              aria-label="Learning rates to try"
-              data={LR_OPTIONS}
-              value={values.lr_values.map(String)}
-              onChange={(list) => update({ lr_values: numbers(list) })}
-              error={errors.lr_values}
-            />
-          ) : (
-            <Group gap="xs" wrap="nowrap" align="flex-start">
-              <NumberInput
-                aria-label="Smallest learning rate"
-                value={values.lr_min}
-                onChange={(value) => update({ lr_min: value })}
-                min={0}
-                max={LIMITS.learning_rate.max}
-                decimalScale={6}
-                allowNegative={false}
-                error={errors.lr_min}
-                style={{ flex: 1 }}
-              />
-              <Text size="sm" mt={7}>
-                to
-              </Text>
-              <NumberInput
-                aria-label="Largest learning rate"
-                value={values.lr_max}
-                onChange={(value) => update({ lr_max: value })}
-                min={0}
-                max={LIMITS.learning_rate.max}
-                decimalScale={6}
-                allowNegative={false}
-                error={errors.lr_max}
-                style={{ flex: 1 }}
-              />
-            </Group>
-          )}
-        </SearchRow>
-        <SearchRow
-          label="Batch size"
-          checked={values.tune_batch_size}
-          onToggle={(checked) => update({ tune_batch_size: checked })}
-          fixed={formatField('batch_size', values.batch_size)}
-        >
-          <MultiSelect
-            aria-label="Batch sizes to try"
-            data={BATCH_SIZE_OPTIONS}
-            value={values.batch_sizes.map(String)}
-            onChange={(list) => update({ batch_sizes: numbers(list) })}
-            error={errors.batch_sizes}
-          />
-        </SearchRow>
-        <SearchRow
-          label="Optimizer"
-          checked={values.tune_optimizer}
-          onToggle={(checked) => update({ tune_optimizer: checked })}
-          fixed={formatSetting('optimizer', values.optimizer)}
-        >
-          <MultiSelect
-            aria-label="Optimizers to try"
-            data={OPTIMIZERS}
-            value={values.optimizers}
-            onChange={(list) => update({ optimizers: list as Optimizer[] })}
-            error={errors.optimizers}
-          />
-        </SearchRow>
-        <SearchRow
-          label="Weight decay"
-          checked={values.tune_weight_decay}
-          onToggle={(checked) => update({ tune_weight_decay: checked })}
-          fixed={formatField('weight_decay', values.weight_decay)}
-        >
-          <MultiSelect
-            aria-label="Weight decays to try"
-            data={WEIGHT_DECAY_OPTIONS}
-            value={values.weight_decays.map(String)}
-            onChange={(list) => update({ weight_decays: numbers(list) })}
-            error={errors.weight_decays}
-          />
-        </SearchRow>
+        <NeuralSearchRows values={values} onChange={onChange} errors={errors} />
 
         <MetricField
           values={values}
@@ -736,6 +672,124 @@ function SearchFields({ values, onChange, errors, metrics }: SearchFieldsProps) 
   );
 }
 
+/** The training settings a search can vary, each with its values. */
+function NeuralSearchRows({
+  values,
+  onChange,
+  errors,
+  neural = false,
+}: Omit<SearchFieldsProps, 'metrics'> & {
+  /** Those of a hybrid network's neural layers (beside the parameters of its model). */
+  neural?: boolean;
+}) {
+  const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
+  const numbers = (list: string[]) => list.map(Number);
+  const grid = values.search_method === 'grid';
+  const of = neural ? 'neural ' : '';
+  return (
+    <>
+      <SearchRow
+        label="Learning rate"
+        what={`${of}learning rate`}
+        checked={values.tune_learning_rate}
+        onToggle={(checked) => update({ tune_learning_rate: checked })}
+        fixed={formatField('learning_rate', values.learning_rate)}
+      >
+        {grid ? (
+          <MultiSelect
+            aria-label="Learning rates to try"
+            data={LR_OPTIONS}
+            value={values.lr_values.map(String)}
+            onChange={(list) => update({ lr_values: numbers(list) })}
+            error={errors.lr_values}
+          />
+        ) : (
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <NumberInput
+              aria-label="Smallest learning rate"
+              value={values.lr_min}
+              onChange={(value) => update({ lr_min: value })}
+              min={0}
+              max={LIMITS.learning_rate.max}
+              decimalScale={6}
+              allowNegative={false}
+              error={errors.lr_min}
+              style={{ flex: 1 }}
+            />
+            <Text size="sm" mt={7}>
+              to
+            </Text>
+            <NumberInput
+              aria-label="Largest learning rate"
+              value={values.lr_max}
+              onChange={(value) => update({ lr_max: value })}
+              min={0}
+              max={LIMITS.learning_rate.max}
+              decimalScale={6}
+              allowNegative={false}
+              error={errors.lr_max}
+              style={{ flex: 1 }}
+            />
+          </Group>
+        )}
+      </SearchRow>
+      <SearchRow
+        label="Batch size"
+        what={`${of}batch size`}
+        checked={values.tune_batch_size}
+        onToggle={(checked) => update({ tune_batch_size: checked })}
+        fixed={formatField('batch_size', values.batch_size)}
+      >
+        <MultiSelect
+          aria-label="Batch sizes to try"
+          data={BATCH_SIZE_OPTIONS}
+          value={values.batch_sizes.map(String)}
+          onChange={(list) => update({ batch_sizes: numbers(list) })}
+          error={errors.batch_sizes}
+        />
+      </SearchRow>
+      <SearchRow
+        label="Optimizer"
+        what={`${of}optimizer`}
+        checked={values.tune_optimizer}
+        onToggle={(checked) => update({ tune_optimizer: checked })}
+        fixed={formatSetting('optimizer', values.optimizer)}
+      >
+        <MultiSelect
+          aria-label="Optimizers to try"
+          data={OPTIMIZERS}
+          value={values.optimizers}
+          onChange={(list) => update({ optimizers: list as Optimizer[] })}
+          error={errors.optimizers}
+        />
+      </SearchRow>
+      <SearchRow
+        label="Weight decay"
+        what={`${of}weight decay`}
+        checked={values.tune_weight_decay}
+        onToggle={(checked) => update({ tune_weight_decay: checked })}
+        fixed={formatField('weight_decay', values.weight_decay)}
+      >
+        <MultiSelect
+          aria-label="Weight decays to try"
+          data={WEIGHT_DECAY_OPTIONS}
+          value={values.weight_decays.map(String)}
+          onChange={(list) => update({ weight_decays: numbers(list) })}
+          error={errors.weight_decays}
+        />
+      </SearchRow>
+    </>
+  );
+}
+
+/** "10 epochs". */
+function epochCount(values: SettingsValues): string {
+  const epochs = parseField(values.epochs);
+  return typeof epochs === 'number' && epochs > 0
+    ? `${epochs} ${epochs === 1 ? 'epoch' : 'epochs'}`
+    : 'its epochs';
+}
+
 function formatField(
   name: 'learning_rate' | 'batch_size' | 'weight_decay',
   field: string | number
@@ -750,6 +804,7 @@ function SearchRow({
   onToggle,
   fixed,
   children,
+  what,
 }: {
   label: string;
   checked: boolean;
@@ -757,13 +812,15 @@ function SearchRow({
   /** The value used when the setting is not searched. */
   fixed: string;
   children: React.ReactNode;
+  /** What is searched, for the checkbox's accessible name (default: the label). */
+  what?: string;
 }) {
   return (
     // On phones the values move below the checkbox, where they have the full width.
     <Group align="flex-start" gap="sm" wrap="wrap">
       <Checkbox
         label={label}
-        aria-label={`Search ${label.toLowerCase()}`}
+        aria-label={`Search ${what ?? label.toLowerCase()}`}
         checked={checked}
         onChange={(event) => onToggle(event.currentTarget.checked)}
         w={120}
@@ -808,6 +865,12 @@ interface ClassicalSearchFieldsProps extends SearchFieldsProps {
   model: string;
   /** False: no validation rows, so the trials are always cross-validated. */
   validates: boolean;
+  /**
+   * A hybrid network: its search can also vary the training settings of the neural layers
+   * (not with `frozen` features). `model`: the classical model, e.g. "Support vector
+   * classification".
+   */
+  hybrid?: { model: string; frozen: boolean } | null;
 }
 
 function ClassicalSearchFields({
@@ -817,6 +880,7 @@ function ClassicalSearchFields({
   model,
   validates,
   metrics,
+  hybrid = null,
 }: ClassicalSearchFieldsProps) {
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const grid = values.search_method === 'grid';
@@ -828,9 +892,14 @@ function ClassicalSearchFields({
         [model]: { ...states, [name]: { ...states[name], ...changes } },
       },
     });
-  const trials = plannedClassicalTrials(values, model);
+  const neural = hybrid !== null && searchesNeural(values);
+  const trials = hybrid
+    ? plannedHybridTrials(values, model)
+    : plannedClassicalTrials(values, model);
   const requested = parseField(values.search_trials);
-  const crossValidates = values.cv_enabled || !validates;
+  // The neural settings are compared on the validation rows (their features of the training
+  // rows were learned from those rows).
+  const crossValidates = !neural && (values.cv_enabled || !validates);
   const folds = parseField(values.cv_folds);
   const foldCount =
     values.cv_enabled && typeof folds === 'number' && Number.isInteger(folds)
@@ -840,9 +909,11 @@ function ClassicalSearchFields({
   let summary: string | null = null;
   if (trials !== null) {
     summary = `${trials} ${trials === 1 ? 'trial' : 'trials'}`;
-    summary += crossValidates
-      ? ` × ${foldCount} folds, then the best one is fitted on all training rows.`
-      : ', each fitted on the training rows and measured on the validation rows.';
+    summary += neural
+      ? `: each learns the features (${epochCount(values)}) and fits the model on them, measured on the validation rows.`
+      : crossValidates
+        ? ` × ${foldCount} folds, then the best one is fitted on all training rows.`
+        : ', each fitted on the training rows and measured on the validation rows.';
     if (!grid && typeof requested === 'number' && trials < requested) {
       summary += ` Only ${trials} different combinations: each is tried once.`;
     }
@@ -875,6 +946,31 @@ function ClassicalSearchFields({
           )}
         </Group>
 
+        {hybrid && (
+          <>
+            <Text size="sm" fw={600}>
+              Neural layers
+            </Text>
+            <Checkbox
+              label="Search the training settings of the neural layers"
+              description={
+                hybrid.frozen
+                  ? 'Not with frozen features: they are not trained.'
+                  : 'Every trial learns the features again with its settings, so it costs a training of the neural layers each.'
+              }
+              disabled={hybrid.frozen}
+              checked={neural}
+              onChange={(event) => update({ search_neural: event.currentTarget.checked })}
+            />
+            {neural && (
+              <NeuralSearchRows values={values} onChange={onChange} errors={errors} neural />
+            )}
+            <Text size="sm" fw={600}>
+              {hybrid.model}
+            </Text>
+          </>
+        )}
+
         {MODEL_NOTES[model] && (
           <Text size="xs" c="dimmed">
             {MODEL_NOTES[model]}
@@ -900,7 +996,13 @@ function ClassicalSearchFields({
           where={crossValidates ? 'the cross-validation' : 'the validation rows'}
         />
 
-        {validates ? (
+        {neural ? (
+          <Text size="xs" c={validates ? 'dimmed' : 'red'}>
+            The trials are compared on the validation rows: the features of the training rows were
+            learned from them, so a cross-validation on those would favour settings that memorise
+            them.
+          </Text>
+        ) : validates ? (
           <Group gap="sm" align="flex-start" wrap="wrap">
             <Checkbox
               label="Cross-validate on the training rows"
@@ -940,7 +1042,9 @@ function ClassicalSearchFields({
           {grid
             ? 'Every combination of the listed values is fitted.'
             : 'Ranges are drawn evenly on their scale; whole-number parameters give whole numbers.'}{' '}
-          The best trial is measured on the test rows like a single fit.
+          {neural
+            ? 'Parameters that are not ticked keep the values of the brick. The best trial is measured on the test rows like a single training.'
+            : 'The best trial is measured on the test rows like a single fit.'}
         </Text>
       </Stack>
     </Paper>

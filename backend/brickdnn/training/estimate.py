@@ -24,8 +24,9 @@ cross-validation.
 
 A hybrid network costs both: its neural layers are trained like a network (with the head,
 which adds little; frozen features are not trained), then they compute the features of all
-rows once, and the classical model is fitted on the features (a search multiplies only that
-part).
+rows once, and the classical model is fitted on the features. A search of the classical
+model multiplies only that part; a search of the neural settings multiplies both, as every
+trial learns its features again.
 """
 
 from __future__ import annotations
@@ -191,16 +192,19 @@ def estimate_training(
     plan: dict[str, Any] | None,
     trials: int = 1,
     folds: int | None = None,
+    *,
+    neural_trials: bool = False,
 ) -> Estimate | None:
     """The estimated CPU time of training ``analysis`` on ``info``; None if the network is
     not valid. ``trials``: the trials of a hyperparameter search (1 for a normal run).
-    ``folds``: a classical search that cross-validates (each trial fits ``folds`` times)."""
+    ``folds``: a classical search that cross-validates (each trial fits ``folds`` times).
+    ``neural_trials``: a hybrid network's search learns the features in every trial."""
     if not analysis.valid:
         return None
     config = config or TrainingConfig()
     n_train, n_val, n_test = sample_counts(info, config, plan)
     if analysis.family == "hybrid":
-        return _hybrid(analysis, info, config, plan, trials, folds)
+        return _hybrid(analysis, info, config, plan, trials, folds, neural_trials)
     if analysis.family == "classical":
         single = _classical(analysis, info, config, plan, n_train, n_val + n_test)
         if single is not None and (trials > 1 or folds):
@@ -244,10 +248,12 @@ def _hybrid(
     plan: dict[str, Any] | None,
     trials: int,
     folds: int | None,
+    neural_trials: bool = False,
 ) -> Estimate | None:
     """The neural layers (trained, or frozen: only the feature pass) plus the classical
     model on their features; ``trials`` and ``folds`` are those of a search of the
-    classical model."""
+    classical model, ``neural_trials``: every trial also learns the features (and computes
+    them) again."""
     from ..graph import analyze
     from ..hybrid import split_graph
 
@@ -263,11 +269,12 @@ def _hybrid(
     flops = forward_flops(features)
     # The pass that computes the features of every row.
     extract = (n_train + n_val + n_test) * flops / FLOPS_PER_CPU_SECOND
+    runs = max(1, trials) if neural_trials else 1
     if frozen:
-        neural_seconds = STARTUP_CPU_SECONDS + extract
+        neural_seconds = STARTUP_CPU_SECONDS + extract * runs
     else:
         per_epoch = max(0.0, neural.cpu_seconds - STARTUP_CPU_SECONDS)
-        neural_seconds = STARTUP_CPU_SECONDS + per_epoch * config.epochs + extract
+        neural_seconds = STARTUP_CPU_SECONDS + (per_epoch * config.epochs + extract) * runs
     classical = _classical(
         analyze(parts.classical_graph), info, config, plan, n_train, n_val + n_test, demo=False
     )
@@ -277,6 +284,8 @@ def _hybrid(
         classical = _classical_search(classical, trials, folds)
     fit = max(0.0, classical.cpu_seconds - CLASSICAL_STARTUP_CPU_SECONDS)
     phase = "frozen random features" if frozen else f"{config.epochs} epochs"
+    if runs > 1:
+        phase += f" × {runs} trials"
     basis = (
         f"neural layers ({phase}, about {_amount(flops)} operations per sample and pass) on "
         f"{n_train:,} training and {n_val + n_test:,} validation/test samples, then "
@@ -290,11 +299,34 @@ def _hybrid(
         "val_samples": n_val,
         "test_samples": n_test,
         "epochs": 0 if frozen else config.epochs,
+        "neural_trials": runs,
         "features": parts.features,
         "forward_flops_per_sample": round(flops),
         "classical": classical.details,
     }
     return _estimate(neural_seconds + fit, basis, details)
+
+
+def hybrid_fit_seconds(
+    analysis: Analysis, info: DatasetInfo, config: TrainingConfig, plan: dict[str, Any] | None
+) -> float | None:
+    """The estimated CPU time of phase 2 of a hybrid network alone: computing the features
+    of every row and fitting the classical model on them once (None if unknown)."""
+    from ..graph import analyze
+    from ..hybrid import split_graph
+
+    if not analysis.valid or analysis.family != "hybrid":
+        return None
+    parts = split_graph(_document(analysis), analysis)
+    n_train, n_val, n_test = sample_counts(info, config, plan)
+    flops = forward_flops(analyze(parts.feature_graph))
+    extract = (n_train + n_val + n_test) * flops / FLOPS_PER_CPU_SECOND
+    classical = _classical(
+        analyze(parts.classical_graph), info, config, plan, n_train, n_val + n_test, demo=False
+    )
+    if classical is None:
+        return None
+    return extract + max(0.0, classical.cpu_seconds - CLASSICAL_STARTUP_CPU_SECONDS)
 
 
 def _document(analysis: Analysis) -> dict[str, Any]:

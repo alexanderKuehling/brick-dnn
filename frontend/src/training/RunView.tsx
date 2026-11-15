@@ -267,14 +267,20 @@ function NetworkRunView({
   const currentEpoch = progress?.epoch ?? Math.min(done + 1, epochs);
   let overall = epochs > 0 ? Math.min(100, ((done + stepShare) / epochs) * 100) : 0;
   let headline = `Epoch ${currentEpoch} of ${epochs}`;
-  if (tuning && trialsTotal > 0) {
+  // A hybrid network that searches only its classical model learns the features once, before
+  // the trials (which have no epochs); a search of its neural settings learns them per trial.
+  const fittedTrials = hybridRun && !tuning?.neural_space;
+  const learningFirst = fittedTrials && runningTrial === null && run.trials_done === 0;
+  if (tuning && trialsTotal > 0 && !learningFirst) {
     const share =
-      runningTrial !== null && epochs > 0 ? Math.min(1, (done + stepShare) / epochs) : 0;
+      runningTrial !== null && epochs > 0 && !fittedTrials
+        ? Math.min(1, (done + stepShare) / epochs)
+        : 0;
     overall = Math.min(100, ((run.trials_done + share) / trialsTotal) * 100);
     headline =
-      runningTrial !== null
+      runningTrial !== null && !fittedTrials
         ? `Trial ${runningTrial} of ${trialsTotal} · Epoch ${currentEpoch} of ${epochs}`
-        : `Trial ${Math.min(run.trials_done + 1, trialsTotal)} of ${trialsTotal}`;
+        : `Trial ${runningTrial ?? Math.min(run.trials_done + 1, trialsTotal)} of ${trialsTotal}`;
   }
   if (run.message.startsWith('Testing') || run.message.startsWith('Evaluating')) {
     headline = run.message;
@@ -611,8 +617,9 @@ function NetworkRunView({
               <div>
                 <Title order={5}>Phase 2 · {hybridModel} on the learned features</Title>
                 <Text size="xs" c="dimmed">
-                  Fitted once on the features of the training rows and measured on the validation
-                  and test rows, like a classical model.
+                  {tuning?.neural_space
+                    ? 'Every trial of the search learned its own features and fitted the model on those of the training rows; the best trial is kept and measured on the validation and test rows, like a classical model.'
+                    : 'Fitted on the features of the training rows and measured on the validation and test rows, like a classical model.'}
                 </Text>
               </div>
               <ClassicalResults
@@ -1178,11 +1185,12 @@ function ClassicalResults({
           tuning={tuning}
           trials={state?.trials ?? []}
           total={state?.trials_total ?? tuning.trials}
-          epochs={1}
+          epochs={tuning.neural_space ? state?.epochs || run.epochs : 1}
           best={state?.best_trial ?? run.best_trial?.trial ?? null}
           active={active}
           classification={classification}
           classical
+          features={Boolean(tuning.neural_space)}
         />
       )}
 
@@ -1515,6 +1523,7 @@ export function TrialsTable({
   classification,
   segmentation = false,
   classical = false,
+  features = false,
 }: {
   tuning: TuningConfig;
   trials: TrialEntry[];
@@ -1527,6 +1536,11 @@ export function TrialsTable({
   segmentation?: boolean;
   /** A classical model: brick parameters, fitted once per trial (and fold). */
   classical?: boolean;
+  /**
+   * A hybrid network that searches its neural settings: every trial learns the features in
+   * `epochs` epochs, then fits its classical model on them.
+   */
+  features?: boolean;
 }) {
   const settings = searchedParams(tuning);
   const metric = tuning.metric ?? 'loss';
@@ -1557,7 +1571,13 @@ export function TrialsTable({
       {winner && (
         <Text size="sm" mb="xs">
           {active ? 'Best so far' : 'Best'}: trial {winner.trial} ({describeParams(winner.params)})
-          {active ? '' : classical ? '. Its model is kept.' : '. Its weights are kept.'}
+          {active
+            ? ''
+            : features
+              ? '. Its features and model are kept.'
+              : classical
+                ? '. Its model is kept.'
+                : '. Its weights are kept.'}
         </Text>
       )}
       {trials.length === 0 ? (
@@ -1611,7 +1631,8 @@ export function TrialsTable({
                         best={isBest}
                         epochs={epochs}
                         active={active}
-                        classical={classical}
+                        classical={classical && !features}
+                        features={features}
                       />
                     </Table.Td>
                   </Table.Tr>
@@ -1631,6 +1652,7 @@ function TrialStatus({
   epochs,
   active,
   classical = false,
+  features = false,
 }: {
   entry: TrialEntry;
   best: boolean;
@@ -1639,6 +1661,8 @@ function TrialStatus({
   active: boolean;
   /** Fitted once, without epochs. */
   classical?: boolean;
+  /** Learns the features in `epochs` epochs, then fits a classical model. */
+  features?: boolean;
 }) {
   if (entry.status === 'failed') {
     return (
@@ -1659,7 +1683,9 @@ function TrialStatus({
   if (entry.status === 'running') {
     return (
       <Text span size="xs" c="blue">
-        {classical ? 'Fitting' : `Epoch ${Math.min(entry.epochs_done + 1, epochs)}/${epochs}`}
+        {classical || (features && entry.epochs_done >= epochs)
+          ? 'Fitting'
+          : `Epoch ${Math.min(entry.epochs_done + 1, epochs)}/${epochs}`}
       </Text>
     );
   }

@@ -822,7 +822,14 @@ A **hybrid network** (neural layers before a classical model, see
 [training.md](training.md#hybrid-networks)) needs PyTorch and scikit-learn. Its `config`
 has the settings of a network for the neural layers and `feature_training` (`"pretrain"`,
 the default: learn the features with a temporary head; `"frozen"`: keep random ones); its
-`tuning` varies the parameters of the classical model, as above. The check's plan is that of
+`tuning` varies the parameters of the classical model in `space`, as above, and/or the
+training settings of the neural layers in `neural_space` (the space of a network: every
+trial learns the features again and is ranked by the classical model on the validation
+rows, so it needs validation rows and refuses `cv_folds`; `space` then defaults to
+nothing). In `state.trials` the neural settings have the prefix `neural.`
+(`{"neural.learning_rate": 0.003, "C": 3.2}`), and `state.tuning` keeps `neural_space`. The
+check's `estimate.details` of such a search has `neural_trials` (the trials that learn the
+features). The check's plan is that of
 the neural layers with their head (`targets`, `class_names`, `image`), plus `classical` and
 `hybrid` (`{"boundary", "features", "head_outputs", "feature_training", "neural_params"}`).
 Its runs have `family` `"hybrid"` and the planned `epochs`; their `metrics` are those of the

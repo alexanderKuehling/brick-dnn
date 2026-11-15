@@ -248,7 +248,11 @@ is not flat (*"… needs a flat feature vector, but Conv2d outputs (32, 8, 8). A
 a Linear layer) before …"*). `list_examples` has `hybrid_mlp_gradient_boosting` for tables.
 `check_training` and `start_training` take the settings of a network for the features,
 `config.feature_training` (`pretrain` or `frozen`) and a `tuning` of the classical model's
-parameters; the estimate adds both phases. `get_training_run` shows the curves of the
+parameters (`space`) and/or of the training settings of the neural layers (`neural_space`,
+like a network's `space`: every trial learns the features again and is ranked by the
+classical model on the validation rows, so `cv_folds` is refused with it); the estimate adds
+both phases (per trial for `neural_space`). The trials name the neural settings
+`neural.learning_rate` and so on. `get_training_run` shows the curves of the
 features in `history` and the classical model in `classical` (with `hybrid` and
 `validation`); its `metrics` are those of the classical model. `predict` (also raw rows),
 `get_weights_download` (a ZIP file), `create_ensemble` and `explain_prediction` (permutation
@@ -257,6 +261,7 @@ importance, Shapley values, activations of the neural layers) work as for other 
 ```text
 list_examples {id: "hybrid_mlp_gradient_boosting"} → graph · analyze_network {graph} → family hybrid
 start_training {graph, dataset, config: {epochs: 20}} · get_training_run {id} → history (features), classical.validation
+start_training {graph, dataset, tuning: {trials: 6, neural_space: {learning_rate: {min: 0.0001, max: 0.01}}, space: {max_leaf_nodes: [15, 63]}}} → trials with neural.learning_rate
 ```
 Everything happens as the token's owner: an assistant sees and changes only that user's
 networks, datasets and runs and the ones shared with them, with the same roles, limits and

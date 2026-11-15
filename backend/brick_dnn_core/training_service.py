@@ -95,7 +95,7 @@ from brickdnn.training.config import (
     segmentation_memory_bytes,
 )
 from brickdnn.training.estimate import Estimate, estimate_training
-from brickdnn.training.job import classical_model, graph_family
+from brickdnn.training.job import graph_family, search_config
 from brickdnn.training.segmentation import MAX_PAIRS, MAX_SEGMENTATION_CLASSES, class_colors
 from brickdnn.training.state import (
     LOG_FILE,
@@ -644,7 +644,7 @@ def parse_tuning(tuning: Any, graph: Any = None) -> TuningConfig | None:
     if tuning is None:
         return None
     try:
-        return TuningConfig.from_dict(tuning, classical_model(graph) if graph else None)
+        return search_config(tuning, graph) if graph else TuningConfig.from_dict(tuning)
     except ConfigError as exc:
         raise TrainingInputError(str(exc)) from None
 
@@ -662,8 +662,11 @@ def estimate_run(
     folds = None
     if search is not None and search.model is not None:
         folds = classical_tuning.search_folds(search, dataset.info, config or TrainingConfig())
+    neural = search is not None and search.searches_neural
     try:
-        return estimate_training(analysis, dataset.info, config, plan, trials, folds)
+        return estimate_training(
+            analysis, dataset.info, config, plan, trials, folds, neural_trials=neural
+        )
     except Exception:  # an estimate must never break a check or a start
         logger.exception("Could not estimate the CPU time of a training")
         return None
@@ -740,7 +743,7 @@ def _check_search(
             "layers that learn its features) searches over the parameters of its brick, a "
             "neural network over its training settings."
         )
-    elif (error := objectives.metric_error(search.metric, result.plan)) is not None:
+    elif (error := _search_error(search, result.plan, info, config)) is not None:
         result.errors.append(error)
     elif search.model is not None and search.cv_folds is None:
         folds = classical_tuning.search_folds(search, info, config)
@@ -751,6 +754,17 @@ def _check_search(
             )
     if result.errors:
         result.plan = None
+
+
+def _search_error(
+    search: TuningConfig, plan: Any, info: DatasetInfo, config: TrainingConfig
+) -> str | None:
+    """Why the search cannot run on the data: its metric must fit the task, and a hybrid
+    network that searches its neural settings needs validation rows and learned features."""
+    error = objectives.metric_error(search.metric, plan)
+    if error is None and search.searches_neural:
+        error = classical_tuning.neural_search_error(info, config)
+    return error
 
 
 def dataset_in_use(dataset: Dataset) -> bool:
