@@ -3,6 +3,7 @@ import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { Handle, Position, useNodeConnections, type NodeProps } from '@xyflow/react';
 import { Text, Tooltip } from '@mantine/core';
 import { CommentMarker } from '@/comments/CommentMarker';
+import { i18n, useTranslation } from '@/i18n';
 import { useRemoteSelection } from '@/live/presence';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
@@ -21,10 +22,13 @@ function paramsText(count: number | null | undefined, classical: boolean): strin
   if (!count) {
     return null;
   }
-  return classical ? hyperparameters(count) : `${formatCount(count)} params`;
+  return classical
+    ? hyperparameters(count)
+    : i18n.t('builder.format.params', { value: formatCount(count) });
 }
 
 function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
+  const { t } = useTranslation();
   const { specs, analysis, errorsByNode, warningsByNode, presence } = useBuilder();
   const spec = specs[data.type];
   const info = analysis?.nodes[id];
@@ -39,10 +43,10 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
   const kernelConnections = useNodeConnections({ handleType: 'target', handleId: 'kernel' });
   const output = formatOutput(info, kernel);
   const outputTitle = kernel
-    ? 'Output: a kernel for a Gaussian process'
-    : output === 'classes from data'
-      ? 'One class per sample; the classes come from the training data'
-      : 'Output shape (batch dimension omitted)';
+    ? t('builder.node.kernelOutput')
+    : output === t('builder.format.classesFromData')
+      ? t('builder.node.classesOutput')
+      : t('builder.node.shapeOutput');
   // Live editing: others who have this layer selected (outline and name tag in their colour).
   const remote = useRemoteSelection(presence ?? null, id);
 
@@ -92,12 +96,20 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
         )}
         {errors.length > 0 && (
           <Tooltip label={errors.join(' ')} multiline w={280} withArrow>
-            <IconAlertTriangle size={16} color="var(--mantine-color-red-6)" aria-label="Error" />
+            <IconAlertTriangle
+              size={16}
+              color="var(--mantine-color-red-6)"
+              aria-label={t('common.error')}
+            />
           </Tooltip>
         )}
         {errors.length === 0 && warnings.length > 0 && (
           <Tooltip label={warnings.join(' ')} multiline w={280} withArrow>
-            <IconInfoCircle size={16} color="var(--mantine-color-yellow-7)" aria-label="Warning" />
+            <IconInfoCircle
+              size={16}
+              color="var(--mantine-color-yellow-7)"
+              aria-label={t('builder.node.warning')}
+            />
           </Tooltip>
         )}
         <CommentMarker nodeId={id} />
@@ -109,7 +121,7 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
                 info,
                 kernelConnected: kernelConnections.length > 0,
               }) || ' '
-            : `Unknown layer "${data.type}"`}
+            : t('builder.node.unknown', { type: data.type })}
         </Text>
         {errors[0] && (
           <Text size="xs" c="red" mt={4} lineClamp={3}>

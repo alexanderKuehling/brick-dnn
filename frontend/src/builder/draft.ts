@@ -1,4 +1,5 @@
 import type { GraphDocument, Project, ProjectRole } from '@/api/types';
+import { i18n } from '@/i18n';
 import type { LiveOp } from '@/live/protocol';
 
 /** The builder's working copy is kept in localStorage so a reload never loses work. */
@@ -32,7 +33,7 @@ export function loadDraft(): Draft | null {
     const projectId = draft.projectId ?? null;
     return {
       doc: draft.doc,
-      name: draft.name || 'Untitled network',
+      name: draft.name || i18n.t('builder.untitled'),
       projectId,
       version: projectId !== null && typeof draft.version === 'number' ? draft.version : null,
       role:

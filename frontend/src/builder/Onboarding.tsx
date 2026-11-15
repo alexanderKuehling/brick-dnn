@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { IconSchool } from '@tabler/icons-react';
 import { Paper, SimpleGrid, Text, Title, Tour, UnstyledButton } from '@mantine/core';
 import type { Example } from '@/api/types';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { LegalLinks } from '@/legal/LegalLinks';
 
 /** Set once the guide was finished or skipped in this browser. */
@@ -52,47 +53,29 @@ interface GuideStep {
   body: string;
 }
 
+/** A step whose texts are read in the current language (`builder.guide.<key>`). */
+function makeStep(
+  key: 'palette' | 'connect' | 'checks' | 'code' | 'train',
+  targets: GuideTarget[]
+) {
+  return {
+    targets,
+    get title() {
+      return i18n.t(`builder.guide.${key}.title`);
+    },
+    get body() {
+      return i18n.t(`builder.guide.${key}.body`);
+    },
+  };
+}
+
 export const GUIDE_STEPS: GuideStep[] = [
-  {
-    targets: [tour('palette', 'right'), tour('palette-button')],
-    title: 'Layers come from the palette',
-    body:
-      'Drag a layer onto the canvas, or click it: it is added after the selected layer and ' +
-      'connected to it. On a phone, the palette opens with this button. Every network ' +
-      'starts with an Input layer.',
-  },
-  {
-    // The first layer and its dots; an empty canvas: the middle of the screen.
-    targets: [{ selector: '.react-flow__node', position: 'bottom' }],
-    title: 'Connect the layers',
-    body:
-      'Drag from the dot on the right of a layer to the left side of the next one. Several ' +
-      'connections into one layer need Add or Concat; select a connection and press Delete ' +
-      'to remove it.',
-  },
-  {
-    targets: [tour('status')],
-    title: 'Brick DNN checks while you build',
-    body:
-      'Every layer shows its output shape and parameters, and this badge says whether the ' +
-      'network is valid (click it for a summary). Select a layer to change it in the ' +
-      'properties: sizes like in_features fill themselves in.',
-  },
-  {
-    targets: [tour('code'), tour('export'), tour('export-icon')],
-    title: 'Code and export',
-    body:
-      'See the generated PyTorch code (scikit-learn for classical models such as SVMs), or ' +
-      'download it as a .py file that runs on its own.',
-  },
-  {
-    targets: [tour('train'), tour('train-icon')],
-    title: 'Train it',
-    body:
-      'Press Train, pick a built-in dataset such as MNIST or Fashion-MNIST (or your own CSV ' +
-      'file), and watch loss and accuracy live; it needs an account. The ? button shows ' +
-      'this guide again.',
-  },
+  makeStep('palette', [tour('palette', 'right'), tour('palette-button')]),
+  // The first layer and its dots; an empty canvas: the middle of the screen.
+  makeStep('connect', [{ selector: '.react-flow__node', position: 'bottom' }]),
+  makeStep('checks', [tour('status')]),
+  makeStep('code', [tour('code'), tour('export'), tour('export-icon')]),
+  makeStep('train', [tour('train'), tour('train-icon')]),
 ];
 
 function visible(target: GuideTarget): boolean {
@@ -110,6 +93,7 @@ function resolveTargets(): (GuideTarget | undefined)[] {
 }
 
 export function OnboardingGuide({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [targets, setTargets] = useState<(GuideTarget | undefined)[]>([]);
   const [step, setStep] = useState(0);
 
@@ -139,12 +123,17 @@ export function OnboardingGuide({ opened, onClose }: { opened: boolean; onClose:
       // Skip (on every step) and Escape end it; "Done" on the last step.
       withCloseButton={false}
       spotlightRadius={8}
-      labels={{ skip: 'Skip', back: 'Back', next: 'Next', close: 'Done' }}
-      aria-label="Guide to the builder"
+      labels={{
+        skip: t('builder.guide.skip'),
+        back: t('common.back'),
+        next: t('common.next'),
+        close: t('common.done'),
+      }}
+      aria-label={t('builder.toolbar.guide')}
     >
       {GUIDE_STEPS.map((guideStep, index) => (
         <Tour.Step
-          key={guideStep.title}
+          key={index}
           target={targets[index]?.selector}
           title={guideStep.title}
           position={targets[index]?.position ?? 'bottom'}
@@ -174,6 +163,7 @@ export function EmptyCanvas({
   examples: Example[];
   onLoadExample: (example: Example) => void;
 }) {
+  const { t } = useTranslation();
   const shown = startExamples(examples);
   return (
     <Paper
@@ -187,26 +177,23 @@ export function EmptyCanvas({
       ta="center"
     >
       <Text size="sm" mb="sm">
-        <b>Brick DNN</b> builds neural networks from bricks: drag layers together, see the shapes as
-        you go and get clean PyTorch code. Prepare your data and train the network on this server,
-        free to start.
+        <Trans i18nKey="builder.empty.intro" components={{ b: <b /> }} />
       </Text>
-      <Title order={4}>Start building</Title>
+      <Title order={4}>{t('builder.empty.title')}</Title>
       <Text size="sm" c="dimmed" mt={6}>
-        Drag an <b>Input</b> layer from the palette onto the canvas, then add layers by clicking
-        them.
+        <Trans i18nKey="builder.empty.how" components={{ b: <b /> }} />
       </Text>
       {shown.length > 0 && (
         <>
           <Text size="sm" fw={600} mt="md" mb="xs">
-            Or start from an example
+            {t('builder.empty.orExample')}
           </Text>
           <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="xs" ta="left">
             {shown.map((example) => (
               <UnstyledButton
                 key={example.id}
                 onClick={() => onLoadExample(example)}
-                aria-label={`Start from the example ${example.name}`}
+                aria-label={t('builder.empty.startFrom', { name: example.name })}
               >
                 <Paper withBorder p="xs" radius="md" h="100%">
                   <Text size="sm" fw={600} style={{ display: 'flex', gap: 6 }}>

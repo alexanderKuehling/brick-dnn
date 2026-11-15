@@ -1,5 +1,6 @@
 /** Editing the step list: moving, duplicating, removing, and the status shown per step. */
 import type { PipelineStep, StepCatalog, StepReport } from '@/api/types';
+import { i18n } from '@/i18n';
 import { newStepId, stepSpec, stepStage } from '../steps';
 
 /** Same limit as the server (`pipeline.MAX_STEPS`). */
@@ -87,11 +88,21 @@ export type StepDisplayStatus = StepReport['status'] | 'waiting';
 
 export const STATUS_LABELS: Record<StepDisplayStatus, string> = {
   ok: 'OK',
-  error: 'Error',
-  skipped: 'Skipped',
-  disabled: 'Off',
-  not_run: 'Not run',
-  waiting: 'Waiting',
+  get error() {
+    return i18n.t('ui.data.stepList.error');
+  },
+  get skipped() {
+    return i18n.t('ui.data.stepList.skipped');
+  },
+  get disabled() {
+    return i18n.t('ui.data.stepList.off');
+  },
+  get not_run() {
+    return i18n.t('ui.data.stepList.notRun');
+  },
+  get waiting() {
+    return i18n.t('ui.data.stepList.waiting');
+  },
 };
 
 export const STATUS_COLORS: Record<StepDisplayStatus, string> = {
@@ -104,12 +115,24 @@ export const STATUS_COLORS: Record<StepDisplayStatus, string> = {
 };
 
 export const STATUS_HINTS: Record<StepDisplayStatus, string> = {
-  ok: 'The step ran without problems.',
-  error: 'The step failed; the data after it is the data before it.',
-  skipped: 'Not run because an earlier step failed.',
-  disabled: 'Turned off: the data passes through unchanged.',
-  not_run: 'Not run: the preview shows the data of an earlier step.',
-  waiting: 'Waiting for the preview.',
+  get ok() {
+    return i18n.t('ui.data.stepList.theStepRanWithoutProblems');
+  },
+  get error() {
+    return i18n.t('ui.data.stepList.theStepFailedTheData');
+  },
+  get skipped() {
+    return i18n.t('ui.data.stepList.notRunBecauseAnEarlier');
+  },
+  get disabled() {
+    return i18n.t('ui.data.stepList.turnedOffTheDataPasses');
+  },
+  get not_run() {
+    return i18n.t('ui.data.stepList.notRunThePreviewShows');
+  },
+  get waiting() {
+    return i18n.t('ui.data.stepList.waitingForThePreview');
+  },
 };
 
 /** The status to show: the step's own switch wins over an older report. */

@@ -6,6 +6,7 @@ import {
 } from '@tabler/icons-react';
 import { Alert, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { RunDetail } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { formatCpu } from '@/usage/format';
 import { isActive, queueText } from './format';
 
@@ -41,7 +42,10 @@ export function cpuUsage(run: RunDetail): string | null {
     return null;
   }
   return isActive(run.status) && usage.limit_cpu_minutes !== null
-    ? `${formatCpu(usage.cpu_minutes, '')} of ${formatCpu(usage.limit_cpu_minutes)}`
+    ? i18n.t('ui.training.runParts.of', {
+        cpu_minutes: formatCpu(usage.cpu_minutes, ''),
+        limit_cpu_minutes: formatCpu(usage.limit_cpu_minutes),
+      })
     : formatCpu(usage.cpu_minutes);
 }
 
@@ -52,6 +56,7 @@ const QUEUED_MESSAGE = 'Waiting for a free training slot.';
  * server's rough estimate, updated with every poll) and what holds it up.
  */
 export function QueueNotice({ run }: { run: RunDetail }) {
+  useTranslation();
   const queue = run.queue ?? null;
   const notes: string[] = [];
   if (run.message && run.message !== QUEUED_MESSAGE) {
@@ -73,7 +78,13 @@ export function QueueNotice({ run }: { run: RunDetail }) {
   notes.push('You can close this panel: the training starts by itself.');
   return (
     <Stack gap="xs">
-      <Paper component="section" withBorder p="sm" radius="md" aria-label="Queue">
+      <Paper
+        component="section"
+        withBorder
+        p="sm"
+        radius="md"
+        aria-label={i18n.t('ui.training.runParts.queue')}
+      >
         <Group gap="xs" wrap="nowrap" align="flex-start">
           <IconHourglassHigh
             size={18}
@@ -95,10 +106,9 @@ export function QueueNotice({ run }: { run: RunDetail }) {
         <Alert
           color="yellow"
           icon={<IconAlertTriangle size={18} />}
-          title="No training worker is running"
+          title={i18n.t('ui.training.runParts.noTrainingWorkerIsRunning')}
         >
-          This server cannot train right now. Your training keeps its place and starts as soon as a
-          worker is back.
+          {i18n.t('ui.training.runParts.thisServerCannotTrainRight')}
         </Alert>
       )}
     </Stack>

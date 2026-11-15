@@ -36,7 +36,9 @@ import { usePendingApprovals } from '@/approvals/pending';
 import { useAuth } from '@/auth/AuthContext';
 import { useBillingInfo } from '@/billing/useBillingInfo';
 import { relativeTime } from '@/collab/time';
-import { LEGAL_LABELS, legalPages, useLegalInfo } from '@/legal/useLegalInfo';
+import { useTranslation } from '@/i18n';
+import { LanguageSwitch } from '@/i18n/LanguageSwitch';
+import { legalPages, useLegalInfo } from '@/legal/useLegalInfo';
 import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
@@ -52,6 +54,7 @@ const LEGAL_ICONS: Record<LegalPageName, React.ReactNode> = {
 };
 
 export function AppHeader() {
+  const { t } = useTranslation();
   const { user, ready, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -74,7 +77,7 @@ export function AppHeader() {
   return (
     <Group h="100%" px={{ base: 'xs', xs: 'md' }} gap="xs" justify="space-between" wrap="nowrap">
       <Group gap="lg" wrap="nowrap">
-        <UnstyledButton component={Link} to={EDITOR_PATH} aria-label="Brick DNN home">
+        <UnstyledButton component={Link} to={EDITOR_PATH} aria-label={t('nav.home')}>
           <Logo />
         </UnstyledButton>
         <Group gap={4} visibleFrom="sm">
@@ -85,7 +88,7 @@ export function AppHeader() {
             size="compact-md"
             color="gray"
           >
-            Builder
+            {t('nav.builder')}
           </Button>
           <Button
             component={Link}
@@ -94,7 +97,7 @@ export function AppHeader() {
             size="compact-md"
             color="gray"
           >
-            Data
+            {t('nav.data')}
           </Button>
           {user && (
             <Button
@@ -104,7 +107,7 @@ export function AppHeader() {
               size="compact-md"
               color="gray"
             >
-              My networks
+              {t('nav.myNetworks')}
             </Button>
           )}
           {pricing && (
@@ -115,7 +118,7 @@ export function AppHeader() {
               size="compact-md"
               color="gray"
             >
-              Pricing
+              {t('nav.pricing')}
             </Button>
           )}
         </Group>
@@ -128,7 +131,7 @@ export function AppHeader() {
           legal={legal}
           isActive={(path) => navVariant(path) === 'light'}
         />
-        <Tooltip label="Source code on GitHub">
+        <Tooltip label={t('nav.sourceCode')}>
           <ActionIcon
             component="a"
             href={REPOSITORY_URL}
@@ -136,13 +139,13 @@ export function AppHeader() {
             rel="noreferrer"
             variant="default"
             size="lg"
-            aria-label="GitHub repository"
+            aria-label={t('nav.githubRepository')}
             visibleFrom="sm"
           >
             <IconBrandGithub size={18} />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label="Buy me a coffee">
+        <Tooltip label={t('nav.coffee')}>
           <ActionIcon
             component="a"
             href={SUPPORT_URL}
@@ -150,7 +153,7 @@ export function AppHeader() {
             rel="noreferrer"
             variant="default"
             size="lg"
-            aria-label="Buy me a coffee"
+            aria-label={t('nav.coffee')}
             visibleFrom="sm"
           >
             <IconCoffee size={18} />
@@ -160,8 +163,8 @@ export function AppHeader() {
           <Box visibleFrom="sm">
             <Menu position="bottom-end" withinPortal>
               <Menu.Target>
-                <Tooltip label="Imprint and privacy">
-                  <ActionIcon variant="default" size="lg" aria-label="Legal information">
+                <Tooltip label={t('nav.legalTooltip')}>
+                  <ActionIcon variant="default" size="lg" aria-label={t('nav.legalInfo')}>
                     <IconInfoCircle size={18} />
                   </ActionIcon>
                 </Tooltip>
@@ -173,21 +176,24 @@ export function AppHeader() {
                     leftSection={LEGAL_ICONS[page]}
                     onClick={() => navigate(`/${page}`)}
                   >
-                    {LEGAL_LABELS[page]}
+                    {t(`legal.labels.${page}`)}
                   </Menu.Item>
                 ))}
               </Menu.Dropdown>
             </Menu>
           </Box>
         )}
+        <Box visibleFrom="xs">
+          <LanguageSwitch />
+        </Box>
         <ColorSchemeToggle />
         {ready && !user && (
           <>
             <Button component={Link} to="/login" variant="default">
-              Log in
+              {t('nav.logIn')}
             </Button>
             <Button component={Link} to="/register" visibleFrom="xs">
-              Sign up
+              {t('nav.signUp')}
             </Button>
           </>
         )}
@@ -213,7 +219,7 @@ export function AppHeader() {
                 rightSection={<IconChevronDown size={14} />}
                 aria-label={
                   pending > 0
-                    ? `${user.username}, ${pending} waiting for your approval`
+                    ? t('nav.userWaiting', { user: user.username, count: pending })
                     : user.username
                 }
               >
@@ -228,20 +234,20 @@ export function AppHeader() {
                 leftSection={<IconFolder size={16} />}
                 onClick={() => navigate('/projects')}
               >
-                My networks
+                {t('nav.myNetworks')}
               </Menu.Item>
               <Menu.Item leftSection={<IconTable size={16} />} onClick={() => navigate('/data')}>
-                Data preparation
+                {t('nav.dataPreparation')}
               </Menu.Item>
               <Menu.Item leftSection={<IconKey size={16} />} onClick={() => navigate('/tokens')}>
-                API tokens
+                {t('nav.apiTokens')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconActivity size={16} />}
                 rightSection={
                   pending > 0 ? (
                     <Badge size="sm" color="yellow" variant="filled">
-                      {pending} waiting
+                      {t('nav.waiting', { count: pending })}
                     </Badge>
                   ) : (
                     <RecentActivity at={latestActivity} />
@@ -249,13 +255,13 @@ export function AppHeader() {
                 }
                 onClick={() => navigate('/activity')}
               >
-                Agent activity
+                {t('nav.agentActivity')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconUserCircle size={16} />}
                 onClick={() => navigate('/account')}
               >
-                Account
+                {t('nav.account')}
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item
@@ -265,7 +271,7 @@ export function AppHeader() {
                   navigate('/');
                 }}
               >
-                Log out
+                {t('nav.logOut')}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -309,6 +315,7 @@ function PhoneMenu({
   legal: LegalPageName[];
   isActive: (path: string) => boolean;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const item = (path: string, label: string, icon: React.ReactNode) => (
     <Menu.Item
@@ -325,15 +332,15 @@ function PhoneMenu({
     <Box hiddenFrom="sm">
       <Menu position="bottom-end" withinPortal>
         <Menu.Target>
-          <ActionIcon variant="default" size="lg" aria-label="Pages">
+          <ActionIcon variant="default" size="lg" aria-label={t('nav.pages')}>
             <IconMenu2 size={18} />
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          {item(EDITOR_PATH, 'Builder', <IconTopologyStar3 size={16} />)}
-          {item('/data', 'Data', <IconTable size={16} />)}
-          {loggedIn && item('/projects', 'My networks', <IconFolder size={16} />)}
-          {pricing && item('/pricing', 'Pricing', <IconTag size={16} />)}
+          {item(EDITOR_PATH, t('nav.builder'), <IconTopologyStar3 size={16} />)}
+          {item('/data', t('nav.data'), <IconTable size={16} />)}
+          {loggedIn && item('/projects', t('nav.myNetworks'), <IconFolder size={16} />)}
+          {pricing && item('/pricing', t('nav.pricing'), <IconTag size={16} />)}
           <Menu.Divider />
           <Menu.Item
             component="a"
@@ -342,7 +349,7 @@ function PhoneMenu({
             rel="noreferrer"
             leftSection={<IconBrandGithub size={16} />}
           >
-            Source code on GitHub
+            {t('nav.sourceCode')}
           </Menu.Item>
           <Menu.Item
             component="a"
@@ -351,12 +358,16 @@ function PhoneMenu({
             rel="noreferrer"
             leftSection={<IconCoffee size={16} />}
           >
-            Buy me a coffee
+            {t('nav.coffee')}
           </Menu.Item>
+          <Menu.Divider />
+          <Box px="sm" py={6} hiddenFrom="xs">
+            <LanguageSwitch />
+          </Box>
           {legal.length > 0 && <Menu.Divider />}
           {legal.map((page) => (
             <Fragment key={page}>
-              {item(`/${page}`, LEGAL_LABELS[page], LEGAL_ICONS[page])}
+              {item(`/${page}`, t(`legal.labels.${page}`), LEGAL_ICONS[page])}
             </Fragment>
           ))}
         </Menu.Dropdown>

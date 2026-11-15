@@ -3,6 +3,31 @@
 ## Unreleased
 
 ### Added
+- **The app in German.** The language comes from the browser (German for `de*`, otherwise
+  English) and can be switched with *EN | DE* in the header, the phone menu and on the login
+  and sign-up pages; the choice is kept in the browser and, when logged in, on the account
+  (new field `UserProfile.language`, `language` in `GET /api/auth/me/`,
+  `PATCH /api/auth/account/language/`, optional `language` at sign-up), so it follows the user
+  to other devices. `<html lang>` follows it. The frontend uses i18next with typed keys,
+  plurals and interpolation (`frontend/src/i18n`); numbers and dates are written with `Intl`
+  (decimal comma in German, number fields included), while values sent to the API and the
+  generated code keep their point. Requests carry the app's language as `Accept-Language`:
+  the backend translates with gettext (`backend/locale/de`, compiled `.mo` committed,
+  `manage.py update_translations` keeps it up to date without GNU gettext) the descriptions
+  of layers, parameters, preparation steps, examples and training options, account and
+  sign-up messages (and Django's own), and the e-mails, which go out in the account's
+  language (else the request's, else English). The REST API without the header and the MCP
+  server stay English. Legal pages can have a translation `<page>.<language>.md`, and a page
+  with the sections `## English` and `## Deutsch` shows the one of the app's language. Tests
+  fail on a key missing in one language or a string without German translation. Every
+  page of the app is translated (builder, Data tab and its analyses, training panel, run
+  view, metrics and charts, explanations, account, two-factor, usage, tokens, agent
+  activity, approvals, sharing, comments, history, pricing and billing). Messages the
+  `brickdnn` package builds from data (network analysis, training checks and the run
+  summary, readiness checks, preparation steps) are translated by the API from templates read
+  out of the package's source (`brick_dnn_core/messages.py`), so the package stays free of
+  Django and the MCP server keeps English. See docs/translations.md, also for what is still
+  English.
 - **Landing pages in English and German.** `/` and `/de/` now describe Brick DNN for
   teaching, research and practice: what it is, use cases, how it works, features, where data
   is stored, the plans with their prices, an offer for teaching and research and an FAQ. They
@@ -20,8 +45,8 @@
   its language links, structured data or a file it refers to.
   **The editor moved to `/app`**; every other page of the app keeps its address. Old links
   keep working: `/?…` is redirected to `/app?…`, a `#…` that is not a section of the page
-  goes on to `/app#…`, logged-in users who open `/` land in the editor, and links to `/`
-  inside the app open the editor.
+  goes on to `/app#…`, and links to `/` inside the app open the editor. The landing page
+  is shown to logged-in users too; its header leads to the editor.
 - **Selectable losses of neural networks.** The training settings take a `loss` per task:
   for classification `cross_entropy` (the default), `weighted_cross_entropy` with
   `class_weights` (`"balanced"`, `n / (k · count)` from the class counts of the training

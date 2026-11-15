@@ -20,6 +20,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import type { RunDetail } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { explainApi } from './api';
 import { ExplainDialog } from './ExplainButton';
 import type { ExplainStart } from './ExplainModal';
@@ -86,6 +87,7 @@ export function RunExplanations({ run }: { run: RunDetail }) {
 }
 
 function Explanations({ run }: { run: RunDetail }) {
+  useTranslation();
   const titleId = useId();
   const [methods, setMethods] = useState<ExplainMethods | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +159,7 @@ function Explanations({ run }: { run: RunDetail }) {
     body = (
       <Group gap="xs">
         <Text size="sm" c="dimmed">
-          Cannot check which explanations work for this run: {error}
+          {i18n.t('ui.explain.RunExplanations.cannotCheckWhichExplanationsWork', { error })}
         </Text>
         <Button
           size="compact-xs"
@@ -165,12 +167,17 @@ function Explanations({ run }: { run: RunDetail }) {
           leftSection={<IconRefresh size={14} />}
           onClick={() => setAttempt((n) => n + 1)}
         >
-          Try again
+          {i18n.t('ui.explain.RunExplanations.tryAgain')}
         </Button>
       </Group>
     );
   } else if (!methods) {
-    body = <Loader size="xs" aria-label="Checking which explanations work" />;
+    body = (
+      <Loader
+        size="xs"
+        aria-label={i18n.t('ui.explain.RunExplanations.checkingWhichExplanationsWork')}
+      />
+    );
   } else if (methods.unavailable) {
     body = (
       <Text size="sm" c="dimmed">
@@ -181,8 +188,7 @@ function Explanations({ run }: { run: RunDetail }) {
     body = (
       <Stack gap="xs" align="flex-start">
         <Text size="sm" c="dimmed">
-          Trained on random demo data, so there is nothing meaningful to explain: train on a dataset
-          to see what the model relies on. You can still look inside the network.
+          {i18n.t('ui.explain.RunExplanations.trainedOnRandomDemoData')}
         </Text>
         {inside(can) && (
           <Button
@@ -191,7 +197,7 @@ function Explanations({ run }: { run: RunDetail }) {
             color="grape"
             onClick={() => open({ tab: 'inside' })}
           >
-            Look inside the network
+            {i18n.t('ui.explain.RunExplanations.lookInsideTheNetwork')}
           </Button>
         )}
       </Stack>
@@ -202,7 +208,8 @@ function Explanations({ run }: { run: RunDetail }) {
         <Text size="sm" c="dimmed">
           {(methods.kind === 'image'
             ? (reason('samples') ?? reason('image'))
-            : (reason('permutation') ?? reason('tabular'))) ?? 'There is no preview for this run.'}
+            : (reason('permutation') ?? reason('tabular'))) ??
+            i18n.t('ui.explain.RunExplanations.thereIsNoPreviewFor')}
         </Text>
         {anyTab && <OpenFull onClick={() => open({})} />}
       </Stack>
@@ -212,10 +219,14 @@ function Explanations({ run }: { run: RunDetail }) {
       <Stack gap="xs" align="flex-start">
         <Text size="sm">
           {images
-            ? 'See where the network looks in a few validation images (Grad-CAM and saliency).'
+            ? i18n.t('ui.explain.RunExplanations.seeWhereTheNetworkLooks')
             : importance
-              ? `See which features the model relies on most${boundary ? ' and what it predicts across its two features' : ''}.`
-              : 'See what the model predicts across the plane of its two input features.'}
+              ? i18n.t('ui.explain.RunExplanations.seeWhichFeaturesTheModel', {
+                  value: boundary
+                    ? i18n.t('ui.explain.RunExplanations.andWhatItPredictsAcross')
+                    : '',
+                })
+              : i18n.t('ui.explain.RunExplanations.seeWhatTheModelPredicts')}
         </Text>
         <Button
           variant="light"
@@ -223,11 +234,12 @@ function Explanations({ run }: { run: RunDetail }) {
           leftSection={<IconSparkles size={16} />}
           onClick={() => setRequested(true)}
         >
-          {images ? 'Show where it looks' : 'Show what matters'}
+          {images
+            ? i18n.t('ui.explain.RunExplanations.showWhereItLooks')
+            : i18n.t('ui.explain.RunExplanations.showWhatMatters')}
         </Button>
         <Text size="xs" c="dimmed">
-          Computed on the server in a few seconds; it counts as a prediction. Afterwards it is shown
-          right away.
+          {i18n.t('ui.explain.RunExplanations.computedOnTheServerIn')}
         </Text>
       </Stack>
     );
@@ -264,7 +276,7 @@ function Explanations({ run }: { run: RunDetail }) {
             <IconBulb size={16} />
           </ThemeIcon>
           <Text fw={600} id={titleId}>
-            Why the model decides
+            {i18n.t('ui.explain.RunExplanations.whyTheModelDecides')}
           </Text>
         </Group>
         {body}
@@ -279,23 +291,36 @@ function inside(can: (id: ExplainMethodId) => boolean): boolean {
 }
 
 const TAB_NAMES: Record<ExplainTab, string> = {
-  prediction: 'Explain a prediction',
-  importance: 'Feature importance',
-  boundary: 'Decision boundary',
-  inside: 'Inside the network',
+  get prediction() {
+    return i18n.t('ui.explain.RunExplanations.explainAPrediction');
+  },
+  get importance() {
+    return i18n.t('ui.explain.RunExplanations.featureImportance');
+  },
+  get boundary() {
+    return i18n.t('ui.explain.RunExplanations.decisionBoundary');
+  },
+  get inside() {
+    return i18n.t('ui.explain.RunExplanations.insideTheNetwork');
+  },
 };
 
 /** "Open the full explanation" (on a tab of the dialog). */
 function OpenFull({ tab, onClick }: { tab?: ExplainTab; onClick: () => void }) {
+  useTranslation();
   return (
     <Button
       variant="subtle"
       size="compact-xs"
       rightSection={<IconArrowUpRight size={14} />}
       onClick={onClick}
-      aria-label={tab ? `Open the full explanation: ${TAB_NAMES[tab]}` : undefined}
+      aria-label={
+        tab
+          ? i18n.t('ui.explain.RunExplanations.openTheFullExplanation2', { value: TAB_NAMES[tab] })
+          : undefined
+      }
     >
-      Open the full explanation
+      {i18n.t('ui.explain.RunExplanations.openTheFullExplanation')}
     </Button>
   );
 }
@@ -336,16 +361,17 @@ function ImportanceBlock({
   result: Explanation<PermutationAnswer>;
   onOpen: (start: ExplainStart) => void;
 }) {
+  useTranslation();
   const [all, setAll] = useState(false);
   const count = result.data?.features.length ?? 0;
   return (
     <Block
-      title="What matters most"
-      text="How much the validation score drops when the values of one feature are shuffled: the longer the bar, the more the model relies on that feature."
+      title={i18n.t('ui.explain.RunExplanations.whatMattersMost')}
+      text={i18n.t('ui.explain.RunExplanations.howMuchTheValidationScore')}
       tab="importance"
       onOpen={onOpen}
     >
-      <Pending result={result} what="the feature importance">
+      <Pending result={result} what={i18n.t('ui.explain.RunExplanations.theFeatureImportance')}>
         {(data) => (
           <Stack gap={4} align="flex-start">
             <div style={{ width: '100%' }}>
@@ -359,7 +385,9 @@ function ImportanceBlock({
                 onClick={() => setAll((open) => !open)}
                 aria-expanded={all}
               >
-                {all ? `Show the top ${TOP_FEATURES}` : `Show all ${count} features`}
+                {all
+                  ? i18n.t('ui.explain.RunExplanations.showTheTop', { TOP_FEATURES })
+                  : i18n.t('ui.explain.RunExplanations.showAllFeatures', { count })}
               </Button>
             )}
           </Stack>
@@ -376,14 +404,15 @@ function BoundaryBlock({
   result: Explanation<BoundaryAnswer>;
   onOpen: (start: ExplainStart) => void;
 }) {
+  useTranslation();
   return (
     <Block
-      title="Decision boundary"
-      text="What the model predicts for every combination of its two input features, with training points on top. Pale areas are where it hesitates."
+      title={i18n.t('ui.explain.RunExplanations.decisionBoundary')}
+      text={i18n.t('ui.explain.RunExplanations.whatTheModelPredictsFor')}
       tab="boundary"
       onOpen={onOpen}
     >
-      <Pending result={result} what="the decision boundary">
+      <Pending result={result} what={i18n.t('ui.explain.RunExplanations.theDecisionBoundary')}>
         {(data) => <BoundaryView answer={data} compact />}
       </Pending>
     </Block>
@@ -403,6 +432,7 @@ function ImagesBlock({
   answers: Explanation<ImageAnswer>[];
   onOpen: (start: ExplainStart) => void;
 }) {
+  useTranslation();
   const [chosen, setChosen] = useState<MapKind>('gradcam');
   const loaded = answers.map((answer) => answer.data).filter((a): a is ImageAnswer => !!a);
   // Grad-CAM needs a convolution: without one, saliency it is.
@@ -410,20 +440,20 @@ function ImagesBlock({
   const kind: MapKind = noGradcam ? 'saliency' : chosen;
   return (
     <Block
-      title="Where it looks"
+      title={i18n.t('ui.explain.RunExplanations.whereItLooks')}
       text={
         kind === 'gradcam'
-          ? 'Grad-CAM: the regions where the network found evidence for its answer (bright = more). Click an image to explain it in full.'
-          : 'Saliency: the pixels that change the answer most when they change a little. Click an image to explain it in full.'
+          ? i18n.t('ui.explain.RunExplanations.gradCamTheRegionsWhere')
+          : i18n.t('ui.explain.RunExplanations.saliencyThePixelsThatChange')
       }
       tab="prediction"
       onOpen={onOpen}
     >
-      <Pending result={samples} what="the validation images">
+      <Pending result={samples} what={i18n.t('ui.explain.RunExplanations.theValidationImages')}>
         {() =>
           picked.length === 0 ? (
             <Text size="sm" c="dimmed">
-              No validation images to show.
+              {i18n.t('ui.explain.RunExplanations.noValidationImagesToShow')}
             </Text>
           ) : (
             <Stack gap="xs" align="flex-start">
@@ -433,9 +463,9 @@ function ImagesBlock({
                 onChange={(value) => setChosen(value as MapKind)}
                 data={[
                   { value: 'gradcam', label: 'Grad-CAM', disabled: noGradcam },
-                  { value: 'saliency', label: 'Saliency' },
+                  { value: 'saliency', label: i18n.t('ui.explain.RunExplanations.saliency') },
                 ]}
-                aria-label="Heatmap"
+                aria-label={i18n.t('ui.explain.RunExplanations.heatmap')}
               />
               <div className={classes.strip}>
                 {picked.map((sample, i) => (
@@ -472,22 +502,29 @@ function ImageTile({
   kind: MapKind;
   onOpen: () => void;
 }) {
+  useTranslation();
   const data = answer.data;
   const map = data ? data[kind] : null;
   const aspect = data ? data.size[1] / data.size[0] : 1;
-  const caption = `true ${sample.label ?? '–'} · model ${sample.predicted ?? '–'}`;
+  const caption = i18n.t('ui.explain.RunExplanations.trueModel', {
+    value: sample.label ?? '–',
+    value2: sample.predicted ?? '–',
+  });
   return (
     <UnstyledButton
       className={classes.tile}
       onClick={onOpen}
-      aria-label={`Explain sample ${sample.index} in full: ${caption}`}
+      aria-label={i18n.t('ui.explain.RunExplanations.explainSampleInFull', {
+        index: sample.index,
+        caption,
+      })}
     >
       <Overlay
         image={data?.image ?? sample.png ?? ''}
         heat={map && !map.unavailable ? map.png : undefined}
         opacity={0.7}
         aspect={aspect}
-        label={`Sample ${sample.index}`}
+        label={i18n.t('ui.explain.RunExplanations.sample', { index: sample.index })}
       />
       <Text
         size="xs"
@@ -497,7 +534,9 @@ function ImageTile({
       >
         {caption}
       </Text>
-      {answer.loading && <Loader size={12} aria-label="Computing" />}
+      {answer.loading && (
+        <Loader size={12} aria-label={i18n.t('ui.explain.RunExplanations.computing')} />
+      )}
       {answer.error && (
         <Text size="xs" c="red">
           {answer.error}

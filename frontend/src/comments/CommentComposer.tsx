@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Group, Textarea } from '@mantine/core';
 import { ApiError } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 
 /** The server's message for the text, or the general one. */
 export function commentError(error: unknown): string {
@@ -38,6 +39,7 @@ export function CommentComposer({
   onSubmit,
   onCancel,
 }: CommentComposerProps) {
+  useTranslation();
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -92,7 +94,7 @@ export function CommentComposer({
       <Group justify="flex-end" gap="xs" mt={6}>
         {onCancel && (
           <Button variant="subtle" color="gray" size="xs" onClick={onCancel}>
-            Cancel
+            {i18n.t('ui.comments.CommentComposer.cancel')}
           </Button>
         )}
         <Button type="submit" size="xs" loading={sending} disabled={empty}>

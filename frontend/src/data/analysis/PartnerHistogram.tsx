@@ -8,6 +8,7 @@ import { seriesColor } from '@/components/charts/colors';
 import { formatCount } from '@/components/charts/format';
 import { columnPath, textWidth } from '@/components/charts/marks';
 import { linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 
 export interface PartnerHistogramProps {
   title: string;
@@ -55,6 +56,7 @@ export function PartnerHistogram({
   height = 180,
   width: fixedWidth,
 }: PartnerHistogramProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const dragging = useRef(false);
@@ -91,7 +93,11 @@ export function PartnerHistogram({
       onThresholdChange(event.key === 'Home' ? 0 : 1);
     }
   };
-  const valueText = `Threshold |ρ| ${threshold.toFixed(2)}: ${formatCount(below)} of ${formatCount(total)} columns have no partner above it`;
+  const valueText = i18n.t('ui.data.PartnerHistogram.thresholdOfColumnsHaveNo', {
+    threshold: threshold.toFixed(2),
+    below: formatCount(below),
+    total: formatCount(total),
+  });
 
   return (
     <ChartFrame
@@ -99,8 +105,16 @@ export function PartnerHistogram({
       subtitle={subtitle}
       caption={caption}
       legend={[
-        { key: 'below', label: 'No partner above the threshold', color: BELOW_COLOR },
-        { key: 'above', label: 'With a partner above it', color: ABOVE_COLOR },
+        {
+          key: 'below',
+          label: i18n.t('ui.data.PartnerHistogram.noPartnerAboveTheThreshold'),
+          color: BELOW_COLOR,
+        },
+        {
+          key: 'above',
+          label: i18n.t('ui.data.PartnerHistogram.withAPartnerAboveIt'),
+          color: ABOVE_COLOR,
+        },
       ]}
       table={() => ({
         head: ['Strongest |ρ|', 'Columns'],
@@ -163,7 +177,7 @@ export function PartnerHistogram({
                   strokeDasharray="3 3"
                 />
                 <text className={classes.tick} x={sx(chance) + 4} y={MARGIN.top + 2} dy="0.7em">
-                  chance
+                  {i18n.t('ui.data.PartnerHistogram.chance')}
                 </text>
               </g>
             )}
@@ -195,7 +209,7 @@ export function PartnerHistogram({
           data-clickable
           role="slider"
           tabIndex={0}
-          aria-label={`${title}: threshold (drag, or use the arrow keys)`}
+          aria-label={i18n.t('ui.data.PartnerHistogram.thresholdDragOrUseThe', { title })}
           aria-valuemin={0}
           aria-valuemax={1}
           aria-valuenow={threshold}
@@ -221,8 +235,11 @@ export function PartnerHistogram({
         />
       </div>
       <Text size="xs" c="dimmed" mt={2} aria-live="polite">
-        {formatCount(below)} of {formatCount(total)} columns have no partner at |ρ| ≥{' '}
-        {threshold.toFixed(2)}
+        {i18n.t('ui.data.PartnerHistogram.ofColumnsHaveNoPartner', {
+          below: formatCount(below),
+          total: formatCount(total),
+          threshold: threshold.toFixed(2),
+        })}
       </Text>
     </ChartFrame>
   );

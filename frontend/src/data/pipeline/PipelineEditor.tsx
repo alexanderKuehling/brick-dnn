@@ -11,6 +11,7 @@ import type {
   StepReport,
   StepSpec,
 } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { columnsBefore, finalColumns, insertStep, stepSpec } from '../steps';
 import { AddStepMenu } from './AddStepMenu';
@@ -64,6 +65,7 @@ export function PipelineEditor({
   splitCounts,
   splitInfo = null,
 }: PipelineEditorProps) {
+  useTranslation();
   const headingId = useId();
   // Viewers of a shared preparation look at the steps; others only use the main table.
   const { readOnly, sharedBy } = usePrepAccess();
@@ -198,7 +200,7 @@ export function PipelineEditor({
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <Group gap={8} wrap="nowrap">
             <Title order={3} size="h5" id={headingId}>
-              Steps
+              {i18n.t('ui.data.PipelineEditor.steps')}
             </Title>
             {steps.length > 0 && (
               <Text size="sm" c="dimmed">
@@ -209,7 +211,9 @@ export function PipelineEditor({
               {previewing && (
                 <>
                   <Loader size={12} aria-hidden />
-                  <VisuallyHidden>Updating the preview</VisuallyHidden>
+                  <VisuallyHidden>
+                    {i18n.t('ui.data.PipelineEditor.updatingThePreview')}
+                  </VisuallyHidden>
                 </>
               )}
             </span>
@@ -223,12 +227,17 @@ export function PipelineEditor({
               <Text size="sm" className={classes.reportLine}>
                 <IconEye size={16} aria-hidden />
                 <span>
-                  The preview shows the data after step {uptoIndex + 1}
-                  {uptoIndex < steps.length - 1 ? '; later steps do not run.' : '.'}
+                  {i18n.t('ui.data.PipelineEditor.thePreviewShowsTheData', {
+                    value: uptoIndex + 1,
+                    value2:
+                      uptoIndex < steps.length - 1
+                        ? i18n.t('ui.data.PipelineEditor.laterStepsDoNotRun')
+                        : '.',
+                  })}
                 </span>
               </Text>
               <Button size="compact-xs" variant="subtle" onClick={() => onUptoChange(null)}>
-                Show all steps
+                {i18n.t('ui.data.PipelineEditor.showAllSteps')}
               </Button>
             </Group>
           </Paper>
@@ -238,7 +247,9 @@ export function PipelineEditor({
           <Paper withBorder radius="md" p="xs" mb="xs" role="status">
             <Group gap="xs" justify="space-between" wrap="nowrap">
               <Text size="sm" truncate>
-                Deleted “{stepSpec(catalog, deleted.step.type)?.label ?? deleted.step.type}”.
+                {i18n.t('ui.data.PipelineEditor.deleted', {
+                  value: stepSpec(catalog, deleted.step.type)?.label ?? deleted.step.type,
+                })}
               </Text>
               <Button
                 size="compact-xs"
@@ -246,7 +257,7 @@ export function PipelineEditor({
                 leftSection={<IconArrowBackUp size={14} />}
                 onClick={undo}
               >
-                Undo
+                {i18n.t('ui.data.PipelineEditor.undo')}
               </Button>
             </Group>
           </Paper>
@@ -255,13 +266,11 @@ export function PipelineEditor({
         {steps.length === 0 ? (
           <Paper withBorder radius="md" p="md" className={classes.empty}>
             <Text size="sm" fw={500}>
-              No steps yet
+              {i18n.t('ui.data.PipelineEditor.noStepsYet')}
             </Text>
             {!readOnly && (
               <Text size="sm" c="dimmed" mt={4}>
-                Add steps to clean and transform the data, e.g. fill missing values, clip outliers
-                or encode categories. The column menus of the data table and the Readiness tab
-                suggest steps, too.
+                {i18n.t('ui.data.PipelineEditor.addStepsToCleanAnd')}
               </Text>
             )}
           </Paper>

@@ -10,6 +10,7 @@ import {
   formatPercent,
 } from '@/components/charts/format';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
+import { i18n, useTranslation } from '@/i18n';
 import { analysisNote } from './sampleData';
 import { KIND_LABELS, KIND_ORDER, KindIcon, Note } from './shared';
 import classes from './AnalysisPanel.module.css';
@@ -31,8 +32,12 @@ export const SHORT_METHOD = { pearson: '|r|', eta: 'η', cramers_v: 'V' } as con
 
 export const ASSOCIATION_LABELS = {
   pearson: '|Pearson r|',
-  eta: 'Correlation ratio η',
-  cramers_v: "Cramér's V",
+  get eta() {
+    return i18n.t('ui.data.ColumnsView.correlationRatio');
+  },
+  get cramers_v() {
+    return i18n.t('ui.data.ColumnsView.cramRSV');
+  },
 } as const;
 
 const PAGE = 100;
@@ -105,6 +110,7 @@ export function AssociationBar({
 }
 
 function Distribution({ column }: { column: ColumnProfile }) {
+  useTranslation();
   if (column.histogram && column.histogram.counts.length > 0) {
     return <MiniHistogram counts={column.histogram.counts} width={72} height={20} />;
   }
@@ -115,7 +121,7 @@ function Distribution({ column }: { column: ColumnProfile }) {
   return (
     <span className={classes.dimmed}>
       {column.kind === 'text' && column.mean_length !== null
-        ? `⌀ ${formatNumber(column.mean_length, 3)} chars`
+        ? i18n.t('ui.data.ColumnsView.chars', { mean_length: formatNumber(column.mean_length, 3) })
         : '–'}
     </span>
   );
@@ -136,6 +142,7 @@ const ColumnRow = memo(
     withAssociation: boolean;
     onShow: (name: string) => void;
   }) => {
+    useTranslation();
     return (
       <tr>
         <td>
@@ -145,11 +152,13 @@ const ColumnRow = memo(
               type="button"
               className={classes.linkButton}
               onClick={() => onShow(column.name)}
-              title={`Show the distribution of ${column.name}`}
+              title={i18n.t('ui.data.ColumnsView.showTheDistributionOf', { name: column.name })}
             >
               {column.name}
             </button>
-            {isTarget && <span className={classes.dimmed}>(target)</span>}
+            {isTarget && (
+              <span className={classes.dimmed}>{i18n.t('ui.data.ColumnsView.target')}</span>
+            )}
           </span>
         </td>
         <td>{KIND_LABELS[column.kind]}</td>
@@ -186,6 +195,7 @@ const ColumnRow = memo(
 
 /** All columns at a glance: a sortable, searchable table; a click opens the distribution. */
 export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps) {
+  useTranslation();
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<ColumnKind | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'order', desc: false });
@@ -252,8 +262,8 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
       <Group gap="xs" wrap="wrap">
         <TextInput
           size="xs"
-          placeholder="Search columns"
-          aria-label="Search columns"
+          placeholder={i18n.t('ui.data.ColumnsView.searchColumns')}
+          aria-label={i18n.t('ui.data.ColumnsView.searchColumns')}
           leftSection={<IconSearch size={14} />}
           value={query}
           onChange={(event) => {
@@ -264,8 +274,8 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
         />
         <Select
           size="xs"
-          aria-label="Column type"
-          placeholder="All types"
+          aria-label={i18n.t('ui.data.ColumnsView.columnType')}
+          placeholder={i18n.t('ui.data.ColumnsView.allTypes')}
           data={kindsPresent.map((k) => ({ value: k, label: KIND_LABELS[k] }))}
           value={kind}
           onChange={(value) => setKind((value as ColumnKind | null) ?? null)}
@@ -275,8 +285,11 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
         />
         <Text size="xs" c="dimmed">
           {rows.length === profile.columns.length
-            ? `${formatCount(rows.length)} columns`
-            : `${formatCount(rows.length)} of ${formatCount(profile.columns.length)} columns`}
+            ? i18n.t('ui.data.ColumnsView.columns', { length: formatCount(rows.length) })
+            : i18n.t('ui.data.ColumnsView.ofColumns', {
+                length: formatCount(rows.length),
+                length2: formatCount(profile.columns.length),
+              })}
         </Text>
       </Group>
 
@@ -292,7 +305,7 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
               {header('median', 'Median')}
               {header('min', 'Min')}
               {header('max', 'Max')}
-              <th>Distribution</th>
+              <th>{i18n.t('ui.data.ColumnsView.distribution')}</th>
               {hasAssociation && header('association', 'Target')}
             </tr>
           </thead>
@@ -312,7 +325,7 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
       </div>
       {rows.length === 0 && (
         <Text size="sm" c="dimmed">
-          No column matches the search.
+          {i18n.t('ui.data.ColumnsView.noColumnMatchesTheSearch')}
         </Text>
       )}
       {rows.length > limit && (
@@ -322,14 +335,19 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
           onClick={() => setLimit((l) => l + PAGE)}
           style={{ alignSelf: 'flex-start' }}
         >
-          Show {formatCount(Math.min(PAGE, rows.length - limit))} more of{' '}
-          {formatCount(rows.length - limit)}
+          {i18n.t('ui.data.ColumnsView.showMoreOf', {
+            min: formatCount(Math.min(PAGE, rows.length - limit)),
+            value: formatCount(rows.length - limit),
+          })}
         </Button>
       )}
       <Note>
-        Statistics are exact (all {formatCount(profile.n_rows)} rows).
+        {i18n.t('ui.data.ColumnsView.statisticsAreExactAll')} {formatCount(profile.n_rows)}{' '}
+        {i18n.t('ui.data.ColumnsView.rows')}
         {hasAssociation &&
-          ` Target association (0 = none, 1 = perfect): |Pearson r| between numbers, correlation ratio η between numbers and categories, Cramér's V between categories and classes. ${analysisNote(profile)}`}
+          i18n.t('ui.data.ColumnsView.targetAssociation0None1', {
+            analysisNote: analysisNote(profile),
+          })}
       </Note>
     </Stack>
   );

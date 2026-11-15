@@ -24,6 +24,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import type { DataFix, NewStep, Readiness, ReadinessIssue, SplitSettings } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { formatCount } from '../table/format';
 import classes from './ReadinessPanel.module.css';
@@ -48,15 +49,40 @@ const CLASSES_SHOWN = 12;
 /** Affected columns listed under an issue; the rest are counted. */
 const COLUMNS_SHOWN = 6;
 
-const TASK_LABELS = { classification: 'Classification', regression: 'Regression' } as const;
+const TASK_LABELS = {
+  get classification() {
+    return i18n.t('ui.data.ReadinessPanel.classification');
+  },
+  get regression() {
+    return i18n.t('ui.data.ReadinessPanel.regression');
+  },
+} as const;
 
 type Severity = ReadinessIssue['severity'];
 
 /** The lists of the panel: errors first; long lists of hints show their first items. */
 const SECTIONS: { severity: Severity; title: string; shown: number }[] = [
-  { severity: 'error', title: 'Must be fixed', shown: Infinity },
-  { severity: 'warning', title: 'Worth a look', shown: 8 },
-  { severity: 'info', title: 'Suggestions', shown: 3 },
+  {
+    severity: 'error',
+    get title() {
+      return i18n.t('ui.data.ReadinessPanel.mustBeFixed');
+    },
+    shown: Infinity,
+  },
+  {
+    severity: 'warning',
+    get title() {
+      return i18n.t('ui.data.ReadinessPanel.worthALook');
+    },
+    shown: 8,
+  },
+  {
+    severity: 'info',
+    get title() {
+      return i18n.t('ui.data.ReadinessPanel.suggestions');
+    },
+    shown: 3,
+  },
 ];
 
 const SEVERITY = {
@@ -67,34 +93,88 @@ const SEVERITY = {
 
 /** Short names of the checks (`ReadinessIssue.code`), shown as a badge. */
 const CHECK_LABELS: Record<string, string> = {
-  target_missing: 'Target',
-  target_not_numeric: 'Target',
-  missing_values: 'Missing values',
-  categorical_features: 'Categories',
-  high_cardinality: 'Many categories',
-  inconsistent_categories: 'Spellings',
-  numbers_as_text: 'Numbers as text',
-  dates_as_text: 'Dates as text',
-  text_features: 'Free text',
-  date_features: 'Dates',
-  infinite_values: 'Infinite values',
-  leakage: 'Target leakage',
-  split_overlap: 'Train/test overlap',
-  duplicate_rows: 'Duplicates',
-  conflicting_labels: 'Conflicting labels',
-  rare_classes: 'Rare classes',
-  classes_not_in_split: 'Split',
-  imbalanced: 'Imbalance',
+  get target_missing() {
+    return i18n.t('ui.data.ReadinessPanel.target');
+  },
+  get target_not_numeric() {
+    return i18n.t('ui.data.ReadinessPanel.target');
+  },
+  get missing_values() {
+    return i18n.t('ui.data.ReadinessPanel.missingValues');
+  },
+  get categorical_features() {
+    return i18n.t('ui.data.ReadinessPanel.categories');
+  },
+  get high_cardinality() {
+    return i18n.t('ui.data.ReadinessPanel.manyCategories');
+  },
+  get inconsistent_categories() {
+    return i18n.t('ui.data.ReadinessPanel.spellings');
+  },
+  get numbers_as_text() {
+    return i18n.t('ui.data.ReadinessPanel.numbersAsText');
+  },
+  get dates_as_text() {
+    return i18n.t('ui.data.ReadinessPanel.datesAsText');
+  },
+  get text_features() {
+    return i18n.t('ui.data.ReadinessPanel.freeText');
+  },
+  get date_features() {
+    return i18n.t('ui.data.ReadinessPanel.dates');
+  },
+  get infinite_values() {
+    return i18n.t('ui.data.ReadinessPanel.infiniteValues');
+  },
+  get leakage() {
+    return i18n.t('ui.data.ReadinessPanel.targetLeakage');
+  },
+  get split_overlap() {
+    return i18n.t('ui.data.ReadinessPanel.trainTestOverlap');
+  },
+  get duplicate_rows() {
+    return i18n.t('ui.data.ReadinessPanel.duplicates');
+  },
+  get conflicting_labels() {
+    return i18n.t('ui.data.ReadinessPanel.conflictingLabels');
+  },
+  get rare_classes() {
+    return i18n.t('ui.data.ReadinessPanel.rareClasses');
+  },
+  get classes_not_in_split() {
+    return i18n.t('ui.data.ReadinessPanel.split');
+  },
+  get imbalanced() {
+    return i18n.t('ui.data.ReadinessPanel.imbalance');
+  },
   id_like: 'ID column',
-  constant: 'Constant',
-  near_constant: 'Near-constant',
-  redundant: 'Redundant',
-  no_partner: 'No strong partner',
-  skewed: 'Skewed',
-  skewed_target: 'Skewed target',
-  scales: 'Scales',
-  few_rows: 'Few rows',
-  many_features: 'Many features',
+  get constant() {
+    return i18n.t('ui.data.ReadinessPanel.constant');
+  },
+  get near_constant() {
+    return i18n.t('ui.data.ReadinessPanel.nearConstant');
+  },
+  get redundant() {
+    return i18n.t('ui.data.ReadinessPanel.redundant');
+  },
+  get no_partner() {
+    return i18n.t('ui.data.ReadinessPanel.noStrongPartner');
+  },
+  get skewed() {
+    return i18n.t('ui.data.ReadinessPanel.skewed');
+  },
+  get skewed_target() {
+    return i18n.t('ui.data.ReadinessPanel.skewedTarget');
+  },
+  get scales() {
+    return i18n.t('ui.data.ReadinessPanel.scales');
+  },
+  get few_rows() {
+    return i18n.t('ui.data.ReadinessPanel.fewRows');
+  },
+  get many_features() {
+    return i18n.t('ui.data.ReadinessPanel.manyFeatures');
+  },
 };
 
 function fixKey(fix: DataFix): string {
@@ -115,6 +195,7 @@ export function ReadinessPanel({
   fixesDisabled = false,
   exportBlocked = null,
 }: ReadinessPanelProps) {
+  useTranslation();
   // Viewers of a shared preparation see the problems, but neither fix them nor export.
   const { readOnly } = usePrepAccess();
   // Fixes added since the last check; they disappear with the next preview.
@@ -154,18 +235,24 @@ export function ReadinessPanel({
 
   const split = readiness.split_counts;
   const stats: { label: string; value: string; hint?: string }[] = [
-    { label: 'Target', value: readiness.target ?? 'Not set' },
-    { label: 'Task', value: readiness.task ? TASK_LABELS[readiness.task] : '–' },
-    { label: 'Features', value: formatCount(readiness.num_features) },
+    { label: i18n.t('ui.data.ReadinessPanel.target'), value: readiness.target ?? 'Not set' },
     {
-      label: 'Classes',
+      label: i18n.t('ui.data.ReadinessPanel.task'),
+      value: readiness.task ? TASK_LABELS[readiness.task] : '–',
+    },
+    {
+      label: i18n.t('ui.data.ReadinessPanel.features'),
+      value: formatCount(readiness.num_features),
+    },
+    {
+      label: i18n.t('ui.data.ReadinessPanel.classes'),
       value: readiness.num_classes === null ? '–' : formatCount(readiness.num_classes),
     },
-    { label: 'Rows', value: formatCount(readiness.rows) },
+    { label: i18n.t('ui.data.ReadinessPanel.rows'), value: formatCount(readiness.rows) },
     {
-      label: 'Split',
+      label: i18n.t('ui.data.ReadinessPanel.split'),
       value: split ? split.map(formatCount).join(' / ') : '–',
-      hint: split ? 'train / validation / test' : undefined,
+      hint: split ? i18n.t('ui.data.ReadinessPanel.trainValidationTest') : undefined,
     },
   ];
   const classNames = readiness.class_names ?? [];
@@ -182,25 +269,27 @@ export function ReadinessPanel({
           color="green"
           variant="light"
           icon={<IconCircleCheck size={20} />}
-          title="Ready for training"
+          title={i18n.t('ui.data.ReadinessPanel.readyForTraining')}
         >
           {notes.length > 0
-            ? `The data can be used for training. Have a look at the ${notes.join(' and ')} below.`
-            : 'The data can be used for training.'}
+            ? i18n.t('ui.data.ReadinessPanel.theDataCanBeUsed', { notes: notes.join(' and ') })
+            : i18n.t('ui.data.ReadinessPanel.theDataCanBeUsed2')}
         </Alert>
       ) : (
         <Alert
           color="red"
           variant="light"
           icon={<IconAlertCircle size={20} />}
-          title="Not ready for training yet"
+          title={i18n.t('ui.data.ReadinessPanel.notReadyForTrainingYet')}
         >
           {errors.length === 0
-            ? (exportBlocked ?? 'The data cannot be used for training yet.')
+            ? (exportBlocked ?? i18n.t('ui.data.ReadinessPanel.theDataCannotBeUsed'))
             : errors.length === 1
-              ? '1 problem must be fixed first.'
-              : `${errors.length} problems must be fixed first.`}
-          {pendingFixes.length > 0 && ' Each fix adds a step to the pipeline.'}
+              ? i18n.t('ui.data.ReadinessPanel.text1ProblemMustBeFixed')
+              : i18n.t('ui.data.ReadinessPanel.problemsMustBeFixedFirst', {
+                  length: errors.length,
+                })}
+          {pendingFixes.length > 0 && i18n.t('ui.data.ReadinessPanel.eachFixAddsAStep')}
         </Alert>
       )}
 
@@ -225,7 +314,7 @@ export function ReadinessPanel({
       {classNames.length > 0 && (
         <div>
           <Text size="xs" c="dimmed" mb={4}>
-            Class order (class index 0, 1, …)
+            {i18n.t('ui.data.ReadinessPanel.classOrderClassIndex0')}
           </Text>
           <Group gap={4}>
             {classNames.slice(0, CLASSES_SHOWN).map((name, index) => (
@@ -235,7 +324,9 @@ export function ReadinessPanel({
             ))}
             {classNames.length > CLASSES_SHOWN && (
               <Text size="xs" c="dimmed">
-                +{classNames.length - CLASSES_SHOWN} more
+                {i18n.t('ui.data.ReadinessPanel.more', {
+                  value: classNames.length - CLASSES_SHOWN,
+                })}
               </Text>
             )}
           </Group>
@@ -258,7 +349,7 @@ export function ReadinessPanel({
       )}
       {readiness.issues.length === 0 && (
         <Text size="sm" c="dimmed">
-          No problems found.
+          {i18n.t('ui.data.ReadinessPanel.noProblemsFound')}
         </Text>
       )}
 
@@ -270,7 +361,7 @@ export function ReadinessPanel({
             disabled={fixesDisabled}
             onClick={() => apply(pendingFixes)}
           >
-            Fix all ({pendingFixes.length})
+            {i18n.t('ui.data.ReadinessPanel.fixAll', { length: pendingFixes.length })}
           </Button>
         )}
         {!readOnly && (
@@ -280,19 +371,19 @@ export function ReadinessPanel({
             loading={exporting}
             disabled={!ready}
           >
-            Create training dataset
+            {i18n.t('ui.data.ReadinessPanel.createTrainingDataset')}
           </Button>
         )}
       </Group>
       {!readOnly && (
         <Text size="xs" c="dimmed" mt={-8}>
           {ready
-            ? 'Saves the prepared data with its split; it appears in the Train panel under “Your data”.'
+            ? i18n.t('ui.data.ReadinessPanel.savesThePreparedDataWith')
             : exportBlocked && errors.length > 0
-              ? `${exportBlocked} Available once it and the problems above are fixed.`
+              ? i18n.t('ui.data.ReadinessPanel.availableOnceItAndThe', { exportBlocked })
               : exportBlocked
-                ? `${exportBlocked} Available once it is fixed.`
-                : 'Available once the problems above are fixed.'}
+                ? i18n.t('ui.data.ReadinessPanel.availableOnceItIsFixed', { exportBlocked })
+                : i18n.t('ui.data.ReadinessPanel.availableOnceTheProblemsAbove')}
         </Text>
       )}
     </Stack>
@@ -311,6 +402,7 @@ interface IssueListProps {
 }
 
 function IssueList({ title, issues, shown, applied, disabled, onFix }: IssueListProps) {
+  useTranslation();
   const [expanded, setExpanded] = useState(false);
   const hidden = expanded ? 0 : Math.max(issues.length - shown, 0);
   const visible = hidden > 0 ? issues.slice(0, shown) : issues;
@@ -339,7 +431,9 @@ function IssueList({ title, issues, shown, applied, disabled, onFix }: IssueList
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
         >
-          {expanded ? 'Show fewer' : `Show ${hidden} more`}
+          {expanded
+            ? i18n.t('ui.data.ReadinessPanel.showFewer')
+            : i18n.t('ui.data.ReadinessPanel.showMore', { hidden })}
         </Button>
       )}
     </section>
@@ -354,6 +448,7 @@ interface IssueItemProps {
 }
 
 function IssueItem({ issue, done, disabled, onFix }: IssueItemProps) {
+  useTranslation();
   const { color, Icon, prefix } = SEVERITY[issue.severity];
   const label = CHECK_LABELS[issue.code];
   const { columns } = issue;
@@ -384,9 +479,13 @@ function IssueItem({ issue, done, disabled, onFix }: IssueItemProps) {
             )}
             {columns.length > 0 && (
               <Text size="xs" c="dimmed" ff="monospace" className={classes.columns}>
-                <VisuallyHidden>{columns.length === 1 ? 'Column: ' : 'Columns: '}</VisuallyHidden>
+                <VisuallyHidden>
+                  {columns.length === 1
+                    ? i18n.t('ui.data.ReadinessPanel.column')
+                    : i18n.t('ui.data.ReadinessPanel.columns')}
+                </VisuallyHidden>
                 {columns.slice(0, COLUMNS_SHOWN).join(', ')}
-                {more > 0 && ` +${more} more`}
+                {more > 0 && i18n.t('ui.data.ReadinessPanel.more2', { more })}
               </Text>
             )}
           </Group>
@@ -402,7 +501,7 @@ function IssueItem({ issue, done, disabled, onFix }: IssueItemProps) {
           classNames={{ root: classes.fix, label: classes.fixLabel }}
           onClick={() => onFix(issue.fix!)}
         >
-          {done ? 'Step added' : issue.fix.label}
+          {done ? i18n.t('ui.data.ReadinessPanel.stepAdded') : issue.fix.label}
         </Button>
       )}
     </Paper>

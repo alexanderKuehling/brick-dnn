@@ -7,6 +7,7 @@
  */
 import type { Analysis, RunSummary, TrainingStatus } from '@/api/types';
 import { networkFamily } from '@/builder/kinds';
+import { i18n } from '@/i18n';
 
 export type Family = 'neural' | 'classical' | 'hybrid';
 
@@ -78,14 +79,34 @@ export function isClassicalRun(run: Pick<RunSummary, 'family'> & { state?: unkno
 
 /** "Gaussian process regression", or what the model is called in the catalogue. */
 export const MODEL_KINDS: Record<string, string> = {
-  GaussianProcessRegressor: 'Gaussian process regression',
-  GaussianProcessClassifier: 'Gaussian process classification',
-  SVR: 'Support vector regression',
-  SVC: 'Support vector classification',
-  HistGradientBoostingRegressor: 'Gradient boosting regression',
-  HistGradientBoostingClassifier: 'Gradient boosting classification',
-  VotingClassifier: 'Voting classifier',
-  VotingRegressor: 'Voting regression',
-  StackingClassifier: 'Stacking classifier',
-  StackingRegressor: 'Stacking regression',
+  get GaussianProcessRegressor() {
+    return i18n.t('ui.training.classical.gaussianProcessRegression');
+  },
+  get GaussianProcessClassifier() {
+    return i18n.t('ui.training.classical.gaussianProcessClassification');
+  },
+  get SVR() {
+    return i18n.t('ui.training.classical.supportVectorRegression');
+  },
+  get SVC() {
+    return i18n.t('ui.training.classical.supportVectorClassification');
+  },
+  get HistGradientBoostingRegressor() {
+    return i18n.t('ui.training.classical.gradientBoostingRegression');
+  },
+  get HistGradientBoostingClassifier() {
+    return i18n.t('ui.training.classical.gradientBoostingClassification');
+  },
+  get VotingClassifier() {
+    return i18n.t('ui.training.classical.votingClassifier');
+  },
+  get VotingRegressor() {
+    return i18n.t('ui.training.classical.votingRegression');
+  },
+  get StackingClassifier() {
+    return i18n.t('ui.training.classical.stackingClassifier');
+  },
+  get StackingRegressor() {
+    return i18n.t('ui.training.classical.stackingRegression');
+  },
 };

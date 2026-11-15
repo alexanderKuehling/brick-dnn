@@ -9,6 +9,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { Alert, Button, Group, Stack, Text } from '@mantine/core';
 import type { KernelBound, Params } from '@/api/types';
 import { BuilderContext } from '@/builder/BuilderContext';
+import { i18n, useTranslation } from '@/i18n';
 
 /** 1e-05, 0.001, 50, 1e+05: short, like the server's messages. */
 export function formatBound(value: unknown): string {
@@ -26,12 +27,17 @@ function boundsText(bound: KernelBound): string {
   const suggestion = bound.suggestion ?? {};
   const low = suggestion[`${bound.parameter}_min`];
   const high = suggestion[`${bound.parameter}_max`];
-  return `${bound.label}: custom bounds ${formatBound(low)} … ${formatBound(high)}`;
+  return i18n.t('ui.training.KernelBounds.customBounds', {
+    label: bound.label,
+    low: formatBound(low),
+    high: formatBound(high),
+  });
 }
 
 const keyOf = (bound: KernelBound) => `${bound.node}:${bound.parameter}:${bound.side}`;
 
 export function KernelBoundsHint({ bounds }: { bounds: KernelBound[] }) {
+  useTranslation();
   const builder = useContext(BuilderContext);
   // The parameters of each brick before a suggestion was applied (for undo).
   const [applied, setApplied] = useState<Record<string, { node: string; before: Params }>>({});
@@ -75,10 +81,10 @@ export function KernelBoundsHint({ bounds }: { bounds: KernelBound[] }) {
       icon={<IconAlertTriangle size={18} />}
       title={
         bounds.length === 1
-          ? 'A kernel hyperparameter ended at its bound'
-          : 'Kernel hyperparameters ended at their bounds'
+          ? i18n.t('ui.training.KernelBounds.aKernelHyperparameterEndedAt')
+          : i18n.t('ui.training.KernelBounds.kernelHyperparametersEndedAtTheir')
       }
-      aria-label="Kernel hyperparameters at a bound"
+      aria-label={i18n.t('ui.training.KernelBounds.kernelHyperparametersAtABound')}
     >
       <Stack gap="xs">
         {bounds.map((bound) => {
@@ -87,23 +93,35 @@ export function KernelBoundsHint({ bounds }: { bounds: KernelBound[] }) {
             <div key={keyOf(bound)}>
               <Text size="sm">
                 {bound.message}
-                {bound.classes?.length ? ` (classes: ${bound.classes.join(', ')})` : ''}
+                {bound.classes?.length
+                  ? i18n.t('ui.training.KernelBounds.classes', {
+                      classes: bound.classes.join(', '),
+                    })
+                  : ''}
               </Text>
               {canApply(bound) && (
                 <Group gap="xs" mt={4} wrap="wrap">
                   {done ? (
                     <>
                       <Text size="xs" c="dimmed">
-                        Set on {bound.name}: {boundsText(bound)}. Train again to see the effect.
+                        {i18n.t('ui.training.KernelBounds.setOnTrainAgainTo', {
+                          name: bound.name,
+                          boundsText: boundsText(bound),
+                        })}
                       </Text>
                       <Button size="compact-xs" variant="subtle" onClick={() => undo(bound)}>
-                        Undo
+                        {i18n.t('ui.training.KernelBounds.undo')}
                       </Button>
                     </>
                   ) : (
                     <Button size="compact-xs" variant="light" onClick={() => apply(bound)}>
-                      Set {bound.side === 'lower' ? 'a higher lower' : 'a higher upper'} bound on{' '}
-                      {bound.name}
+                      {i18n.t('ui.training.KernelBounds.setBoundOn', {
+                        value:
+                          bound.side === 'lower'
+                            ? i18n.t('ui.training.KernelBounds.aHigherLower')
+                            : i18n.t('ui.training.KernelBounds.aHigherUpper'),
+                        name: bound.name,
+                      })}
                     </Button>
                   )}
                 </Group>

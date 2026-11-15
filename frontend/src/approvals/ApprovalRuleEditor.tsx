@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { IconShieldCheck } from '@tabler/icons-react';
 import { Button, Checkbox, Group, NumberInput, Popover, Stack, Text } from '@mantine/core';
 import type { ApprovalRule } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { ruleSummary } from './format';
 import classes from './Approvals.module.css';
 
@@ -18,6 +19,7 @@ interface ApprovalRuleEditorProps {
  * trainings above N CPU minutes, publishing and deleting.
  */
 export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorProps) {
+  useTranslation();
   const [opened, setOpened] = useState(false);
   const [training, setTraining] = useState(rule.training_cpu_minutes !== null);
   const [minutes, setMinutes] = useState<string | number>(rule.training_cpu_minutes ?? 15);
@@ -38,7 +40,7 @@ export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorPr
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (training && (minutes === '' || Number(minutes) < 0)) {
-      setError('Enter the CPU minutes (0: ask before every training).');
+      setError(i18n.t('ui.approvals.ApprovalRuleEditor.enterTheCpuMinutes0'));
       return;
     }
     setBusy(true);
@@ -69,28 +71,28 @@ export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorPr
             size="compact-xs"
             leftSection={<IconShieldCheck size={14} />}
             onClick={() => (opened ? setOpened(false) : open())}
-            aria-label={`Change what ${label} may do without asking`}
+            aria-label={i18n.t('ui.approvals.ApprovalRuleEditor.changeWhatMayDoWithout', { label })}
           >
-            Change
+            {i18n.t('ui.approvals.ApprovalRuleEditor.change')}
           </Button>
         </Popover.Target>
         <Popover.Dropdown maw="min(22rem, calc(100vw - 2rem))">
           <form onSubmit={submit}>
             <Stack gap="sm">
               <Text size="sm" fw={600}>
-                Ask me first before …
+                {i18n.t('ui.approvals.ApprovalRuleEditor.askMeFirstBefore')}
               </Text>
               <div>
                 <Checkbox
-                  label="Trainings above"
+                  label={i18n.t('ui.approvals.ApprovalRuleEditor.trainingsAbove')}
                   checked={training}
                   onChange={(event) => setTraining(event.currentTarget.checked)}
                 />
                 <NumberInput
                   mt={6}
                   ml={30}
-                  aria-label="CPU minutes a training may use without asking"
-                  description="Estimated CPU minutes; 0: every training"
+                  aria-label={i18n.t('ui.approvals.ApprovalRuleEditor.cpuMinutesATrainingMay')}
+                  description={i18n.t('ui.approvals.ApprovalRuleEditor.estimatedCpuMinutes0Every')}
                   min={0}
                   max={10_000_000}
                   decimalScale={2}
@@ -101,14 +103,16 @@ export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorPr
                 />
               </div>
               <Checkbox
-                label="Publishing"
-                description="Weights links that work without logging in, sharing data in a project"
+                label={i18n.t('ui.approvals.ApprovalRuleEditor.publishing')}
+                description={i18n.t('ui.approvals.ApprovalRuleEditor.weightsLinksThatWorkWithout')}
                 checked={publishing}
                 onChange={(event) => setPublishing(event.currentTarget.checked)}
               />
               <Checkbox
-                label="Deleting"
-                description="Networks, training runs, datasets and data"
+                label={i18n.t('ui.approvals.ApprovalRuleEditor.deleting')}
+                description={i18n.t(
+                  'ui.approvals.ApprovalRuleEditor.networksTrainingRunsDatasetsAnd'
+                )}
                 checked={deleting}
                 onChange={(event) => setDeleting(event.currentTarget.checked)}
               />
@@ -119,7 +123,7 @@ export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorPr
               )}
               <Group justify="flex-end">
                 <Button type="submit" size="xs" loading={busy}>
-                  Save
+                  {i18n.t('ui.approvals.ApprovalRuleEditor.save')}
                 </Button>
               </Group>
             </Stack>

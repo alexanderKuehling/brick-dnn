@@ -1,4 +1,5 @@
 import type { ProjectVersion } from '@/api/types';
+import { i18n } from '@/i18n';
 
 /**
  * What an entry is called in the history: its name ("Baseline"), "Restored …" or, for
@@ -9,19 +10,27 @@ export function versionTitle(entry: ProjectVersion, me: string | null): string {
     return entry.label;
   }
   if (entry.kind === 'restore') {
-    return entry.label || `Restored version ${entry.version}`;
+    return entry.label || i18n.t('ui.history.labels.restoredVersion', { version: entry.version });
   }
   if (!entry.created_by) {
     return 'Edited';
   }
-  return `Edited by ${entry.created_by === me ? 'you' : entry.created_by}`;
+  return i18n.t('ui.history.labels.editedBy', {
+    value: entry.created_by === me ? i18n.t('ui.history.labels.you') : entry.created_by,
+  });
 }
 
 /** Shown before the title, for screen readers and as a tooltip of the icon. */
 export const KIND_LABELS: Record<ProjectVersion['kind'], string> = {
-  auto: 'Automatic version',
-  named: 'Named version',
-  restore: 'Restored version',
+  get auto() {
+    return i18n.t('ui.history.labels.automaticVersion');
+  },
+  get named() {
+    return i18n.t('ui.history.labels.namedVersion');
+  },
+  get restore() {
+    return i18n.t('ui.history.labels.restoredVersion2');
+  },
 };
 
 export function layerCount(count: number): string {

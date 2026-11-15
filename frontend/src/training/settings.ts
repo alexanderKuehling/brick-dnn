@@ -15,6 +15,7 @@ import type {
   TuningMetric,
   TuningSpace,
 } from '@/api/types';
+import { currentLocale, i18n } from '@/i18n';
 import { isOwnDataset } from './access';
 import {
   CLASSICAL_TUNABLES,
@@ -249,14 +250,29 @@ export const LIMITS = {
 } as const;
 
 export const OPTIMIZERS: { value: Optimizer; label: string }[] = [
-  { value: 'adam', label: 'Adam' },
+  {
+    value: 'adam',
+    get label() {
+      return i18n.t('ui.training.settings.adam');
+    },
+  },
   { value: 'adamw', label: 'AdamW' },
   { value: 'sgd', label: 'SGD' },
 ];
 
 export const FEATURE_TRAININGS: { value: FeatureTraining; label: string }[] = [
-  { value: 'pretrain', label: 'Learn them (temporary head on the target)' },
-  { value: 'frozen', label: 'Frozen random features (no training)' },
+  {
+    value: 'pretrain',
+    get label() {
+      return i18n.t('ui.training.settings.learnThemTemporaryHeadOn');
+    },
+  },
+  {
+    value: 'frozen',
+    get label() {
+      return i18n.t('ui.training.settings.frozenRandomFeaturesNoTraining');
+    },
+  },
 ];
 
 export type ClassWeightsMode = 'balanced' | 'custom' | 'none';
@@ -276,48 +292,88 @@ export const LOSS_OPTIONS: Record<LossTask, LossOption[]> = {
   classification: [
     {
       value: 'cross_entropy',
-      label: 'Cross-entropy',
-      help: 'The default: the log loss of the predicted probabilities.',
+      get label() {
+        return i18n.t('ui.training.settings.crossEntropy');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.theDefaultTheLogLoss');
+      },
     },
     {
       value: 'weighted_cross_entropy',
-      label: 'Weighted cross-entropy',
-      help: 'Rare classes count more (balanced: by their counts in the training rows). For imbalanced data such as fraud, instead of oversampling.',
+      get label() {
+        return i18n.t('ui.training.settings.weightedCrossEntropy');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.rareClassesCountMoreBalanced');
+      },
     },
     {
       value: 'focal',
-      label: 'Focal loss',
-      help: 'Well-classified samples count less, so the training concentrates on the hard and rare ones.',
+      get label() {
+        return i18n.t('ui.training.settings.focalLoss');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.wellClassifiedSamplesCountLess');
+      },
     },
   ],
   regression: [
     {
       value: 'mse',
-      label: 'Mean squared error',
-      help: 'The default, of the standardised target: large errors count most.',
+      get label() {
+        return i18n.t('ui.training.settings.meanSquaredError');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.theDefaultOfTheStandardised');
+      },
     },
     {
       value: 'mae',
-      label: 'Mean absolute error',
-      help: 'Every error counts by its size: less sensitive to outliers.',
+      get label() {
+        return i18n.t('ui.training.settings.meanAbsoluteError');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.everyErrorCountsByIts');
+      },
     },
     {
       value: 'huber',
-      label: 'Huber loss',
-      help: 'Squared for small errors, linear for large ones (beyond delta).',
+      get label() {
+        return i18n.t('ui.training.settings.huberLoss');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.squaredForSmallErrorsLinear');
+      },
     },
   ],
   segmentation: [
-    { value: 'cross_entropy', label: 'Cross-entropy', help: 'The cross-entropy of every pixel.' },
+    {
+      value: 'cross_entropy',
+      get label() {
+        return i18n.t('ui.training.settings.crossEntropy');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.theCrossEntropyOfEvery');
+      },
+    },
     {
       value: 'cross_entropy_dice',
-      label: 'Cross-entropy + Dice',
-      help: 'The Dice term helps classes that cover only a few pixels.',
+      get label() {
+        return i18n.t('ui.training.settings.crossEntropyDice');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.theDiceTermHelpsClasses');
+      },
     },
     {
       value: 'weighted_cross_entropy',
-      label: 'Weighted cross-entropy',
-      help: 'Pixels of rare classes count more (balanced: by the pixel counts of the training images).',
+      get label() {
+        return i18n.t('ui.training.settings.weightedCrossEntropy');
+      },
+      get help() {
+        return i18n.t('ui.training.settings.pixelsOfRareClassesCount');
+      },
     },
   ],
 };
@@ -390,11 +446,14 @@ export function lossUses(values: SettingsValues, task: LossTask | null, param: L
  */
 export function classWeightModes(losses: LossName[]): { value: ClassWeightsMode; label: string }[] {
   const given = [
-    { value: 'balanced' as const, label: 'Balanced (from the class counts)' },
-    { value: 'custom' as const, label: 'Custom' },
+    {
+      value: 'balanced' as const,
+      label: i18n.t('ui.training.settings.balancedFromTheClassCounts'),
+    },
+    { value: 'custom' as const, label: i18n.t('ui.training.settings.custom') },
   ];
   return losses.length === 1 && losses[0] === 'focal'
-    ? [{ value: 'none' as const, label: 'None' }, ...given]
+    ? [{ value: 'none' as const, label: i18n.t('ui.training.settings.none') }, ...given]
     : given;
 }
 
@@ -412,7 +471,7 @@ export function parseClassWeights(
     .map((item) => item.trim())
     .filter(Boolean);
   if (items.length === 0) {
-    return 'Enter a weight per class, e.g. "1, 10", or "fraud: 10"';
+    return i18n.t('ui.training.settings.enterAWeightPerClass');
   }
   const number = (value: string) => {
     const weight = value.trim() === '' ? NaN : Number(value.trim());
@@ -435,7 +494,10 @@ export function parseClassWeights(
         classes.some((label) => label.toLowerCase() === key.toLowerCase()) ||
         (/^\d+$/.test(key) && Number(key) < classes.length);
       if (!known) {
-        return `'${key}' is not a class: ${(classes ?? []).slice(0, 8).join(', ')}`;
+        return i18n.t('ui.training.settings.isNotAClass', {
+          key,
+          slice: (classes ?? []).slice(0, 8).join(', '),
+        });
       }
       weights[key] = weight;
     }
@@ -446,7 +508,10 @@ export function parseClassWeights(
     return invalid;
   }
   if (classes !== null && weights.length !== classes.length) {
-    return `One weight per class: ${classes.length} (${classes.slice(0, 8).join(', ')})`;
+    return i18n.t('ui.training.settings.oneWeightPerClass', {
+      length: classes.length,
+      slice: classes.slice(0, 8).join(', '),
+    });
   }
   return weights as number[];
 }
@@ -554,10 +619,13 @@ function wholeNumber(
     return required ? 'Required' : null;
   }
   if (value === null || !Number.isInteger(value)) {
-    return 'Enter a whole number';
+    return i18n.t('ui.training.settings.enterAWholeNumber');
   }
   if (value < min || value > max) {
-    return `Between ${min.toLocaleString('en-US')} and ${max.toLocaleString('en-US')}`;
+    return i18n.t('ui.training.settings.betweenAnd', {
+      min: min.toLocaleString(currentLocale()),
+      max: max.toLocaleString(currentLocale()),
+    });
   }
   return null;
 }
@@ -573,7 +641,7 @@ function decimal(
     return required ? 'Required' : null;
   }
   if (value === null) {
-    return 'Enter a number';
+    return i18n.t('ui.training.settings.enterANumber');
   }
   return check(value) ? null : message;
 }
@@ -873,7 +941,7 @@ function validateClassical(
     const value = parseField(values.max_samples);
     errors.max_samples =
       maxRows !== null && typeof value === 'number' && value > maxRows
-        ? `At most ${maxRows.toLocaleString('en-US')} on this server`
+        ? `At most ${maxRows.toLocaleString(currentLocale())} on this server`
         : samples;
   }
   const seed = wholeNumber(values.seed, LIMITS.seed, false);
@@ -959,8 +1027,10 @@ export function validateSettings(
   const tooLarge = (size: number) =>
     maxBatch !== null && size > maxBatch
       ? maxBatch >= 1
-        ? `At most ${maxBatch.toLocaleString('en-US')}: larger batches do not fit into memory`
-        : 'No batch fits into memory: make the Input smaller'
+        ? i18n.t('ui.training.settings.atMostLargerBatchesDo', {
+            maxBatch: maxBatch.toLocaleString(currentLocale()),
+          })
+        : i18n.t('ui.training.settings.noBatchFitsIntoMemory')
       : null;
   if (!tuned.batch_size && segmentation) {
     const size = parseField(values.segmentation_batch_size);

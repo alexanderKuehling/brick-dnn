@@ -5,6 +5,7 @@
  */
 import type { DataFix, DataProfile, DataWarning } from '@/api/types';
 import { formatCount, formatNumber, formatPercent } from '@/components/charts/format';
+import { i18n } from '@/i18n';
 
 /** Warnings of one kind form a group from this many columns on. */
 export const MIN_GROUP = 3;
@@ -63,7 +64,7 @@ export function groupTitle(
   columns: string[],
   profile: DataProfile | null
 ): string {
-  const n = `${formatCount(columns.length)} columns`;
+  const n = i18n.t('data.columns', { count: columns.length, value: formatCount(columns.length) });
   const byName = new Map((profile?.columns ?? []).map((c) => [c.name, c]));
   const found = columns.map((c) => byName.get(c)).filter((c) => c !== undefined);
   const rows = profile?.n_rows ?? 0;
@@ -71,40 +72,44 @@ export function groupTitle(
   switch (code) {
     case 'high_missing': {
       const shares = rows ? found.map((c) => c.missing / rows) : [];
-      const text = shares.length ? `${range(shares, formatPercent)} of the rows` : '';
+      const text = shares.length
+        ? i18n.t('ui.data.warningGroups.ofTheRows', { range: range(shares, formatPercent) })
+        : '';
       return severity === 'warning'
-        ? `Mostly or all missing: ${n}${detail(text)}`
-        : `Missing values in ${n}${detail(text)}`;
+        ? i18n.t('ui.data.warningGroups.mostlyOrAllMissing', { n, detail: detail(text) })
+        : i18n.t('ui.data.warningGroups.missingValuesIn', { n, detail: detail(text) });
     }
     case 'outliers': {
       const shares = found
         .filter((c) => c.stats && c.count)
         .map((c) => c.stats!.iqr_outliers / c.count);
-      const text = shares.length ? `${range(shares, formatPercent)} of the values` : '';
-      return `Outliers by the IQR rule in ${n}${detail(text)}`;
+      const text = shares.length
+        ? i18n.t('ui.data.warningGroups.ofTheValues', { range: range(shares, formatPercent) })
+        : '';
+      return i18n.t('ui.data.warningGroups.outliersByTheIqrRule', { n, detail: detail(text) });
     }
     case 'skewed': {
       const skews = found.map((c) => c.stats?.skew).filter((s) => typeof s === 'number');
       const text = skews.length ? `skewness ${range(skews as number[], NUMBER)}` : '';
-      return `Strongly skewed: ${n}${detail(text)}`;
+      return i18n.t('ui.data.warningGroups.stronglySkewed', { n, detail: detail(text) });
     }
     case 'many_zeros':
-      return `Mostly zeros: ${n}`;
+      return i18n.t('ui.data.warningGroups.mostlyZeros', { n });
     case 'constant':
-      return `The same value in every row: ${n}`;
+      return i18n.t('ui.data.warningGroups.theSameValueInEvery', { n });
     case 'id_like':
-      return `A different value in every row (like IDs): ${n}`;
+      return i18n.t('ui.data.warningGroups.aDifferentValueInEvery', { n });
     case 'text':
-      return `Free text: ${n}`;
+      return i18n.t('ui.data.warningGroups.freeText', { n });
     case 'mixed_types':
-      return `Numbers stored as text: ${n}`;
+      return i18n.t('ui.data.warningGroups.numbersStoredAsText', { n });
     case 'high_cardinality': {
       const counts = found.map((c) => c.unique);
       const text = counts.length ? `${range(counts, formatCount)} values` : '';
-      return `Many categories: ${n}${detail(text)}`;
+      return i18n.t('ui.data.warningGroups.manyCategories', { n, detail: detail(text) });
     }
     case 'high_correlation':
-      return `Almost copies of other columns: ${n}`;
+      return i18n.t('ui.data.warningGroups.almostCopiesOfOtherColumns', { n });
     default:
       return `${code.replace(/_/g, ' ')}: ${n}`;
   }
@@ -119,8 +124,14 @@ function groupFix(warnings: DataWarning[]): DataFix | null {
   const columns = warnings.map((w) => w.column!);
   const name = warnings[0].column!;
   const label = first.label.includes(name)
-    ? first.label.replace(name, `${formatCount(columns.length)} columns`)
-    : `${first.label} (${formatCount(columns.length)} columns)`;
+    ? first.label.replace(
+        name,
+        i18n.t('data.columns', { count: columns.length, value: formatCount(columns.length) })
+      )
+    : i18n.t('ui.data.warningGroups.columns', {
+        label: first.label,
+        length: formatCount(columns.length),
+      });
   return { type: first.type, params: { ...first.params, columns }, label };
 }
 

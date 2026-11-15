@@ -1,12 +1,17 @@
+import { currentLocale, i18n, longDateLocale } from '@/i18n';
+
 /** Formatting of compute usage (CPU minutes), money and budget dates. */
 
 /** 0.0123 → "0.01 CPU min", 2.5 → "2.5 CPU min", 312.4 → "312 CPU min". */
-export function formatCpu(minutes: number | null | undefined, unit = 'CPU min'): string {
+export function formatCpu(
+  minutes: number | null | undefined,
+  unit = i18n.t('ui.usage.format.cpuMin')
+): string {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) {
     return '–';
   }
   const digits = minutes >= 100 ? 0 : minutes >= 10 ? 1 : 2;
-  const value = Number(minutes.toFixed(digits)).toLocaleString('en-US', {
+  const value = Number(minutes.toFixed(digits)).toLocaleString(currentLocale(), {
     maximumFractionDigits: digits,
   });
   return unit ? `${value} ${unit}` : value;
@@ -18,7 +23,7 @@ export function formatMoney(amount: number | null | undefined, currency: string 
     return '';
   }
   try {
-    return amount.toLocaleString('en-US', {
+    return amount.toLocaleString(currentLocale(), {
       style: 'currency',
       currency,
       minimumFractionDigits: 2,
@@ -31,7 +36,7 @@ export function formatMoney(amount: number | null | undefined, currency: string 
 
 /** When a budget resets: "1 December 2026". Shown in UTC (budgets follow UTC months). */
 export function formatResetDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
+  return new Date(iso).toLocaleDateString(longDateLocale(), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

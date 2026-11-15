@@ -25,6 +25,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { api, setTokens, type TwoFactorSetup, type TwoFactorState } from '@/api';
 import { downloadText } from '@/builder/download';
+import { i18n, useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 import { fieldError } from './fieldError';
 import { QrCode } from './QrCode';
@@ -45,10 +46,16 @@ function errorsOf(err: unknown, fields: string[]): Record<string, string | undef
 }
 
 function RecoveryCodes({ codes, username }: { codes: string[]; username: string }) {
+  useTranslation();
   const text = codes.join('\n');
   return (
     <Stack gap="xs">
-      <SimpleGrid cols={2} spacing={4} verticalSpacing={4} aria-label="Recovery codes">
+      <SimpleGrid
+        cols={2}
+        spacing={4}
+        verticalSpacing={4}
+        aria-label={i18n.t('ui.account.TwoFactorSection.recoveryCodes')}
+      >
         {codes.map((code) => (
           <Code key={code} style={{ textAlign: 'center', fontSize: 'var(--mantine-font-size-sm)' }}>
             {code}
@@ -64,7 +71,9 @@ function RecoveryCodes({ codes, username }: { codes: string[]; username: string 
               onClick={copy}
               leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copied
+                ? i18n.t('ui.account.TwoFactorSection.copied')
+                : i18n.t('ui.account.TwoFactorSection.copy')}
             </Button>
           )}
         </CopyButton>
@@ -79,7 +88,7 @@ function RecoveryCodes({ codes, username }: { codes: string[]; username: string 
             )
           }
         >
-          Download
+          {i18n.t('ui.account.TwoFactorSection.download')}
         </Button>
       </Group>
     </Stack>
@@ -96,6 +105,7 @@ function SetupDialog({
   onClose: () => void;
   onEnabled: (state: TwoFactorState) => void;
 }) {
+  useTranslation();
   const [password, setPassword] = useState('');
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
   const [code, setCode] = useState('');
@@ -141,21 +151,20 @@ function SetupDialog({
     body = (
       <Stack gap="sm">
         <Alert color="green" icon={<IconShieldCheck size={18} />}>
-          Two-factor authentication is on. You were logged out on your other devices.
+          {i18n.t('ui.account.TwoFactorSection.twoFactorAuthenticationIsOn')}
         </Alert>
         <Text size="sm">
-          Save these recovery codes somewhere safe, e.g. in your password manager. If you lose your
-          phone, each code lets you log in once. They are shown only now.
+          {i18n.t('ui.account.TwoFactorSection.saveTheseRecoveryCodesSomewhere')}
         </Text>
         <RecoveryCodes codes={codes} username={username} />
         <Checkbox
-          label="I have saved my recovery codes"
+          label={i18n.t('ui.account.TwoFactorSection.iHaveSavedMyRecovery')}
           checked={saved}
           onChange={(e) => setSaved(e.currentTarget.checked)}
         />
         <Group justify="flex-end">
           <Button onClick={onClose} disabled={!saved}>
-            Done
+            {i18n.t('ui.account.TwoFactorSection.done')}
           </Button>
         </Group>
       </Stack>
@@ -164,19 +173,16 @@ function SetupDialog({
     body = (
       <form onSubmit={confirm}>
         <Stack gap="sm">
-          <Text size="sm">
-            Scan this QR code with an authenticator app (e.g. Google Authenticator, Microsoft
-            Authenticator, 1Password, Aegis or FreeOTP):
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.TwoFactorSection.scanThisQrCodeWith')}</Text>
           <Group justify="center">
             <QrCode
               value={setup.otpauth_uri}
               size={192}
-              label="QR code for your authenticator app"
+              label={i18n.t('ui.account.TwoFactorSection.qrCodeForYourAuthenticator')}
             />
           </Group>
           <Text size="xs" c="dimmed">
-            Or type this key into the app (time-based, 6 digits, 30 seconds):
+            {i18n.t('ui.account.TwoFactorSection.orTypeThisKeyInto')}
           </Text>
           <Group gap="xs" wrap="nowrap">
             <Code
@@ -188,7 +194,9 @@ function SetupDialog({
             <CopyButton value={setup.secret} timeout={1500}>
               {({ copied, copy }) => (
                 <Button variant="subtle" size="xs" onClick={copy}>
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied
+                    ? i18n.t('ui.account.TwoFactorSection.copied')
+                    : i18n.t('ui.account.TwoFactorSection.copy')}
                 </Button>
               )}
             </CopyButton>
@@ -199,7 +207,7 @@ function SetupDialog({
             </Alert>
           )}
           <TextInput
-            label="Code from the app"
+            label={i18n.t('ui.account.TwoFactorSection.codeFromTheApp')}
             autoComplete="one-time-code"
             inputMode="numeric"
             maxLength={6}
@@ -211,10 +219,10 @@ function SetupDialog({
           />
           <Group justify="flex-end" gap="sm">
             <Button variant="default" onClick={onClose} disabled={busy}>
-              Cancel
+              {i18n.t('ui.account.TwoFactorSection.cancel')}
             </Button>
             <Button type="submit" loading={busy} disabled={code.trim().length !== 6}>
-              Turn on
+              {i18n.t('ui.account.TwoFactorSection.turnOn')}
             </Button>
           </Group>
         </Stack>
@@ -224,17 +232,14 @@ function SetupDialog({
     body = (
       <form onSubmit={start}>
         <Stack gap="sm">
-          <Text size="sm">
-            After your password, logging in will ask for a code from an app on your phone. Enter
-            your password to start.
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.TwoFactorSection.afterYourPasswordLoggingIn')}</Text>
           {errors.other && (
             <Alert color="red" icon={<IconAlertCircle size={18} />}>
               {errors.other}
             </Alert>
           )}
           <PasswordInput
-            label="Your password"
+            label={i18n.t('ui.account.TwoFactorSection.yourPassword')}
             autoComplete="current-password"
             required
             data-autofocus
@@ -244,10 +249,10 @@ function SetupDialog({
           />
           <Group justify="flex-end" gap="sm">
             <Button variant="default" onClick={onClose} disabled={busy}>
-              Cancel
+              {i18n.t('ui.account.TwoFactorSection.cancel')}
             </Button>
             <Button type="submit" loading={busy} disabled={!password}>
-              Continue
+              {i18n.t('ui.account.TwoFactorSection.continue')}
             </Button>
           </Group>
         </Stack>
@@ -259,7 +264,7 @@ function SetupDialog({
     <Modal
       opened
       onClose={onClose}
-      title="Turn on two-factor authentication"
+      title={i18n.t('ui.account.TwoFactorSection.turnOnTwoFactorAuthentication')}
       closeOnClickOutside={false}
       withCloseButton={!codes}
       closeOnEscape={!codes}
@@ -281,6 +286,7 @@ function ConfirmDialog({
   onClose: () => void;
   onChanged: (state: TwoFactorState) => void;
 }) {
+  useTranslation();
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -294,7 +300,10 @@ function ConfirmDialog({
     try {
       if (action === 'disable') {
         onChanged(await api.twoFactor.disable(password, code.trim()));
-        notifications.show({ color: 'green', message: 'Two-factor authentication is off.' });
+        notifications.show({
+          color: 'green',
+          message: i18n.t('ui.account.TwoFactorSection.twoFactorAuthenticationIsOff'),
+        });
         onClose();
       } else {
         const result = await api.twoFactor.recoveryCodes(password, code.trim());
@@ -308,15 +317,18 @@ function ConfirmDialog({
     }
   };
 
-  const title = action === 'disable' ? 'Turn off two-factor authentication?' : 'New recovery codes';
+  const title =
+    action === 'disable'
+      ? i18n.t('ui.account.TwoFactorSection.turnOffTwoFactorAuthentication')
+      : i18n.t('ui.account.TwoFactorSection.newRecoveryCodes2');
   return (
     <Modal opened onClose={onClose} title={title} closeOnClickOutside={!busy && !codes}>
       {codes ? (
         <Stack gap="sm">
-          <Text size="sm">Your old recovery codes no longer work. Save these:</Text>
+          <Text size="sm">{i18n.t('ui.account.TwoFactorSection.yourOldRecoveryCodesNo')}</Text>
           <RecoveryCodes codes={codes} username={username} />
           <Group justify="flex-end">
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>{i18n.t('ui.account.TwoFactorSection.done')}</Button>
           </Group>
         </Stack>
       ) : (
@@ -324,8 +336,8 @@ function ConfirmDialog({
           <Stack gap="sm">
             <Text size="sm">
               {action === 'disable'
-                ? 'Logging in will need only your password again.'
-                : 'This replaces all your recovery codes.'}
+                ? i18n.t('ui.account.TwoFactorSection.loggingInWillNeedOnly')
+                : i18n.t('ui.account.TwoFactorSection.thisReplacesAllYourRecovery')}
             </Text>
             {errors.other && (
               <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -333,7 +345,7 @@ function ConfirmDialog({
               </Alert>
             )}
             <PasswordInput
-              label="Your password"
+              label={i18n.t('ui.account.TwoFactorSection.yourPassword')}
               autoComplete="current-password"
               required
               data-autofocus
@@ -342,7 +354,7 @@ function ConfirmDialog({
               error={errors.password}
             />
             <TextInput
-              label="Code from the app or a recovery code"
+              label={i18n.t('ui.account.TwoFactorSection.codeFromTheAppOr')}
               autoComplete="one-time-code"
               autoCapitalize="none"
               spellCheck={false}
@@ -353,7 +365,7 @@ function ConfirmDialog({
             />
             <Group justify="flex-end" gap="sm">
               <Button variant="default" onClick={onClose} disabled={busy}>
-                Cancel
+                {i18n.t('ui.account.TwoFactorSection.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -361,7 +373,9 @@ function ConfirmDialog({
                 loading={busy}
                 disabled={!password || !code.trim()}
               >
-                {action === 'disable' ? 'Turn off' : 'Make new codes'}
+                {action === 'disable'
+                  ? i18n.t('ui.account.TwoFactorSection.turnOff2')
+                  : i18n.t('ui.account.TwoFactorSection.makeNewCodes')}
               </Button>
             </Group>
           </Stack>
@@ -381,6 +395,7 @@ export function TwoFactorSection({
   state: TwoFactorState;
   onChange: (state: TwoFactorState) => void;
 }) {
+  useTranslation();
   const [dialog, setDialog] = useState<'setup' | 'disable' | 'codes' | null>(null);
   const close = () => setDialog(null);
 
@@ -390,26 +405,29 @@ export function TwoFactorSection({
         <>
           <Group gap="xs">
             <Badge color="green" leftSection={<IconShieldCheck size={14} />}>
-              On
+              {i18n.t('ui.account.TwoFactorSection.on')}
             </Badge>
             <Text size="sm" c="dimmed">
-              {state.enabled_at && `since ${formatDate(state.enabled_at)} · `}
-              {state.recovery_codes_left} recovery code{state.recovery_codes_left === 1 ? '' : 's'}{' '}
-              left
+              {i18n.t('ui.account.TwoFactorSection.recoveryCodeLeft', {
+                value:
+                  state.enabled_at &&
+                  i18n.t('ui.account.TwoFactorSection.since', {
+                    enabled_at: formatDate(state.enabled_at),
+                  }),
+                recovery_codes_left: state.recovery_codes_left,
+                value2: state.recovery_codes_left === 1 ? '' : 's',
+              })}
             </Text>
           </Group>
           {state.recovery_codes_left <= 3 && (
             <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-              Few recovery codes are left. Make new ones and keep them safe.
+              {i18n.t('ui.account.TwoFactorSection.fewRecoveryCodesAreLeft')}
             </Alert>
           )}
-          <Text size="sm">
-            Logging in asks for a code from your authenticator app after your password. API tokens
-            and connected apps work as before.
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.TwoFactorSection.loggingInAsksForA')}</Text>
           <Group justify="flex-end" gap="sm">
             <Button variant="default" onClick={() => setDialog('codes')}>
-              New recovery codes…
+              {i18n.t('ui.account.TwoFactorSection.newRecoveryCodes')}
             </Button>
             <Button
               color="red"
@@ -417,19 +435,16 @@ export function TwoFactorSection({
               leftSection={<IconShieldOff size={16} />}
               onClick={() => setDialog('disable')}
             >
-              Turn off…
+              {i18n.t('ui.account.TwoFactorSection.turnOff')}
             </Button>
           </Group>
         </>
       ) : (
         <>
-          <Text size="sm">
-            Protect your account with a second step: after your password, logging in asks for a code
-            from an authenticator app on your phone. Recommended.
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.TwoFactorSection.protectYourAccountWithA')}</Text>
           <Group justify="flex-end">
             <Button leftSection={<IconShieldCheck size={16} />} onClick={() => setDialog('setup')}>
-              Turn on…
+              {i18n.t('ui.account.TwoFactorSection.turnOn2')}
             </Button>
           </Group>
         </>

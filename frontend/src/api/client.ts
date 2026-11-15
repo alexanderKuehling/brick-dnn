@@ -1,3 +1,4 @@
+import { currentLanguage, i18n } from '@/i18n';
 import type { Tokens } from './types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
@@ -120,6 +121,12 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, ' ');
 }
 
+/** The name of a form field in the current language ("Username", "Benutzername"). */
+function fieldName(field: string): string {
+  const key = `common.fields.${field}`;
+  return i18n.exists(key) ? String(i18n.t(key as 'common.fields.name')) : capitalize(field);
+}
+
 /** Turn a Django REST framework error payload into a readable sentence. */
 export function errorMessage(data: unknown, status: number): string {
   if (data && typeof data === 'object') {
@@ -130,7 +137,7 @@ export function errorMessage(data: unknown, status: number): string {
     const parts = Object.entries(record).flatMap(([field, value]) => {
       const messages = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
       return messages.map((message) =>
-        field === 'non_field_errors' ? String(message) : `${capitalize(field)}: ${message}`
+        field === 'non_field_errors' ? String(message) : `${fieldName(field)}: ${message}`
       );
     });
     if (parts.length > 0) {
@@ -138,12 +145,12 @@ export function errorMessage(data: unknown, status: number): string {
     }
   }
   if (status === 429) {
-    return 'Too many requests. Please wait a moment.';
+    return i18n.t('common.errors.tooManyRequests');
   }
   if (status === 413) {
-    return 'The file is too large for the server.';
+    return i18n.t('common.errors.tooLarge');
   }
-  return `Request failed (HTTP ${status}).`;
+  return i18n.t('common.errors.http', { status });
 }
 
 export interface RequestOptions {
@@ -302,7 +309,12 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   }
 
   const attempt = () => {
-    const headers: Record<string, string> = { Accept: accept };
+    // The language of the app, not the browser's: messages and descriptions from the server
+    // follow the switch (docs/translations.md).
+    const headers: Record<string, string> = {
+      Accept: accept,
+      'Accept-Language': currentLanguage(),
+    };
     // The browser sets the multipart Content-Type itself, including the boundary.
     if (body !== undefined && !multipart) {
       headers['Content-Type'] = 'application/json';
@@ -332,11 +344,9 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
     if (isAbort(error)) {
       throw error;
     }
-    throw new ApiError(0, null, 'Cannot reach the Brick DNN server. Is the backend running?');
+    throw new ApiError(0, null, i18n.t('common.errors.unreachable'));
   }
 }
-
-const INTERRUPTED = 'The connection to the server was interrupted. Please try again.';
 
 /** Read the body; an abort is passed on, a broken connection becomes an ApiError. */
 async function readBody<T>(read: () => Promise<T>): Promise<T> {
@@ -346,7 +356,7 @@ async function readBody<T>(read: () => Promise<T>): Promise<T> {
     if (isAbort(error)) {
       throw error;
     }
-    throw new ApiError(0, null, INTERRUPTED);
+    throw new ApiError(0, null, i18n.t('common.errors.interrupted'));
   }
 }
 
@@ -383,7 +393,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new ApiError(response.status, null, 'The server sent an unexpected response.');
+    throw new ApiError(response.status, null, i18n.t('common.errors.unexpected'));
   }
 }
 

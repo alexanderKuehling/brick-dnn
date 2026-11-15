@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import { Button, Menu, ScrollArea, Text, type ButtonProps } from '@mantine/core';
 import type { StepCatalog, StepSpec } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { GroupIcon } from './groups';
 import classes from './PipelineEditor.module.css';
 
@@ -34,8 +35,9 @@ export function AddStepMenu({
   combineDisabled,
   disabled = null,
   buttonProps,
-  label = 'Add step',
+  label = i18n.t('ui.data.AddStepMenu.addStep'),
 }: AddStepMenuProps) {
+  useTranslation();
   const [query, setQuery] = useState('');
 
   const groups = useMemo(() => {
@@ -70,8 +72,8 @@ export function AddStepMenu({
       </Menu.Target>
       <Menu.Dropdown maw="calc(100vw - 32px)">
         <Menu.Search
-          aria-label="Search steps"
-          placeholder="Search steps"
+          aria-label={i18n.t('ui.data.AddStepMenu.searchSteps')}
+          placeholder={i18n.t('ui.data.AddStepMenu.searchSteps')}
           leftSection={<IconSearch size={14} />}
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
@@ -103,7 +105,7 @@ export function AddStepMenu({
           ))}
           {groups.length === 0 && (
             <Text size="sm" c="dimmed" px="sm" py="xs">
-              No step matches “{query.trim()}”.
+              {i18n.t('ui.data.AddStepMenu.noStepMatches', { query: query.trim() })}
             </Text>
           )}
         </ScrollArea.Autosize>

@@ -269,17 +269,12 @@ describe('the inline script', () => {
     expect(run('/de/#token=abc')).toBeNull();
   });
 
-  test('sends logged-in users to the editor', () => {
+  test('leaves logged-in users on the landing page', () => {
     const valid = { access: token(now - 10), refresh: token(now + 3600) };
-    expect(run('/', valid)).toBe('/app');
-    expect(run('/de/', valid)).toBe('/app');
-    expect(run('/#faq', valid)).toBe('/app#faq');
-  });
-
-  test('ignores expired or broken logins', () => {
-    expect(run('/', { access: token(now - 10), refresh: token(now - 10) })).toBeNull();
-    expect(run('/', 'not json')).toBeNull();
-    expect(run('/', { refresh: 'no-dots' })).toBeNull();
+    expect(run('/', valid)).toBeNull();
+    expect(run('/de/', valid)).toBeNull();
+    expect(run('/#faq', valid)).toBeNull();
+    expect(run('/?project=5', valid)).toBe('/app?project=5');
   });
 });
 

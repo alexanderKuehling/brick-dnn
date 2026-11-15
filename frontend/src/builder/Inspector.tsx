@@ -29,6 +29,7 @@ import {
 import type { Analysis, LayerSpec, ModelMember, NodeAnalysis } from '@/api/types';
 import { LayerComments } from '@/comments/LayerComments';
 import { LayerLearning } from '@/explain/LayerLearning';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { categoryColor } from '@/theme';
 import { useBuilder, type InputFit } from './BuilderContext';
 import { formatOutput, formatShape } from './format';
@@ -58,25 +59,42 @@ function paramsStat(
 ): { label: string; value: string } {
   const count = info?.num_params;
   if (!isClassicalSpec(spec)) {
-    return { label: 'Parameters', value: count?.toLocaleString('en-US') ?? '–' };
+    return {
+      label: i18n.t('builder.inspector.parameters'),
+      value: count?.toLocaleString(currentLocale()) ?? '–',
+    };
   }
   if (isEnsemble(spec.type)) {
-    return { label: 'Models', value: info?.members ? String(info.members.length) : '–' };
+    return {
+      label: i18n.t('builder.inspector.models'),
+      value: info?.members ? String(info.members.length) : '–',
+    };
   }
   if (GAUSSIAN_PROCESSES.includes(spec.type)) {
     // With kernel bricks, their hyperparameters are the ones the fit optimises.
     const total = count === 0 && analysis?.valid ? analysis.total_params : count;
-    return { label: 'Fitted hyperparameters', value: total?.toLocaleString('en-US') ?? '–' };
+    return {
+      label: i18n.t('builder.inspector.fittedHyperparameters'),
+      value: total?.toLocaleString(currentLocale()) ?? '–',
+    };
   }
   if (count === null) {
-    const label = isBoosting(spec.type) ? 'Decision trees' : 'Support vectors';
-    return { label, value: 'after the fit' };
+    const label = isBoosting(spec.type)
+      ? i18n.t('builder.inspector.decisionTrees')
+      : i18n.t('builder.inspector.supportVectors');
+    return { label, value: i18n.t('builder.inspector.afterFit') };
   }
   if (inputSlots(spec).length > 0) {
     // A kernel sum or product has none of its own; the kernels it combines count theirs.
-    return { label: 'Fitted hyperparameters', value: 'in its kernels' };
+    return {
+      label: i18n.t('builder.inspector.fittedHyperparameters'),
+      value: i18n.t('builder.inspector.inItsKernels'),
+    };
   }
-  return { label: 'Fitted hyperparameters', value: count?.toLocaleString('en-US') ?? '–' };
+  return {
+    label: i18n.t('builder.inspector.fittedHyperparameters'),
+    value: count?.toLocaleString(currentLocale()) ?? '–',
+  };
 }
 
 /** A kernel as scikit-learn code, one top-level term per line. */
@@ -109,13 +127,14 @@ function EnsembleMembers({
   weights: unknown;
   onSelect: (node: string) => void;
 }) {
+  const { t } = useTranslation();
   const weighted = Array.isArray(weights) && weights.length === members.length;
   return (
     <Stack gap={4}>
       <Text size="xs" c="dimmed">
-        Models, in the order of their connections{weighted ? ' and weights' : ''}
+        {weighted ? t('builder.inspector.membersWeighted') : t('builder.inspector.members')}
       </Text>
-      <List size="sm" spacing={2} type="ordered" aria-label="Models of the ensemble">
+      <List size="sm" spacing={2} type="ordered" aria-label={t('builder.inspector.membersLabel')}>
         {members.map((member, index) => (
           <List.Item key={member.node}>
             <UnstyledButton onClick={() => onSelect(member.node)}>
@@ -124,7 +143,9 @@ function EnsembleMembers({
               </Text>{' '}
               <Text span size="sm" c="dimmed">
                 {member.label}
-                {weighted ? ` · weight ${String((weights as unknown[])[index])}` : ''}
+                {weighted
+                  ? ` · ${t('builder.inspector.weight', { weight: String((weights as unknown[])[index]) })}`
+                  : ''}
               </Text>
             </UnstyledButton>
           </List.Item>
@@ -159,6 +180,7 @@ export function Inspector({ node, nodes, tips }: InspectorProps) {
 }
 
 function LayerInspector({ node }: { node: LayerFlowNode }) {
+  const { t } = useTranslation();
   const {
     specs,
     analysis,
@@ -180,7 +202,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
   if (!spec) {
     return (
       <Stack p="md">
-        <Alert color="red">Unknown layer type “{node.data.type}”.</Alert>
+        <Alert color="red">{t('builder.inspector.unknownType', { type: node.data.type })}</Alert>
       </Stack>
     );
   }
@@ -208,22 +230,22 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         </Group>
         {!readOnly && (
           <Group gap={4}>
-            <Tooltip label="Duplicate">
+            <Tooltip label={t('builder.inspector.duplicate')}>
               <ActionIcon
                 variant="subtle"
                 color="gray"
                 onClick={() => duplicateNode(node.id)}
-                aria-label="Duplicate layer"
+                aria-label={t('builder.inspector.duplicateLayer')}
               >
                 <IconCopy size={16} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="Delete (Del)">
+            <Tooltip label={t('builder.inspector.deleteTooltip')}>
               <ActionIcon
                 variant="subtle"
                 color="red"
                 onClick={() => deleteNode(node.id)}
-                aria-label="Delete layer"
+                aria-label={t('builder.inspector.deleteLayer')}
               >
                 <IconTrash size={16} />
               </ActionIcon>
@@ -248,7 +270,11 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
 
       <SimpleGrid cols={2} spacing="xs">
         <Stat
-          label={kernel || info?.task === 'classification' ? 'Output' : 'Output shape'}
+          label={
+            kernel || info?.task === 'classification'
+              ? t('builder.inspector.output')
+              : t('builder.inspector.outputShape')
+          }
           value={formatOutput(info, kernel)}
         />
         <Stat label={params.label} value={params.value} />
@@ -259,12 +285,12 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
         <Stack gap={4}>
           <Text size="xs" c="dimmed">
             {kernel
-              ? 'Kernel (scikit-learn)'
+              ? t('builder.inspector.kernel')
               : info?.num_params
-                ? 'Default kernel (scikit-learn). Connect kernel bricks to the kernel input to choose your own.'
-                : 'Kernel (scikit-learn)'}
+                ? t('builder.inspector.defaultKernel')
+                : t('builder.inspector.kernel')}
           </Text>
-          <KernelCode code={kernelCode} label="Kernel as scikit-learn code" />
+          <KernelCode code={kernelCode} label={t('builder.inspector.kernelCode')} />
         </Stack>
       )}
       {info?.members && info.members.length > 0 && (
@@ -279,7 +305,9 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
       {/* View only: the settings are shown, but every field is disabled. */}
       <Fieldset variant="unstyled" disabled={readOnly} p={0} m={0}>
         <Stack gap="sm">
-          {spec.params.length > 0 && <Divider label="Settings" labelPosition="left" />}
+          {spec.params.length > 0 && (
+            <Divider label={t('builder.inspector.settings')} labelPosition="left" />
+          )}
           {spec.params
             .filter((param) => isParamVisible(param, node.data.params))
             .map((param) => (
@@ -302,15 +330,15 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
             ))}
           {spec.params.length === 0 && (
             <Text size="sm" c="dimmed">
-              This layer has no settings.
+              {t('builder.inspector.noSettings')}
             </Text>
           )}
 
-          <Divider label="Code" labelPosition="left" />
+          <Divider label={t('builder.inspector.code')} labelPosition="left" />
           <TextInput
-            label="Name in code"
-            description="Optional variable name, e.g. classifier"
-            placeholder="automatic"
+            label={t('builder.inspector.nameInCode')}
+            description={t('builder.inspector.nameInCodeHint')}
+            placeholder={t('builder.inspector.automatic')}
             value={node.data.name ?? ''}
             onChange={(event) =>
               updateNode(node.id, { name: event.currentTarget.value || undefined })
@@ -326,6 +354,7 @@ function LayerInspector({ node }: { node: LayerFlowNode }) {
 
 /** The Input layer and the dataset chosen in the training panel. */
 function DatasetFit({ fit }: { fit: InputFit }) {
+  const { t } = useTranslation();
   if (fit.matches) {
     return (
       <Badge
@@ -334,7 +363,7 @@ function DatasetFit({ fit }: { fit: InputFit }) {
         leftSection={<IconCircleCheck size={12} />}
         style={{ alignSelf: 'flex-start', textTransform: 'none' }}
       >
-        Matches “{fit.datasetName}”
+        {t('builder.inspector.matches', { name: fit.datasetName })}
       </Badge>
     );
   }
@@ -342,7 +371,7 @@ function DatasetFit({ fit }: { fit: InputFit }) {
     <Paper withBorder p="xs" radius="sm">
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed" style={{ flex: '1 1 140px' }}>
-          Training data “{fit.datasetName}”: {fit.summary}
+          {t('builder.inspector.trainingData', { name: fit.datasetName })}: {fit.summary}
         </Text>
         {fit.apply && (
           <Button
@@ -351,7 +380,7 @@ function DatasetFit({ fit }: { fit: InputFit }) {
             leftSection={<IconDatabase size={12} />}
             onClick={fit.apply}
           >
-            Set from dataset
+            {t('builder.inspector.setFromDataset')}
           </Button>
         )}
       </Group>
@@ -360,6 +389,7 @@ function DatasetFit({ fit }: { fit: InputFit }) {
 }
 
 function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.ReactNode[] }) {
+  const { t } = useTranslation();
   const { analysis, specs, readOnly, focusNode } = useBuilder();
   const family = networkFamily(analysis);
   const classical = family !== 'neural' ? (analysis?.classical ?? null) : null;
@@ -367,17 +397,17 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
   const labelOf = (id: string | null) => {
     const node = nodes.find((n) => n.id === id);
     if (!node) {
-      return 'Graph';
+      return t('builder.inspector.graph');
     }
     return node.data.name || specs[node.data.type]?.label || node.data.type;
   };
 
   return (
     <Stack p="md" gap="sm">
-      <Title order={4}>Model</Title>
+      <Title order={4}>{t('builder.inspector.model')}</Title>
       {nodes.length === 0 && (
         <Text size="sm" c="dimmed">
-          The canvas is empty. Start with an <b>Input</b> layer from the palette or load an example.
+          <Trans i18nKey="builder.inspector.emptyCanvas" components={{ b: <b /> }} />
         </Text>
       )}
 
@@ -385,13 +415,11 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
         <>
           {analysis.valid ? (
             <Alert color="green" variant="light" icon={<IconCircleCheck size={18} />}>
-              The network is valid and ready to export.
+              {t('builder.inspector.valid')}
             </Alert>
           ) : (
             <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />}>
-              {analysis.errors.length === 1
-                ? '1 problem needs fixing before export.'
-                : `${analysis.errors.length} problems need fixing before export.`}
+              {t('builder.inspector.problems', { count: analysis.errors.length })}
             </Alert>
           )}
 
@@ -399,60 +427,62 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
             <SimpleGrid cols={1} spacing="xs">
               {hybrid && (
                 <Stat
-                  label="Neural layers (PyTorch): learned features"
-                  value={`${hybrid.features ?? '–'} features from ${labelOf(hybrid.boundary)}, ${
-                    hybrid.neural_params?.toLocaleString('en-US') ?? '–'
-                  } trainable parameters`}
+                  label={t('builder.inspector.neuralLayers')}
+                  value={t('builder.inspector.hybridFeatures', {
+                    features: hybrid.features ?? '–',
+                    from: labelOf(hybrid.boundary),
+                    params: hybrid.neural_params?.toLocaleString(currentLocale()) ?? '–',
+                  })}
                 />
               )}
               {classical ? (
                 <>
                   <Stat
-                    label="Classical model (scikit-learn)"
+                    label={t('builder.inspector.classicalModel')}
                     value={specs[classical.type]?.label ?? classical.estimator}
                   />
                   {classical.members ? (
                     <Stat
-                      label={`${classical.members.length} models`}
+                      label={t('builder.inspector.modelCount', { count: classical.members.length })}
                       value={classical.members.map((member) => member.name).join(', ')}
                     />
                   ) : (
                     <Stat
                       label={
                         analysis.total_params === null
-                          ? 'Parameters'
-                          : 'Hyperparameters the fit optimises'
+                          ? t('builder.inspector.parameters')
+                          : t('builder.inspector.optimisedHyperparameters')
                       }
                       value={
                         analysis.total_params === null
                           ? isBoosting(classical.type)
-                            ? 'decision trees, after the fit'
-                            : 'support vectors, after the fit'
-                          : analysis.total_params.toLocaleString('en-US')
+                            ? t('builder.inspector.treesAfterFit')
+                            : t('builder.inspector.vectorsAfterFit')
+                          : analysis.total_params.toLocaleString(currentLocale())
                       }
                     />
                   )}
                 </>
               ) : (
                 <Stat
-                  label="Trainable parameters"
-                  value={analysis.total_params?.toLocaleString('en-US') ?? '–'}
+                  label={t('builder.inspector.trainableParameters')}
+                  value={analysis.total_params?.toLocaleString(currentLocale()) ?? '–'}
                 />
               )}
               {analysis.inputs.map((id) => (
                 <Stat
                   key={`in-${id}`}
-                  label={`Input · ${labelOf(id)}`}
+                  label={`${t('builder.inspector.input')} · ${labelOf(id)}`}
                   value={`batch × ${formatShape(analysis.nodes[id]?.output_shape)}`}
                 />
               ))}
               {analysis.outputs.map((id) => (
                 <Stat
                   key={`out-${id}`}
-                  label={`Output · ${labelOf(id)}`}
+                  label={`${t('builder.inspector.output')} · ${labelOf(id)}`}
                   value={
-                    formatOutput(analysis.nodes[id]) === 'classes from data'
-                      ? 'one class per sample'
+                    formatOutput(analysis.nodes[id]) === t('builder.format.classesFromData')
+                      ? t('builder.inspector.oneClassPerSample')
                       : `batch × ${formatShape(analysis.nodes[id]?.output_shape)}`
                   }
                 />
@@ -460,9 +490,12 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
               {classical?.kernel && (
                 <Stack gap={4}>
                   <Text size="xs" c="dimmed">
-                    Kernel (starting values, optimised by the fit)
+                    {t('builder.inspector.kernelStart')}
                   </Text>
-                  <KernelCode code={classical.kernel} label="Kernel of the model" />
+                  <KernelCode
+                    code={classical.kernel}
+                    label={t('builder.inspector.kernelOfModel')}
+                  />
                 </Stack>
               )}
             </SimpleGrid>
@@ -495,7 +528,7 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
         </>
       )}
 
-      <Divider label="Tips" labelPosition="left" mt="sm" />
+      <Divider label={t('builder.inspector.tips')} labelPosition="left" mt="sm" />
       {tips ? (
         <List size="sm" spacing={4} c="dimmed">
           {tips.map((tip, index) => (
@@ -504,45 +537,34 @@ function ModelSummary({ nodes, tips }: { nodes: LayerFlowNode[]; tips?: React.Re
         </List>
       ) : readOnly ? (
         <List size="sm" spacing={4} c="dimmed">
-          <List.Item>You can view this network, but not change it.</List.Item>
-          <List.Item>Click a layer to see its settings here.</List.Item>
+          <List.Item>{t('builder.inspector.tipViewOnly')}</List.Item>
+          <List.Item>{t('builder.inspector.tipClickView')}</List.Item>
           <List.Item>
-            <b>Duplicate to my networks</b> makes a copy that you can change.
+            <Trans i18nKey="builder.inspector.tipDuplicate" components={{ b: <b /> }} />
           </List.Item>
         </List>
       ) : (
         <List size="sm" spacing={4} c="dimmed">
-          <List.Item>Click a layer to edit its settings here.</List.Item>
+          <List.Item>{t('builder.inspector.tipClickEdit')}</List.Item>
+          <List.Item>{t('builder.inspector.tipConnect')}</List.Item>
           <List.Item>
-            Drag from the right dot of a layer to the left dot of another to connect them.
-          </List.Item>
-          <List.Item>
-            Fields marked <i>auto</i> are inferred from the incoming tensor.
+            <Trans i18nKey="builder.inspector.tipAuto" components={{ i: <i /> }} />
           </List.Item>
           {classical ? (
             <>
               <List.Item>
-                Connect the <b>Input</b> straight to the model. Kernels flow along the dashed
-                connections into a <b>Kernel sum</b>, a <b>Kernel product</b> or the Gaussian
-                process.
+                <Trans i18nKey="builder.inspector.tipClassical" components={{ b: <b /> }} />
               </List.Item>
-              <List.Item>
-                Kernel values are starting values: the Gaussian process optimises them when it is
-                trained, unless they are fixed.
-              </List.Item>
-              <List.Item>
-                To combine models, connect each of them to a voting or stacking ensemble: the dotted
-                connections carry the models themselves.
-              </List.Item>
+              <List.Item>{t('builder.inspector.tipKernelValues')}</List.Item>
+              <List.Item>{t('builder.inspector.tipEnsemble')}</List.Item>
             </>
           ) : (
             <List.Item>
-              Use <b>Add</b> or <b>Concat</b> to merge branches (skip connections, multiple inputs).
+              <Trans i18nKey="builder.inspector.tipMerge" components={{ b: <b /> }} />
             </List.Item>
           )}
           <List.Item>
-            <Kbd>Del</Kbd> deletes the selection, <Kbd>Ctrl</Kbd> + <Kbd>S</Kbd> saves,{' '}
-            <Kbd>Ctrl</Kbd> + <Kbd>E</Kbd> exports.
+            <Trans i18nKey="builder.inspector.tipKeys" components={{ k: <Kbd /> }} />
           </List.Item>
         </List>
       )}

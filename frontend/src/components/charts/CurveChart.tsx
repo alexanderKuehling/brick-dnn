@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Group, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { innerTicks } from './axes';
 import { ChartEmpty, ChartFrame, type ChartTable, type LegendItem } from './ChartFrame';
 import { seriesColor } from './colors';
@@ -53,6 +54,7 @@ export function CurveChart({
   /** A fixed width in pixels (tests); by default the width of the container. */
   width?: number;
 }) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const clipId = useId();
@@ -68,9 +70,12 @@ export function CurveChart({
   const sx = linearScale([0, 1], [MARGIN.left, plotRight]);
   const sy = linearScale([0, 1], [base, MARGIN.top]);
   const ticks = innerTicks(0, 1, 5).ticks;
-  const summary = `${title}: ${yLabel} against ${xLabel}${
-    drawn.length ? `, ${drawn.map((s) => s.label).join(' and ')}` : ''
-  }.`;
+  const summary = i18n.t('ui.components.CurveChart.against', {
+    title,
+    yLabel,
+    xLabel,
+    value: drawn.length ? `, ${drawn.map((s) => s.label).join(' and ')}` : '',
+  });
   return (
     <ChartFrame
       title={title}
@@ -92,7 +97,7 @@ export function CurveChart({
       table={table}
     >
       {drawn.length === 0 ? (
-        <ChartEmpty>No points to show</ChartEmpty>
+        <ChartEmpty>{i18n.t('ui.components.CurveChart.noPointsToShow')}</ChartEmpty>
       ) : (
         <div ref={ref} className={classes.plot} style={{ height }}>
           {width > 0 && (

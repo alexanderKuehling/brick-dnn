@@ -1,0 +1,23 @@
+/** The header: page links, account menu. */
+export const nav = {
+  home: 'Brick DNN home',
+  builder: 'Builder',
+  data: 'Data',
+  myNetworks: 'My networks',
+  pricing: 'Pricing',
+  sourceCode: 'Source code on GitHub',
+  githubRepository: 'GitHub repository',
+  coffee: 'Buy me a coffee',
+  legalTooltip: 'Imprint and privacy',
+  legalInfo: 'Legal information',
+  logIn: 'Log in',
+  signUp: 'Sign up',
+  pages: 'Pages',
+  userWaiting: '{{user}}, {{count}} waiting for your approval',
+  dataPreparation: 'Data preparation',
+  apiTokens: 'API tokens',
+  waiting: '{{count}} waiting',
+  agentActivity: 'Agent activity',
+  account: 'Account',
+  logOut: 'Log out',
+};

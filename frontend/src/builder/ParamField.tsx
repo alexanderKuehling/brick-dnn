@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Group, Input, NumberInput, Select, Switch, TextInput } from '@mantine/core';
 import type { ParamSpec, ParamValue } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { optionLabel } from './format';
 
 interface ParamFieldProps {
@@ -99,6 +100,7 @@ const AXES: Record<number, string[]> = { 1: [''], 2: ['H', 'W'], 3: ['D', 'H', '
 
 /** Fixed number of integers, e.g. a 2-D kernel size: one small input per axis. */
 function FixedIntsField({ param, value, inferred, onChange }: ParamFieldProps) {
+  useTranslation();
   const length = param.length ?? 1;
   const toDraft = (v: ParamValue): (number | '')[] =>
     Array.isArray(v) ? [...v] : Array<number | ''>(length).fill('');
@@ -144,7 +146,7 @@ function FixedIntsField({ param, value, inferred, onChange }: ParamFieldProps) {
             placeholder={
               fallback
                 ? param.auto
-                  ? `auto (${fallback[index]})`
+                  ? i18n.t('ui.builder.ParamField.auto', { value: fallback[index] })
                   : String(fallback[index])
                 : 'auto'
             }
@@ -173,6 +175,7 @@ export function parseIntList(text: string): number[] | null {
 
 /** Variable-length list of integers such as an input shape: typed as "1, 28, 28". */
 function ShapeField({ param, value, onChange }: Omit<ParamFieldProps, 'inferred'>) {
+  useTranslation();
   const format = (v: ParamValue) => (Array.isArray(v) ? v.join(', ') : '');
   const [text, setText] = useState(format(value));
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +192,7 @@ function ShapeField({ param, value, onChange }: Omit<ParamFieldProps, 'inferred'
   return (
     <TextInput
       label={param.label}
-      description={param.help || 'Comma separated, e.g. 1, 28, 28'}
+      description={param.help || i18n.t('builder.inspector.commaSeparated')}
       placeholder={format(param.default)}
       value={text}
       error={error}
@@ -206,7 +209,7 @@ function ShapeField({ param, value, onChange }: Omit<ParamFieldProps, 'inferred'
           setError(null);
           onChange(parsed);
         } else {
-          setError('Enter whole numbers separated by commas.');
+          setError(i18n.t('ui.builder.ParamField.enterWholeNumbersSeparatedBy'));
         }
       }}
     />

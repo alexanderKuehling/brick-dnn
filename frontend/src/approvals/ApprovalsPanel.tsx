@@ -28,6 +28,7 @@ import type { OpenTarget } from '@/activity/ActivityItem';
 import { summaryParts, TARGET_LABELS, unnamedTargets } from '@/activity/format';
 import { api, type AgentTarget, type ApprovalCategory, type ApprovalRequest } from '@/api';
 import { relativeTime } from '@/collab/time';
+import { i18n, useTranslation } from '@/i18n';
 import { formatCpu } from '@/usage/format';
 import { estimateText, expiresIn } from './format';
 import classes from './Approvals.module.css';
@@ -39,19 +40,29 @@ const CATEGORY_ICONS: Record<ApprovalCategory, typeof IconShare> = {
 };
 
 const CATEGORY_LABELS: Record<ApprovalCategory, string> = {
-  training: 'Training',
-  publishing: 'Publishing',
-  deleting: 'Deleting',
+  get training() {
+    return i18n.t('ui.approvals.ApprovalsPanel.training');
+  },
+  get publishing() {
+    return i18n.t('ui.approvals.ApprovalsPanel.publishing');
+  },
+  get deleting() {
+    return i18n.t('ui.approvals.ApprovalsPanel.deleting');
+  },
 };
 
 function TargetLink({ target, onOpen }: { target: AgentTarget; onOpen: OpenTarget }) {
+  useTranslation();
   return (
     <Anchor
       component="button"
       type="button"
       className={classes.link}
       onClick={() => onOpen(target)}
-      aria-label={`Open ${TARGET_LABELS[target.kind].toLowerCase()} “${target.name}”`}
+      aria-label={i18n.t('ui.approvals.ApprovalsPanel.open', {
+        value: TARGET_LABELS[target.kind].toLowerCase(),
+        name: target.name,
+      })}
     >
       “{target.name}”
     </Anchor>
@@ -124,6 +135,7 @@ function ApprovalCard({
   onDecided: (approval: ApprovalRequest) => void;
   onOpen: OpenTarget;
 }) {
+  useTranslation();
   const [busy, setBusy] = useState<'approve' | 'deny' | null>(null);
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState('');
@@ -140,20 +152,29 @@ function ApprovalCard({
           : await api.approvals.deny(approval.id, message.trim());
       onDecided(decided);
       if (decided.status === 'executed') {
-        notifications.show({ color: 'green', title: 'Approved', message: decided.done });
+        notifications.show({
+          color: 'green',
+          title: i18n.t('ui.approvals.ApprovalsPanel.approved'),
+          message: decided.done,
+        });
       } else if (decided.status === 'failed') {
         notifications.show({
           color: 'red',
-          title: 'Approved, but it could not be done',
+          title: i18n.t('ui.approvals.ApprovalsPanel.approvedButItCouldNot'),
           message: decided.error,
         });
       } else if (decided.status === 'denied') {
-        notifications.show({ message: 'Denied. The agent sees your answer.' });
+        notifications.show({
+          message: i18n.t('ui.approvals.ApprovalsPanel.deniedTheAgentSeesYour'),
+        });
       }
     } catch (err) {
       notifications.show({
         color: 'red',
-        title: what === 'approve' ? 'Could not approve' : 'Could not deny',
+        title:
+          what === 'approve'
+            ? i18n.t('ui.approvals.ApprovalsPanel.couldNotApprove')
+            : i18n.t('ui.approvals.ApprovalsPanel.couldNotDeny'),
         message: (err as Error).message,
       });
       setBusy(null);
@@ -188,8 +209,10 @@ function ApprovalCard({
               {CATEGORY_LABELS[approval.category]}
             </Badge>
             <Text span size="xs" c="dimmed">
-              asked {relativeTime(approval.created_at, now)} · expires{' '}
-              {expiresIn(approval.expires_at, now)}
+              {i18n.t('ui.approvals.ApprovalsPanel.askedExpires', {
+                relativeTime: relativeTime(approval.created_at, now),
+                expiresIn: expiresIn(approval.expires_at, now),
+              })}
             </Text>
           </Group>
         </div>
@@ -221,8 +244,12 @@ function ApprovalCard({
         )}
         {!approval.agent.active && (
           <Text size="sm" c="red">
-            This {approval.agent.kind === 'app' ? 'app was disconnected' : 'token was revoked'}:
-            approving it does nothing.
+            {i18n.t('ui.approvals.ApprovalsPanel.thisApprovingItDoesNothing', {
+              value:
+                approval.agent.kind === 'app'
+                  ? i18n.t('ui.approvals.ApprovalsPanel.appWasDisconnected')
+                  : i18n.t('ui.approvals.ApprovalsPanel.tokenWasRevoked'),
+            })}
           </Text>
         )}
       </Stack>
@@ -230,8 +257,8 @@ function ApprovalCard({
       {denying && (
         <Textarea
           mt="sm"
-          label="Message for the agent (optional)"
-          placeholder="e.g. Use 5 epochs and the smaller dataset."
+          label={i18n.t('ui.approvals.ApprovalsPanel.messageForTheAgentOptional')}
+          placeholder={i18n.t('ui.approvals.ApprovalsPanel.eGUse5Epochs')}
           autosize
           minRows={2}
           maxLength={500}
@@ -249,7 +276,7 @@ function ApprovalCard({
               onClick={() => setDenying(false)}
               disabled={busy !== null}
             >
-              Cancel
+              {i18n.t('ui.approvals.ApprovalsPanel.cancel')}
             </Button>
             <Button
               color="red"
@@ -259,7 +286,7 @@ function ApprovalCard({
               disabled={busy === 'approve'}
               onClick={() => void decide('deny')}
             >
-              Deny
+              {i18n.t('ui.approvals.ApprovalsPanel.deny')}
             </Button>
           </>
         ) : (
@@ -270,9 +297,11 @@ function ApprovalCard({
               leftSection={<IconX size={14} />}
               onClick={() => setDenying(true)}
               disabled={busy !== null}
-              aria-label={`Deny: ${approval.summary}`}
+              aria-label={i18n.t('ui.approvals.ApprovalsPanel.deny3', {
+                summary: approval.summary,
+              })}
             >
-              Deny…
+              {i18n.t('ui.approvals.ApprovalsPanel.deny2')}
             </Button>
             <Button
               color="green"
@@ -280,9 +309,11 @@ function ApprovalCard({
               leftSection={<IconCheck size={14} />}
               loading={busy === 'approve'}
               onClick={() => void decide('approve')}
-              aria-label={`Approve: ${approval.summary}`}
+              aria-label={i18n.t('ui.approvals.ApprovalsPanel.approve2', {
+                summary: approval.summary,
+              })}
             >
-              Approve
+              {i18n.t('ui.approvals.ApprovalsPanel.approve')}
             </Button>
           </>
         )}
@@ -306,6 +337,7 @@ export function ApprovalsPanel({
   onDecided: (approval: ApprovalRequest) => void;
   onOpen: OpenTarget;
 }) {
+  useTranslation();
   if (approvals.length === 0) {
     return null;
   }
@@ -314,15 +346,14 @@ export function ApprovalsPanel({
       <Group gap="xs" mb="xs">
         <IconClockHour4 size={20} aria-hidden color="var(--mantine-color-yellow-7)" />
         <Title order={3} size="h4" id="approvals-title">
-          Waiting for your approval
+          {i18n.t('ui.approvals.ApprovalsPanel.waitingForYourApproval')}
         </Title>
         <Badge color="yellow" variant="filled" circle aria-label={`${approvals.length} waiting`}>
           {approvals.length}
         </Badge>
       </Group>
       <Text size="sm" c="dimmed" mb="sm">
-        Approving does it right away, as the agent and within its budgets. Denying tells the agent
-        your reason.
+        {i18n.t('ui.approvals.ApprovalsPanel.approvingDoesItRightAway')}
       </Text>
       <ul className={classes.list}>
         {approvals.map((approval) => (

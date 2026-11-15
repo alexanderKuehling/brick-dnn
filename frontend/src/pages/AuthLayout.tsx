@@ -1,4 +1,5 @@
-import { Container, Paper, Text, Title } from '@mantine/core';
+import { Container, Group, Paper, Text, Title } from '@mantine/core';
+import { LanguageSwitch } from '@/i18n/LanguageSwitch';
 import { LegalLinks } from '@/legal/LegalLinks';
 
 export function AuthLayout({
@@ -23,7 +24,11 @@ export function AuthLayout({
       <Paper withBorder shadow="sm" p="xl" mt="xl" radius="md">
         {children}
       </Paper>
-      <LegalLinks mt="lg" />
+      {/* The language can be chosen before logging in (the header hides it on phones). */}
+      <Group justify="center" mt="lg">
+        <LanguageSwitch />
+      </Group>
+      <LegalLinks mt="sm" />
     </Container>
   );
 }

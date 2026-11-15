@@ -22,6 +22,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import type { ClassificationEvaluation, ThresholdCurve } from '@/api';
 import { CurveChart } from '@/components/charts/CurveChart';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { formatPercent } from './format';
 import {
   DEFAULT_THRESHOLD,
@@ -35,16 +36,27 @@ import {
 type SplitKey = 'val' | 'test' | 'training';
 
 const LABELS: Record<SplitKey, string> = {
-  val: 'Validation',
-  test: 'Test',
-  training: 'Training (optimistic)',
+  get val() {
+    return i18n.t('ui.training.ThresholdAnalysis.validation');
+  },
+  get test() {
+    return i18n.t('ui.training.ThresholdAnalysis.test');
+  },
+  get training() {
+    return i18n.t('ui.training.ThresholdAnalysis.trainingOptimistic');
+  },
 };
 
 const SOURCE_NOTES: Record<SplitKey, string> = {
-  val: 'The thresholds and suggestions come from the validation rows; check them on the test rows.',
-  test: 'No validation rows: the thresholds and suggestions come from the test rows, so a threshold picked here makes the test numbers optimistic.',
-  training:
-    'No validation or test rows: the thresholds and suggestions come from the training rows, which the model has learned from, so all numbers are optimistic.',
+  get val() {
+    return i18n.t('ui.training.ThresholdAnalysis.theThresholdsAndSuggestionsCome');
+  },
+  get test() {
+    return i18n.t('ui.training.ThresholdAnalysis.noValidationRowsTheThresholds');
+  },
+  get training() {
+    return i18n.t('ui.training.ThresholdAnalysis.noValidationOrTestRows');
+  },
 };
 
 /** The splits with a threshold curve, in order. */
@@ -63,7 +75,7 @@ export function curvesOf(evaluation: ClassificationEvaluation): {
 }
 
 function count(value: number): string {
-  return value.toLocaleString('en-US');
+  return value.toLocaleString(currentLocale());
 }
 
 export function ThresholdAnalysis({
@@ -77,6 +89,7 @@ export function ThresholdAnalysis({
   /** Saves a new threshold; missing when the user may not (only who started the run may). */
   onSave?: (threshold: number) => Promise<void>;
 }) {
+  useTranslation();
   const curves = useMemo(() => curvesOf(evaluation), [evaluation]);
   const thresholds = useMemo(() => curves[0]?.curve.points.threshold ?? [], [curves]);
   const saved = savedThreshold ?? DEFAULT_THRESHOLD;
@@ -113,13 +126,16 @@ export function ThresholdAnalysis({
       await onSave(threshold);
       notifications.show({
         color: 'green',
-        title: 'Threshold saved',
-        message: `Predictions of this run are now “${positive}” from a probability of ${formatThreshold(threshold)}.`,
+        title: i18n.t('ui.training.ThresholdAnalysis.thresholdSaved'),
+        message: i18n.t('ui.training.ThresholdAnalysis.predictionsOfThisRunAre', {
+          positive,
+          threshold: formatThreshold(threshold),
+        }),
       });
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Cannot save the threshold',
+        title: i18n.t('ui.training.ThresholdAnalysis.cannotSaveTheThreshold'),
         message: (error as Error).message,
       });
     } finally {
@@ -128,25 +144,47 @@ export function ThresholdAnalysis({
   };
 
   const rows: { label: string; value: (p: (typeof points)[number]['point']) => string }[] = [
-    { label: 'Precision', value: (p) => formatPercent(p.precision) },
-    { label: 'Recall', value: (p) => formatPercent(p.recall) },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.precision'),
+      value: (p) => formatPercent(p.precision),
+    },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.recall'),
+      value: (p) => formatPercent(p.recall),
+    },
     { label: 'F1', value: (p) => (p.f1 === null ? '–' : p.f1.toFixed(3)) },
-    { label: 'False-positive rate', value: (p) => formatPercent(p.fpr, 2) },
-    { label: `True positives (${positive} found)`, value: (p) => count(p.tp) },
-    { label: `False positives (false alarms)`, value: (p) => count(p.fp) },
-    { label: `True negatives`, value: (p) => count(p.tn) },
-    { label: `False negatives (${positive} missed)`, value: (p) => count(p.fn) },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.falsePositiveRate'),
+      value: (p) => formatPercent(p.fpr, 2),
+    },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.truePositivesFound', { positive }),
+      value: (p) => count(p.tp),
+    },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.falsePositivesFalseAlarms'),
+      value: (p) => count(p.fp),
+    },
+    { label: i18n.t('ui.training.ThresholdAnalysis.trueNegatives'), value: (p) => count(p.tn) },
+    {
+      label: i18n.t('ui.training.ThresholdAnalysis.falseNegativesMissed', { positive }),
+      value: (p) => count(p.fn),
+    },
   ];
 
   const suggestions = [
-    binary?.best_f1 ? { label: 'Best F1', value: binary.best_f1.threshold } : null,
+    binary?.best_f1
+      ? { label: i18n.t('ui.training.ThresholdAnalysis.bestF1'), value: binary.best_f1.threshold }
+      : null,
     binary?.recall
       ? {
-          label: `Recall ≥ ${formatPercent(binary.recall_target, 0)}`,
+          label: i18n.t('ui.training.ThresholdAnalysis.recall2', {
+            recall_target: formatPercent(binary.recall_target, 0),
+          }),
           value: binary.recall.threshold,
         }
       : null,
-    { label: 'Default', value: DEFAULT_THRESHOLD },
+    { label: i18n.t('ui.training.ThresholdAnalysis.default'), value: DEFAULT_THRESHOLD },
   ].filter((item): item is { label: string; value: number } => item !== null);
 
   const marks = [
@@ -155,22 +193,31 @@ export function ThresholdAnalysis({
   ];
 
   return (
-    <Paper withBorder p="sm" radius="sm" component="section" aria-label="Decision threshold">
+    <Paper
+      withBorder
+      p="sm"
+      radius="sm"
+      component="section"
+      aria-label={i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}
+    >
       <Stack gap="sm">
         <div>
           <Text size="sm" fw={600}>
-            Decision threshold
+            {i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}
           </Text>
           <Text size="xs" c="dimmed">
-            A row is predicted “{positive}” when its probability of “{positive}” is at least the
-            threshold, else “{negative}”. Lower finds more “{positive}” (recall) with more false
-            alarms (precision falls).
+            {i18n.t('ui.training.ThresholdAnalysis.aRowIsPredictedWhen', {
+              positive,
+              positive2: positive,
+              negative,
+              positive3: positive,
+            })}
           </Text>
         </div>
         <Group gap="lg" align="flex-end" wrap="wrap">
           <div>
             <Text size="xs" c="dimmed">
-              Threshold
+              {i18n.t('ui.training.ThresholdAnalysis.threshold')}
             </Text>
             <Text fw={700} size="xl" lh={1.2} data-testid="threshold-value">
               {formatThreshold(threshold)}
@@ -183,7 +230,10 @@ export function ThresholdAnalysis({
                 size="compact-xs"
                 variant="light"
                 onClick={() => pick(item.value)}
-                aria-label={`${item.label}: threshold ${formatThreshold(item.value)}`}
+                aria-label={i18n.t('ui.training.ThresholdAnalysis.threshold2', {
+                  label: item.label,
+                  value: formatThreshold(item.value),
+                })}
               >
                 {item.label} · {formatThreshold(item.value)}
               </Button>
@@ -203,10 +253,18 @@ export function ThresholdAnalysis({
           mb="md"
         />
         <ScrollArea type="auto">
-          <Table fz="xs" aria-label="Results at the threshold" withRowBorders={false}>
+          <Table
+            fz="xs"
+            aria-label={i18n.t('ui.training.ThresholdAnalysis.resultsAtTheThreshold')}
+            withRowBorders={false}
+          >
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>At {formatThreshold(threshold)}</Table.Th>
+                <Table.Th>
+                  {i18n.t('ui.training.ThresholdAnalysis.at', {
+                    threshold: formatThreshold(threshold),
+                  })}
+                </Table.Th>
                 {points.map(({ key }) => (
                   <Table.Th key={key} ta="right">
                     {LABELS[key]}
@@ -233,11 +291,13 @@ export function ThresholdAnalysis({
         </Text>
         <Group gap="xs" justify="space-between" wrap="wrap">
           <Text size="xs" c="dimmed" data-testid="saved-threshold">
-            Predictions use {formatThreshold(saved)}
+            {i18n.t('ui.training.ThresholdAnalysis.predictionsUse')} {formatThreshold(saved)}
             {savedNearest !== undefined && Math.abs(savedNearest - saved) > 1e-12
-              ? ` (the closest threshold measured: ${formatThreshold(savedNearest)})`
+              ? i18n.t('ui.training.ThresholdAnalysis.theClosestThresholdMeasured', {
+                  savedNearest: formatThreshold(savedNearest),
+                })
               : ''}
-            .{!onSave && ' Only who started the run can change it.'}
+            .{!onSave && i18n.t('ui.training.ThresholdAnalysis.onlyWhoStartedTheRun')}
           </Text>
           {onSave && (
             <Button
@@ -247,16 +307,16 @@ export function ThresholdAnalysis({
               loading={saving}
               onClick={() => void save()}
             >
-              Use this threshold for predictions
+              {i18n.t('ui.training.ThresholdAnalysis.useThisThresholdForPredictions')}
             </Button>
           )}
         </Group>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <CurveChart
-            title="Precision-recall curve"
-            subtitle={`“${positive}” as the positive class; the dot is the threshold`}
-            xLabel="Recall"
-            yLabel="Precision"
+            title={i18n.t('ui.training.ThresholdAnalysis.precisionRecallCurve')}
+            subtitle={i18n.t('ui.training.ThresholdAnalysis.asThePositiveClassThe', { positive })}
+            xLabel={i18n.t('ui.training.ThresholdAnalysis.recall')}
+            yLabel={i18n.t('ui.training.ThresholdAnalysis.precision')}
             series={lines.map(({ key, pr }) => {
               const point = points.find((p) => p.key === key)!.point;
               return {
@@ -271,7 +331,12 @@ export function ThresholdAnalysis({
               };
             })}
             table={() => ({
-              head: ['Split', 'Threshold', 'Recall', 'Precision'],
+              head: [
+                i18n.t('ui.training.ThresholdAnalysis.split'),
+                i18n.t('ui.training.ThresholdAnalysis.threshold'),
+                i18n.t('ui.training.ThresholdAnalysis.recall'),
+                i18n.t('ui.training.ThresholdAnalysis.precision'),
+              ],
               rows: lines.flatMap(({ key, pr }) =>
                 pr.x.map((x, i) => [
                   LABELS[key],
@@ -283,10 +348,10 @@ export function ThresholdAnalysis({
             })}
           />
           <CurveChart
-            title="ROC curve"
-            subtitle="Recall against the false-positive rate; the dot is the threshold"
-            xLabel="False-positive rate"
-            yLabel="Recall"
+            title={i18n.t('ui.training.ThresholdAnalysis.rocCurve')}
+            subtitle={i18n.t('ui.training.ThresholdAnalysis.recallAgainstTheFalsePositive')}
+            xLabel={i18n.t('ui.training.ThresholdAnalysis.falsePositiveRate')}
+            yLabel={i18n.t('ui.training.ThresholdAnalysis.recall')}
             diagonal="Guessing"
             series={lines.map(({ key, roc }) => {
               const point = points.find((p) => p.key === key)!.point;

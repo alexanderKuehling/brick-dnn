@@ -30,6 +30,7 @@ import { ApprovalsPanel } from '@/approvals/ApprovalsPanel';
 import { projectDraft } from '@/builder/draft';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
 import { groupByDay } from '@/collab/time';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { REPOSITORY_URL } from '@/links';
 import { ActivityItem, type OpenTarget } from './ActivityItem';
 import { groupEntries } from './format';
@@ -84,11 +85,12 @@ function optionLabel({ agent, active }: AgentOption): string {
 }
 
 function LiveIndicator({ state }: { state: LiveState }) {
+  useTranslation();
   const label = { live: 'Live', paused: 'Paused', offline: 'Reconnecting…' }[state];
   const title = {
-    live: 'New actions appear as they happen.',
-    paused: 'Paused while the page is in the background.',
-    offline: 'The server cannot be reached; trying again.',
+    live: i18n.t('ui.activity.AgentActivityPage.newActionsAppearAsThey'),
+    paused: i18n.t('ui.activity.AgentActivityPage.pausedWhileThePageIs'),
+    offline: i18n.t('ui.activity.AgentActivityPage.theServerCannotBeReached'),
   }[state];
   return (
     <span className={classes.live} title={title} role="status">
@@ -111,7 +113,9 @@ function useOpenTarget(): OpenTarget {
           .catch(() =>
             notifications.show({
               color: 'red',
-              message: `“${target.name}” was deleted or is no longer shared with you.`,
+              message: i18n.t('ui.activity.AgentActivityPage.wasDeletedOrIsNo', {
+                name: target.name,
+              }),
             })
           );
         break;
@@ -132,6 +136,7 @@ function useOpenTarget(): OpenTarget {
 }
 
 function EmptyLog() {
+  useTranslation();
   return (
     <Card withBorder p="xl" mt="lg">
       <Stack align="center" gap="sm" ta="center">
@@ -139,16 +144,14 @@ function EmptyLog() {
           <IconRobot size={26} />
         </ThemeIcon>
         <Title order={3} size="h4">
-          No agent activity yet
+          {i18n.t('ui.activity.AgentActivityPage.noAgentActivityYet')}
         </Title>
         <Text c="dimmed" maw={520}>
-          When an AI assistant such as Claude or one of your scripts uses Brick DNN with an API
-          token or as a connected app, every action shows up here as it happens: which networks it
-          saved, which trainings it started, what failed.
+          {i18n.t('ui.activity.AgentActivityPage.whenAnAiAssistantSuch')}
         </Text>
         <Group justify="center" gap="sm">
           <Button component={Link} to="/tokens" leftSection={<IconKey size={16} />}>
-            Connect an assistant
+            {i18n.t('ui.activity.AgentActivityPage.connectAnAssistant')}
           </Button>
           <Button
             component="a"
@@ -158,7 +161,7 @@ function EmptyLog() {
             variant="default"
             leftSection={<IconBook size={16} />}
           >
-            How it works (MCP)
+            {i18n.t('ui.activity.AgentActivityPage.howItWorksMcp')}
           </Button>
         </Group>
       </Stack>
@@ -167,6 +170,7 @@ function EmptyLog() {
 }
 
 export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterval?: number }) {
+  useTranslation();
   const [params, setParams] = useSearchParams();
   const filters = filtersFrom(params);
   const activity = useAgentActivity(filters, pollInterval);
@@ -217,16 +221,15 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
   return (
     <Container size="md" py="xl">
       <Group gap="sm" align="center">
-        <Title order={2}>Agent activity</Title>
+        <Title order={2}>{i18n.t('ui.activity.AgentActivityPage.agentActivity')}</Title>
         {entries && retention !== 0 && <LiveIndicator state={activity.live} />}
       </Group>
       <Text mt="xs" className={classes.intro}>
-        Everything AI assistants and scripts did in your account with your{' '}
-        <Anchor component={Link} to="/tokens">
-          API tokens and connected apps
-        </Anchor>
-        , as it happens.
-        {retention ? ` Entries are kept for ${retention} days.` : ''}
+        <Trans
+          i18nKey="ui.activity.AgentActivityPage.everythingAiAssistantsAndScripts"
+          values={{ value: retention ? ` Entries are kept for ${retention} days.` : '' }}
+          components={[<Anchor component={Link} to="/tokens" />]}
+        />
       </Text>
 
       <ApprovalsPanel
@@ -238,7 +241,7 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
 
       {retention === 0 && (
         <Alert color="gray" mt="lg">
-          This server keeps no log of what agents do.
+          {i18n.t('ui.activity.AgentActivityPage.thisServerKeepsNoLog')}
         </Alert>
       )}
 
@@ -246,8 +249,8 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
         <Group className={classes.filters} gap="md" align="flex-end" wrap="wrap">
           <Select
             className={classes.agentSelect}
-            label="Token or app"
-            placeholder="All tokens and apps"
+            label={i18n.t('ui.activity.AgentActivityPage.tokenOrApp')}
+            placeholder={i18n.t('ui.activity.AgentActivityPage.allTokensAndApps')}
             data={options.map((option) => ({
               value: option.agent.key,
               label: optionLabel(option),
@@ -258,14 +261,16 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
             comboboxProps={{ withinPortal: true }}
           />
           <Switch
-            label="Errors only"
+            label={i18n.t('ui.activity.AgentActivityPage.errorsOnly')}
             checked={filters.errorsOnly}
             onChange={(event) => setFilter('errors', event.currentTarget.checked ? '1' : null)}
             mb={8}
           />
           {filters.project !== null && (
             <Button variant="subtle" size="compact-sm" onClick={() => setFilter('project', null)}>
-              Only network #{filters.project} · show all
+              {i18n.t('ui.activity.AgentActivityPage.onlyNetworkShowAll', {
+                project: filters.project,
+              })}
             </Button>
           )}
         </Group>
@@ -285,12 +290,14 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
         retention !== 0 &&
         (filtered ? (
           <Stack align="center" gap="xs" py="xl">
-            <Text c="dimmed">Nothing matches these filters yet.</Text>
+            <Text c="dimmed">
+              {i18n.t('ui.activity.AgentActivityPage.nothingMatchesTheseFiltersYet')}
+            </Text>
             <Button
               variant="light"
               onClick={() => setParams(new URLSearchParams(), { replace: true })}
             >
-              Show all activity
+              {i18n.t('ui.activity.AgentActivityPage.showAllActivity')}
             </Button>
           </Stack>
         ) : (
@@ -320,7 +327,7 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
       {entries && activity.hasMore && (
         <Center mt="lg">
           <Button variant="default" loading={activity.loadingMore} onClick={activity.loadMore}>
-            Show older activity
+            {i18n.t('ui.activity.AgentActivityPage.showOlderActivity')}
           </Button>
         </Center>
       )}

@@ -21,6 +21,7 @@ import { notifications } from '@mantine/notifications';
 import type { ProjectComment } from '@/api';
 import type { CollabStore } from '@/collab/store';
 import { fullDateTime, relativeTime } from '@/collab/time';
+import { i18n, useTranslation } from '@/i18n';
 import { CommentComposer } from './CommentComposer';
 import {
   canDeleteComment,
@@ -53,20 +54,23 @@ const failed = (title: string) => (error: unknown) => {
 };
 
 function LayerChip({ layer }: { layer: ThreadLayer }) {
+  useTranslation();
   if (layer.name === null) {
     return (
       <Text span className={classes.layer} c="dimmed">
         <IconStack2 size={12} />
-        <span className={classes.layerName}>Deleted layer</span>
+        <span className={classes.layerName}>
+          {i18n.t('ui.comments.CommentThread.deletedLayer')}
+        </span>
       </Text>
     );
   }
   return (
-    <Tooltip label="Show this layer on the canvas">
+    <Tooltip label={i18n.t('ui.comments.CommentThread.showThisLayerOnThe')}>
       <UnstyledButton
         className={classes.layer}
         onClick={layer.onFocus}
-        aria-label={`Show layer ${layer.name}`}
+        aria-label={i18n.t('ui.comments.CommentThread.showLayer', { name: layer.name })}
       >
         <IconStack2 size={12} />
         <span className={classes.layerName}>{layer.name}</span>
@@ -86,6 +90,7 @@ interface CommentItemProps {
 }
 
 function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: CommentItemProps) {
+  useTranslation();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -112,7 +117,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
       <div className={classes.commentBody}>
         <div className={classes.commentHeader}>
           <Text size="sm" className={classes.author}>
-            {isMine ? `${author} (you)` : author}
+            {isMine ? i18n.t('ui.comments.CommentThread.you', { author }) : author}
           </Text>
           <Tooltip label={fullDateTime(comment.created_at)}>
             <Text size="xs" c="dimmed" className={classes.time}>
@@ -121,7 +126,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
           </Tooltip>
           <div className={classes.headerActions}>
             {canResolve && !comment.resolved && (
-              <Tooltip label="Resolve: mark as done">
+              <Tooltip label={i18n.t('ui.comments.CommentThread.resolveMarkAsDone')}>
                 <ActionIcon
                   variant="subtle"
                   color="green"
@@ -130,7 +135,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                   onClick={() =>
                     void run(() => store.setResolved(comment.id, true), 'Could not resolve it')
                   }
-                  aria-label="Resolve thread"
+                  aria-label={i18n.t('ui.comments.CommentThread.resolveThread')}
                 >
                   <IconCircleCheck size={16} />
                 </ActionIcon>
@@ -143,7 +148,9 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                     variant="subtle"
                     color="gray"
                     size="sm"
-                    aria-label={`Actions for the comment by ${author}`}
+                    aria-label={i18n.t('ui.comments.CommentThread.actionsForTheCommentBy', {
+                      author,
+                    })}
                   >
                     <IconDots size={16} />
                   </ActionIcon>
@@ -154,7 +161,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                       leftSection={<IconPencil size={14} />}
                       onClick={() => setEditing(true)}
                     >
-                      Edit
+                      {i18n.t('ui.comments.CommentThread.edit')}
                     </Menu.Item>
                   )}
                   {canDelete && (
@@ -163,7 +170,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                       leftSection={<IconTrash size={14} />}
                       onClick={() => setConfirmDelete(true)}
                     >
-                      Delete
+                      {i18n.t('ui.comments.CommentThread.delete')}
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>
@@ -174,7 +181,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
 
         {editing ? (
           <CommentComposer
-            label="Edit comment"
+            label={i18n.t('ui.comments.CommentThread.editComment')}
             submitLabel="Save"
             initialText={comment.text}
             autoFocus
@@ -194,11 +201,16 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
           <Group gap="xs" mt={6} wrap="wrap">
             <Text size="xs" c="dimmed" style={{ flex: '1 1 10rem' }}>
               {root && replyCount > 0
-                ? `Delete this comment and its ${replyCount === 1 ? 'reply' : `${replyCount} replies`}?`
-                : 'Delete this comment?'}
+                ? i18n.t('ui.comments.CommentThread.deleteThisCommentAndIts', {
+                    value:
+                      replyCount === 1
+                        ? i18n.t('ui.comments.CommentThread.reply2')
+                        : i18n.t('ui.comments.CommentThread.replies', { replyCount }),
+                  })
+                : i18n.t('ui.comments.CommentThread.deleteThisComment')}
             </Text>
             <Button variant="default" size="xs" onClick={() => setConfirmDelete(false)}>
-              Cancel
+              {i18n.t('ui.comments.CommentThread.cancel')}
             </Button>
             <Button
               color="red"
@@ -211,7 +223,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                 }, 'Could not delete the comment')
               }
             >
-              Delete
+              {i18n.t('ui.comments.CommentThread.delete')}
             </Button>
           </Group>
         )}
@@ -222,6 +234,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
 
 /** A comment with its replies: reply, edit, delete, resolve and reopen as allowed. */
 export function CommentThread({ thread, viewer, store, layer, highlight }: CommentThreadProps) {
+  useTranslation();
   const { root, replies } = thread;
   const [replying, setReplying] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -232,7 +245,7 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
     try {
       await store.setResolved(root.id, false);
     } catch (error) {
-      failed('Could not reopen it')(error);
+      failed(i18n.t('ui.comments.CommentThread.couldNotReopenIt'))(error);
     } finally {
       setReopening(false);
     }
@@ -243,7 +256,7 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
       className={classes.thread}
       data-resolved={root.resolved || undefined}
       data-highlight={highlight || undefined}
-      aria-label={`Comment by ${root.author.username}`}
+      aria-label={i18n.t('ui.comments.CommentThread.commentBy', { username: root.author.username })}
     >
       {layer && <LayerChip layer={layer} />}
       <CommentItem comment={root} viewer={viewer} store={store} root replyCount={replies.length} />
@@ -263,7 +276,10 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
               style={{ verticalAlign: 'text-bottom' }}
               color="var(--mantine-color-green-6)"
             />{' '}
-            Resolved{root.resolved_by ? ` by ${root.resolved_by}` : ''}
+            {i18n.t('ui.comments.CommentThread.resolved')}
+            {root.resolved_by
+              ? i18n.t('ui.comments.CommentThread.by', { resolved_by: root.resolved_by })
+              : ''}
           </Text>
           {canResolve && (
             <Button
@@ -272,17 +288,17 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
               leftSection={<IconRefresh size={12} />}
               loading={reopening}
               onClick={() => void reopen()}
-              aria-label="Reopen thread"
+              aria-label={i18n.t('ui.comments.CommentThread.reopenThread')}
             >
-              Reopen
+              {i18n.t('ui.comments.CommentThread.reopen')}
             </Button>
           )}
         </Group>
       ) : replying ? (
         <div style={{ marginTop: 'var(--mantine-spacing-xs)' }}>
           <CommentComposer
-            label="Reply"
-            placeholder="Write a reply…"
+            label={i18n.t('ui.comments.CommentThread.reply')}
+            placeholder={i18n.t('ui.comments.CommentThread.writeAReply')}
             submitLabel="Reply"
             autoFocus
             onSubmit={async (text) => {
@@ -298,9 +314,11 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
           size="compact-xs"
           mt={6}
           onClick={() => setReplying(true)}
-          aria-label={`Reply to ${root.author.username}`}
+          aria-label={i18n.t('ui.comments.CommentThread.replyTo', {
+            username: root.author.username,
+          })}
         >
-          Reply
+          {i18n.t('ui.comments.CommentThread.reply')}
         </Button>
       )}
     </article>

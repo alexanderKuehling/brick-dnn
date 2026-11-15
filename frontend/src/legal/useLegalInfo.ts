@@ -54,13 +54,6 @@ export function legalPages(info: State): LegalPageName[] {
     : [];
 }
 
-export const LEGAL_LABELS: Record<LegalPageName, string> = {
-  imprint: 'Imprint',
-  privacy: 'Privacy policy',
-  terms: 'Terms of use',
-  refund: 'Refund policy',
-};
-
 /** For tests: forget what was loaded. */
 export function resetLegalInfo(): void {
   state = undefined;

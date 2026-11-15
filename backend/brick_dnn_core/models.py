@@ -627,6 +627,14 @@ class UserProfile(models.Model):
     )
     # The last warning that the inactive account will be deleted (retention.py).
     deletion_warned_at = models.DateTimeField(null=True, blank=True)
+    # The language of the app and of e-mails (languages.py): chosen with the app's switch, set
+    # at sign-up. Empty: not chosen yet (e-mails then follow the request, else English).
+    language = models.CharField(
+        max_length=8,
+        blank=True,
+        choices=[("en", "English"), ("de", "Deutsch")],
+        help_text="Language of the app and of e-mails. Empty: not chosen (English e-mails).",
+    )
 
     def __str__(self) -> str:
         return f"Profile of {self.user}"

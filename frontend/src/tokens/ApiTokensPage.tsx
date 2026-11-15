@@ -27,6 +27,7 @@ import {
   type ApprovalRules,
 } from '@/api';
 import { ApprovalRuleEditor } from '@/approvals/ApprovalRuleEditor';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
 import { ActivityLink } from './ActivityLink';
@@ -55,6 +56,7 @@ function TokenItem({
   onBudget: (budget: number | null) => Promise<void>;
   onRule: (rule: ApprovalRule) => Promise<void>;
 }) {
+  useTranslation();
   const expired = isExpired(token);
   return (
     <li className={classes.item} aria-label={token.name}>
@@ -65,11 +67,13 @@ function TokenItem({
               {token.name}
             </Text>
             <Badge variant="light" color={token.read_only ? 'gray' : 'brick'}>
-              {token.read_only ? 'Read only' : 'Full access'}
+              {token.read_only
+                ? i18n.t('ui.tokens.ApiTokensPage.readOnly')
+                : i18n.t('ui.tokens.ApiTokensPage.fullAccess')}
             </Badge>
             {expired && (
               <Badge variant="filled" color="red">
-                Expired
+                {i18n.t('ui.tokens.ApiTokensPage.expired')}
               </Badge>
             )}
           </Group>
@@ -84,50 +88,60 @@ function TokenItem({
           leftSection={<IconTrash size={14} />}
           className={classes.itemAction}
           onClick={onRevoke}
-          aria-label={`Revoke “${token.name}”`}
+          aria-label={i18n.t('ui.tokens.ApiTokensPage.revoke3', { name: token.name })}
         >
-          Revoke
+          {i18n.t('ui.tokens.ApiTokensPage.revoke')}
         </Button>
       </Group>
       <dl className={classes.meta}>
         <div>
-          <dt>Created</dt>
+          <dt>{i18n.t('ui.tokens.ApiTokensPage.created')}</dt>
           <dd>{formatDate(token.created_at)}</dd>
         </div>
         <div>
-          <dt>Last used</dt>
-          <dd>{token.last_used_at ? formatDate(token.last_used_at) : 'Never'}</dd>
+          <dt>{i18n.t('ui.tokens.ApiTokensPage.lastUsed')}</dt>
+          <dd>
+            {token.last_used_at
+              ? formatDate(token.last_used_at)
+              : i18n.t('ui.tokens.ApiTokensPage.never')}
+          </dd>
         </div>
         <div>
-          <dt>{expired ? 'Expired' : 'Expires'}</dt>
+          <dt>
+            {expired
+              ? i18n.t('ui.tokens.ApiTokensPage.expired')
+              : i18n.t('ui.tokens.ApiTokensPage.expires')}
+          </dt>
           <dd data-expired={expired || undefined}>
-            {token.expires_at ? formatDate(token.expires_at) : 'Never'}
+            {token.expires_at
+              ? formatDate(token.expires_at)
+              : i18n.t('ui.tokens.ApiTokensPage.never')}
           </dd>
         </div>
         {token.used_cpu_minutes !== undefined && (
           <div>
-            <dt>Compute this month</dt>
+            <dt>{i18n.t('ui.tokens.ApiTokensPage.computeThisMonth')}</dt>
             <dd className={classes.budget}>
               <MonthUsage used={token.used_cpu_minutes} budget={token.budget_cpu_minutes} />
               <BudgetEditor
                 budget={token.budget_cpu_minutes ?? null}
                 label={`“${token.name}”`}
                 onSave={onBudget}
-                description="CPU minutes per month for everything this token starts. Empty: only your account's limits apply."
+                description={i18n.t('ui.tokens.ApiTokensPage.cpuMinutesPerMonthFor')}
               />
             </dd>
           </div>
         )}
         {rule && (
           <div>
-            <dt>Approval</dt>
+            <dt>{i18n.t('ui.tokens.ApiTokensPage.approval')}</dt>
             <dd>
               <ApprovalRuleEditor rule={rule} label={`“${token.name}”`} onSave={onRule} />
             </dd>
           </div>
         )}
         <div>
-          <dt>Agent activity</dt>
+          <dt>{i18n.t('ui.tokens.ApiTokensPage.agentActivity')}</dt>
           <dd>
             <ActivityLink agentKey={`token:${token.id}`} activity={activity} />
           </dd>
@@ -145,32 +159,35 @@ function DefaultApprovals({
   rules: ApprovalRules;
   onRule: (rule: ApprovalRule) => Promise<void>;
 }) {
+  useTranslation();
   return (
     <section className={classes.section} aria-labelledby="approvals-title">
       <Title order={3} id="approvals-title" mb="xs">
-        Approvals
+        {i18n.t('ui.tokens.ApiTokensPage.approvals')}
       </Title>
       <Text size="sm" c="dimmed" mb="sm" maw={720}>
-        Agents can ask you before expensive trainings, before publishing something (a download link
-        that works without logging in, sharing data in a project) and before deleting. Their request
-        then waits on{' '}
-        <Anchor component={Link} to="/activity">
-          the activity page
-        </Anchor>{' '}
-        until you approve or deny it (at most {rules.expiry_hours} hours). Set it for each token and
-        app below.
+        <Trans
+          i18nKey="ui.tokens.ApiTokensPage.agentsCanAskYouBefore"
+          values={{ expiry_hours: rules.expiry_hours }}
+          components={[<Anchor component={Link} to="/activity" />]}
+        />
       </Text>
       <Group gap="xs" wrap="wrap">
         <Text size="sm" fw={600}>
-          New tokens and apps:
+          {i18n.t('ui.tokens.ApiTokensPage.newTokensAndApps')}
         </Text>
-        <ApprovalRuleEditor rule={rules.default} label="new tokens and apps" onSave={onRule} />
+        <ApprovalRuleEditor
+          rule={rules.default}
+          label={i18n.t('ui.tokens.ApiTokensPage.newTokensAndApps2')}
+          onSave={onRule}
+        />
       </Group>
     </section>
   );
 }
 
 export function ApiTokensPage() {
+  useTranslation();
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -229,14 +246,14 @@ export function ApiTokensPage() {
 
   const revoke = (token: ApiToken) =>
     modals.openConfirmModal({
-      title: `Revoke “${token.name}”?`,
+      title: i18n.t('ui.tokens.ApiTokensPage.revoke2', { name: token.name }),
       children: (
-        <Text size="sm">
-          Apps, assistants and scripts using this token stop working immediately. This cannot be
-          undone.
-        </Text>
+        <Text size="sm">{i18n.t('ui.tokens.ApiTokensPage.appsAssistantsAndScriptsUsing')}</Text>
       ),
-      labels: { confirm: 'Revoke', cancel: 'Cancel' },
+      labels: {
+        confirm: i18n.t('ui.tokens.ApiTokensPage.revoke'),
+        cancel: i18n.t('ui.tokens.ApiTokensPage.cancel'),
+      },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
@@ -245,7 +262,7 @@ export function ApiTokensPage() {
         } catch (err) {
           notifications.show({
             color: 'red',
-            title: 'Could not revoke the token',
+            title: i18n.t('ui.tokens.ApiTokensPage.couldNotRevokeTheToken'),
             message: (err as Error).message,
           });
         }
@@ -254,27 +271,20 @@ export function ApiTokensPage() {
 
   return (
     <Container size="md" py="xl">
-      <Title order={2}>API tokens</Title>
+      <Title order={2}>{i18n.t('ui.tokens.ApiTokensPage.apiTokens')}</Title>
       <Text mt="xs" maw={720}>
-        AI assistants (through MCP) and your own scripts can use Brick DNN as you: apps like Claude
-        by signing in, others with an API token. Treat tokens like passwords: anyone who has one can
-        use your account as far as the token allows, until it expires or you revoke it. Everything
-        they do is listed under{' '}
-        <Anchor component={Link} to="/activity">
-          Agent activity
-        </Anchor>
-        .
+        <Trans
+          i18nKey="ui.tokens.ApiTokensPage.aiAssistantsThroughMcpAnd"
+          components={[<Anchor component={Link} to="/activity" />]}
+        />
       </Text>
 
       <section className={classes.section} aria-labelledby="mcp-title">
         <Title order={3} id="mcp-title" mb="xs">
-          Connect an AI assistant (MCP)
+          {i18n.t('ui.tokens.ApiTokensPage.connectAnAiAssistantMcp')}
         </Title>
         <Text size="sm" c="dimmed" mb="md" maw={720}>
-          With Brick DNN&apos;s MCP server, an assistant can look up layers and examples, check
-          networks, generate PyTorch code and read your networks and training runs. With full
-          access, it can also save networks and start or stop trainings. Give a token or app a
-          monthly budget to limit the compute its trainings and predictions may use.
+          {i18n.t('ui.tokens.ApiTokensPage.withBrickDnnSMcp')}
         </Text>
         <McpSetup />
       </section>
@@ -290,11 +300,11 @@ export function ApiTokensPage() {
       <section className={classes.section} aria-labelledby="tokens-title">
         <Group justify="space-between" mb="md">
           <Title order={3} id="tokens-title">
-            Your tokens
+            {i18n.t('ui.tokens.ApiTokensPage.yourTokens')}
           </Title>
           {tokens && tokens.length > 0 && (
             <Button leftSection={<IconPlus size={16} />} onClick={create}>
-              Create token
+              {i18n.t('ui.tokens.ApiTokensPage.createToken')}
             </Button>
           )}
         </Group>
@@ -311,11 +321,9 @@ export function ApiTokensPage() {
               <ThemeIcon variant="light" size={44} radius="xl" aria-hidden>
                 <IconKey size={24} />
               </ThemeIcon>
-              <Text c="dimmed">
-                You have no API tokens yet. Create one to connect an AI assistant or a script.
-              </Text>
+              <Text c="dimmed">{i18n.t('ui.tokens.ApiTokensPage.youHaveNoApiTokens')}</Text>
               <Button leftSection={<IconPlus size={16} />} onClick={create}>
-                Create token
+                {i18n.t('ui.tokens.ApiTokensPage.createToken')}
               </Button>
             </Stack>
           </Card>

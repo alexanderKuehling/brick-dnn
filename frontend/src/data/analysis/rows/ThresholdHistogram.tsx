@@ -2,6 +2,7 @@ import { useMemo, useRef, type KeyboardEvent, type PointerEvent, type ReactNode 
 import { Group, NumberInput, Paper, Stack, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { formatCount, formatNumber } from '@/components/charts/format';
+import { i18n, useTranslation } from '@/i18n';
 import { countBelow, histogramCounts, histogramEdges } from './rowsData';
 import classes from './RowsView.module.css';
 
@@ -50,6 +51,7 @@ export function ThresholdHistogram({
   bins = 40,
   height = 170,
 }: ThresholdHistogramProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = measured || 480;
   const edges = useMemo(
@@ -106,7 +108,13 @@ export function ThresholdHistogram({
     ? baseCounts
         .map((c, i) => {
           const x0 = MARGIN.left + i * barW;
-          return `${i === 0 ? 'M' : 'L'}${x0},${sy(c)} L${x0 + barW},${sy(c)}`;
+          return i18n.t('ui.data.ThresholdHistogram.l', {
+            value: i === 0 ? 'M' : 'L',
+            x0,
+            sy: sy(c),
+            value2: x0 + barW,
+            sy2: sy(c),
+          });
         })
         .join(' ')
     : null;
@@ -131,7 +139,7 @@ export function ThresholdHistogram({
             height={height}
             role="slider"
             tabIndex={0}
-            aria-label={`${title}: threshold`}
+            aria-label={i18n.t('ui.data.ThresholdHistogram.threshold', { title })}
             aria-valuemin={0}
             aria-valuemax={top}
             aria-valuenow={threshold}
@@ -205,8 +213,8 @@ export function ThresholdHistogram({
             <NumberInput
               size="xs"
               w={110}
-              label="Threshold"
-              aria-label={`Threshold (${xLabel})`}
+              label={i18n.t('ui.data.ThresholdHistogram.threshold2')}
+              aria-label={i18n.t('ui.data.ThresholdHistogram.threshold3', { xLabel })}
               value={threshold}
               min={0}
               step={step * 5}
@@ -222,7 +230,8 @@ export function ThresholdHistogram({
         </Group>
         <Group gap="md">
           <Text size="xs" c="dimmed">
-            <span className={classes.keyBelow} aria-hidden /> below the threshold
+            <span className={classes.keyBelow} aria-hidden />{' '}
+            {i18n.t('ui.data.ThresholdHistogram.belowTheThreshold')}
           </Text>
           {baseline && baselineLabel && (
             <Text size="xs" c="dimmed">
@@ -231,8 +240,8 @@ export function ThresholdHistogram({
           )}
           {suggested !== null && (
             <Text size="xs" c="dimmed">
-              <span className={classes.keySuggested} aria-hidden /> clear gap at{' '}
-              {formatNumber(suggested, 3)}
+              <span className={classes.keySuggested} aria-hidden />{' '}
+              {i18n.t('ui.data.ThresholdHistogram.clearGapAt')} {formatNumber(suggested, 3)}
             </Text>
           )}
         </Group>

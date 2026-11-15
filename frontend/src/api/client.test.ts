@@ -313,7 +313,11 @@ describe('uploads with progress', () => {
     expect(xhr.method).toBe('POST');
     expect(xhr.url).toBe('/api/data/sources/');
     // The browser sets the multipart Content-Type with its boundary.
-    expect(xhr.headers).toEqual({ Accept: 'application/json', Authorization: 'Bearer old-access' });
+    expect(xhr.headers).toEqual({
+      Accept: 'application/json',
+      'Accept-Language': 'en',
+      Authorization: 'Bearer old-access',
+    });
     expect(xhr.body).toBeInstanceOf(FormData);
     expect((xhr.body as FormData).get('name')).toBe('Iris');
 

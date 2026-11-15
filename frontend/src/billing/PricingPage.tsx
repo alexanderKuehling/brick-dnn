@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { api, type BillingEnabled, type BillingPlan, type BillingState } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
+import { i18n, useTranslation } from '@/i18n';
 import { LegalLinks } from '@/legal/LegalLinks';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ChangePlanDialog } from './ChangePlanDialog';
@@ -38,6 +39,7 @@ function PlanCard({
   current: boolean;
   action: React.ReactNode;
 }) {
+  useTranslation();
   const free = !plan.price;
   return (
     <Paper
@@ -53,16 +55,18 @@ function PlanCard({
           <Title order={3} size="h4">
             {plan.name}
           </Title>
-          {current && <Badge variant="light">Your plan</Badge>}
+          {current && <Badge variant="light">{i18n.t('ui.billing.PricingPage.yourPlan')}</Badge>}
         </Group>
         <div>
           <Text span fz={30} fw={700} lh={1.1}>
-            {free ? 'Free' : formatPrice(plan.price ?? 0, plan.currency ?? info.currency)}
+            {free
+              ? i18n.t('ui.billing.PricingPage.free')
+              : formatPrice(plan.price ?? 0, plan.currency ?? info.currency)}
           </Text>
           {!free && (
             <Text span c="dimmed" size="sm">
               {' '}
-              per month
+              {i18n.t('ui.billing.PricingPage.perMonth')}
             </Text>
           )}
         </div>
@@ -87,6 +91,7 @@ function PlanCard({
 }
 
 function Plans({ info }: { info: BillingEnabled }) {
+  useTranslation();
   const { user, ready } = useAuth();
   const location = useLocation();
   const [state, setState] = useState<BillingState | null>(null);
@@ -118,11 +123,11 @@ function Plans({ info }: { info: BillingEnabled }) {
     if (!user) {
       return plan.purchasable ? (
         <Button component={Link} to="/login" state={{ from: location.pathname }} variant="light">
-          Log in to choose {plan.name}
+          {i18n.t('ui.billing.PricingPage.logInToChoose', { name: plan.name })}
         </Button>
       ) : (
         <Button component={Link} to="/register" variant="default">
-          Sign up for free
+          {i18n.t('ui.billing.PricingPage.signUpForFree')}
         </Button>
       );
     }
@@ -132,7 +137,7 @@ function Plans({ info }: { info: BillingEnabled }) {
     if (plan.key === currentKey) {
       return (
         <Button component={Link} to="/account" variant="default">
-          Manage on your account page
+          {i18n.t('ui.billing.PricingPage.manageOnYourAccountPage')}
         </Button>
       );
     }
@@ -141,8 +146,8 @@ function Plans({ info }: { info: BillingEnabled }) {
       return (
         <Text size="xs" c="dimmed">
           {subscription?.can_cancel
-            ? 'Cancel your subscription on your account page to go back to this plan.'
-            : 'The plan of every account without a subscription.'}
+            ? i18n.t('ui.billing.PricingPage.cancelYourSubscriptionOnYour')
+            : i18n.t('ui.billing.PricingPage.thePlanOfEveryAccount')}
         </Text>
       );
     }
@@ -153,22 +158,22 @@ function Plans({ info }: { info: BillingEnabled }) {
           loading={busy === plan.key || activating === plan.key}
           disabled={(busy !== null || activating !== null) && busy !== plan.key}
         >
-          Choose {plan.name}
+          {i18n.t('ui.billing.PricingPage.choose', { name: plan.name })}
         </Button>
       );
     }
     if (subscription?.can_change_plan) {
       return (
         <Button variant="light" onClick={() => setChanging(plan)}>
-          Switch to {plan.name}
+          {i18n.t('ui.billing.PricingPage.switchTo', { name: plan.name })}
         </Button>
       );
     }
     return (
       <Text size="xs" c="dimmed">
         {subscription?.can_reactivate
-          ? 'Continue your subscription on your account page to change its plan.'
-          : 'Update your payment on your account page to change the plan.'}
+          ? i18n.t('ui.billing.PricingPage.continueYourSubscriptionOnYour')
+          : i18n.t('ui.billing.PricingPage.updateYourPaymentOnYour')}
       </Text>
     );
   };
@@ -182,12 +187,12 @@ function Plans({ info }: { info: BillingEnabled }) {
       )}
       {state?.unlimited && (
         <Alert color="green" mb="md">
-          No limits apply to your account: you do not need a plan.
+          {i18n.t('ui.billing.PricingPage.noLimitsApplyToYour')}
         </Alert>
       )}
       {activating && (
         <Alert color="blue" mb="md" icon={<Loader size={16} />}>
-          Payment received. Activating your plan…
+          {i18n.t('ui.billing.PricingPage.paymentReceivedActivatingYourPlan')}
         </Alert>
       )}
       <SimpleGrid cols={{ base: 1, xs: 2, lg: info.plans.length > 3 ? 4 : info.plans.length }}>
@@ -215,6 +220,7 @@ function Plans({ info }: { info: BillingEnabled }) {
 
 /** /pricing: the plans of this server and what they cost. Only on a server that sells plans. */
 export function PricingPage() {
+  useTranslation();
   const info = useBillingInfo();
   const { search } = useLocation();
   useEffect(() => {
@@ -237,29 +243,30 @@ export function PricingPage() {
   const overage = info.overage_billed && info.plans.some((p) => p.overage_price_per_cpu_hour);
   return (
     <Container size="lg" py="xl">
-      <Title order={2}>Plans and prices</Title>
+      <Title order={2}>{i18n.t('ui.billing.PricingPage.plansAndPrices')}</Title>
       <Text c="dimmed" size="sm" mt={4} maw={640}>
-        Building networks and generating code is free. Plans differ in how much the server trains
-        for you each month and how much it stores.
+        {i18n.t('ui.billing.PricingPage.buildingNetworksAndGeneratingCode')}
       </Text>
       {info.environment === 'sandbox' && (
-        <Alert color="yellow" mt="md" icon={<IconFlask size={18} />} title="Test mode">
-          Payments are simulated with Paddle’s sandbox: nothing is charged.
+        <Alert
+          color="yellow"
+          mt="md"
+          icon={<IconFlask size={18} />}
+          title={i18n.t('ui.billing.PricingPage.testMode')}
+        >
+          {i18n.t('ui.billing.PricingPage.paymentsAreSimulatedWithPaddle')}
         </Alert>
       )}
       <Stack gap="lg" mt="xl">
         <Plans info={info} />
         <Text size="sm" c="dimmed" maw={760}>
-          Prices are per month{info.prices_include_tax && ' and include VAT'}; Paddle charges them.
-          A CPU hour is one hour of one processor core working on your trainings or predictions;
-          unused hours do not carry over. You can cancel at any time to the end of the month you
-          paid for. Nothing is deleted when a plan ends: the limits of the free plan apply.
-          {overage &&
-            ' Compute beyond what a plan includes is only used and billed if you switch it on yourself on your account page, up to a limit you set.'}
+          {i18n.t('ui.billing.PricingPage.pricesArePerMonth')}
+          {info.prices_include_tax && i18n.t('ui.billing.PricingPage.andIncludeVat')}
+          {i18n.t('ui.billing.PricingPage.paddleChargesThemACpu')}
+          {overage && i18n.t('ui.billing.PricingPage.computeBeyondWhatAPlan')}
         </Text>
         <Text size="sm" c="dimmed" maw={760}>
-          Paid plans are sold by Paddle (Paddle.com Market Ltd), which handles the payment, the
-          invoice and the tax as the merchant of record.
+          {i18n.t('ui.billing.PricingPage.paidPlansAreSoldBy')}
         </Text>
       </Stack>
       <LegalLinks mt="xl" />

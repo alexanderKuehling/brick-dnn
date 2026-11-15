@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type RunDetail, type RunSummary, type TrainingStatus } from '@/api';
+import { i18n, useLanguage } from '@/i18n';
 import { isOwnRun, isRelevantRun, NO_SCOPE, otherStarter, type TrainingScope } from './access';
 import { isActive, resultText } from './format';
 import { showSupportHintOnce } from './supportHint';
@@ -163,20 +164,20 @@ export function useTraining(
       const id = `training-${run.id}`;
       const result = resultText(run);
       const titles = {
-        completed: 'Training finished',
-        stopped: 'Training stopped',
-        failed: 'Training failed',
+        completed: i18n.t('ui.training.useTraining.trainingFinished'),
+        stopped: i18n.t('ui.training.useTraining.trainingStopped'),
+        failed: i18n.t('ui.training.useTraining.trainingFailed'),
       } as const;
       const status = run.status as keyof typeof titles;
       notifications.show({
         id,
         color: status === 'failed' ? 'red' : status === 'completed' ? 'green' : 'orange',
-        title: titles[status] ?? 'Training ended',
+        title: titles[status] ?? i18n.t('ui.training.useTraining.trainingEnded'),
         autoClose: status === 'failed' ? false : 15000,
         message: (
           <>
             <Text size="sm">
-              “{run.name}”{by && ` by ${by}`}
+              “{run.name}”{by && i18n.t('ui.training.useTraining.by', { by })}
               {status === 'failed'
                 ? `: ${run.message || 'Something went wrong.'}`
                 : result
@@ -192,7 +193,9 @@ export function useTraining(
                 openRun(run.id);
               }}
             >
-              {status === 'failed' ? 'Show details' : 'Show results'}
+              {status === 'failed'
+                ? i18n.t('ui.training.useTraining.showDetails')
+                : i18n.t('ui.training.useTraining.showResults')}
             </Button>
           </>
         ),
@@ -293,6 +296,8 @@ export function useTraining(
   );
 
   // ---------------------------------------------------------------- capabilities
+  // Their descriptions come in the app's language: loaded again when it changes.
+  const language = useLanguage();
   useEffect(() => {
     const controller = new AbortController();
     setStatusError(null);
@@ -306,12 +311,12 @@ export function useTraining(
         // Keep the last known capabilities: a failed refresh should not hide the runs.
         setStatusError(
           error instanceof ApiError && error.status === 404
-            ? 'This server does not support training. Update Brick DNN to use it.'
+            ? i18n.t('ui.training.useTraining.thisServerDoesNotSupport')
             : error.message
         );
       });
     return () => controller.abort();
-  }, [statusRequest]);
+  }, [statusRequest, language]);
 
   // ---------------------------------------------------------------- run list
   useEffect(() => {

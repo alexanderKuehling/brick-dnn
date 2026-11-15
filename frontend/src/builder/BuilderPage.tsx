@@ -48,6 +48,7 @@ import { Collaboration } from '@/collab/Collaboration';
 import { CollabProvider } from '@/collab/context';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { DataFlowTour } from '@/explain/DataFlowTour';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
 import { useDatasetFit } from '@/training/useDatasetFit';
@@ -123,6 +124,7 @@ export function BuilderPage() {
 }
 
 function Builder() {
+  const { t } = useTranslation();
   const { catalog, examples, error: catalogError, reload } = useCatalog();
   const { user, ready } = useAuth();
   const navigate = useNavigate();
@@ -154,7 +156,7 @@ function Builder() {
   }, []);
   const [nodes, setNodes, onNodesChange] = useNodesState<LayerFlowNode>(initial?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(withEdgeStyle(initial?.edges ?? []));
-  const [name, setName] = useState(initial?.name ?? 'Untitled network');
+  const [name, setName] = useState(initial?.name ?? i18n.t('builder.untitled'));
   // The saved project the canvas belongs to: its version, the user's role and the sharing.
   const { project, setProject, attach, detach, members, applySharing, readOnly } = useOpenProject(
     initial?.project ?? null
@@ -265,7 +267,9 @@ function Builder() {
     seed: initial?.seed,
     onSelectedRemoved: (by) => {
       inspector.close();
-      notifications.show({ message: `${by.username} deleted the layer you had selected.` });
+      notifications.show({
+        message: i18n.t('builder.page.selectedRemoved', { user: by.username }),
+      });
     },
   });
 
@@ -424,29 +428,29 @@ function Builder() {
           setSavedKey(current);
           return;
         }
-        const changedBy = server.updated_by ?? 'Someone';
+        const changedBy = server.updated_by ?? i18n.t('builder.page.someone');
         const newer = opened.version !== null && opened.version !== server.version;
         if (initial.saved && current === initial.key) {
           // No local changes: show the latest version.
           loadProject(server);
           if (newer) {
-            notifications.show({ message: `Showing the latest version: ${changedBy} changed it.` });
+            notifications.show({
+              message: i18n.t('builder.page.latestVersion', { user: changedBy }),
+            });
           }
         } else if (server.role === 'viewer') {
           detach();
           notifications.show({
-            title: `You can only view “${server.name}” now`,
-            message: 'Your unsaved changes stay open here as a new network. Save it to keep them.',
+            title: i18n.t('builder.page.viewOnlyNow', { name: server.name }),
+            message: i18n.t('builder.page.unsavedStayOpen'),
           });
         } else {
           // Keep the unsaved changes, with the version they are based on.
           setProject({ ...openProjectOf(server), version: opened.version ?? server.version });
           if (newer) {
             notifications.show({
-              title: `${changedBy} changed “${server.name}”`,
-              message:
-                'Your unsaved changes are based on an older version. When you save, you can ' +
-                'choose which version to keep.',
+              title: i18n.t('builder.page.changedBy', { user: changedBy, name: server.name }),
+              message: i18n.t('builder.page.olderVersion'),
             });
           }
         }
@@ -457,10 +461,8 @@ function Builder() {
           notifications.show({
             id: 'no-access',
             color: 'yellow',
-            title: 'No access any more',
-            message:
-              `“${initial.name}” was deleted or is no longer shared with you. It stays open ` +
-              'here as an unsaved network.',
+            title: i18n.t('builder.page.noAccess'),
+            message: i18n.t('builder.page.noAccessText', { name: initial.name }),
           });
         }
       });
@@ -473,13 +475,9 @@ function Builder() {
       return;
     }
     modals.openConfirmModal({
-      title: 'Replace the current network?',
-      children: (
-        <Text size="sm">
-          The canvas will be replaced. Save first if you want to keep your current network.
-        </Text>
-      ),
-      labels: { confirm: 'Replace', cancel: 'Cancel' },
+      title: i18n.t('builder.page.replaceTitle'),
+      children: <Text size="sm">{i18n.t('builder.page.replaceText')}</Text>,
+      labels: { confirm: i18n.t('builder.page.replace'), cancel: i18n.t('common.cancel') },
       onConfirm: action,
     });
   };
@@ -812,16 +810,16 @@ function Builder() {
     }
     if (!user) {
       notifications.show({
-        title: 'Log in to save',
-        message: 'Saving networks needs a free account. Your work is kept while you log in.',
+        title: i18n.t('builder.page.loginToSave'),
+        message: i18n.t('builder.page.loginToSaveText'),
       });
       navigate('/login', { state: { from: '/' } });
       return null;
     }
     if (readOnly && !asCopy) {
       notifications.show({
-        title: 'View only',
-        message: 'You can view this network but not change it. Duplicate it to get your own copy.',
+        title: i18n.t('builder.page.viewOnly'),
+        message: i18n.t('builder.page.viewOnlyText'),
       });
       return null;
     }
@@ -831,7 +829,7 @@ function Builder() {
     savingRef.current = true;
     const generation = documentGeneration.current;
     setSaving(true);
-    const trimmed = name.trim() || 'Untitled network';
+    const trimmed = name.trim() || i18n.t('builder.untitled');
     const payload = { name: asCopy ? `${trimmed} (copy)` : trimmed, graph: doc };
     let savedAsNew = false;
     try {
@@ -864,8 +862,8 @@ function Builder() {
             }
             notifications.show({
               color: 'yellow',
-              title: `You can only view “${project.info?.name ?? trimmed}” now`,
-              message: 'Your changes stay open here as a new network. Save again to keep them.',
+              title: i18n.t('builder.page.viewOnlyNow', { name: project.info?.name ?? trimmed }),
+              message: i18n.t('builder.page.changesStayOpen'),
             });
             return null;
           }
@@ -886,14 +884,14 @@ function Builder() {
       notifications.show({
         color: 'green',
         message: savedAsNew
-          ? `The network no longer exists or is not shared with you. Saved it as “${saved.name}”.`
-          : `Saved “${saved.name}”.`,
+          ? i18n.t('builder.page.savedAsNew', { name: saved.name })
+          : i18n.t('builder.page.saved', { name: saved.name }),
       });
       return saved;
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Saving failed',
+        title: i18n.t('builder.page.savingFailed'),
         message: (error as Error).message,
       });
       return null;
@@ -955,13 +953,13 @@ function Builder() {
       loadProject(copy);
       notifications.show({
         color: 'green',
-        title: `Saved “${copy.name}” to your networks`,
-        message: 'This copy is yours: you can change it.',
+        title: i18n.t('builder.page.duplicated', { name: copy.name }),
+        message: i18n.t('builder.page.duplicatedText'),
       });
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Could not duplicate the network',
+        title: i18n.t('builder.page.duplicateFailed'),
         message: (error as Error).message,
       });
     }
@@ -979,14 +977,14 @@ function Builder() {
       ) {
         notifications.show({
           color: 'red',
-          title: 'The network has problems',
-          message: 'Fix the highlighted layers first. The list is shown in the side panel.',
+          title: i18n.t('builder.page.hasProblems'),
+          message: i18n.t('builder.page.hasProblemsText'),
         });
         showSummary();
       } else {
         notifications.show({
           color: 'red',
-          title: 'Export failed',
+          title: i18n.t('builder.page.exportFailed'),
           message: (error as Error).message,
         });
       }
@@ -1009,7 +1007,7 @@ function Builder() {
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Cannot open file',
+        title: i18n.t('builder.page.cannotOpen'),
         message: (error as Error).message,
       });
     }
@@ -1025,7 +1023,7 @@ function Builder() {
 
   const newNetwork = () =>
     confirmReplace(() =>
-      loadDocument({ version: 1, nodes: [], edges: [] }, 'Untitled network', null)
+      loadDocument({ version: 1, nodes: [], edges: [] }, i18n.t('builder.untitled'), null)
     );
 
   const loadTrainedNetwork = (graph: GraphDocument, runName: string) =>
@@ -1093,12 +1091,12 @@ function Builder() {
         {catalogError ? (
           <Stack align="center" maw={420} ta="center">
             <IconPlugConnectedX size={40} color="var(--mantine-color-red-6)" />
-            <Title order={3}>Cannot reach the backend</Title>
+            <Title order={3}>{t('builder.page.noBackend')}</Title>
             <Text c="dimmed" size="sm">
-              {catalogError} If you run Brick DNN locally, start the API with{' '}
-              <code>python manage.py runserver</code> in the <code>backend</code> folder.
+              {catalogError}{' '}
+              <Trans i18nKey="builder.page.noBackendText" components={{ code: <code /> }} />
             </Text>
-            <Button onClick={reload}>Try again</Button>
+            <Button onClick={reload}>{t('common.retry')}</Button>
           </Stack>
         ) : (
           <Loader />
@@ -1229,7 +1227,12 @@ function Builder() {
       </Box>
 
       {!readOnly && (
-        <Drawer opened={paletteOpened} onClose={palette.close} title="Layers" size={280}>
+        <Drawer
+          opened={paletteOpened}
+          onClose={palette.close}
+          title={t('builder.toolbar.layers')}
+          size={280}
+        >
           <Box h="calc(100dvh - 90px - env(safe-area-inset-bottom))">{paletteView}</Box>
         </Drawer>
       )}
@@ -1237,7 +1240,7 @@ function Builder() {
         opened={inspectorOpened && !wideScreen}
         onClose={inspector.close}
         position="right"
-        title="Properties"
+        title={t('builder.page.properties')}
         size={340}
       >
         {inspectorView}

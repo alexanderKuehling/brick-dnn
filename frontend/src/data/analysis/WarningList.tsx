@@ -10,6 +10,7 @@ import {
 import { Anchor, Badge, Button, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import type { DataFix, DataProfile, DataWarning, NewStep } from '@/api/types';
 import { formatCount } from '@/components/charts/format';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { groupWarnings, type WarningGroup } from './warningGroups';
 
@@ -29,13 +30,16 @@ export interface WarningListProps {
 const GROUP_PREVIEW = 20;
 
 function SeverityIcon({ severity }: { severity: DataWarning['severity'] }) {
+  useTranslation();
   const isWarning = severity === 'warning';
   const Icon = isWarning ? IconAlertTriangle : IconInfoCircle;
   return (
     <Icon
       size={18}
       role="img"
-      aria-label={isWarning ? 'Warning' : 'Note'}
+      aria-label={
+        isWarning ? i18n.t('ui.data.WarningList.warning') : i18n.t('ui.data.WarningList.note')
+      }
       color={isWarning ? 'var(--chart-status-warning)' : 'var(--mantine-color-dimmed)'}
       style={{ flexShrink: 0, marginTop: 2 }}
     />
@@ -43,6 +47,7 @@ function SeverityIcon({ severity }: { severity: DataWarning['severity'] }) {
 }
 
 function FixButton({ fix, added, onAdd }: { fix: DataFix; added: boolean; onAdd: () => void }) {
+  useTranslation();
   return (
     <Button
       size="compact-sm"
@@ -51,7 +56,7 @@ function FixButton({ fix, added, onAdd }: { fix: DataFix; added: boolean; onAdd:
       leftSection={added ? <IconCheck size={14} /> : undefined}
       onClick={onAdd}
     >
-      {added ? 'Step added' : fix.label}
+      {added ? i18n.t('ui.data.WarningList.stepAdded') : fix.label}
     </Button>
   );
 }
@@ -69,6 +74,7 @@ function GroupEntry({
   onAdd: () => void;
   onShowColumn?: (column: string) => void;
 }) {
+  useTranslation();
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const shown = all ? group.warnings : group.warnings.slice(0, GROUP_PREVIEW);
@@ -91,7 +97,12 @@ function GroupEntry({
               >
                 <Chevron size={14} aria-hidden="true" />
                 <Text size="xs" c="var(--mantine-color-anchor)">
-                  {open ? 'Hide' : 'Show'} the {formatCount(group.columns.length)} columns
+                  {i18n.t('ui.data.WarningList.theColumns', {
+                    value: open
+                      ? i18n.t('ui.data.WarningList.hide')
+                      : i18n.t('ui.data.WarningList.show'),
+                    length: formatCount(group.columns.length),
+                  })}
                 </Text>
               </UnstyledButton>
             </Group>
@@ -126,7 +137,9 @@ function GroupEntry({
               onClick={() => setAll(true)}
               style={{ alignSelf: 'flex-start' }}
             >
-              Show all {formatCount(group.warnings.length)}
+              {i18n.t('ui.data.WarningList.showAll', {
+                length: formatCount(group.warnings.length),
+              })}
             </Button>
           )}
         </Stack>
@@ -147,6 +160,7 @@ export function WarningList({
   emptyText,
   profile = null,
 }: WarningListProps) {
+  useTranslation();
   // Viewers of a shared preparation see the warnings without their fixes.
   const { readOnly } = usePrepAccess();
   const [added, setAdded] = useState<{ resetKey: unknown; keys: Set<string> }>({
@@ -213,7 +227,7 @@ export function WarningList({
                         size="xs"
                         onClick={() => onShowColumn(warning.column!)}
                       >
-                        Show {warning.column}
+                        {i18n.t('ui.data.WarningList.show2', { column: warning.column })}
                       </Anchor>
                     )}
                   </Group>

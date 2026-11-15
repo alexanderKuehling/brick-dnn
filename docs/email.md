@@ -18,7 +18,9 @@ before, except what needs e-mail (it says so).
 | **Your account will be deleted** | the account's address | `BRICKDNN_INACTIVE_ACCOUNT_WARNING_DAYS` (14 and 3) days before an inactive account is deleted (`BRICKDNN_DELETE_INACTIVE_ACCOUNTS_DAYS`) |
 | **Server errors** | `BRICKDNN_ADMIN_EMAIL` (you) | an unhandled error (HTTP 500), at most one e-mail per kind of error an hour |
 
-All of them are short, in English like the app, plain text with a simple HTML version, with
+All of them are short, in the language of the account (English or German: the language
+chosen in the app, saved on the account; else the language of the request, else English; see
+[translations.md](translations.md)), plain text with a simple HTML version, with
 the site name (`BRICKDNN_SITE_NAME`, default "Brick DNN") and links to `BRICKDNN_PUBLIC_URL`.
 Receipts and invoices of paid plans come from Paddle, not from the app.
 

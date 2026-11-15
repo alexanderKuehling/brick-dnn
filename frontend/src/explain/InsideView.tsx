@@ -12,6 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatShape, formatValue, percent } from './format';
 import { METHOD_TEXT } from './texts';
 import type {
@@ -41,6 +42,7 @@ function HistogramLine({ histogram, label }: { histogram: Histogram; label: stri
 }
 
 function VectorBars({ values, total }: { values: (number | null)[]; total: number }) {
+  useTranslation();
   const top = Math.max(1e-12, ...values.map((v) => Math.abs(v ?? 0)));
   const width = 360;
   const height = 60;
@@ -52,7 +54,11 @@ function VectorBars({ values, total }: { values: (number | null)[]; total: numbe
         className={classes.plot}
         style={{ maxWidth: width }}
         role="img"
-        aria-label={`${values.length} values from ${formatValue(Math.min(...values.map((v) => v ?? 0)))} to ${formatValue(Math.max(...values.map((v) => v ?? 0)))}`}
+        aria-label={i18n.t('ui.explain.InsideView.valuesFromTo', {
+          length: values.length,
+          min: formatValue(Math.min(...values.map((v) => v ?? 0))),
+          max: formatValue(Math.max(...values.map((v) => v ?? 0))),
+        })}
       >
         <line
           x1={0}
@@ -80,7 +86,7 @@ function VectorBars({ values, total }: { values: (number | null)[]; total: numbe
       </svg>
       {total > values.length && (
         <Text size="xs" c="dimmed">
-          The first {values.length} of {total} values.
+          {i18n.t('ui.explain.InsideView.theFirstOfValues', { length: values.length, total })}
         </Text>
       )}
     </Stack>
@@ -88,15 +94,27 @@ function VectorBars({ values, total }: { values: (number | null)[]; total: numbe
 }
 
 function ActivationPicture({ view }: { view: ActivationView }) {
+  useTranslation();
   if (view.kind === 'maps') {
     return (
       <Stack gap={4}>
-        <img src={view.png} alt="Feature maps" className={classes.maps} />
+        <img
+          src={view.png}
+          alt={i18n.t('ui.explain.InsideView.featureMaps')}
+          className={classes.maps}
+        />
         <Text size="xs" c="dimmed">
-          {view.shown === view.channels
-            ? `All ${view.channels} feature maps`
-            : `The first ${view.shown} of ${view.channels} feature maps`}{' '}
-          ({view.tile[0]}×{view.tile[1]} each; bright = high, each map scaled on its own).
+          {i18n.t('ui.explain.InsideView.eachBrightHighEachMap', {
+            value:
+              view.shown === view.channels
+                ? i18n.t('ui.explain.InsideView.allFeatureMaps', { channels: view.channels })
+                : i18n.t('ui.explain.InsideView.theFirstOfFeatureMaps', {
+                    shown: view.shown,
+                    channels: view.channels,
+                  }),
+            value2: view.tile[0],
+            value3: view.tile[1],
+          })}
         </Text>
       </Stack>
     );
@@ -104,15 +122,28 @@ function ActivationPicture({ view }: { view: ActivationView }) {
   if (view.kind === 'matrix' || view.kind === 'image') {
     return (
       <Stack gap={4}>
-        <img src={view.png} alt="Heatmap of the output" className={classes.maps} />
+        <img
+          src={view.png}
+          alt={i18n.t('ui.explain.InsideView.heatmapOfTheOutput')}
+          className={classes.maps}
+        />
         <Text size="xs" c="dimmed">
-          {view.kind === 'matrix'
-            ? `${view.rows} rows (positions) × ${view.cols} columns (features)`
-            : `${view.rows}×${view.cols}`}
-          {view.shown[0] < view.rows || view.shown[1] < view.cols
-            ? `, the first ${view.shown[0]}×${view.shown[1]} shown`
-            : ''}
-          ; bright = high.
+          {i18n.t('ui.explain.InsideView.brightHigh', {
+            value:
+              view.kind === 'matrix'
+                ? i18n.t('ui.explain.InsideView.rowsPositionsColumnsFeatures', {
+                    rows: view.rows,
+                    cols: view.cols,
+                  })
+                : `${view.rows}×${view.cols}`,
+            value2:
+              view.shown[0] < view.rows || view.shown[1] < view.cols
+                ? i18n.t('ui.explain.InsideView.theFirstShown', {
+                    value: view.shown[0],
+                    value2: view.shown[1],
+                  })
+                : '',
+          })}
         </Text>
       </Stack>
     );
@@ -131,6 +162,7 @@ function ActivationPicture({ view }: { view: ActivationView }) {
 }
 
 function NodeDetails({ node, description }: { node: NodeActivation; description?: string }) {
+  useTranslation();
   return (
     <Stack gap="xs">
       <Group gap="xs">
@@ -148,18 +180,30 @@ function NodeDetails({ node, description }: { node: NodeActivation; description?
       <ActivationPicture view={node.view} />
       <Group gap="lg">
         <Text size="xs">
-          mean <b>{formatValue(node.stats.mean)}</b>
+          <Trans
+            i18nKey="ui.explain.InsideView.mean"
+            values={{ mean: formatValue(node.stats.mean) }}
+            components={[<b />]}
+          />
         </Text>
         <Text size="xs">
-          std <b>{formatValue(node.stats.std)}</b>
+          <Trans
+            i18nKey="ui.explain.InsideView.std"
+            values={{ std: formatValue(node.stats.std) }}
+            components={[<b />]}
+          />
         </Text>
         <Text size="xs">
-          zeros <b>{percent(node.stats.zeros)}</b>
+          <Trans
+            i18nKey="ui.explain.InsideView.zeros"
+            values={{ percent: percent(node.stats.zeros) }}
+            components={[<b />]}
+          />
         </Text>
       </Group>
       <HistogramLine
         histogram={node.histogram}
-        label={`Distribution of the outputs of ${node.name}`}
+        label={i18n.t('ui.explain.InsideView.distributionOfTheOutputsOf', { name: node.name })}
       />
     </Stack>
   );
@@ -173,6 +217,7 @@ interface InsideProps {
 
 /** Every brick's output for the sample (click a brick), then the learned weights. */
 export function InsideView({ activations, weights, descriptions }: InsideProps) {
+  useTranslation();
   const nodes = activations?.nodes ?? [];
   const [selected, setSelected] = useState<string | null>(null);
   const current =
@@ -183,10 +228,13 @@ export function InsideView({ activations, weights, descriptions }: InsideProps) 
         <>
           {activations.prediction?.class !== undefined && (
             <Text size="sm">
-              Model: <b>{activations.prediction.class}</b> (
+              {i18n.t('ui.explain.InsideView.model')} <b>{activations.prediction.class}</b> (
               {percent(activations.prediction.probability)})
               {activations.sample.label !== undefined && (
-                <> · true class: {activations.sample.label}</>
+                <>
+                  {' '}
+                  {i18n.t('ui.explain.InsideView.trueClass', { label: activations.sample.label })}
+                </>
               )}
             </Text>
           )}
@@ -197,7 +245,7 @@ export function InsideView({ activations, weights, descriptions }: InsideProps) 
           >
             <Box>
               <Text size="xs" c="dimmed" mb={4}>
-                The bricks in the order the data flows through them:
+                {i18n.t('ui.explain.InsideView.theBricksInTheOrder')}
               </Text>
               <ScrollArea.Autosize mah={420} type="auto">
                 <Stack gap={2}>
@@ -231,15 +279,24 @@ export function InsideView({ activations, weights, descriptions }: InsideProps) 
       )}
       {weights && (
         <Stack gap="sm">
-          <Title order={5}>Learned weights</Title>
+          <Title order={5}>{i18n.t('ui.explain.InsideView.learnedWeights')}</Title>
           {weights.filters && (
             <Paper withBorder p="xs">
               <Stack gap={4}>
                 <Text size="sm" fw={600}>
-                  Filters of {weights.filters.name} ({weights.filters.shape[2]}×
-                  {weights.filters.shape[3]}, {weights.filters.count} of {weights.filters.shape[0]})
+                  {i18n.t('ui.explain.InsideView.filtersOfOf', {
+                    name: weights.filters.name,
+                    value: weights.filters.shape[2],
+                    value2: weights.filters.shape[3],
+                    count: weights.filters.count,
+                    value3: weights.filters.shape[0],
+                  })}
                 </Text>
-                <img src={weights.filters.png} alt="Learned filters" className={classes.filters} />
+                <img
+                  src={weights.filters.png}
+                  alt={i18n.t('ui.explain.InsideView.learnedFilters')}
+                  className={classes.filters}
+                />
                 {weights.filters.note && (
                   <Text size="xs" c="dimmed">
                     {weights.filters.note}
@@ -263,11 +320,17 @@ export function InsideView({ activations, weights, descriptions }: InsideProps) 
                   </Text>
                   <HistogramLine
                     histogram={param.histogram}
-                    label={`Distribution of ${layer.name}.${param.name}`}
+                    label={i18n.t('ui.explain.InsideView.distributionOf', {
+                      name: layer.name,
+                      name2: param.name,
+                    })}
                   />
                   <Text size="10px" c="dimmed">
-                    mean {formatValue(param.histogram.mean)} · std{' '}
-                    {formatValue(param.histogram.std)} · norm {formatValue(param.norm)}
+                    {i18n.t('ui.explain.InsideView.meanStdNorm', {
+                      mean: formatValue(param.histogram.mean),
+                      std: formatValue(param.histogram.std),
+                      norm: formatValue(param.norm),
+                    })}
                   </Text>
                 </Paper>
               ))

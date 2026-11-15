@@ -28,6 +28,7 @@ import { api, ApiError, type Project, type ProjectRole, type ProjectVersion } fr
 import { useAuth } from '@/auth/AuthContext';
 import type { SubscribeToEvents } from '@/collab/events';
 import { fullDateTime, groupByDay, timeInDay } from '@/collab/time';
+import { i18n, useTranslation } from '@/i18n';
 import { KIND_LABELS, layerCount, versionAuthor, versionTitle } from './labels';
 import { useVersions } from './useVersions';
 import { VersionPreview } from './VersionPreview';
@@ -76,13 +77,14 @@ function LabelForm({
   onSubmit,
   onCancel,
 }: LabelFormProps) {
+  useTranslation();
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     if (!value.trim()) {
-      setError('Give the version a name.');
+      setError(i18n.t('ui.history.HistoryPanel.giveTheVersionAName'));
       return;
     }
     setSaving(true);
@@ -105,7 +107,7 @@ function LabelForm({
       <TextInput
         label={label}
         description={description}
-        placeholder="e.g. Baseline"
+        placeholder={i18n.t('ui.history.HistoryPanel.eGBaseline')}
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
         onKeyDown={(event) => {
@@ -121,7 +123,7 @@ function LabelForm({
       />
       <Group justify="flex-end" gap="xs" mt="xs">
         <Button variant="subtle" color="gray" size="xs" onClick={onCancel}>
-          Cancel
+          {i18n.t('ui.history.HistoryPanel.cancel')}
         </Button>
         <Button type="submit" size="xs" loading={saving}>
           {submitLabel}
@@ -152,6 +154,7 @@ export function HistoryPanel({
   unsaved = false,
   onRestored,
 }: HistoryPanelProps) {
+  useTranslation();
   const { user } = useAuth();
   const me = user?.username ?? null;
   const { versions, error, reload, replace } = useVersions(projectId, subscribe, live);
@@ -183,8 +186,8 @@ export function HistoryPanel({
     notifications.show({
       id: REPLACED_NOTIFICATION,
       color: 'green',
-      title: `Restored “${versionTitle(entry, me)}”`,
-      message: 'It is the current state now. To undo it, restore the previous version.',
+      title: i18n.t('ui.history.HistoryPanel.restored', { versionTitle: versionTitle(entry, me) }),
+      message: i18n.t('ui.history.HistoryPanel.itIsTheCurrentState'),
     });
   };
 
@@ -195,11 +198,11 @@ export function HistoryPanel({
       {canEdit ? (
         naming ? (
           <LabelForm
-            label="Name the current version"
+            label={i18n.t('ui.history.HistoryPanel.nameTheCurrentVersion')}
             description={
               unsaved
-                ? 'Your unsaved changes are not part of it: save first to include them.'
-                : 'Named versions are kept for good.'
+                ? i18n.t('ui.history.HistoryPanel.yourUnsavedChangesAreNot')
+                : i18n.t('ui.history.HistoryPanel.namedVersionsAreKeptFor')
             }
             submitLabel="Save name"
             onSubmit={nameCurrent}
@@ -212,23 +215,27 @@ export function HistoryPanel({
             onClick={() => setNaming(true)}
             style={{ alignSelf: 'flex-start' }}
           >
-            Name current version
+            {i18n.t('ui.history.HistoryPanel.nameCurrentVersion')}
           </Button>
         )
       ) : (
         <Text size="sm" c="dimmed">
-          You can look at earlier versions. The owner and editors can name and restore them.
+          {i18n.t('ui.history.HistoryPanel.youCanLookAtEarlier')}
         </Text>
       )}
       <Text size="xs" c="dimmed">
-        Every change is kept. Changes by the same person within ten minutes form one entry.
+        {i18n.t('ui.history.HistoryPanel.everyChangeIsKeptChanges')}
       </Text>
 
       {error && (
-        <Alert color="red" variant="light" title="Could not load the history">
+        <Alert
+          color="red"
+          variant="light"
+          title={i18n.t('ui.history.HistoryPanel.couldNotLoadTheHistory')}
+        >
           {error}{' '}
           <Button variant="subtle" size="compact-xs" onClick={() => void reload()}>
-            Try again
+            {i18n.t('ui.history.HistoryPanel.tryAgain')}
           </Button>
         </Alert>
       )}
@@ -239,7 +246,7 @@ export function HistoryPanel({
       )}
       {versions?.length === 0 && (
         <Text size="sm" c="dimmed" ta="center" py="lg">
-          No history yet.
+          {i18n.t('ui.history.HistoryPanel.noHistoryYet')}
         </Text>
       )}
 
@@ -261,7 +268,11 @@ export function HistoryPanel({
                     {renaming === entry.id ? (
                       <div className={classes.rename}>
                         <LabelForm
-                          label={entry.kind === 'named' ? 'Rename version' : 'Name this version'}
+                          label={
+                            entry.kind === 'named'
+                              ? i18n.t('ui.history.HistoryPanel.renameVersion')
+                              : i18n.t('ui.history.HistoryPanel.nameThisVersion')
+                          }
                           initial={entry.kind === 'auto' ? '' : entry.label}
                           submitLabel="Save name"
                           onSubmit={(label) => rename(entry, label)}
@@ -290,7 +301,7 @@ export function HistoryPanel({
                               </Text>
                               {latest && (
                                 <Badge size="xs" variant="light" tt="none">
-                                  Current
+                                  {i18n.t('ui.history.HistoryPanel.current')}
                                 </Badge>
                               )}
                             </Group>
@@ -311,7 +322,7 @@ export function HistoryPanel({
                               variant="subtle"
                               color="gray"
                               className={classes.entryMenu}
-                              aria-label={`Actions for “${title}”`}
+                              aria-label={i18n.t('ui.history.HistoryPanel.actionsFor', { title })}
                             >
                               <IconDots size={16} />
                             </ActionIcon>
@@ -321,14 +332,16 @@ export function HistoryPanel({
                               leftSection={<IconEye size={14} />}
                               onClick={() => setPreview({ entry, confirm: false })}
                             >
-                              Preview
+                              {i18n.t('ui.history.HistoryPanel.preview')}
                             </Menu.Item>
                             {canEdit && (
                               <Menu.Item
                                 leftSection={<IconBookmark size={14} />}
                                 onClick={() => setRenaming(entry.id)}
                               >
-                                {entry.kind === 'named' ? 'Rename' : 'Name this version'}
+                                {entry.kind === 'named'
+                                  ? i18n.t('ui.history.HistoryPanel.rename')
+                                  : i18n.t('ui.history.HistoryPanel.nameThisVersion')}
                               </Menu.Item>
                             )}
                             {canEdit && !isCurrent && (
@@ -336,7 +349,7 @@ export function HistoryPanel({
                                 leftSection={<IconRestore size={14} />}
                                 onClick={() => setPreview({ entry, confirm: true })}
                               >
-                                Restore…
+                                {i18n.t('ui.history.HistoryPanel.restore')}
                               </Menu.Item>
                             )}
                           </Menu.Dropdown>

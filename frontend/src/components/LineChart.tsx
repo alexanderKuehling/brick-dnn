@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Group, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import {
   extent,
   formatTick,
@@ -49,7 +50,7 @@ const INSET = 8;
 const TICK_CHAR_WIDTH = 6.6;
 
 const defaultFormat = (value: number) =>
-  value.toLocaleString('en-US', { maximumSignificantDigits: 4 });
+  value.toLocaleString(currentLocale(), { maximumSignificantDigits: 4 });
 
 function LineKey({ color }: { color: string }) {
   return (
@@ -75,6 +76,7 @@ export function LineChart({
   height = 190,
   width: fixedWidth,
 }: LineChartProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const [active, setActive] = useState<number | null>(null);
@@ -114,16 +116,25 @@ export function LineChart({
       .map((xv, i) => [xv, s.values[i]] as const)
       .filter((p): p is readonly [number, number] => typeof p[1] === 'number');
     if (points.length === 0) {
-      return `${s.label}: no data yet.`;
+      return i18n.t('ui.components.LineChart.noDataYet', { label: s.label });
     }
     const [first, last] = [points[0], points[points.length - 1]];
     if (points.length === 1) {
-      return `${s.label}: ${formatValue(first[1])} at ${xLabel.toLowerCase()} ${first[0]}.`;
+      return i18n.t('ui.components.LineChart.at', {
+        label: s.label,
+        value: formatValue(first[1]),
+        xLabel: xLabel.toLowerCase(),
+        value2: first[0],
+      });
     }
-    return (
-      `${s.label}: ${formatValue(first[1])} at ${xLabel.toLowerCase()} ${first[0]}, ` +
-      `${formatValue(last[1])} at ${xLabel.toLowerCase()} ${last[0]}.`
-    );
+    return i18n.t('ui.components.LineChart.atAt', {
+      label: s.label,
+      first: formatValue(first[1]),
+      xLabel: xLabel.toLowerCase(),
+      firstX: first[0],
+      last: formatValue(last[1]),
+      lastX: last[0],
+    });
   };
   const summary = `${title}. ${series.map(describe).join(' ')}`;
 
@@ -286,7 +297,7 @@ export function LineChart({
         {x.length === 0 && (
           <div className={classes.empty}>
             <Text size="sm" c="dimmed">
-              No data yet
+              {i18n.t('ui.components.LineChart.noDataYet2')}
             </Text>
           </div>
         )}
@@ -296,7 +307,10 @@ export function LineChart({
             className={classes.overlay}
             role="slider"
             tabIndex={0}
-            aria-label={`${title}: use the arrow keys to read the values per ${xLabel.toLowerCase()}`}
+            aria-label={i18n.t('ui.components.LineChart.useTheArrowKeysTo', {
+              title,
+              xLabel: xLabel.toLowerCase(),
+            })}
             aria-valuemin={x[0]}
             aria-valuemax={x[x.length - 1]}
             aria-valuenow={x[activeIndex ?? x.length - 1]}

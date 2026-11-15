@@ -1,11 +1,12 @@
 /** Formatting of sample values and column facts for the data table. */
 import type { ColumnKind } from '@/api/types';
+import { currentLocale, i18n } from '@/i18n';
 
 const NBSP = ' ';
 
 /** 1234567 → "1,234,567". */
 export function formatCount(value: number): string {
-  return value.toLocaleString('en-US');
+  return value.toLocaleString(currentLocale());
 }
 
 /**
@@ -21,9 +22,9 @@ export function formatNumber(value: number): string {
     return value.toExponential(3).replace(/\.?0+e/, 'e');
   }
   if (Number.isInteger(value)) {
-    return value.toLocaleString('en-US');
+    return value.toLocaleString(currentLocale());
   }
-  return value.toLocaleString('en-US', {
+  return value.toLocaleString(currentLocale(), {
     maximumSignificantDigits: Math.max(6, Math.floor(Math.log10(magnitude)) + 3),
   });
 }
@@ -91,13 +92,20 @@ export function formatShare(part: number, total: number): string {
     return `>99.9${NBSP}%`;
   }
   const digits = percent < 10 ? 1 : 0;
-  return `${Number(percent.toFixed(digits))}${NBSP}%`;
+  return `${Number(percent.toFixed(digits)).toLocaleString(currentLocale())}${NBSP}%`;
 }
 
 /** "Showing 5,000 random rows of 1,234,567" / "Showing all 1,200 rows". */
 export function sampleCaption(rows: number, total: number): string {
   if (rows >= total) {
-    return `Showing all ${formatCount(total)} ${total === 1 ? 'row' : 'rows'}`;
+    return i18n.t('ui.data.format.showingAll', {
+      total: formatCount(total),
+      value: total === 1 ? i18n.t('ui.data.format.row') : i18n.t('ui.data.format.rows'),
+    });
   }
-  return `Showing ${formatCount(rows)} random ${rows === 1 ? 'row' : 'rows'} of ${formatCount(total)}`;
+  return i18n.t('ui.data.format.showingRandomOf', {
+    rows: formatCount(rows),
+    value: rows === 1 ? i18n.t('ui.data.format.row') : i18n.t('ui.data.format.rows'),
+    total: formatCount(total),
+  });
 }

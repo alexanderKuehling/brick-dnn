@@ -49,6 +49,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { downloadBlob } from '@/builder/download';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
@@ -147,6 +148,7 @@ function datasetSummary(dataset: Dataset): string {
  * and turn the result into a training dataset.
  */
 export function DataPage() {
+  useTranslation();
   const { user, ready } = useAuth();
   const resources = useDataResources(Boolean(user));
   const { status } = resources;
@@ -158,8 +160,12 @@ export function DataPage() {
           <Message
             icon={<IconPlugConnectedX size={24} />}
             color="red"
-            title="Cannot reach the backend"
-            actions={<Button onClick={resources.reloadStatus}>Try again</Button>}
+            title={i18n.t('ui.data.DataPage.cannotReachTheBackend')}
+            actions={
+              <Button onClick={resources.reloadStatus}>
+                {i18n.t('ui.data.DataPage.tryAgain')}
+              </Button>
+            }
           >
             {resources.statusError}
           </Message>
@@ -221,43 +227,43 @@ function Message({
 }
 
 function LoggedOut() {
+  useTranslation();
   const { pathname } = useLocation();
   return (
     <Center h={PAGE_HEIGHT} px="md">
       <Message
         icon={<IconLock size={24} />}
-        title="Log in to prepare data"
+        title={i18n.t('ui.data.DataPage.logInToPrepareData')}
         actions={
           <>
             <Button component={Link} to="/login" state={{ from: pathname }}>
-              Log in
+              {i18n.t('ui.data.DataPage.logIn')}
             </Button>
             <Button component={Link} to="/register" state={{ from: pathname }} variant="default">
-              Sign up
+              {i18n.t('ui.data.DataPage.signUp')}
             </Button>
           </>
         }
       >
-        Import CSV, Excel or JSON files, clean and combine them step by step, see what is in them,
-        and turn them into training data. Your files are stored on the Brick DNN server, so this
-        needs a free account, just like saving and training.
+        {i18n.t('ui.data.DataPage.importCsvExcelOrJson')}
       </Message>
     </Center>
   );
 }
 
 function Unavailable({ status, onRetry }: { status: DataStatus; onRetry: () => void }) {
+  useTranslation();
   const missingPackages = status.enabled;
   return (
     <Center h={PAGE_HEIGHT} px="md">
       <Message
         icon={<IconDatabaseOff size={24} />}
         color={missingPackages ? 'yellow' : 'gray'}
-        title="Data preparation is not available"
+        title={i18n.t('ui.data.DataPage.dataPreparationIsNotAvailable')}
         actions={
           missingPackages ? (
             <Button variant="light" onClick={onRetry}>
-              Check again
+              {i18n.t('ui.data.DataPage.checkAgain')}
             </Button>
           ) : undefined
         }
@@ -265,17 +271,16 @@ function Unavailable({ status, onRetry }: { status: DataStatus; onRetry: () => v
         <Text size="sm">
           {status.reason ??
             (status.enabled
-              ? 'pandas is not installed on the server.'
-              : 'Data preparation is switched off on this server.')}
+              ? i18n.t('ui.data.DataPage.pandasIsNotInstalledOn')
+              : i18n.t('ui.data.DataPage.dataPreparationIsSwitchedOff'))}
         </Text>
         {missingPackages && (
           <Stack gap={6} mt="md" ta="left">
             <Text size="sm">
-              It needs pandas in the backend environment. In the <Code>backend</Code> folder, with
-              the virtual environment active:
+              <Trans i18nKey="ui.data.DataPage.itNeedsPandasInThe" components={[<Code />]} />
             </Text>
-            <Code block>pip install -r requirements.txt</Code>
-            <Text size="sm">Then restart the backend and check again.</Text>
+            <Code block>{i18n.t('ui.data.DataPage.pipInstallRRequirementsTxt')}</Code>
+            <Text size="sm">{i18n.t('ui.data.DataPage.thenRestartTheBackendAnd')}</Text>
           </Stack>
         )}
       </Message>
@@ -293,6 +298,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ resources, status }: WorkspaceProps) {
+  useTranslation();
   const params = useParams();
   const navigate = useNavigate();
   const theme = useMantineTheme();
@@ -409,7 +415,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Cannot create the preparation',
+        title: i18n.t('ui.data.DataPage.cannotCreateThePreparation'),
         message: (error as Error).message,
       });
     }
@@ -420,8 +426,11 @@ function Workspace({ resources, status }: WorkspaceProps) {
     if (imported.report.warnings.length === 0) {
       notifications.show({
         color: 'green',
-        title: `Imported “${imported.name}”`,
-        message: `${tableSize(imported.n_rows, imported.n_columns)}, read as ${describeReport(imported.report)}.`,
+        title: i18n.t('ui.data.DataPage.imported', { name: imported.name }),
+        message: i18n.t('ui.data.DataPage.readAs', {
+          tableSize: tableSize(imported.n_rows, imported.n_columns),
+          describeReport: describeReport(imported.report),
+        }),
       });
     }
     if (openNew) {
@@ -475,11 +484,11 @@ function Workspace({ resources, status }: WorkspaceProps) {
     const current = target.id === prepId;
     let value = current ? prep.name : target.name;
     modals.openConfirmModal({
-      title: 'Rename preparation',
+      title: i18n.t('ui.data.DataPage.renamePreparation'),
       children: (
         <TextInput
           data-autofocus
-          label="Name"
+          label={i18n.t('ui.data.DataPage.name')}
           defaultValue={value}
           maxLength={120}
           onChange={(event) => {
@@ -487,7 +496,10 @@ function Workspace({ resources, status }: WorkspaceProps) {
           }}
         />
       ),
-      labels: { confirm: 'Save', cancel: 'Cancel' },
+      labels: {
+        confirm: i18n.t('ui.data.DataPage.save'),
+        cancel: i18n.t('ui.data.DataPage.cancel'),
+      },
       onConfirm: async () => {
         const name = value.trim();
         if (!name) {
@@ -502,7 +514,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
         } catch (error) {
           notifications.show({
             color: 'red',
-            title: 'Cannot rename the preparation',
+            title: i18n.t('ui.data.DataPage.cannotRenameThePreparation'),
             message: (error as Error).message,
           });
         }
@@ -523,14 +535,12 @@ function Workspace({ resources, status }: WorkspaceProps) {
     const current = target.id === prepId;
     const name = current ? prep.name : target.name;
     modals.openConfirmModal({
-      title: `Delete “${name}”?`,
-      children: (
-        <Text size="sm">
-          Its steps and settings are deleted. The imported tables and the training datasets made
-          from it are kept.
-        </Text>
-      ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      title: i18n.t('ui.data.DataPage.delete', { name }),
+      children: <Text size="sm">{i18n.t('ui.data.DataPage.itsStepsAndSettingsAre')}</Text>,
+      labels: {
+        confirm: i18n.t('ui.data.DataPage.delete2'),
+        cancel: i18n.t('ui.data.DataPage.cancel'),
+      },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
@@ -543,7 +553,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
           if (!(error instanceof ApiError && error.status === 404)) {
             notifications.show({
               color: 'red',
-              title: 'Cannot delete the preparation',
+              title: i18n.t('ui.data.DataPage.cannotDeleteThePreparation'),
               message: (error as Error).message,
             });
             return;
@@ -594,7 +604,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Cannot save the preparation',
+        title: i18n.t('ui.data.DataPage.cannotSaveThePreparation'),
         message: (error as Error).message,
       });
       return false;
@@ -609,8 +619,11 @@ function Workspace({ resources, status }: WorkspaceProps) {
     const summary = datasetSummary(dataset);
     notifications.show({
       color: 'green',
-      title: 'Training data selected',
-      message: `“${dataset.name}” is selected in the training panel${summary ? ` (${summary})` : ''}.`,
+      title: i18n.t('ui.data.DataPage.trainingDataSelected'),
+      message: i18n.t('ui.data.DataPage.isSelectedInTheTraining', {
+        name: dataset.name,
+        value: summary ? ` (${summary})` : '',
+      }),
     });
   };
 
@@ -621,11 +634,11 @@ function Workspace({ resources, status }: WorkspaceProps) {
         showView('readiness');
         notifications.show({
           color: 'orange',
-          title: 'Not ready for training yet',
+          title: i18n.t('ui.data.DataPage.notReadyForTrainingYet'),
           message:
             errors === 1
-              ? 'Fix the problem listed under Readiness first.'
-              : `Fix the ${errors} problems listed under Readiness first.`,
+              ? i18n.t('ui.data.DataPage.fixTheProblemListedUnder')
+              : i18n.t('ui.data.DataPage.fixTheProblemsListedUnder', { errors }),
         });
         return;
       }
@@ -646,7 +659,9 @@ function Workspace({ resources, status }: WorkspaceProps) {
         }
         notifications.show({
           color: 'red',
-          title: notReady ? 'Not ready for training' : 'Cannot create the training dataset',
+          title: notReady
+            ? i18n.t('ui.data.DataPage.notReadyForTraining')
+            : i18n.t('ui.data.DataPage.cannotCreateTheTrainingDataset'),
           message: (error as Error).message,
         });
         return;
@@ -670,14 +685,15 @@ function Workspace({ resources, status }: WorkspaceProps) {
       notifications.show({
         id,
         color: 'green',
-        title: 'Training dataset created',
+        title: i18n.t('ui.data.DataPage.trainingDatasetCreated'),
         autoClose: 10000,
         message: (
           <>
             <Text size="sm">
-              “{dataset.name}” is listed under “Your data” in the training panel
+              “{dataset.name}
+              {i18n.t('ui.data.DataPage.isListedUnderYourData')}
               {dataset.mine === false &&
-                ` (shared with you: it belongs to ${dataset.owner}, like the preparation)`}
+                i18n.t('ui.data.DataPage.sharedWithYouItBelongs', { owner: dataset.owner })}
               .
             </Text>
             <Button
@@ -689,7 +705,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
                 trainWith(dataset);
               }}
             >
-              Train with it
+              {i18n.t('ui.data.DataPage.trainWithIt')}
             </Button>
           </>
         ),
@@ -707,7 +723,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
       } catch (error) {
         notifications.show({
           color: 'red',
-          title: 'Download failed',
+          title: i18n.t('ui.data.DataPage.downloadFailed'),
           message: (error as Error).message,
         });
       }
@@ -730,8 +746,8 @@ function Workspace({ resources, status }: WorkspaceProps) {
         notifications.show({
           message:
             labels.length === 1
-              ? `Added “${labels[0]}” to the steps.`
-              : `Added ${labels.length} steps.`,
+              ? i18n.t('ui.data.DataPage.addedToTheSteps', { value: labels[0] })
+              : i18n.t('ui.data.DataPage.addedSteps', { length: labels.length }),
           autoClose: 2500,
         });
       });
@@ -781,8 +797,10 @@ function Workspace({ resources, status }: WorkspaceProps) {
           <Message
             icon={<IconAlertTriangle size={24} />}
             color="red"
-            title="Cannot load your data"
-            actions={<Button onClick={resources.retry}>Try again</Button>}
+            title={i18n.t('ui.data.DataPage.cannotLoadYourData')}
+            actions={
+              <Button onClick={resources.retry}>{i18n.t('ui.data.DataPage.tryAgain')}</Button>
+            }
           >
             {resources.listsError}
           </Message>
@@ -815,8 +833,8 @@ function Workspace({ resources, status }: WorkspaceProps) {
         <Message
           icon={<IconAlertTriangle size={24} />}
           color="red"
-          title="Cannot load the preparation"
-          actions={<Button onClick={prep.reload}>Try again</Button>}
+          title={i18n.t('ui.data.DataPage.cannotLoadThePreparation')}
+          actions={<Button onClick={prep.reload}>{i18n.t('ui.data.DataPage.tryAgain')}</Button>}
         >
           {prep.loadError}
         </Message>
@@ -872,7 +890,10 @@ function Workspace({ resources, status }: WorkspaceProps) {
   return (
     <Box className={classes.page} style={{ height: PAGE_HEIGHT }} {...dropHandlers}>
       {wide && (
-        <aside className={classes.sidebar} aria-label="Preparations and tables">
+        <aside
+          className={classes.sidebar}
+          aria-label={i18n.t('ui.data.DataPage.preparationsAndTables')}
+        >
           {sidebar}
         </aside>
       )}
@@ -882,7 +903,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
         <Drawer
           opened={drawerOpened}
           onClose={drawer.close}
-          title="Data"
+          title={i18n.t('ui.data.DataPage.data')}
           size={300}
           classNames={{ body: classes.drawerBody }}
         >
@@ -918,7 +939,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
         <div className={classes.dropOverlay} aria-hidden>
           <Stack align="center" gap="xs">
             <IconTableImport size={36} color="var(--mantine-primary-color-filled)" />
-            <Text fw={600}>Drop the file to import it</Text>
+            <Text fw={600}>{i18n.t('ui.data.DataPage.dropTheFileToImport')}</Text>
           </Stack>
         </div>
       )}
@@ -927,19 +948,20 @@ function Workspace({ resources, status }: WorkspaceProps) {
 }
 
 function NotFound() {
+  useTranslation();
   return (
     <Center className={classes.empty}>
       <Message
         icon={<IconAlertTriangle size={24} />}
         color="gray"
-        title="Preparation not found"
+        title={i18n.t('ui.data.DataPage.preparationNotFound')}
         actions={
           <Button component={Link} to="/data" replace>
-            Show my preparations
+            {i18n.t('ui.data.DataPage.showMyPreparations')}
           </Button>
         }
       >
-        This preparation does not exist (any more).
+        {i18n.t('ui.data.DataPage.thisPreparationDoesNotExist')}
       </Message>
     </Center>
   );
@@ -956,26 +978,24 @@ function Welcome({
   onImport: () => void;
   onNewPrep: (source: DataSource) => void;
 }) {
+  useTranslation();
   return (
     <div className={classes.empty}>
       <Message
         icon={<IconTableImport size={24} />}
-        title="Prepare data for training"
+        title={i18n.t('ui.data.DataPage.prepareDataForTraining')}
         actions={
           <Button leftSection={<IconFileImport size={16} />} onClick={onImport}>
-            Import data
+            {i18n.t('ui.data.DataPage.importData')}
           </Button>
         }
       >
         <Text size="sm" c="dimmed">
-          Import a CSV, Excel, JSON or Parquet file (up to {maxUploadMb} MB), drop it here, or
-          import it from a link. Separators, decimal commas, dates and missing values are detected.
-          Then clean and combine the data step by step, see what is in it, and turn it into a
-          training dataset.
+          {i18n.t('ui.data.DataPage.importACsvExcelJson', { maxUploadMb })}
         </Text>
         {sources.length > 0 && (
           <Stack gap={6} mt="lg" align="center">
-            <Text size="sm">Or start with a table you imported:</Text>
+            <Text size="sm">{i18n.t('ui.data.DataPage.orStartWithATable')}</Text>
             <Group gap="xs" justify="center">
               {sources.map((s) => (
                 <Button
@@ -1021,6 +1041,7 @@ interface PrepContentProps {
 }
 
 function PrepContent(props: PrepContentProps) {
+  useTranslation();
   const { prep, resources, source, split, view, visited, onViewChange } = props;
   const { catalog, catalogError } = resources;
   const result = prep.preview;
@@ -1080,10 +1101,14 @@ function PrepContent(props: PrepContentProps) {
       splitInfo={result?.split ?? null}
     />
   ) : catalogError ? (
-    <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot load the step types">
+    <Alert
+      color="red"
+      icon={<IconAlertTriangle size={18} />}
+      title={i18n.t('ui.data.DataPage.cannotLoadTheStepTypes')}
+    >
       <Text size="sm">{catalogError}</Text>
       <Button size="compact-sm" variant="light" color="red" mt="xs" onClick={resources.retry}>
-        Try again
+        {i18n.t('ui.data.DataPage.tryAgain')}
       </Button>
     </Alert>
   ) : (
@@ -1103,7 +1128,7 @@ function PrepContent(props: PrepContentProps) {
           <Stack align="center" gap="xs">
             <Loader />
             <Text size="sm" c="dimmed">
-              Running the preparation …
+              {i18n.t('ui.data.DataPage.runningThePreparation')}
             </Text>
           </Stack>
         </Center>
@@ -1132,20 +1157,28 @@ function PrepContent(props: PrepContentProps) {
                 </Badge>
               }
             >
-              Steps
+              {i18n.t('ui.data.DataPage.steps')}
             </Tabs.Tab>
           )}
           <Tabs.Tab value="data" leftSection={<IconTable size={14} />}>
-            Data
+            {i18n.t('ui.data.DataPage.data')}
           </Tabs.Tab>
           <Tabs.Tab value="analysis" leftSection={<IconChartHistogram size={14} />}>
-            Analysis
+            {i18n.t('ui.data.DataPage.analysis')}
           </Tabs.Tab>
           <Tabs.Tab
             value="readiness"
             leftSection={<IconCircleCheck size={14} />}
             aria-label={
-              errors ? `Readiness, ${errors} ${errors === 1 ? 'problem' : 'problems'}` : undefined
+              errors
+                ? i18n.t('ui.data.DataPage.readiness2', {
+                    errors,
+                    value:
+                      errors === 1
+                        ? i18n.t('ui.data.DataPage.problem')
+                        : i18n.t('ui.data.DataPage.problems'),
+                  })
+                : undefined
             }
             rightSection={
               errors ? (
@@ -1157,7 +1190,7 @@ function PrepContent(props: PrepContentProps) {
               ) : undefined
             }
           >
-            Readiness
+            {i18n.t('ui.data.DataPage.readiness')}
           </Tabs.Tab>
         </Tabs.List>
         <PreviewStatus prep={prep} />
@@ -1236,10 +1269,10 @@ function PrepContent(props: PrepContentProps) {
   }
   return (
     <div className={classes.split}>
-      <section className={classes.editor} aria-label="Steps">
+      <section className={classes.editor} aria-label={i18n.t('ui.data.DataPage.steps')}>
         <div className={classes.editorInner}>{editor}</div>
       </section>
-      <section className={classes.results} aria-label="Preview">
+      <section className={classes.results} aria-label={i18n.t('ui.data.DataPage.preview')}>
         {tabs}
       </section>
     </div>
@@ -1247,13 +1280,14 @@ function PrepContent(props: PrepContentProps) {
 }
 
 function PreviewStatus({ prep }: { prep: DataPrepController }) {
+  useTranslation();
   const result = prep.preview;
   if (prep.previewing && result) {
     return (
       <Group gap={6} wrap="nowrap" ml="auto" style={{ flexShrink: 0 }}>
         <Loader size={12} />
         <Text size="xs" c="dimmed" visibleFrom="xs">
-          Updating …
+          {i18n.t('ui.data.DataPage.updating')}
         </Text>
       </Group>
     );
@@ -1269,11 +1303,16 @@ function PreviewStatus({ prep }: { prep: DataPrepController }) {
 }
 
 function PreviewError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  useTranslation();
   return (
-    <Alert color="red" icon={<IconAlertTriangle size={18} />} title="The preview failed">
+    <Alert
+      color="red"
+      icon={<IconAlertTriangle size={18} />}
+      title={i18n.t('ui.data.DataPage.thePreviewFailed')}
+    >
       <Text size="sm">{message}</Text>
       <Button size="compact-sm" variant="light" color="red" mt="xs" onClick={onRetry}>
-        Try again
+        {i18n.t('ui.data.DataPage.tryAgain')}
       </Button>
     </Alert>
   );
@@ -1281,6 +1320,7 @@ function PreviewError({ message, onRetry }: { message: string; onRetry: () => vo
 
 /** What the user should know about the shown preview. */
 function Notices({ prep, resources, split, onViewChange }: PrepContentProps) {
+  useTranslation();
   const result = prep.preview;
   if (!result) {
     return null;
@@ -1296,7 +1336,7 @@ function Notices({ prep, resources, split, onViewChange }: PrepContentProps) {
   const failed = failedIndex >= 0 ? prep.steps[failedIndex] : null;
   const showSteps = !split && (
     <Button size="compact-xs" variant="light" mt={6} onClick={() => onViewChange('steps')}>
-      Show steps
+      {i18n.t('ui.data.DataPage.showSteps')}
     </Button>
   );
 
@@ -1305,9 +1345,11 @@ function Notices({ prep, resources, split, onViewChange }: PrepContentProps) {
       {prep.previewError && (
         <Alert color="red" icon={<IconAlertTriangle size={16} />} p="xs">
           <Group gap="xs" justify="space-between">
-            <Text size="sm">The preview could not be updated: {prep.previewError}</Text>
+            <Text size="sm">
+              {i18n.t('ui.data.DataPage.thePreviewCouldNotBe', { previewError: prep.previewError })}
+            </Text>
             <Button size="compact-xs" variant="light" color="red" onClick={prep.retryPreview}>
-              Try again
+              {i18n.t('ui.data.DataPage.tryAgain')}
             </Button>
           </Group>
         </Alert>
@@ -1315,8 +1357,10 @@ function Notices({ prep, resources, split, onViewChange }: PrepContentProps) {
       {failed && (
         <Alert color="red" icon={<IconAlertTriangle size={16} />} p="xs">
           <Text size="sm">
-            Step {failedIndex + 1} “{label(failed.type)}” failed, so the steps after it did not run.
-            The preview shows the data before it.
+            {i18n.t('ui.data.DataPage.stepFailedSoTheSteps', {
+              value: failedIndex + 1,
+              label: label(failed.type),
+            })}
           </Text>
           {showSteps}
         </Alert>
@@ -1325,10 +1369,13 @@ function Notices({ prep, resources, split, onViewChange }: PrepContentProps) {
         <Alert color="blue" p="xs">
           <Group gap="xs" justify="space-between">
             <Text size="sm">
-              Showing the data after step {uptoIndex + 1} “{label(prep.steps[uptoIndex].type)}”.
+              {i18n.t('ui.data.DataPage.showingTheDataAfterStep', {
+                value: uptoIndex + 1,
+                label: label(prep.steps[uptoIndex].type),
+              })}
             </Text>
             <Button size="compact-xs" variant="light" onClick={() => prep.setUpto(null)}>
-              Show the result of all steps
+              {i18n.t('ui.data.DataPage.showTheResultOfAll')}
             </Button>
           </Group>
         </Alert>

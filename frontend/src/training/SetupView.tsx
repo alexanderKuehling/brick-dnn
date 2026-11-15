@@ -22,6 +22,7 @@ import {
   type RunSummary,
   type TrainingStatus,
 } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { AccountLink, CostEstimate } from '@/usage/CostEstimate';
 import { useCostEstimate } from '@/usage/useCostEstimate';
 import type { TrainingProject } from './access';
@@ -88,11 +89,13 @@ interface StartError {
   budget?: string;
 }
 
-const BUDGET_TITLES: Record<string, string> = {
-  budget_exceeded: 'Not enough compute budget',
-  estimate_too_high: 'Too much compute for the budget',
-  storage_quota_exceeded: 'The storage of your account is full',
-};
+const BUDGET_CODES = ['budget_exceeded', 'estimate_too_high', 'storage_quota_exceeded'] as const;
+
+function budgetTitle(code: string): string {
+  return (BUDGET_CODES as readonly string[]).includes(code)
+    ? i18n.t(`training.setup.budget.${code as (typeof BUDGET_CODES)[number]}`)
+    : i18n.t('training.setup.budget.other');
+}
 
 export function SetupView({
   status,
@@ -109,6 +112,7 @@ export function SetupView({
   onRefresh,
   fit = null,
 }: SetupViewProps) {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<SettingsValues>(loadSettings);
   const [runName, setRunName] = useState('');
   const [starting, setStarting] = useState(false);
@@ -267,13 +271,9 @@ export function SetupView({
 
   const deleteDataset = (dataset: Dataset) =>
     modals.openConfirmModal({
-      title: `Delete “${dataset.name}”?`,
-      children: (
-        <Text size="sm">
-          The uploaded data is removed from the server. Finished trainings keep their results.
-        </Text>
-      ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      title: i18n.t('training.setup.deleteTitle', { name: dataset.name }),
+      children: <Text size="sm">{i18n.t('training.setup.deleteText')}</Text>,
+      labels: { confirm: i18n.t('common.delete'), cancel: i18n.t('common.cancel') },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
@@ -281,7 +281,7 @@ export function SetupView({
         } catch (error) {
           notifications.show({
             color: 'red',
-            title: 'Cannot delete the data',
+            title: i18n.t('training.setup.deleteFailed'),
             message: (error as Error).message,
           });
         }
@@ -296,7 +296,7 @@ export function SetupView({
     setStartError(null);
     try {
       const run = await api.training.runs.create({
-        name: runName.trim() || networkName.trim() || 'Untitled network',
+        name: runName.trim() || networkName.trim() || i18n.t('builder.untitled'),
         graph: doc,
         dataset: ref,
         config,
@@ -335,30 +335,35 @@ export function SetupView({
     <Stack gap="md">
       {empty && (
         <Alert color="gray" icon={<IconInfoCircle size={18} />}>
-          The canvas is empty. Build a network (or load an example) to train it.
+          {t('training.setup.empty')}
         </Alert>
       )}
       {!empty && analysis && !analysis.valid && (
-        <Alert color="red" icon={<IconAlertTriangle size={18} />} title="The network has problems">
-          <Text size="sm">Fix the layers marked in red first, then come back here.</Text>
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={18} />}
+          title={t('builder.page.hasProblems')}
+        >
+          <Text size="sm">{t('training.setup.fixFirst')}</Text>
           <Button size="compact-sm" variant="light" color="red" mt="xs" onClick={onShowProblems}>
-            Show problems
+            {t('training.setup.showProblems')}
           </Button>
         </Alert>
       )}
       {blockedByActive && activeRun && (
-        <Alert color="blue" icon={<Loader size={16} />} title="A training is running">
+        <Alert color="blue" icon={<Loader size={16} />} title={t('training.setup.running')}>
           <Text size="sm">
-            “{activeRun.name}”{activeRunBy ? ` (started by ${activeRunBy})` : ''} is still training.
-            You can start a new one when it has finished.
+            {activeRunBy
+              ? t('training.setup.stillTrainingBy', { name: activeRun.name, user: activeRunBy })
+              : t('training.setup.stillTraining', { name: activeRun.name })}
           </Text>
           <Button size="compact-sm" variant="light" mt="xs" onClick={() => onOpenRun(activeRun.id)}>
-            Show it
+            {t('training.setup.showIt')}
           </Button>
         </Alert>
       )}
 
-      <Divider label="Data" labelPosition="left" />
+      <Divider label={t('training.setup.data')} labelPosition="left" />
       <DataSourcePicker
         status={status}
         choice={effective}
@@ -384,13 +389,13 @@ export function SetupView({
         />
       )}
 
-      <Divider label="Settings" labelPosition="left" />
+      <Divider label={t('training.setup.settings')} labelPosition="left" />
       <SettingsForm
         values={settings}
         onChange={changeSettings}
         errors={errors}
         name={runName}
-        namePlaceholder={networkName || 'Untitled network'}
+        namePlaceholder={networkName || t('builder.untitled')}
         onNameChange={setRunName}
         devices={status.devices}
         defaultDevice={status.default_device}
@@ -415,11 +420,11 @@ export function SetupView({
           title={
             startError.busy
               ? queueing
-                ? 'Too many trainings are waiting'
-                : 'Another training is running'
+                ? t('training.setup.tooMany')
+                : t('training.setup.another')
               : startError.budget
-                ? (BUDGET_TITLES[startError.budget] ?? 'Not enough budget')
-                : 'Cannot start the training'
+                ? budgetTitle(startError.budget)
+                : t('training.setup.cannotStart')
           }
         >
           <Text size="sm">{startError.message}</Text>
@@ -439,7 +444,7 @@ export function SetupView({
               mt="xs"
               onClick={() => onOpenRun(activeRun.id)}
             >
-              Open it
+              {t('training.setup.openIt')}
             </Button>
           )}
         </Alert>
@@ -450,7 +455,7 @@ export function SetupView({
           <Group gap={6} wrap="nowrap" mr="auto">
             <IconUsers size={14} color="var(--mantine-color-dimmed)" aria-hidden />
             <Text size="xs" c="dimmed">
-              Visible to everyone in this network
+              {t('training.setup.visible')}
             </Text>
           </Group>
         )}
@@ -460,7 +465,7 @@ export function SetupView({
           loading={starting}
           disabled={!canStart}
         >
-          {search ? 'Start search' : 'Start training'}
+          {search ? t('training.setup.startSearch') : t('training.setup.start')}
         </Button>
       </Group>
     </Stack>
@@ -473,6 +478,7 @@ export function SetupView({
  * when it would start right away.
  */
 function QueueHint({ queue }: { queue: QueuePreview | null }) {
+  const { t } = useTranslation();
   if (!queue) {
     return null;
   }
@@ -481,12 +487,9 @@ function QueueHint({ queue }: { queue: QueuePreview | null }) {
       <Alert
         color="yellow"
         icon={<IconAlertTriangle size={18} />}
-        title="No training worker is running"
+        title={t('training.setup.noWorker')}
       >
-        <Text size="sm">
-          This server cannot train right now. A training you start waits in the queue until a worker
-          is back.
-        </Text>
+        <Text size="sm">{t('training.setup.noWorkerText')}</Text>
       </Alert>
     );
   }
@@ -495,7 +498,7 @@ function QueueHint({ queue }: { queue: QueuePreview | null }) {
   if (!blocked && queue.position <= 1 && (wait === null || wait < 20)) {
     return null;
   }
-  const start = blocked ? 'starts after your running training' : startsIn(wait);
+  const start = blocked ? t('training.setup.afterYours') : startsIn(wait);
   return (
     <Group gap={6} wrap="nowrap" align="flex-start">
       <IconHourglassHigh
@@ -505,8 +508,10 @@ function QueueHint({ queue }: { queue: QueuePreview | null }) {
         aria-hidden
       />
       <Text size="xs" c="dimmed">
-        The server is busy: this training will wait in the queue (position {queue.position}
-        {start ? `, ${start}` : ''}; an estimate).{queue.hint ? ` ${queue.hint}` : ''}
+        {start
+          ? t('training.setup.busyStart', { position: queue.position, start })
+          : t('training.setup.busy', { position: queue.position })}
+        {queue.hint ? ` ${queue.hint}` : ''}
       </Text>
     </Group>
   );
@@ -521,9 +526,15 @@ interface CheckResultProps extends CompatibilityState {
 }
 
 function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }: CheckResultProps) {
+  const { t } = useTranslation();
+  const data = datasetName ?? t('training.setup.theData');
   if (error) {
     return (
-      <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Cannot check the data">
+      <Alert
+        color="red"
+        icon={<IconAlertTriangle size={18} />}
+        title={t('training.setup.cannotCheck')}
+      >
         {error}
       </Alert>
     );
@@ -533,7 +544,7 @@ function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }:
       <Group gap="xs">
         <Loader size="xs" />
         <Text size="sm" c="dimmed">
-          Checking the network against the data …
+          {t('training.setup.checking')}
         </Text>
       </Group>
     );
@@ -541,7 +552,7 @@ function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }:
   return (
     <Stack gap="xs" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 150ms' }}>
       {result.errors.length > 0 && (
-        <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Does not fit the data">
+        <Alert color="red" icon={<IconAlertTriangle size={18} />} title={t('training.setup.noFit')}>
           <List styles={WRAPPING_LIST} size="sm" spacing={4}>
             {result.errors.map((message) => (
               <List.Item key={message}>{message}</List.Item>
@@ -550,7 +561,7 @@ function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }:
         </Alert>
       )}
       {result.ok && result.plan && (
-        <Alert color="green" icon={<IconCircleCheck size={18} />} title="Ready to train">
+        <Alert color="green" icon={<IconCircleCheck size={18} />} title={t('training.setup.ready')}>
           <Text size="sm">{result.plan.summary}</Text>
           {result.plan.notes.length > 0 && (
             <List styles={WRAPPING_LIST} size="xs" c="dimmed" mt={4} spacing={2}>
@@ -571,8 +582,8 @@ function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }:
           <Stack gap={6}>
             <Text size="sm">
               {result.ok
-                ? `To fit “${datasetName ?? 'the data'}” exactly, change:`
-                : `To fit “${datasetName ?? 'the data'}”, change:`}
+                ? t('training.setup.fitExactly', { name: data })
+                : t('training.setup.fit', { name: data })}
             </Text>
             <List styles={WRAPPING_LIST} size="sm" spacing={2}>
               {result.fixes.map((fix) => (
@@ -587,7 +598,7 @@ function CheckResult({ result, loading, error, datasetName, canAdapt, onAdapt }:
               disabled={loading || !onAdapt}
               style={{ alignSelf: 'flex-start' }}
             >
-              Adapt network to “{datasetName ?? 'the data'}”
+              {t('training.setup.adapt', { name: data })}
             </Button>
           </Stack>
         </Paper>

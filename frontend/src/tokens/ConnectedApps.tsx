@@ -11,6 +11,7 @@ import {
   type OAuthConnection,
 } from '@/api';
 import { ApprovalRuleEditor } from '@/approvals/ApprovalRuleEditor';
+import { i18n, useTranslation } from '@/i18n';
 import { urlHost } from '@/oauth/url';
 import { formatDate } from '@/training/format';
 import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
@@ -32,6 +33,7 @@ function ConnectionItem({
   onBudget: (budget: number | null) => Promise<void>;
   onRule: (rule: ApprovalRule) => Promise<void>;
 }) {
+  useTranslation();
   const host = urlHost(connection.client_uri);
   return (
     <li className={classes.item} aria-label={connection.client_name}>
@@ -42,7 +44,9 @@ function ConnectionItem({
               {connection.client_name}
             </Text>
             <Badge variant="light" color={connection.read_only ? 'gray' : 'brick'}>
-              {connection.read_only ? 'Read only' : 'Full access'}
+              {connection.read_only
+                ? i18n.t('ui.tokens.ConnectedApps.readOnly')
+                : i18n.t('ui.tokens.ConnectedApps.fullAccess')}
             </Badge>
           </Group>
           {host && (
@@ -58,23 +62,29 @@ function ConnectionItem({
           leftSection={<IconPlugConnectedX size={14} />}
           className={classes.itemAction}
           onClick={onDisconnect}
-          aria-label={`Disconnect “${connection.client_name}”`}
+          aria-label={i18n.t('ui.tokens.ConnectedApps.disconnect3', {
+            client_name: connection.client_name,
+          })}
         >
-          Disconnect
+          {i18n.t('ui.tokens.ConnectedApps.disconnect')}
         </Button>
       </Group>
       <dl className={classes.meta}>
         <div>
-          <dt>Connected</dt>
+          <dt>{i18n.t('ui.tokens.ConnectedApps.connected')}</dt>
           <dd>{formatDate(connection.created_at)}</dd>
         </div>
         <div>
-          <dt>Last used</dt>
-          <dd>{connection.last_used_at ? formatDate(connection.last_used_at) : 'Never'}</dd>
+          <dt>{i18n.t('ui.tokens.ConnectedApps.lastUsed')}</dt>
+          <dd>
+            {connection.last_used_at
+              ? formatDate(connection.last_used_at)
+              : i18n.t('ui.tokens.ConnectedApps.never')}
+          </dd>
         </div>
         {connection.used_cpu_minutes !== undefined && (
           <div>
-            <dt>Compute this month</dt>
+            <dt>{i18n.t('ui.tokens.ConnectedApps.computeThisMonth')}</dt>
             <dd className={classes.budget}>
               <MonthUsage
                 used={connection.used_cpu_minutes}
@@ -84,14 +94,14 @@ function ConnectionItem({
                 budget={connection.budget_cpu_minutes ?? null}
                 label={`“${connection.client_name}”`}
                 onSave={onBudget}
-                description="CPU minutes per month for everything this app starts. Empty: only your account's limits apply."
+                description={i18n.t('ui.tokens.ConnectedApps.cpuMinutesPerMonthFor')}
               />
             </dd>
           </div>
         )}
         {rule && (
           <div>
-            <dt>Approval</dt>
+            <dt>{i18n.t('ui.tokens.ConnectedApps.approval')}</dt>
             <dd>
               <ApprovalRuleEditor
                 rule={rule}
@@ -102,7 +112,7 @@ function ConnectionItem({
           </div>
         )}
         <div>
-          <dt>Agent activity</dt>
+          <dt>{i18n.t('ui.tokens.ConnectedApps.agentActivity')}</dt>
           <dd>
             <ActivityLink agentKey={`app:${connection.id}`} activity={activity} />
           </dd>
@@ -124,6 +134,7 @@ export function ConnectedApps({
   rules?: Partial<Record<AgentKey, ApprovalRule>>;
   onRule?: (id: number, rule: ApprovalRule) => Promise<void>;
 }) {
+  useTranslation();
   const [connections, setConnections] = useState<OAuthConnection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,14 +147,18 @@ export function ConnectedApps({
 
   const disconnect = (connection: OAuthConnection) =>
     modals.openConfirmModal({
-      title: `Disconnect “${connection.client_name}”?`,
+      title: i18n.t('ui.tokens.ConnectedApps.disconnect2', { client_name: connection.client_name }),
       children: (
         <Text size="sm">
-          {connection.client_name} loses access immediately. To use it again, connect it again in
-          the app.
+          {i18n.t('ui.tokens.ConnectedApps.losesAccessImmediatelyToUse', {
+            client_name: connection.client_name,
+          })}
         </Text>
       ),
-      labels: { confirm: 'Disconnect', cancel: 'Cancel' },
+      labels: {
+        confirm: i18n.t('ui.tokens.ConnectedApps.disconnect'),
+        cancel: i18n.t('ui.tokens.ConnectedApps.cancel'),
+      },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
@@ -152,7 +167,7 @@ export function ConnectedApps({
         } catch (err) {
           notifications.show({
             color: 'red',
-            title: 'Could not disconnect the app',
+            title: i18n.t('ui.tokens.ConnectedApps.couldNotDisconnectTheApp'),
             message: (err as Error).message,
           });
         }
@@ -162,7 +177,7 @@ export function ConnectedApps({
   return (
     <section className={classes.section} aria-labelledby="apps-title">
       <Title order={3} id="apps-title" mb="md">
-        Connected apps
+        {i18n.t('ui.tokens.ConnectedApps.connectedApps')}
       </Title>
       {error && <Alert color="red">{error}</Alert>}
       {!connections && !error && (
@@ -172,8 +187,7 @@ export function ConnectedApps({
       )}
       {connections?.length === 0 && (
         <Text c="dimmed" size="sm">
-          No apps connected yet. Apps like Claude ask for access when you add Brick DNN as a
-          connector.
+          {i18n.t('ui.tokens.ConnectedApps.noAppsConnectedYetApps')}
         </Text>
       )}
       {connections && connections.length > 0 && (

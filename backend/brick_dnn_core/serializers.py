@@ -1,11 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
+from django.utils.translation import gettext
 from rest_framework import serializers
 
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
-from . import legal, site_admins
+from . import languages, legal, site_admins
 from .api_tokens import EXPIRY_DAYS
 from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun, UserProfile
 
@@ -43,9 +44,19 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    # The language saved on the account ("en", "de"; "" if none was chosen yet).
+    language = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "date_joined"]
+        fields = ["id", "username", "email", "date_joined", "language"]
+
+    def get_language(self, obj) -> str:
+        return languages.saved_language(obj) or ""
+
+
+class LanguageSerializer(serializers.Serializer):
+    language = serializers.ChoiceField(choices=languages.LANGUAGE_CHOICES)
 
 
 def email_field() -> serializers.EmailField:
@@ -53,8 +64,8 @@ def email_field() -> serializers.EmailField:
     return serializers.EmailField(
         max_length=254,
         error_messages={
-            "required": "Enter your e-mail address.",
-            "blank": "Enter your e-mail address.",
+            "required": gettext("Enter your e-mail address."),
+            "blank": gettext("Enter your e-mail address."),
         },
     )
 
@@ -66,7 +77,9 @@ def clean_email(value: str, user=None) -> str:
     if user is not None:
         others = others.exclude(pk=user.pk)
     if others.exists():
-        raise serializers.ValidationError("An account with this e-mail address exists already.")
+        raise serializers.ValidationError(
+            gettext("An account with this e-mail address exists already.")
+        )
     return value
 
 
@@ -75,10 +88,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     email = email_field()
     # Required when the server has terms of use (see legal.py).
     accept_terms = serializers.BooleanField(required=False, default=False, write_only=True)
+    # The language of the app at sign-up; without it the request's (Accept-Language).
+    language = serializers.ChoiceField(
+        choices=languages.LANGUAGE_CHOICES, required=False, write_only=True
+    )
 
     class Meta:
         model = User
-        fields = ["username", "email", "password", "accept_terms"]
+        fields = ["username", "email", "password", "accept_terms", "language"]
 
     def validate_email(self, value: str) -> str:
         return clean_email(value)
@@ -86,14 +103,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_username(self, value: str) -> str:
         if site_admins.is_reserved(value):
             # As for a name that is taken: nothing says whose it is.
-            raise serializers.ValidationError("A user with that username already exists.")
+            raise serializers.ValidationError(gettext("A user with that username already exists."))
         return value
 
     def validate(self, attrs):
         self.legal_versions = legal.versions()
         if self.legal_versions["terms"] is not None and attrs.get("accept_terms") is not True:
             raise serializers.ValidationError(
-                {"accept_terms": "Please agree to the terms of use to create an account."}
+                {"accept_terms": gettext("Please agree to the terms of use to create an account.")}
             )
         candidate = User(username=attrs.get("username"), email=attrs.get("email", ""))
         validate_password(attrs["password"], user=candidate)
@@ -101,9 +118,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         accepted = validated_data.pop("accept_terms", False)
+        language = validated_data.pop("language", None) or languages.request_language(
+            self.context.get("request")
+        )
         user = User.objects.create_user(**validated_data)
         versions = getattr(self, "legal_versions", {})
-        profile = UserProfile(user=user)
+        profile = UserProfile(user=user, language=language)
         if accepted and versions.get("terms"):
             profile.terms_accepted_at = timezone.now()
             profile.terms_version = versions["terms"]

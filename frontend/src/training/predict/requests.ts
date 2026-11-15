@@ -5,6 +5,7 @@ import {
   type PredictionRequest,
   type PredictionResult,
 } from '@/api';
+import { i18n } from '@/i18n';
 import { chunks, shiftMessage } from './rows';
 
 /** Why a prediction failed: a message, the problems per row and column, and whether a budget is used up. */
@@ -28,7 +29,7 @@ export function predictionProblem(error: unknown, offset = 0): PredictionProblem
     };
   }
   return {
-    message: (error as Error).message || 'The prediction failed.',
+    message: (error as Error).message || i18n.t('ui.training.requests.thePredictionFailed'),
     errors: [],
     budget: false,
   };
@@ -69,7 +70,7 @@ export async function predictAll(
   }
   if (answers.length === 0) {
     const problem: PredictionProblem = {
-      message: 'There is nothing to predict.',
+      message: i18n.t('ui.training.requests.thereIsNothingToPredict'),
       errors: [],
       budget: false,
     };

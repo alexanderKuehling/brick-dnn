@@ -27,6 +27,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import type { ColumnInfo, DataSource, PipelineStep, StepReport, StepSpec } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { formatCount } from '../table/format';
 import { GroupIcon } from './groups';
 import { errorField, isParamVisible, paramSummary, paramValue } from './params';
@@ -103,6 +104,7 @@ export function StepCard({
   scrollIntoView = false,
   readOnly = false,
 }: StepCardProps) {
+  useTranslation();
   const formId = useId();
   const ref = useRef<HTMLLIElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -150,7 +152,11 @@ export function StepCard({
   const actionsMenu = readOnly ? null : (
     <Menu position="bottom-end" shadow="md" withinPortal>
       <Menu.Target>
-        <ActionIcon variant="subtle" color="gray" aria-label={`Actions for step ${index + 1}`}>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          aria-label={i18n.t('ui.data.StepCard.actionsForStep', { value: index + 1 })}
+        >
           <IconDots size={16} />
         </ActionIcon>
       </Menu.Target>
@@ -161,11 +167,11 @@ export function StepCard({
           onClick={() => onMove(-1)}
           rightSection={
             <Text size="xs" c="dimmed">
-              Alt ↑
+              {i18n.t('ui.data.StepCard.alt')}
             </Text>
           }
         >
-          Move up
+          {i18n.t('ui.data.StepCard.moveUp')}
         </Menu.Item>
         <Menu.Item
           leftSection={<IconArrowDown size={14} />}
@@ -173,20 +179,20 @@ export function StepCard({
           onClick={() => onMove(1)}
           rightSection={
             <Text size="xs" c="dimmed">
-              Alt ↓
+              {i18n.t('ui.data.StepCard.alt2')}
             </Text>
           }
         >
-          Move down
+          {i18n.t('ui.data.StepCard.moveDown')}
         </Menu.Item>
         {spec && (
           <Menu.Item leftSection={<IconCopy size={14} />} onClick={onDuplicate}>
-            Duplicate
+            {i18n.t('ui.data.StepCard.duplicate')}
           </Menu.Item>
         )}
         <Menu.Divider />
         <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={onDelete}>
-          Delete
+          {i18n.t('ui.data.StepCard.delete')}
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>
@@ -201,7 +207,10 @@ export function StepCard({
         radius="md"
         className={classes.step}
         data-status="error"
-        aria-label={`Step ${index + 1}: unknown step type ${step.type}`}
+        aria-label={i18n.t('ui.data.StepCard.stepUnknownStepType', {
+          value: index + 1,
+          type: step.type,
+        })}
       >
         <div className={classes.stepHeader}>
           <div className={classes.stepToggle}>
@@ -217,16 +226,13 @@ export function StepCard({
             </span>
           </div>
           <Badge size="sm" variant="light" color="red">
-            Unknown
+            {i18n.t('ui.data.StepCard.unknown')}
           </Badge>
           {actionsMenu}
         </div>
         <Text size="sm" c="red" mt={6} className={classes.reportLine}>
           <IconAlertCircle size={16} aria-hidden />
-          <span>
-            Unknown step type “{step.type}”. The server does not offer it (any more); delete this
-            step.
-          </span>
+          <span>{i18n.t('ui.data.StepCard.unknownStepTypeTheServer', { type: step.type })}</span>
         </Text>
       </Paper>
     );
@@ -249,7 +255,7 @@ export function StepCard({
       data-status={status}
       data-off={!step.enabled || undefined}
       data-previewed={previewed || undefined}
-      aria-label={`Step ${index + 1}: ${label}`}
+      aria-label={i18n.t('ui.data.StepCard.step', { value: index + 1, label })}
     >
       <div className={classes.stepHeader}>
         <UnstyledButton
@@ -283,13 +289,17 @@ export function StepCard({
           </Badge>
         </Tooltip>
         <Tooltip
-          label={previewed ? 'Show the data after all steps' : 'Preview the data after this step'}
+          label={
+            previewed
+              ? i18n.t('ui.data.StepCard.showTheDataAfterAll')
+              : i18n.t('ui.data.StepCard.previewTheDataAfterThis')
+          }
           withArrow
         >
           <ActionIcon
             variant={previewed ? 'filled' : 'subtle'}
             color={previewed ? undefined : 'gray'}
-            aria-label="Preview after this step"
+            aria-label={i18n.t('ui.data.StepCard.previewAfterThisStep')}
             aria-pressed={previewed}
             onClick={onPreviewToggle}
           >
@@ -300,7 +310,7 @@ export function StepCard({
           size="xs"
           checked={step.enabled}
           disabled={readOnly}
-          aria-label={`Use step ${index + 1} (${label})`}
+          aria-label={i18n.t('ui.data.StepCard.useStep', { value: index + 1, label })}
           onChange={(event) => onChange({ ...step, enabled: event.currentTarget.checked })}
         />
         {actionsMenu}
@@ -354,7 +364,9 @@ export function StepCard({
                   size="xs"
                   onClick={() => setAllDetails((v) => !v)}
                 >
-                  {allDetails ? 'Show less' : `Show all ${details.length}`}
+                  {allDetails
+                    ? i18n.t('ui.data.StepCard.showLess')
+                    : i18n.t('ui.data.StepCard.showAll', { length: details.length })}
                 </Anchor>
               </li>
             )}
@@ -368,7 +380,7 @@ export function StepCard({
             <Tooltip label={FITTED_HINT} multiline w={260} withArrow>
               <Text size="xs" c="dimmed" className={classes.hint}>
                 <IconSchool size={14} aria-hidden />
-                Learns from training rows
+                {i18n.t('ui.data.StepCard.learnsFromTrainingRows')}
                 <VisuallyHidden>. {FITTED_HINT}</VisuallyHidden>
               </Text>
             </Tooltip>
@@ -376,13 +388,13 @@ export function StepCard({
           {spec.training_only && (
             <Text size="xs" c="dimmed" className={classes.hint}>
               <IconSchool size={14} aria-hidden />
-              Changes training rows only
+              {i18n.t('ui.data.StepCard.changesTrainingRowsOnly')}
             </Text>
           )}
           {(spec.combine || spec.pre_split) && (
             <Text size="xs" c="dimmed" className={classes.hint}>
               <IconArrowMerge size={14} aria-hidden />
-              Runs before the split
+              {i18n.t('ui.data.StepCard.runsBeforeTheSplit')}
             </Text>
           )}
         </Group>
@@ -412,7 +424,7 @@ export function StepCard({
             ))}
             {visibleParams.length === 0 && (
               <Text size="sm" c="dimmed">
-                This step has no settings.
+                {i18n.t('ui.data.StepCard.thisStepHasNoSettings')}
               </Text>
             )}
           </Stack>
@@ -429,7 +441,10 @@ function plural(count: number, word: string): string {
 function names(list: string[], max = 3): string {
   return list.length <= max
     ? list.join(', ')
-    : `${list.slice(0, max).join(', ')} and ${list.length - max} more`;
+    : i18n.t('ui.data.StepCard.andMore', {
+        slice: list.slice(0, max).join(', '),
+        value: list.length - max,
+      });
 }
 
 /** Rows and columns the step changed, e.g. "1,200 → 1,180 rows · +2 columns (a, b)". */

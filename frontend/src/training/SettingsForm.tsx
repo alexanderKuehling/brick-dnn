@@ -27,6 +27,8 @@ import type {
   TuningMethod,
   TuningMetric,
 } from '@/api';
+import { currentLanguage, currentLocale, i18n, useTranslation } from '@/i18n';
+import { numberSeparators } from '@/i18n/mantine';
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
   CLASSICAL_TUNABLES,
@@ -141,10 +143,26 @@ export interface HybridSettings {
   type?: string | null;
 }
 
+/**
+ * Select options with their labels in the current language
+ * (`training.settings.options.<group>.<value>`); options without a translation keep theirs.
+ */
+function optionsIn<T extends string>(
+  options: { value: T; label: string }[],
+  group: 'featureTraining' | 'loss'
+): { value: T; label: string }[] {
+  return options.map((option) => {
+    const key = `training.settings.options.${group}.${option.value}`;
+    return i18n.exists(key)
+      ? { ...option, label: String(i18n.t(key as 'training.settings.options.loss.cross_entropy')) }
+      : option;
+  });
+}
+
 /** Shown in the fixed fields while the search varies them. */
-const SEARCHED = 'Set by the search';
+const searchedText = () => i18n.t('training.settings.searched');
 /** The training settings of a hybrid network with frozen features. */
-const NOT_TRAINED = 'Not used: frozen features are not trained';
+const notTrained = () => i18n.t('training.settings.notTrained');
 
 export function SettingsForm({
   values,
@@ -163,6 +181,7 @@ export function SettingsForm({
   metrics = null,
   loss = null,
 }: SettingsFormProps) {
+  const { t } = useTranslation();
   const [advanced, { toggle }] = useDisclosure(false);
   const set =
     <K extends keyof SettingsValues>(key: K) =>
@@ -184,7 +203,12 @@ export function SettingsForm({
 
   const automatic = devices.find((device) => device.id === defaultDevice)?.label;
   const deviceOptions = [
-    { value: 'auto', label: automatic ? `Automatic: ${automatic}` : 'Automatic' },
+    {
+      value: 'auto',
+      label: automatic
+        ? t('training.settings.automaticDevice', { device: automatic })
+        : t('training.settings.automatic'),
+    },
     ...devices.map((device) => ({ value: device.id, label: device.label })),
   ];
   const device = deviceOptions.some((option) => option.value === values.device)
@@ -200,7 +224,7 @@ export function SettingsForm({
 
   const nameField = (
     <TextInput
-      label="Name"
+      label={t('training.settings.name')}
       placeholder={namePlaceholder}
       value={name}
       onChange={(event) => onNameChange(event.currentTarget.value)}
@@ -209,13 +233,13 @@ export function SettingsForm({
   );
   const validationField = (
     <NumberInput
-      label="Validation split"
+      label={t('training.settings.valSplit')}
       description={
         validates
           ? undefined
           : classical
-            ? 'No validation data: the model is measured on the test rows only (without them, on its training rows).'
-            : 'No validation data: the last epoch is kept, no early stopping or search; scores only on test (or training) data.'
+            ? t('training.settings.noValClassical')
+            : t('training.settings.noVal')
       }
       value={fixedPercents ? fixedPercents[1] : values.val_split}
       disabled={fixed !== null}
@@ -232,15 +256,17 @@ export function SettingsForm({
   const testFields = (
     <div>
       <Switch
-        label={builtin && !fixed ? 'Test on the official test images' : 'Hold out a test set'}
+        label={
+          builtin && !fixed ? t('training.settings.officialTest') : t('training.settings.holdOut')
+        }
         description={
           fixed && segmentation
-            ? `This dataset brings its own split, the folders train, val and test: ${formatSplit(fixed)} images for training, validation and test. Training uses it as it is.`
+            ? t('training.settings.ownSplitImages', { split: formatSplit(fixed) })
             : fixed
-              ? `This dataset brings its own split from the Data tab: ${formatSplit(fixed)} rows for training, validation and test. Training uses it as it is; change it in the Data tab.`
+              ? t('training.settings.ownSplitRows', { split: formatSplit(fixed) })
               : builtin
-                ? 'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.'
-                : 'Never trained on and not used to compare settings: the final model is measured on it once, after training.'
+                ? t('training.settings.builtinTest')
+                : t('training.settings.testHint')
         }
         checked={testEnabled}
         disabled={fixed !== null || builtin}
@@ -249,7 +275,7 @@ export function SettingsForm({
       {testEnabled && (fixed !== null || !builtin) && (
         <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mt="xs">
           <NumberInput
-            label="Test split"
+            label={t('training.settings.testSplit')}
             value={fixedPercents ? fixedPercents[2] : values.test_split}
             disabled={fixed !== null}
             onChange={setNumber('test_split')}
@@ -268,29 +294,36 @@ export function SettingsForm({
   const maxRows = classical?.maxRows ?? null;
   const maxSamplesField = (
     <NumberInput
-      label="Max. samples"
+      label={t('training.settings.maxSamples')}
       description={
         classical
           ? maxRows !== null
-            ? `${classical.model} is fitted on at most ${maxRows.toLocaleString('en-US')} training rows on this server; larger training sets are subsampled.`
-            : 'Training rows to fit on (empty: all).'
+            ? t('training.settings.maxRowsHint', {
+                model: classical.model,
+                rows: maxRows.toLocaleString(currentLocale()),
+              })
+            : t('training.settings.maxSamplesHint')
           : undefined
       }
-      placeholder={maxRows !== null ? `All, up to ${maxRows.toLocaleString('en-US')}` : 'All'}
+      placeholder={
+        maxRows !== null
+          ? t('training.settings.allUpTo', { rows: maxRows.toLocaleString(currentLocale()) })
+          : t('training.settings.all')
+      }
       value={values.max_samples}
       onChange={setNumber('max_samples')}
       min={LIMITS.max_samples.min}
       max={maxRows ?? LIMITS.max_samples.max}
       allowDecimal={false}
       allowNegative={false}
-      thousandSeparator=","
+      thousandSeparator={numberSeparators(currentLanguage()).thousandSeparator}
       error={errors.max_samples}
     />
   );
   const seedField = (
     <NumberInput
-      label="Seed"
-      placeholder="Random"
+      label={t('training.settings.seed')}
+      placeholder={t('training.settings.random')}
       value={values.seed}
       onChange={setNumber('seed')}
       min={LIMITS.seed.min}
@@ -307,11 +340,9 @@ export function SettingsForm({
       <Stack gap="sm">
         {nameField}
         <Text size="xs" c="dimmed">
-          {classical.model} is fitted once with scikit-learn, on the CPU: only the split, the number
-          of rows and the seed apply
           {classical.optimisesKernel
-            ? '; the fit optimises the kernel hyperparameters itself.'
-            : '.'}
+            ? t('training.settings.classicalNoteKernel', { model: classical.model })
+            : t('training.settings.classicalNote', { model: classical.model })}
         </Text>
         <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
           {validationField}
@@ -322,8 +353,8 @@ export function SettingsForm({
         {type && (
           <div>
             <Switch
-              label="Hyperparameter search"
-              description="Fits the model several times with other values of its parameters and keeps the best one."
+              label={t('training.settings.search')}
+              description={t('training.settings.searchClassical')}
               checked={values.search}
               onChange={(event) => set('search')(event.currentTarget.checked)}
             />
@@ -349,23 +380,24 @@ export function SettingsForm({
       {hybrid && (
         <>
           <Text size="xs" c="dimmed">
-            Two phases: the neural layers learn{' '}
-            {hybrid.features !== null ? `${hybrid.features} features` : 'the features'} with a
-            temporary linear head on the target (the settings below), then {hybrid.model} is fitted
-            on the features of the training rows
-            {hybrid.maxRows !== null
-              ? ` (at most ${hybrid.maxRows.toLocaleString('en-US')} on this server)`
-              : ''}
-            .
+            {t(
+              hybrid.maxRows !== null
+                ? 'training.settings.hybridNoteMax'
+                : 'training.settings.hybridNote',
+              {
+                features:
+                  hybrid.features !== null
+                    ? t('training.settings.nFeatures', { count: hybrid.features })
+                    : t('training.settings.theFeatures'),
+                model: hybrid.model,
+                rows: hybrid.maxRows?.toLocaleString(currentLocale()) ?? '',
+              }
+            )}
           </Text>
           <Select
-            label="Features"
-            description={
-              frozen
-                ? 'The neural layers keep their random initial weights: nothing is trained, so the training settings (epochs, batch size, learning rate, optimizer, weight decay, early stopping) are not used.'
-                : undefined
-            }
-            data={FEATURE_TRAININGS}
+            label={t('training.settings.features')}
+            description={frozen ? t('training.settings.frozenHint') : undefined}
+            data={optionsIn(FEATURE_TRAININGS, 'featureTraining')}
             value={values.feature_training}
             onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
             allowDeselect={false}
@@ -374,13 +406,13 @@ export function SettingsForm({
       )}
       <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
         <NumberInput
-          label="Epochs"
+          label={t('training.settings.epochs')}
           description={
             frozen
-              ? 'Not used: the features stay random'
+              ? t('training.settings.epochsFrozen')
               : values.search && !hybrid
-                ? 'Per trial of the search'
-                : 'Passes over the training data'
+                ? t('training.settings.perTrial')
+                : t('training.settings.epochsHint')
           }
           disabled={frozen}
           value={values.epochs}
@@ -393,14 +425,16 @@ export function SettingsForm({
         />
         {segmentation ? (
           <NumberInput
-            label="Batch size"
+            label={t('training.settings.batchSize')}
             description={
               maxBatch !== null && maxBatch >= 1
-                ? `Images per optimizer step; up to ${maxBatch.toLocaleString('en-US')} fit into memory`
-                : 'Images per optimizer step (4 to 16 is usual for segmentation)'
+                ? t('training.settings.imagesPerStepMax', {
+                    max: maxBatch.toLocaleString(currentLocale()),
+                  })
+                : t('training.settings.imagesPerStep')
             }
             value={tuned.batch_size ? '' : values.segmentation_batch_size}
-            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            placeholder={tuned.batch_size ? searchedText() : undefined}
             disabled={tuned.batch_size || frozen}
             onChange={setNumber('segmentation_batch_size')}
             min={LIMITS.batch_size.min}
@@ -411,10 +445,10 @@ export function SettingsForm({
           />
         ) : (
           <NumberInput
-            label="Batch size"
-            description={frozen ? NOT_TRAINED : 'Samples per optimizer step'}
+            label={t('training.settings.batchSize')}
+            description={frozen ? notTrained() : t('training.settings.samplesPerStep')}
             value={tuned.batch_size ? '' : values.batch_size}
-            placeholder={tuned.batch_size ? SEARCHED : undefined}
+            placeholder={tuned.batch_size ? searchedText() : undefined}
             disabled={tuned.batch_size || frozen}
             onChange={setNumber('batch_size')}
             min={LIMITS.batch_size.min}
@@ -425,10 +459,10 @@ export function SettingsForm({
           />
         )}
         <NumberInput
-          label="Learning rate"
-          description={frozen ? NOT_TRAINED : undefined}
+          label={t('training.settings.learningRate')}
+          description={frozen ? notTrained() : undefined}
           value={tuned.learning_rate ? '' : values.learning_rate}
-          placeholder={tuned.learning_rate ? SEARCHED : undefined}
+          placeholder={tuned.learning_rate ? searchedText() : undefined}
           disabled={tuned.learning_rate || frozen}
           onChange={setNumber('learning_rate')}
           min={0}
@@ -439,17 +473,17 @@ export function SettingsForm({
           error={errors.learning_rate}
         />
         <Select
-          label="Optimizer"
-          description={frozen ? NOT_TRAINED : undefined}
+          label={t('training.settings.optimizer')}
+          description={frozen ? notTrained() : undefined}
           data={OPTIMIZERS}
           value={tuned.optimizer ? null : values.optimizer}
-          placeholder={tuned.optimizer ? SEARCHED : undefined}
+          placeholder={tuned.optimizer ? searchedText() : undefined}
           disabled={tuned.optimizer || frozen}
           onChange={(value) => value && set('optimizer')(value as Optimizer)}
           allowDeselect={false}
         />
         <Select
-          label="Device"
+          label={t('training.settings.device')}
           data={deviceOptions}
           value={device}
           onChange={(value) => value && set('device')(value)}
@@ -458,17 +492,21 @@ export function SettingsForm({
         {validationField}
         {task && (
           <Select
-            label="Loss"
+            label={t('training.settings.loss')}
             description={
               frozen
-                ? NOT_TRAINED
+                ? notTrained()
                 : tuned.loss
-                  ? 'The search tries the losses: rank it by a metric, not by the loss.'
-                  : `${LOSS_OPTIONS[task].find((o) => o.value === effectiveLoss(values, task))?.help ?? ''} The curves and early stopping use it.`
+                  ? i18n.t('ui.training.SettingsForm.theSearchTriesTheLosses')
+                  : i18n.t('ui.training.SettingsForm.theCurvesAndEarlyStopping', {
+                      value:
+                        LOSS_OPTIONS[task].find((o) => o.value === effectiveLoss(values, task))
+                          ?.help ?? '',
+                    })
             }
             data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
             value={tuned.loss ? null : effectiveLoss(values, task)}
-            placeholder={tuned.loss ? SEARCHED : undefined}
+            placeholder={tuned.loss ? searchedText() : undefined}
             disabled={tuned.loss || frozen}
             onChange={(value) => value && set('loss')(value as LossName)}
             allowDeselect={false}
@@ -493,8 +531,8 @@ export function SettingsForm({
         hybrid.type && (
           <div>
             <Switch
-              label="Hyperparameter search"
-              description={`Fits ${hybrid.model} several times with other values of its parameters on the features, and can learn the features again with other training settings in every trial; keeps the best trial.`}
+              label={t('training.settings.search')}
+              description={t('training.settings.searchHybrid', { model: hybrid.model })}
               checked={values.search}
               onChange={(event) => set('search')(event.currentTarget.checked)}
             />
@@ -515,8 +553,8 @@ export function SettingsForm({
       ) : (
         <div>
           <Switch
-            label="Hyperparameter search"
-            description="Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss)."
+            label={t('training.settings.search')}
+            description={t('training.settings.searchNeural')}
             checked={values.search}
             onChange={(event) => set('search')(event.currentTarget.checked)}
           />
@@ -541,16 +579,16 @@ export function SettingsForm({
         aria-expanded={advancedOpen}
         style={{ alignSelf: 'flex-start' }}
       >
-        Advanced settings
+        {t('training.settings.advanced')}
       </Button>
       <Collapse expanded={advancedOpen}>
         <Stack gap="sm">
           <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
             <NumberInput
-              label="Weight decay"
-              description={frozen ? NOT_TRAINED : undefined}
+              label={t('training.settings.weightDecay')}
+              description={frozen ? notTrained() : undefined}
               value={tuned.weight_decay ? '' : values.weight_decay}
-              placeholder={tuned.weight_decay ? SEARCHED : undefined}
+              placeholder={tuned.weight_decay ? searchedText() : undefined}
               disabled={tuned.weight_decay || frozen}
               onChange={setNumber('weight_decay')}
               min={LIMITS.weight_decay.min}
@@ -564,13 +602,9 @@ export function SettingsForm({
             {seedField}
           </SimpleGrid>
           <NumberInput
-            label="Early stopping"
-            description={
-              frozen
-                ? NOT_TRAINED
-                : 'Stop when the validation loss has not improved for this many epochs'
-            }
-            placeholder="Off"
+            label={t('training.settings.earlyStopping')}
+            description={frozen ? notTrained() : t('training.settings.earlyStoppingHint')}
+            placeholder={t('common.off')}
             disabled={frozen}
             value={values.patience}
             onChange={setNumber('patience')}
@@ -581,13 +615,13 @@ export function SettingsForm({
             error={errors.patience}
           />
           <Checkbox
-            label="Keep the weights of the best epoch"
+            label={t('training.settings.restoreBest')}
             description={
               frozen
-                ? NOT_TRAINED
+                ? notTrained()
                 : validates
-                  ? 'Test and save the weights with the lowest validation loss, not those of the last epoch.'
-                  : 'Not used without validation data: the weights of the last epoch are kept.'
+                  ? t('training.settings.restoreBestHint')
+                  : t('training.settings.restoreBestNoVal')
             }
             disabled={!validates || frozen}
             checked={values.restore_best && validates && !frozen}
@@ -604,8 +638,18 @@ export function SettingsForm({
 // --------------------------------------------------------------------------
 
 const METHODS: { value: TuningMethod; label: string }[] = [
-  { value: 'random', label: 'Random search' },
-  { value: 'grid', label: 'Grid search' },
+  {
+    value: 'random',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.randomSearch');
+    },
+  },
+  {
+    value: 'grid',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.gridSearch');
+    },
+  },
 ];
 
 const options = (values: number[], format: (value: number) => string) =>
@@ -647,6 +691,7 @@ function LossFields({
   /** Whether a search varies the training settings (a hybrid network's: its neural ones). */
   searched: boolean;
 }) {
+  useTranslation();
   const losses = lossesInUse({ ...values, search: searched }, task);
   const uses = (param: LossParam) => losses.some((name) => usesParam(param, name, task));
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
@@ -662,13 +707,17 @@ function LossFields({
     <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
       {uses('class_weights') && (
         <Select
-          label="Class weights"
+          label={i18n.t('ui.training.SettingsForm.classWeights')}
           description={
             mode === 'balanced'
-              ? `n / (k · count) from the ${pixels ? 'pixels of the training images' : 'training rows'}: an alternative to oversampling.`
+              ? i18n.t('ui.training.SettingsForm.nKCountFromThe', {
+                  value: pixels
+                    ? i18n.t('ui.training.SettingsForm.pixelsOfTheTrainingImages')
+                    : i18n.t('ui.training.SettingsForm.trainingRows'),
+                })
               : mode === 'custom'
-                ? 'One weight per class, or by class name.'
-                : 'Every class counts the same (alpha 1).'
+                ? i18n.t('ui.training.SettingsForm.oneWeightPerClassOr')
+                : i18n.t('ui.training.SettingsForm.everyClassCountsTheSame')
           }
           data={modes}
           value={mode}
@@ -678,9 +727,9 @@ function LossFields({
       )}
       {uses('class_weights') && mode === 'custom' && (
         <TextInput
-          label="Weights"
-          placeholder="1, 10   or   fraud: 10, ok: 1"
-          description="Classes that are not named get 1."
+          label={i18n.t('ui.training.SettingsForm.weights')}
+          placeholder={i18n.t('ui.training.SettingsForm.text110OrFraud10')}
+          description={i18n.t('ui.training.SettingsForm.classesThatAreNotNamed')}
           value={values.class_weights_text}
           onChange={(event) => update({ class_weights_text: event.currentTarget.value })}
           error={errors.class_weights_text}
@@ -688,10 +737,10 @@ function LossFields({
       )}
       {uses('focal_gamma') && (
         <NumberInput
-          label="Focal gamma"
-          description="How much less well-classified samples count (0: the cross-entropy; 2 is usual)"
+          label={i18n.t('ui.training.SettingsForm.focalGamma')}
+          description={i18n.t('ui.training.SettingsForm.howMuchLessWellClassified')}
           value={tuned.focal_gamma ? '' : values.focal_gamma}
-          placeholder={tuned.focal_gamma ? SEARCHED : undefined}
+          placeholder={tuned.focal_gamma ? searchedText() : undefined}
           disabled={tuned.focal_gamma}
           onChange={(value) => update({ focal_gamma: value })}
           min={LIMITS.focal_gamma.min}
@@ -704,10 +753,10 @@ function LossFields({
       )}
       {uses('label_smoothing') && (
         <NumberInput
-          label="Label smoothing"
-          description="Share of the target spread over all classes (0 to 0.3): against overconfident predictions"
+          label={i18n.t('ui.training.SettingsForm.labelSmoothing')}
+          description={i18n.t('ui.training.SettingsForm.shareOfTheTargetSpread')}
           value={tuned.label_smoothing ? '' : values.label_smoothing}
-          placeholder={tuned.label_smoothing ? SEARCHED : undefined}
+          placeholder={tuned.label_smoothing ? searchedText() : undefined}
           disabled={tuned.label_smoothing}
           onChange={(value) => update({ label_smoothing: value })}
           min={LIMITS.label_smoothing.min}
@@ -720,10 +769,10 @@ function LossFields({
       )}
       {uses('huber_delta') && (
         <NumberInput
-          label="Huber delta"
-          description="Where the loss turns from squared to linear, in standard deviations of the target"
+          label={i18n.t('ui.training.SettingsForm.huberDelta')}
+          description={i18n.t('ui.training.SettingsForm.whereTheLossTurnsFrom')}
           value={tuned.huber_delta ? '' : values.huber_delta}
-          placeholder={tuned.huber_delta ? SEARCHED : undefined}
+          placeholder={tuned.huber_delta ? searchedText() : undefined}
           disabled={tuned.huber_delta}
           onChange={(value) => update({ huber_delta: value })}
           min={LIMITS.huber_delta.min}
@@ -746,6 +795,7 @@ function MetricField({
   metrics,
   where,
 }: SearchFieldsProps & { where: string }) {
+  useTranslation();
   const offered = metrics ?? METRICS;
   const data = offered.map((metric) => ({ value: metric.name, label: metric.label }));
   if (!offered.some((metric) => metric.name === values.metric)) {
@@ -754,8 +804,11 @@ function MetricField({
   }
   return (
     <Select
-      label="Objective metric"
-      description={`Ranks the trials on ${where}; ${metricDirection(values.metric)}.`}
+      label={i18n.t('ui.training.SettingsForm.objectiveMetric')}
+      description={i18n.t('ui.training.SettingsForm.ranksTheTrialsOn', {
+        where,
+        metricDirection: metricDirection(values.metric),
+      })}
       data={data}
       value={values.metric}
       onChange={(value) => value && onChange({ ...values, metric: value as TuningMetric })}
@@ -767,6 +820,7 @@ function MetricField({
 }
 
 function SearchFields({ values, onChange, errors, metrics, task = null }: SearchFieldsProps) {
+  useTranslation();
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const grid = values.search_method === 'grid';
   const trials = plannedTrials(values, task);
@@ -776,7 +830,14 @@ function SearchFields({ values, onChange, errors, metrics, task = null }: Search
   let summary: string | null = null;
   if (trials !== null && typeof epochs === 'number' && epochs > 0) {
     const count = `${trials} ${trials === 1 ? 'trial' : 'trials'}`;
-    summary = `${count} of ${epochs} ${epochs === 1 ? 'epoch' : 'epochs'} each.`;
+    summary = i18n.t('ui.training.SettingsForm.ofEach', {
+      count,
+      epochs,
+      value:
+        epochs === 1
+          ? i18n.t('ui.training.SettingsForm.epoch')
+          : i18n.t('ui.training.SettingsForm.epochs'),
+    });
     if (!grid && typeof requested === 'number' && trials < requested) {
       summary += ` Only ${trials} different combinations: each is tried once.`;
     }
@@ -786,7 +847,7 @@ function SearchFields({ values, onChange, errors, metrics, task = null }: Search
     <Paper withBorder p="sm" radius="sm" mt="xs">
       <Stack gap="sm">
         <Group gap="sm" align="flex-end" wrap="wrap">
-          <Input.Wrapper label="Method">
+          <Input.Wrapper label={i18n.t('ui.training.SettingsForm.method')}>
             <SegmentedControl
               display="flex"
               data={METHODS}
@@ -796,7 +857,7 @@ function SearchFields({ values, onChange, errors, metrics, task = null }: Search
           </Input.Wrapper>
           {!grid && (
             <NumberInput
-              label="Trials"
+              label={i18n.t('ui.training.SettingsForm.trials')}
               w={110}
               value={values.search_trials}
               onChange={(value) => update({ search_trials: value })}
@@ -825,12 +886,12 @@ function SearchFields({ values, onChange, errors, metrics, task = null }: Search
           </Text>
         )}
         <Text size="xs" c="dimmed">
-          {summary && `${summary} `}
-          {grid
-            ? 'Every combination of the chosen values is trained.'
-            : 'Learning rates are drawn evenly on a log scale.'}{' '}
-          All trials use the same data and starting weights; the trial with the best objective
-          metric wins (each trial keeps the weights of its epoch with the lowest validation loss).
+          {i18n.t('ui.training.SettingsForm.allTrialsUseTheSame', {
+            value: summary && `${summary} `,
+            value2: grid
+              ? i18n.t('ui.training.SettingsForm.everyCombinationOfTheChosen')
+              : i18n.t('ui.training.SettingsForm.learningRatesAreDrawnEvenly'),
+          })}
         </Text>
       </Stack>
     </Paper>
@@ -848,6 +909,7 @@ function NeuralSearchRows({
   /** Those of a hybrid network's neural layers (beside the parameters of its model). */
   neural?: boolean;
 }) {
+  useTranslation();
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const numbers = (list: string[]) => list.map(Number);
   const grid = values.search_method === 'grid';
@@ -855,7 +917,7 @@ function NeuralSearchRows({
   return (
     <>
       <SearchRow
-        label="Learning rate"
+        label={i18n.t('ui.training.SettingsForm.learningRate')}
         what={`${of}learning rate`}
         checked={values.tune_learning_rate}
         onToggle={(checked) => update({ tune_learning_rate: checked })}
@@ -863,7 +925,7 @@ function NeuralSearchRows({
       >
         {grid ? (
           <MultiSelect
-            aria-label="Learning rates to try"
+            aria-label={i18n.t('ui.training.SettingsForm.learningRatesToTry')}
             data={LR_OPTIONS}
             value={values.lr_values.map(String)}
             onChange={(list) => update({ lr_values: numbers(list) })}
@@ -872,7 +934,7 @@ function NeuralSearchRows({
         ) : (
           <Group gap="xs" wrap="nowrap" align="flex-start">
             <NumberInput
-              aria-label="Smallest learning rate"
+              aria-label={i18n.t('ui.training.SettingsForm.smallestLearningRate')}
               value={values.lr_min}
               onChange={(value) => update({ lr_min: value })}
               min={0}
@@ -883,10 +945,10 @@ function NeuralSearchRows({
               style={{ flex: 1 }}
             />
             <Text size="sm" mt={7}>
-              to
+              {i18n.t('ui.training.SettingsForm.to')}
             </Text>
             <NumberInput
-              aria-label="Largest learning rate"
+              aria-label={i18n.t('ui.training.SettingsForm.largestLearningRate')}
               value={values.lr_max}
               onChange={(value) => update({ lr_max: value })}
               min={0}
@@ -900,14 +962,14 @@ function NeuralSearchRows({
         )}
       </SearchRow>
       <SearchRow
-        label="Batch size"
+        label={i18n.t('ui.training.SettingsForm.batchSize')}
         what={`${of}batch size`}
         checked={values.tune_batch_size}
         onToggle={(checked) => update({ tune_batch_size: checked })}
         fixed={formatField('batch_size', values.batch_size)}
       >
         <MultiSelect
-          aria-label="Batch sizes to try"
+          aria-label={i18n.t('ui.training.SettingsForm.batchSizesToTry')}
           data={BATCH_SIZE_OPTIONS}
           value={values.batch_sizes.map(String)}
           onChange={(list) => update({ batch_sizes: numbers(list) })}
@@ -915,14 +977,14 @@ function NeuralSearchRows({
         />
       </SearchRow>
       <SearchRow
-        label="Optimizer"
+        label={i18n.t('ui.training.SettingsForm.optimizer')}
         what={`${of}optimizer`}
         checked={values.tune_optimizer}
         onToggle={(checked) => update({ tune_optimizer: checked })}
         fixed={formatSetting('optimizer', values.optimizer)}
       >
         <MultiSelect
-          aria-label="Optimizers to try"
+          aria-label={i18n.t('ui.training.SettingsForm.optimizersToTry')}
           data={OPTIMIZERS}
           value={values.optimizers}
           onChange={(list) => update({ optimizers: list as Optimizer[] })}
@@ -930,14 +992,14 @@ function NeuralSearchRows({
         />
       </SearchRow>
       <SearchRow
-        label="Weight decay"
+        label={i18n.t('ui.training.SettingsForm.weightDecay')}
         what={`${of}weight decay`}
         checked={values.tune_weight_decay}
         onToggle={(checked) => update({ tune_weight_decay: checked })}
         fixed={formatField('weight_decay', values.weight_decay)}
       >
         <MultiSelect
-          aria-label="Weight decays to try"
+          aria-label={i18n.t('ui.training.SettingsForm.weightDecaysToTry')}
           data={WEIGHT_DECAY_OPTIONS}
           value={values.weight_decays.map(String)}
           onChange={(list) => update({ weight_decays: numbers(list) })}
@@ -946,7 +1008,7 @@ function NeuralSearchRows({
       </SearchRow>
       {task && (
         <SearchRow
-          label="Loss"
+          label={i18n.t('ui.training.SettingsForm.loss')}
           what={`${of}loss`}
           checked={values.tune_loss}
           onToggle={(checked) => update({ tune_loss: checked })}
@@ -956,7 +1018,7 @@ function NeuralSearchRows({
           }
         >
           <MultiSelect
-            aria-label="Losses to try"
+            aria-label={i18n.t('ui.training.SettingsForm.lossesToTry')}
             data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
             value={LOSS_OPTIONS[task]
               .map((option) => option.value)
@@ -968,14 +1030,14 @@ function NeuralSearchRows({
       )}
       {lossUses(values, task, 'focal_gamma') && (
         <SearchRow
-          label="Focal gamma"
+          label={i18n.t('ui.training.SettingsForm.focalGamma')}
           what={`${of}focal gamma`}
           checked={values.tune_focal_gamma}
           onToggle={(checked) => update({ tune_focal_gamma: checked })}
           fixed={formatNumber(values.focal_gamma)}
         >
           <MultiSelect
-            aria-label="Focal gammas to try"
+            aria-label={i18n.t('ui.training.SettingsForm.focalGammasToTry')}
             data={FOCAL_GAMMA_OPTIONS}
             value={values.focal_gammas.map(String)}
             onChange={(list) => update({ focal_gammas: numbers(list) })}
@@ -985,14 +1047,14 @@ function NeuralSearchRows({
       )}
       {lossUses(values, task, 'label_smoothing') && (
         <SearchRow
-          label="Label smoothing"
+          label={i18n.t('ui.training.SettingsForm.labelSmoothing')}
           what={`${of}label smoothing`}
           checked={values.tune_label_smoothing}
           onToggle={(checked) => update({ tune_label_smoothing: checked })}
           fixed={formatNumber(values.label_smoothing)}
         >
           <MultiSelect
-            aria-label="Label smoothings to try"
+            aria-label={i18n.t('ui.training.SettingsForm.labelSmoothingsToTry')}
             data={LABEL_SMOOTHING_OPTIONS}
             value={values.label_smoothings.map(String)}
             onChange={(list) => update({ label_smoothings: numbers(list) })}
@@ -1002,14 +1064,14 @@ function NeuralSearchRows({
       )}
       {lossUses(values, task, 'huber_delta') && (
         <SearchRow
-          label="Huber delta"
+          label={i18n.t('ui.training.SettingsForm.huberDelta')}
           what={`${of}Huber delta`}
           checked={values.tune_huber_delta}
           onToggle={(checked) => update({ tune_huber_delta: checked })}
           fixed={formatNumber(values.huber_delta)}
         >
           <MultiSelect
-            aria-label="Huber deltas to try"
+            aria-label={i18n.t('ui.training.SettingsForm.huberDeltasToTry')}
             data={HUBER_DELTA_OPTIONS}
             value={values.huber_deltas.map(String)}
             onChange={(list) => update({ huber_deltas: numbers(list) })}
@@ -1060,12 +1122,15 @@ function SearchRow({
   /** What is searched, for the checkbox's accessible name (default: the label). */
   what?: string;
 }) {
+  useTranslation();
   return (
     // On phones the values move below the checkbox, where they have the full width.
     <Group align="flex-start" gap="sm" wrap="wrap">
       <Checkbox
         label={label}
-        aria-label={`Search ${what ?? label.toLowerCase()}`}
+        aria-label={i18n.t('ui.training.SettingsForm.search', {
+          value: what ?? label.toLowerCase(),
+        })}
         checked={checked}
         onChange={(event) => onToggle(event.currentTarget.checked)}
         w={120}
@@ -1077,7 +1142,7 @@ function SearchRow({
           children
         ) : (
           <Text size="sm" c="dimmed" mt={6}>
-            Fixed: {fixed}
+            {i18n.t('ui.training.SettingsForm.fixed', { fixed })}
           </Text>
         )}
       </Box>
@@ -1090,19 +1155,41 @@ function SearchRow({
 // --------------------------------------------------------------------------
 
 const MODEL_NOTES: Record<string, string> = {
-  GaussianProcessRegressor:
-    'The fit optimises the kernel hyperparameters itself: a search can only vary alpha, the normalisation of the targets and the optimizer restarts.',
-  GaussianProcessClassifier:
-    'The fit optimises the kernel hyperparameters itself: a search can only vary the optimizer restarts.',
+  get GaussianProcessRegressor() {
+    return i18n.t('ui.training.SettingsForm.theFitOptimisesTheKernel');
+  },
+  get GaussianProcessClassifier() {
+    return i18n.t('ui.training.SettingsForm.theFitOptimisesTheKernel2');
+  },
 };
 
 const RANGE_MODES = [
-  { value: 'range', label: 'Range' },
-  { value: 'list', label: 'List' },
+  {
+    value: 'range',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.range');
+    },
+  },
+  {
+    value: 'list',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.list');
+    },
+  },
 ];
 const SCALES = [
-  { value: 'log', label: 'Log' },
-  { value: 'linear', label: 'Linear' },
+  {
+    value: 'log',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.log');
+    },
+  },
+  {
+    value: 'linear',
+    get label() {
+      return i18n.t('ui.training.SettingsForm.linear');
+    },
+  },
 ];
 
 interface ClassicalSearchFieldsProps extends SearchFieldsProps {
@@ -1128,6 +1215,7 @@ function ClassicalSearchFields({
   hybrid = null,
   task = null,
 }: ClassicalSearchFieldsProps) {
+  useTranslation();
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
   const grid = values.search_method === 'grid';
   const states = classicalParams(values, model);
@@ -1169,7 +1257,7 @@ function ClassicalSearchFields({
     <Paper withBorder p="sm" radius="sm" mt="xs">
       <Stack gap="sm">
         <Group gap="sm" align="flex-end" wrap="wrap">
-          <Input.Wrapper label="Method">
+          <Input.Wrapper label={i18n.t('ui.training.SettingsForm.method')}>
             <SegmentedControl
               display="flex"
               data={METHODS}
@@ -1179,7 +1267,7 @@ function ClassicalSearchFields({
           </Input.Wrapper>
           {!grid && (
             <NumberInput
-              label="Trials"
+              label={i18n.t('ui.training.SettingsForm.trials')}
               w={110}
               value={values.search_trials}
               onChange={(value) => update({ search_trials: value })}
@@ -1195,14 +1283,14 @@ function ClassicalSearchFields({
         {hybrid && (
           <>
             <Text size="sm" fw={600}>
-              Neural layers
+              {i18n.t('ui.training.SettingsForm.neuralLayers')}
             </Text>
             <Checkbox
-              label="Search the training settings of the neural layers"
+              label={i18n.t('ui.training.SettingsForm.searchTheTrainingSettingsOf')}
               description={
                 hybrid.frozen
-                  ? 'Not with frozen features: they are not trained.'
-                  : 'Every trial learns the features again with its settings, so it costs a training of the neural layers each.'
+                  ? i18n.t('ui.training.SettingsForm.notWithFrozenFeaturesThey')
+                  : i18n.t('ui.training.SettingsForm.everyTrialLearnsTheFeatures')
               }
               disabled={hybrid.frozen}
               checked={neural}
@@ -1250,22 +1338,20 @@ function ClassicalSearchFields({
 
         {neural ? (
           <Text size="xs" c={validates ? 'dimmed' : 'red'}>
-            The trials are compared on the validation rows: the features of the training rows were
-            learned from them, so a cross-validation on those would favour settings that memorise
-            them.
+            {i18n.t('ui.training.SettingsForm.theTrialsAreComparedOn')}
           </Text>
         ) : validates ? (
           <Group gap="sm" align="flex-start" wrap="wrap">
             <Checkbox
-              label="Cross-validate on the training rows"
-              description="Instead of the validation rows, which the search then does not see."
+              label={i18n.t('ui.training.SettingsForm.crossValidateOnTheTraining')}
+              description={i18n.t('ui.training.SettingsForm.insteadOfTheValidationRows')}
               checked={values.cv_enabled}
               onChange={(event) => update({ cv_enabled: event.currentTarget.checked })}
               style={{ flex: 1, minWidth: 220 }}
             />
             {values.cv_enabled && (
               <NumberInput
-                label="Folds"
+                label={i18n.t('ui.training.SettingsForm.folds')}
                 w={110}
                 value={values.cv_folds}
                 onChange={(value) => update({ cv_folds: value })}
@@ -1279,8 +1365,9 @@ function ClassicalSearchFields({
           </Group>
         ) : (
           <Text size="xs" c="dimmed">
-            No validation rows: the trials are compared by {FOLDS.default}-fold cross-validation on
-            the training rows.
+            {i18n.t('ui.training.SettingsForm.noValidationRowsTheTrials', {
+              default: FOLDS.default,
+            })}
           </Text>
         )}
 
@@ -1292,11 +1379,11 @@ function ClassicalSearchFields({
         <Text size="xs" c="dimmed">
           {summary && `${summary} `}
           {grid
-            ? 'Every combination of the listed values is fitted.'
-            : 'Ranges are drawn evenly on their scale; whole-number parameters give whole numbers.'}{' '}
+            ? i18n.t('ui.training.SettingsForm.everyCombinationOfTheListed')
+            : i18n.t('ui.training.SettingsForm.rangesAreDrawnEvenlyOn')}{' '}
           {neural
-            ? 'Parameters that are not ticked keep the values of the brick. The best trial is measured on the test rows like a single training.'
-            : 'The best trial is measured on the test rows like a single fit.'}
+            ? i18n.t('ui.training.SettingsForm.parametersThatAreNotTicked')
+            : i18n.t('ui.training.SettingsForm.theBestTrialIsMeasured')}
         </Text>
       </Stack>
     </Paper>
@@ -1316,13 +1403,14 @@ function ParamRow({
   error: string | undefined;
   onChange: (changes: Partial<ParamState>) => void;
 }) {
+  useTranslation();
   const choice = item.kind === 'choice' || item.kind === 'bool';
   const range = !grid && !choice && state.mode === 'range';
   let editor: React.ReactNode;
   if (choice) {
     editor = (
       <MultiSelect
-        aria-label={`${item.label} to try`}
+        aria-label={i18n.t('ui.training.SettingsForm.toTry', { label: item.label })}
         data={item.options.map((option) => ({ value: String(option), label: String(option) }))}
         value={state.choices}
         onChange={(choices) => onChange({ choices })}
@@ -1338,14 +1426,16 @@ function ParamRow({
             data={RANGE_MODES}
             value={state.mode}
             onChange={(mode) => onChange({ mode: mode as ParamState['mode'] })}
-            aria-label={`${item.label}: range or list`}
+            aria-label={i18n.t('ui.training.SettingsForm.rangeOrList', { label: item.label })}
             style={{ alignSelf: 'flex-start' }}
           />
         )}
         {range ? (
           <Group gap="xs" wrap="nowrap" align="flex-start">
             <NumberInput
-              aria-label={`Smallest ${item.label.toLowerCase()}`}
+              aria-label={i18n.t('ui.training.SettingsForm.smallest', {
+                label: item.label.toLowerCase(),
+              })}
               value={state.min}
               onChange={(min) => onChange({ min })}
               allowNegative={false}
@@ -1355,10 +1445,12 @@ function ParamRow({
               style={{ flex: 1 }}
             />
             <Text size="sm" mt={7}>
-              to
+              {i18n.t('ui.training.SettingsForm.to')}
             </Text>
             <NumberInput
-              aria-label={`Largest ${item.label.toLowerCase()}`}
+              aria-label={i18n.t('ui.training.SettingsForm.largest', {
+                label: item.label.toLowerCase(),
+              })}
               value={state.max}
               onChange={(max) => onChange({ max })}
               allowNegative={false}
@@ -1367,7 +1459,9 @@ function ParamRow({
               style={{ flex: 1 }}
             />
             <Select
-              aria-label={`Scale of the ${item.label.toLowerCase()}`}
+              aria-label={i18n.t('ui.training.SettingsForm.scaleOfThe', {
+                label: item.label.toLowerCase(),
+              })}
               data={SCALES}
               value={state.scale}
               onChange={(scale) => scale && onChange({ scale: scale as ParamState['scale'] })}
@@ -1377,8 +1471,10 @@ function ParamRow({
           </Group>
         ) : (
           <TextInput
-            aria-label={`${item.label} to try`}
-            placeholder={item.none ? 'e.g. none, 3, 6' : 'e.g. 0.1, 1, 10'}
+            aria-label={i18n.t('ui.training.SettingsForm.toTry', { label: item.label })}
+            placeholder={
+              item.none ? i18n.t('ui.training.SettingsForm.eGNone36') : 'e.g. 0.1, 1, 10'
+            }
             description={item.help}
             value={state.text}
             onChange={(event) => onChange({ text: event.currentTarget.value })}

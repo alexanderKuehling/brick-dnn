@@ -12,6 +12,7 @@ import {
   Text,
 } from '@mantine/core';
 import type { MemberPredictions, Prediction, PredictionResult } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { formatProbability, formatValue } from './rows';
 
 /** One prediction: the class with the top classes as bars, or the value (± std). */
@@ -27,18 +28,26 @@ export function ResultCard({
   /** The real target value of a sample row. */
   actual?: string | null;
 }) {
+  useTranslation();
   const classification = task === 'classification' || prediction.top !== undefined;
   return (
-    <Paper withBorder p="sm" radius="sm" aria-label="Prediction">
+    <Paper
+      withBorder
+      p="sm"
+      radius="sm"
+      aria-label={i18n.t('ui.training.PredictionResults.prediction')}
+    >
       {classification ? (
         <Stack gap={6}>
           <Group justify="space-between" align="baseline" wrap="wrap" gap="xs">
             <Text size="sm" c="dimmed">
-              Predicted {target ? target : 'class'}
+              {i18n.t('ui.training.PredictionResults.predicted', {
+                value: target ? target : i18n.t('ui.training.PredictionResults.class'),
+              })}
             </Text>
             {actual !== undefined && actual !== null && actual !== '' && (
               <Text size="xs" c="dimmed">
-                actual: {actual}
+                {i18n.t('ui.training.PredictionResults.actual', { actual })}
               </Text>
             )}
           </Group>
@@ -50,8 +59,9 @@ export function ResultCard({
           </Text>
           {typeof prediction.positive_probability === 'number' && (
             <Text size="xs" c="dimmed">
-              Decided by the threshold on the probability of the positive class:{' '}
-              {formatProbability(prediction.positive_probability)}
+              {i18n.t('ui.training.PredictionResults.decidedByTheThresholdOn', {
+                positive_probability: formatProbability(prediction.positive_probability),
+              })}
             </Text>
           )}
           {(prediction.top ?? []).map((item) => (
@@ -72,11 +82,13 @@ export function ResultCard({
         <Stack gap={4}>
           <Group justify="space-between" align="baseline" wrap="wrap" gap="xs">
             <Text size="sm" c="dimmed">
-              Predicted {target || 'value'}
+              {i18n.t('ui.training.PredictionResults.predicted', {
+                value: target || i18n.t('ui.training.PredictionResults.value'),
+              })}
             </Text>
             {actual !== undefined && actual !== null && actual !== '' && (
               <Text size="xs" c="dimmed">
-                actual: {actual}
+                {i18n.t('ui.training.PredictionResults.actual', { actual })}
               </Text>
             )}
           </Group>
@@ -91,7 +103,7 @@ export function ResultCard({
           </Text>
           {typeof prediction.std === 'number' && (
             <Text size="xs" c="dimmed">
-              ± the Gaussian process&apos;s standard deviation: how uncertain the prediction is.
+              {i18n.t('ui.training.PredictionResults.theGaussianProcessSStandard')}
             </Text>
           )}
         </Stack>
@@ -121,14 +133,21 @@ export function MemberResults({
   index: number;
   task: PredictionResult['task'];
 }) {
+  useTranslation();
   const classification = task === 'classification';
   return (
-    <Table fz="xs" withTableBorder aria-label="Predictions of the members">
+    <Table
+      fz="xs"
+      withTableBorder
+      aria-label={i18n.t('ui.training.PredictionResults.predictionsOfTheMembers')}
+    >
       <Table.Thead>
         <Table.Tr>
-          <Table.Th>Member</Table.Th>
-          <Table.Th>Prediction</Table.Th>
-          {classification && <Table.Th>p(positive)</Table.Th>}
+          <Table.Th>{i18n.t('ui.training.PredictionResults.member')}</Table.Th>
+          <Table.Th>{i18n.t('ui.training.PredictionResults.prediction')}</Table.Th>
+          {classification && (
+            <Table.Th>{i18n.t('ui.training.PredictionResults.pPositive')}</Table.Th>
+          )}
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -170,13 +189,17 @@ export function ResultsTable({
   /** An ensemble's members: a column each. */
   members?: MemberPredictions[];
 }) {
+  useTranslation();
   const classification = task === 'classification';
   const withStd = predictions.some((p) => typeof p.std === 'number');
   return (
     <Stack gap="xs">
       <Group justify="space-between" gap="xs">
         <Text size="sm" fw={500}>
-          {predictions.length} {predictions.length === 1 ? 'prediction' : 'predictions'}
+          {predictions.length}{' '}
+          {predictions.length === 1
+            ? i18n.t('ui.training.PredictionResults.prediction2')
+            : i18n.t('ui.training.PredictionResults.predictions2')}
         </Text>
         <Button
           size="compact-sm"
@@ -184,17 +207,28 @@ export function ResultsTable({
           leftSection={<IconDownload size={14} />}
           onClick={onDownload}
         >
-          Results (.csv)
+          {i18n.t('ui.training.PredictionResults.resultsCsv')}
         </Button>
       </Group>
       <ScrollArea.Autosize mah={320} type="auto">
-        <Table striped withTableBorder fz="xs" aria-label="Predictions">
+        <Table
+          striped
+          withTableBorder
+          fz="xs"
+          aria-label={i18n.t('ui.training.PredictionResults.predictions')}
+        >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Row</Table.Th>
-              <Table.Th>Prediction</Table.Th>
-              <Table.Th>{classification ? 'Probability' : withStd ? '± std' : ''}</Table.Th>
-              {actual && <Table.Th>Actual</Table.Th>}
+              <Table.Th>{i18n.t('ui.training.PredictionResults.row')}</Table.Th>
+              <Table.Th>{i18n.t('ui.training.PredictionResults.prediction')}</Table.Th>
+              <Table.Th>
+                {classification
+                  ? i18n.t('ui.training.PredictionResults.probability')
+                  : withStd
+                    ? i18n.t('ui.training.PredictionResults.std')
+                    : ''}
+              </Table.Th>
+              {actual && <Table.Th>{i18n.t('ui.training.PredictionResults.actual2')}</Table.Th>}
               {members?.map((member) => (
                 <Table.Th key={member.id}>{member.name}</Table.Th>
               ))}
@@ -225,7 +259,10 @@ export function ResultsTable({
       </ScrollArea.Autosize>
       {predictions.length > SHOWN_ROWS && (
         <Text size="xs" c="dimmed">
-          The first {SHOWN_ROWS} rows; the download has all {predictions.length}.
+          {i18n.t('ui.training.PredictionResults.theFirstRowsTheDownload', {
+            SHOWN_ROWS,
+            length: predictions.length,
+          })}
         </Text>
       )}
     </Stack>

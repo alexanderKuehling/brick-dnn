@@ -4,6 +4,7 @@ import type { RowAnalysis } from '@/api/types';
 import { seriesColor } from '@/components/charts/colors';
 import { formatCount, formatNumber, formatPercent } from '@/components/charts/format';
 import { Histogram } from '@/components/charts/Histogram';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { closePairs, histogramCounts, median, pairTargets, randomPairs } from './rowsData';
 import classes from './RowsView.module.css';
 
@@ -19,6 +20,7 @@ export interface PairsViewProps {
  * structure, not for choosing rows.
  */
 export function PairsView({ analysis, threshold }: PairsViewProps) {
+  useTranslation();
   const close = useMemo(() => closePairs(analysis, threshold), [analysis, threshold]);
   const random = useMemo(() => randomPairs(analysis), [analysis]);
   const closeTargets = useMemo(() => pairTargets(analysis, close), [analysis, close]);
@@ -28,12 +30,14 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
   const header = (
     <div>
       <Text fw={600} size="sm">
-        Close pairs vs random pairs
+        {i18n.t('ui.data.PairsView.closePairsVsRandomPairs')}
       </Text>
       <Text size="xs" c="dimmed">
-        A close pair is a row and its nearest row with an NN ratio below{' '}
-        {formatNumber(threshold, 3)} ({formatCount(close.length)} pairs). This view uses the labels
-        ({target ?? 'no target'}): use it to see what the near twins are, not to pick rows.
+        {i18n.t('ui.data.PairsView.aClosePairIsA', {
+          threshold: formatNumber(threshold, 3),
+          length: formatCount(close.length),
+          value: target ?? i18n.t('ui.data.PairsView.noTarget'),
+        })}
       </Text>
     </div>
   );
@@ -44,8 +48,7 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
         <Stack gap="xs">
           {header}
           <Text size="sm" c="dimmed">
-            Choose a target in “Target &amp; split” to compare the target values of close and random
-            pairs.
+            {i18n.t('ui.data.PairsView.chooseATargetInTarget')}
           </Text>
         </Stack>
       </Paper>
@@ -57,7 +60,7 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
         <Stack gap="xs">
           {header}
           <Text size="sm" c="dimmed">
-            No row has a near twin below this threshold.
+            {i18n.t('ui.data.PairsView.noRowHasANear')}
           </Text>
         </Stack>
       </Paper>
@@ -77,14 +80,22 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
           {header}
           <Group gap="lg" data-testid="pair-medians">
             <Text size="sm">
-              Close pairs: median difference <b>{formatNumber(closeMedian, 3)}</b>
+              <Trans
+                i18nKey="ui.data.PairsView.closePairsMedianDifference"
+                values={{ closeMedian: formatNumber(closeMedian, 3) }}
+                components={[<b />]}
+              />
             </Text>
             <Text size="sm">
-              Random pairs: median difference <b>{formatNumber(randomMedian, 3)}</b>
+              <Trans
+                i18nKey="ui.data.PairsView.randomPairsMedianDifference"
+                values={{ randomMedian: formatNumber(randomMedian, 3) }}
+                components={[<b />]}
+              />
             </Text>
           </Group>
           <Histogram
-            title={`Difference of ${target} within a pair`}
+            title={i18n.t('ui.data.PairsView.differenceOfWithinAPair', { target })}
             edges={edges}
             normalize
             unit="pairs"
@@ -93,13 +104,13 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
             series={[
               {
                 key: 'close',
-                label: 'Close pairs',
+                label: i18n.t('ui.data.PairsView.closePairs'),
                 color: seriesColor(1),
                 counts: histogramCounts(closeTargets.diffs, edges),
               },
               {
                 key: 'random',
-                label: 'Random pairs',
+                label: i18n.t('ui.data.PairsView.randomPairs'),
                 color: seriesColor(0),
                 counts: histogramCounts(randomTargets.diffs, edges),
               },
@@ -107,11 +118,7 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
           />
           {closeMedian !== null && randomMedian !== null && closeMedian < randomMedian * 0.5 && (
             <Alert color="yellow" p="xs">
-              <Text size="sm">
-                Near twins have very similar targets. If a row's twin is in the training data while
-                the row is in validation or test, the scores look better than they are on new data:
-                keep the groups together in the split.
-              </Text>
+              <Text size="sm">{i18n.t('ui.data.PairsView.nearTwinsHaveVerySimilar')}</Text>
             </Alert>
           )}
         </Stack>
@@ -125,14 +132,25 @@ export function PairsView({ analysis, threshold }: PairsViewProps) {
     <Paper withBorder radius="md" p="sm" className={classes.card}>
       <Stack gap="xs">
         {header}
-        <Text size="sm">Same class within a pair</Text>
+        <Text size="sm">{i18n.t('ui.data.PairsView.sameClassWithinAPair')}</Text>
         <div>
-          <Text size="xs">Close pairs: {formatPercent(closeShare)}</Text>
-          <Progress value={closeShare * 100} color="orange" aria-label="Close pairs, same class" />
+          <Text size="xs">
+            {i18n.t('ui.data.PairsView.closePairs2', { closeShare: formatPercent(closeShare) })}
+          </Text>
+          <Progress
+            value={closeShare * 100}
+            color="orange"
+            aria-label={i18n.t('ui.data.PairsView.closePairsSameClass')}
+          />
         </div>
         <div>
-          <Text size="xs">Random pairs: {formatPercent(randomShare)}</Text>
-          <Progress value={randomShare * 100} aria-label="Random pairs, same class" />
+          <Text size="xs">
+            {i18n.t('ui.data.PairsView.randomPairs2', { randomShare: formatPercent(randomShare) })}
+          </Text>
+          <Progress
+            value={randomShare * 100}
+            aria-label={i18n.t('ui.data.PairsView.randomPairsSameClass')}
+          />
         </div>
       </Stack>
     </Paper>

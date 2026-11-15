@@ -2,6 +2,8 @@ import json
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
+from django.utils import translation
+from django.utils.translation import gettext
 from rest_framework import mixins, permissions, renderers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
@@ -16,7 +18,16 @@ import brickdnn
 from brickdnn import service
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
-from . import approvals, downloads, ensembles, notices, raw_predictions, recovery, shared_data
+from . import (
+    approvals,
+    catalog,
+    downloads,
+    ensembles,
+    notices,
+    raw_predictions,
+    recovery,
+    shared_data,
+)
 from . import health as health_checks
 from . import training_service as training
 from .accounts import LoginSerializer, tokens_for
@@ -53,13 +64,14 @@ def health(request: Request) -> Response:
 
 @api_view(["GET"])
 def layers(request: Request) -> Response:
-    """All layer types with their parameters: the UI builds its palette and forms from this."""
-    return Response(service.layers())
+    """All layer types with their parameters: the UI builds its palette and forms from this.
+    Descriptions in the request's language (catalog.py)."""
+    return Response(catalog.layers(translation.get_language() or "en"))
 
 
 @api_view(["GET"])
 def examples(request: Request) -> Response:
-    return Response(service.examples())
+    return Response(catalog.examples(translation.get_language() or "en"))
 
 
 @api_view(["POST"])
@@ -100,10 +112,10 @@ class RegisterView(APIView):
     def post(self, request: Request) -> Response:
         if not settings.ALLOW_REGISTRATION:
             return Response(
-                {"detail": "Registration is disabled on this server."},
+                {"detail": gettext("Registration is disabled on this server.")},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        serializer = RegisterSerializer(data=request.data)
+        serializer = RegisterSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         recovery.after_signup(user, request)  # a link to confirm the e-mail address
@@ -220,7 +232,7 @@ def _disabled_response() -> Response | None:
 def training_info(request: Request) -> Response:
     """Whether training is possible on this server: PyTorch version, devices, datasets,
     and with a training worker the state of the queue (``queue``)."""
-    return Response(training.capabilities(request.user))
+    return Response(catalog.translate(training.capabilities(request.user)))
 
 
 @api_view(["POST"])

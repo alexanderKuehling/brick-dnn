@@ -25,6 +25,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import type { GraphDocument } from '@/api';
+import { useTranslation } from '@/i18n';
 import { BuilderContext, groupIssues, type BuilderContextValue } from './BuilderContext';
 import { EDGE_DEFAULTS, miniMapColor, nodeTypes, useDecoratedEdges, withEdgeStyle } from './flow';
 import { fromDocument, type LayerFlowNode } from './graph';
@@ -53,6 +54,7 @@ export function NetworkViewer({ doc, tips }: NetworkViewerProps) {
 const noop = () => undefined;
 
 function Viewer({ doc, tips }: NetworkViewerProps) {
+  const { t } = useTranslation();
   const { catalog, error, reload } = useCatalog();
   const { analysis } = useAnalysis(doc);
   const flow = useReactFlow<LayerFlowNode, Edge>();
@@ -130,7 +132,7 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
             <Text c="dimmed" size="sm">
               {error}
             </Text>
-            <Button onClick={reload}>Try again</Button>
+            <Button onClick={reload}>{t('common.retry')}</Button>
           </Stack>
         ) : (
           <Loader />
@@ -171,7 +173,7 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
                 leftSection={<IconAdjustmentsHorizontal size={14} />}
                 onClick={inspector.open}
               >
-                Properties
+                {t('builder.page.properties')}
               </Button>
             </Panel>
           </ReactFlow>
@@ -188,7 +190,7 @@ function Viewer({ doc, tips }: NetworkViewerProps) {
         opened={inspectorOpened && !wideScreen}
         onClose={inspector.close}
         position="right"
-        title="Properties"
+        title={t('builder.page.properties')}
         size={340}
       >
         {inspectorView}

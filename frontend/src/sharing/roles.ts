@@ -1,9 +1,16 @@
 import { api, type MemberRole, type ProjectRole } from '@/api';
+import { i18n } from '@/i18n';
 
 export const ROLE_LABELS: Record<ProjectRole, string> = {
-  owner: 'Owner',
-  editor: 'Can edit',
-  viewer: 'Can view',
+  get owner() {
+    return i18n.t('ui.sharing.roles.owner');
+  },
+  get editor() {
+    return i18n.t('ui.sharing.roles.canEdit');
+  },
+  get viewer() {
+    return i18n.t('ui.sharing.roles.canView');
+  },
 };
 
 export const MEMBER_ROLE_OPTIONS: { value: MemberRole; label: string }[] = [

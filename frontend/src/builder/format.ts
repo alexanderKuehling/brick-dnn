@@ -1,37 +1,53 @@
 import type { Analysis, NodeAnalysis, Params, ParamValue } from '@/api/types';
+import { currentLocale, i18n } from '@/i18n';
+import { formatNumber } from '@/i18n/format';
 import { compactKernel, isBoosting, isEnsemble } from './kinds';
 
 const ACTIVATION_NAMES: Record<string, string> = {
-  relu: 'ReLU',
-  leaky_relu: 'LeakyReLU',
+  get relu() {
+    return i18n.t('ui.builder.format.relu');
+  },
+  get leaky_relu() {
+    return i18n.t('ui.builder.format.leakyrelu');
+  },
   gelu: 'GELU',
   elu: 'ELU',
   selu: 'SELU',
-  silu: 'SiLU',
-  mish: 'Mish',
-  sigmoid: 'Sigmoid',
-  tanh: 'Tanh',
-  softplus: 'Softplus',
-  softmax: 'Softmax',
-  log_softmax: 'LogSoftmax',
+  get silu() {
+    return i18n.t('ui.builder.format.silu');
+  },
+  get mish() {
+    return i18n.t('ui.builder.format.mish');
+  },
+  get sigmoid() {
+    return i18n.t('ui.builder.format.sigmoid');
+  },
+  get tanh() {
+    return i18n.t('ui.builder.format.tanh');
+  },
+  get softplus() {
+    return i18n.t('ui.builder.format.softplus');
+  },
+  get softmax() {
+    return i18n.t('ui.builder.format.softmax');
+  },
+  get log_softmax() {
+    return i18n.t('ui.builder.format.logsoftmax');
+  },
 };
 
-/** Labels of select options whose values are code (the backend sends the raw values). */
-const OPTION_LABELS: Record<string, Record<string, string>> = {
-  function: ACTIVATION_NAMES,
-  // Kernel bricks: how the Gaussian process treats their hyperparameters.
-  hyperparameters: { optimize: 'Optimise', 'custom bounds': 'Custom bounds', fixed: 'Fixed' },
-  // The own kernel of SVR and SVC.
-  kernel: { linear: 'Linear', poly: 'Polynomial', rbf: 'RBF', sigmoid: 'Sigmoid' },
-  class_weight: { none: 'None', balanced: 'Balanced' },
-  // Gradient boosting: auto switches it on above 10,000 training rows.
-  early_stopping: { auto: 'Auto (above 10,000 rows)', on: 'On', off: 'Off' },
-  // VotingClassifier.
-  voting: { soft: 'Soft (average the probabilities)', hard: 'Hard (count the classes)' },
-};
-
+/**
+ * Labels of select options whose values are code (the backend sends the raw values): the
+ * activation functions by name, the others in the current language (`builder.options`):
+ * kernel bricks (how the Gaussian process treats their hyperparameters), the own kernel of
+ * SVR and SVC, class weights, early stopping of gradient boosting, voting.
+ */
 export function optionLabel(param: string, value: string): string {
-  return OPTION_LABELS[param]?.[value] ?? value;
+  if (param === 'function') {
+    return ACTIVATION_NAMES[value] ?? value;
+  }
+  const key = `builder.options.${param}.${value}`;
+  return i18n.exists(key) ? String(i18n.t(key as 'builder.options.kernel.rbf')) : value;
 }
 
 export function formatShape(shape: number[] | null | undefined): string {
@@ -45,16 +61,18 @@ export function formatCount(count: number | null | undefined): string {
   if (count === null || count === undefined) {
     return '–';
   }
+  const one = (value: number) =>
+    formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   if (count >= 1e9) {
-    return `${(count / 1e9).toFixed(1)}B`;
+    return i18n.t('builder.format.billions', { value: one(count / 1e9) });
   }
   if (count >= 1e6) {
-    return `${(count / 1e6).toFixed(1)}M`;
+    return i18n.t('builder.format.millions', { value: one(count / 1e6) });
   }
   if (count >= 1e4) {
-    return `${(count / 1e3).toFixed(1)}k`;
+    return i18n.t('builder.format.thousands', { value: one(count / 1e3) });
   }
-  return count.toLocaleString('en-US');
+  return count.toLocaleString(currentLocale());
 }
 
 /** [3, 3] → "3×3", [5] → "5", null → "auto". */
@@ -69,7 +87,7 @@ function strideText(stride: ParamValue): string {
   if (!Array.isArray(stride) || stride.every((s) => s === 1)) {
     return '';
   }
-  return ` · stride ${new Set(stride).size === 1 ? stride[0] : stride.join('×')}`;
+  return ` · ${i18n.t('builder.format.stride', { stride: new Set(stride).size === 1 ? stride[0] : stride.join('×') })}`;
 }
 
 function num(value: ParamValue): string {
@@ -87,25 +105,35 @@ export function pyFloat(value: ParamValue): string {
 /** Kernel bricks: their scikit-learn name with the starting values of the hyperparameters. */
 const KERNEL_FORMULAS: Record<string, (p: Params) => string> = {
   RBF: (p) => `RBF(ℓ=${pyFloat(p.length_scale)})`,
-  Matern: (p) => `Matérn(ℓ=${pyFloat(p.length_scale)}, ν=${num(p.nu)})`,
+  Matern: (p) =>
+    i18n.t('ui.builder.format.matRn', { pyFloat: pyFloat(p.length_scale), num: num(p.nu) }),
   RationalQuadratic: (p) => `RQ(ℓ=${pyFloat(p.length_scale)}, α=${pyFloat(p.alpha)})`,
-  ExpSineSquared: (p) => `Periodic(ℓ=${pyFloat(p.length_scale)}, p=${pyFloat(p.periodicity)})`,
-  DotProduct: (p) => `Dot(σ₀=${pyFloat(p.sigma_0)})`,
-  WhiteKernel: (p) => `White(noise=${pyFloat(p.noise_level)})`,
-  ConstantKernel: (p) => `Constant(${pyFloat(p.constant_value)})`,
+  ExpSineSquared: (p) =>
+    i18n.t('ui.builder.format.periodicP', {
+      pyFloat: pyFloat(p.length_scale),
+      pyFloat2: pyFloat(p.periodicity),
+    }),
+  DotProduct: (p) => i18n.t('ui.builder.format.dot', { pyFloat: pyFloat(p.sigma_0) }),
+  WhiteKernel: (p) => i18n.t('ui.builder.format.whiteNoise', { pyFloat: pyFloat(p.noise_level) }),
+  ConstantKernel: (p) =>
+    i18n.t('ui.builder.format.constant', { pyFloat: pyFloat(p.constant_value) }),
 };
 
-const HYPERPARAMETER_NOTES: Record<string, string> = {
-  fixed: ' · fixed',
-  'custom bounds': ' · bounded',
-};
+function hyperparameterNote(value: string): string {
+  if (value === 'fixed') {
+    return ` · ${i18n.t('builder.format.fixed')}`;
+  }
+  return value === 'custom bounds' ? ` · ${i18n.t('builder.format.bounded')}` : '';
+}
 
 /** The SVM's own kernel: "RBF kernel", "poly (degree 3)". */
 function svmKernel(p: Params): string {
   if (p.kernel === 'poly') {
-    return `Polynomial kernel (degree ${num(p.degree)})`;
+    return i18n.t('builder.format.polyKernel', { degree: num(p.degree) });
   }
-  return `${optionLabel('kernel', String(p.kernel ?? 'rbf'))} kernel`;
+  return i18n.t('builder.format.kernel', {
+    kernel: optionLabel('kernel', String(p.kernel ?? 'rbf')),
+  });
 }
 
 /** The models of an ensemble by name, in the order of their connections ("gb, svc, gp"). */
@@ -116,7 +144,9 @@ function memberNames(context: SummaryContext): string | null {
 
 /** "weights 2:1:1", or null without weights. */
 function weightsText(weights: ParamValue): string | null {
-  return Array.isArray(weights) && weights.length > 0 ? `weights ${weights.join(':')}` : null;
+  return Array.isArray(weights) && weights.length > 0
+    ? i18n.t('builder.format.weights', { weights: weights.join(':') })
+    : null;
 }
 
 /** What the analysis adds to a node's summary (kernels of Gaussian processes, models of ensembles). */
@@ -130,17 +160,28 @@ export interface SummaryContext {
 export function summarize(type: string, p: Params, context: SummaryContext = {}): string {
   const kernel = KERNEL_FORMULAS[type];
   if (kernel) {
-    return `${kernel(p)}${HYPERPARAMETER_NOTES[String(p.hyperparameters)] ?? ''}`;
+    return `${kernel(p)}${hyperparameterNote(String(p.hyperparameters))}`;
   }
   switch (type) {
     case 'Input':
-      return `${formatShape(p.shape as number[])}${p.dtype === 'long' ? ' · token ids' : ''}`;
+      return `${formatShape(p.shape as number[])}${p.dtype === 'long' ? ` · ${i18n.t('builder.format.tokenIds')}` : ''}`;
     case 'Linear':
-      return `${num(p.in_features)} → ${num(p.out_features)}${p.bias === false ? ' · no bias' : ''}`;
+      return i18n.t('ui.builder.format.text', {
+        num: num(p.in_features),
+        num2: num(p.out_features),
+        value: p.bias === false ? ` · ${i18n.t('builder.format.noBias')}` : '',
+      });
     case 'Conv1d':
     case 'Conv2d':
     case 'ConvTranspose2d':
-      return `${num(p.out_channels)} filters · ${size(p.kernel_size)}${strideText(p.stride)}`;
+      return i18n.t('ui.builder.format.text2', {
+        value: i18n.t('builder.format.filters', {
+          count: Number(p.out_channels),
+          value: num(p.out_channels),
+        }),
+        size: size(p.kernel_size),
+        strideText: strideText(p.stride),
+      });
     case 'MaxPool1d':
     case 'MaxPool2d':
     case 'AvgPool2d':
@@ -148,7 +189,7 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
     case 'AdaptiveAvgPool2d':
       return `→ ${size(p.output_size)}`;
     case 'Flatten':
-      return 'to a vector';
+      return i18n.t('builder.format.toVector');
     case 'Reshape':
       return `→ ${formatShape(p.shape as number[])}`;
     case 'Dropout':
@@ -157,52 +198,59 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       return optionLabel('function', String(p.function));
     case 'BatchNorm1d':
     case 'BatchNorm2d':
-      return `${num(p.num_features)} channels`;
+      return i18n.t('builder.format.channels', { value: num(p.num_features) });
     case 'LayerNorm':
-      return `${num(p.normalized_shape)} features`;
+      return i18n.t('builder.format.features', { value: num(p.normalized_shape) });
     case 'Embedding':
-      return `${num(p.num_embeddings)} tokens → ${num(p.embedding_dim)}`;
+      return i18n.t('builder.format.tokens', {
+        tokens: num(p.num_embeddings),
+        dim: num(p.embedding_dim),
+      });
     case 'PositionalEmbedding':
-      return `max length ${num(p.max_len)}`;
+      return i18n.t('builder.format.maxLength', { value: num(p.max_len) });
     case 'RNN':
     case 'LSTM':
     case 'GRU': {
-      const parts = [`hidden ${num(p.hidden_size)}`];
+      const parts = [i18n.t('builder.format.hidden', { value: num(p.hidden_size) })];
       if (Number(p.num_layers) > 1) {
-        parts.push(`${p.num_layers} layers`);
+        parts.push(i18n.t('builder.format.layers', { value: String(p.num_layers) }));
       }
       if (p.bidirectional) {
-        parts.push('bi');
+        parts.push(i18n.t('builder.format.bi'));
       }
       if (p.return_sequences) {
-        parts.push('sequences');
+        parts.push(i18n.t('builder.format.sequences'));
       }
       return parts.join(' · ');
     }
     case 'TransformerEncoder':
-      return `${num(p.num_layers)} × ${num(p.nhead)} heads · ff ${num(p.dim_feedforward)}`;
+      return i18n.t('builder.format.transformer', {
+        layers: num(p.num_layers),
+        heads: num(p.nhead),
+        ff: num(p.dim_feedforward),
+      });
     case 'SequencePool':
-      return `${p.mode} over sequence`;
+      return i18n.t('builder.format.overSequence', { mode: String(p.mode) });
     case 'Add':
-      return 'element-wise sum';
+      return i18n.t('builder.format.elementwiseSum');
     case 'Concat':
-      return `along dim ${num(p.dim)}`;
+      return i18n.t('builder.format.alongDim', { dim: num(p.dim) });
     case 'KernelSum':
     case 'KernelProduct': {
       const code = context.info?.kernel;
       return code
         ? compactKernel(code)
         : type === 'KernelSum'
-          ? 'sum of kernels'
-          : 'product of kernels';
+          ? i18n.t('builder.format.sumOfKernels')
+          : i18n.t('builder.format.productOfKernels');
     }
     case 'GaussianProcessRegressor':
     case 'GaussianProcessClassifier': {
       const code = context.info?.kernel;
       if (!context.kernelConnected) {
-        return 'default kernel';
+        return i18n.t('builder.format.defaultKernel');
       }
-      return code ? compactKernel(code) : 'kernel';
+      return code ? compactKernel(code) : i18n.t('builder.format.kernelOutput');
     }
     case 'SVR':
     case 'SVC': {
@@ -210,37 +258,43 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       if (type === 'SVR') {
         parts.push(`ε = ${num(p.epsilon)}`);
       } else if (p.class_weight === 'balanced') {
-        parts.push('balanced');
+        parts.push(i18n.t('builder.format.balanced'));
       }
       return parts.join(' · ');
     }
     case 'HistGradientBoostingRegressor':
     case 'HistGradientBoostingClassifier': {
       const parts = [
-        `${num(p.max_iter)} iterations`,
-        `rate ${num(p.learning_rate)}`,
-        `${num(p.max_leaf_nodes)} leaves`,
+        i18n.t('builder.format.iterations', { value: num(p.max_iter) }),
+        i18n.t('builder.format.rate', { value: num(p.learning_rate) }),
+        i18n.t('builder.format.leaves', { value: num(p.max_leaf_nodes) }),
       ];
       if (typeof p.max_depth === 'number') {
-        parts.push(`depth ${p.max_depth}`);
+        parts.push(i18n.t('builder.format.depth', { value: p.max_depth }));
       }
       if (p.class_weight === 'balanced') {
-        parts.push('balanced');
+        parts.push(i18n.t('builder.format.balanced'));
       }
       return parts.join(' · ');
     }
     case 'VotingClassifier':
     case 'VotingRegressor': {
-      const how = type === 'VotingClassifier' ? `${String(p.voting ?? 'soft')} voting` : 'average';
+      const how =
+        type === 'VotingClassifier'
+          ? i18n.t('builder.format.voting', { voting: String(p.voting ?? 'soft') })
+          : i18n.t('builder.format.average');
       const parts = [how, weightsText(p.weights), memberNames(context)];
       return parts.filter(Boolean).join(' · ');
     }
     case 'StackingClassifier':
     case 'StackingRegressor': {
-      const final = type === 'StackingClassifier' ? 'logistic' : 'ridge';
+      const final =
+        type === 'StackingClassifier'
+          ? i18n.t('builder.format.logistic')
+          : i18n.t('builder.format.ridge');
       const parts = [
-        `${final} on ${num(p.cv)} folds`,
-        p.passthrough ? '+ features' : null,
+        i18n.t('builder.format.onFolds', { final, folds: num(p.cv) }),
+        p.passthrough ? i18n.t('builder.format.plusFeatures') : null,
         memberNames(context),
       ];
       return parts.filter(Boolean).join(' · ');
@@ -256,17 +310,20 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
  */
 export function formatOutput(info: NodeAnalysis | null | undefined, kernel = false): string {
   if (kernel || info?.output_kind === 'kernel') {
-    return 'kernel';
+    return i18n.t('builder.format.kernelOutput');
   }
   if (info && !info.output_shape && info.task === 'classification') {
-    return 'classes from data';
+    return i18n.t('builder.format.classesFromData');
   }
   return formatShape(info?.output_shape);
 }
 
 /** "1 hyperparameter", "3 hyperparameters". */
 export function hyperparameters(count: number): string {
-  return `${count.toLocaleString('en-US')} hyperparameter${count === 1 ? '' : 's'}`;
+  return i18n.t('builder.format.hyperparameters', {
+    count,
+    value: count.toLocaleString(currentLocale()),
+  });
 }
 
 /**
@@ -276,17 +333,19 @@ export function hyperparameters(count: number): string {
  */
 export function networkSize(analysis: Analysis): string {
   if (analysis.family !== 'classical') {
-    return `${formatCount(analysis.total_params)} params`;
+    return i18n.t('builder.format.params', { value: formatCount(analysis.total_params) });
   }
   if (isEnsemble(analysis.classical?.type)) {
     const count = analysis.classical?.members?.length ?? 0;
-    return `Ensemble of ${count} models`;
+    return i18n.t('builder.format.ensembleOf', { count });
   }
   if (analysis.total_params === null) {
-    const what = isBoosting(analysis.classical?.type) ? 'Gradient boosting' : 'SVM';
+    const what = isBoosting(analysis.classical?.type)
+      ? i18n.t('builder.format.gradientBoosting')
+      : 'SVM';
     return analysis.classical?.task === 'classification'
-      ? `${what} classifier`
-      : `${what} regression`;
+      ? i18n.t('builder.format.classifier', { what })
+      : i18n.t('builder.format.regression', { what });
   }
   return hyperparameters(analysis.total_params);
 }
