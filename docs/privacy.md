@@ -66,6 +66,16 @@ The files are read on every request: changes are online at once. A missing or em
 (header menu, phone menu, login, sign-up and account pages). The public API is
 `GET /api/legal/` and `GET /api/legal/<page>/` ([api.md](api.md#legal-pages-public)).
 
+### Legal pages in several languages
+
+The app can be switched between English and German ([translations.md](translations.md)). A
+page in a second language goes next to the page itself as `<page>.<language>.md`, e.g.
+`privacy.en.md` next to a German `privacy.md` or `privacy.de.md` next to an English one: the
+app shows the file of its language and otherwise the page itself. A page written in both
+languages with the sections `## English` and `## Deutsch` (like `refund.md` of brickdnn.com)
+shows the section of the app's language, with a link to show both. The version that sign-up
+stores as accepted is always the one of `<page>.md`.
+
 The app renders a safe subset of Markdown into React elements: headings, paragraphs (a single
 line break stays a line break, for addresses: write a paragraph on one line, as the templates
 do), lists, quotes, rules, bold, italic, code, links

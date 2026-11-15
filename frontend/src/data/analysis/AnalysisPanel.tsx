@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, SegmentedControl, Select, Stack, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import type { DataProfile, DataSample, NewStep } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { ColumnsView } from './ColumnsView';
 import { CompareView } from './CompareView';
 import { type CorrelationMethod } from './CorrelationsView';
@@ -29,16 +30,61 @@ export type AnalysisView =
   | 'rows';
 
 export const ANALYSIS_VIEWS: { value: AnalysisView; label: string }[] = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'columns', label: 'Columns' },
-  { value: 'distribution', label: 'Distribution' },
-  { value: 'missing', label: 'Missing values' },
-  { value: 'relationships', label: 'Relationships' },
-  { value: 'scatter', label: 'Scatter' },
-  { value: 'target', label: 'Target' },
-  { value: 'compare', label: 'Compare' },
+  {
+    value: 'overview',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.overview');
+    },
+  },
+  {
+    value: 'columns',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.columns');
+    },
+  },
+  {
+    value: 'distribution',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.distribution');
+    },
+  },
+  {
+    value: 'missing',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.missingValues');
+    },
+  },
+  {
+    value: 'relationships',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.relationships');
+    },
+  },
+  {
+    value: 'scatter',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.scatter');
+    },
+  },
+  {
+    value: 'target',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.target');
+    },
+  },
+  {
+    value: 'compare',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.compare');
+    },
+  },
   // Row structure (atypical rows, near twins, groups)
-  { value: 'rows', label: 'Rows' },
+  {
+    value: 'rows',
+    get label() {
+      return i18n.t('ui.data.AnalysisPanel.rows');
+    },
+  },
 ];
 
 /** Below this width the view switcher is a select instead of a segmented control. */
@@ -84,6 +130,7 @@ export function AnalysisPanel({
   rows,
   readOnly = false,
 }: AnalysisPanelProps) {
+  useTranslation();
   const { ref, width } = useElementSize();
   const [ownView, setOwnView] = useState<AnalysisView>('overview');
   const view = viewProp ?? ownView;
@@ -160,7 +207,7 @@ export function AnalysisPanel({
         {narrow ? (
           <Select
             size="xs"
-            label="View"
+            label={i18n.t('ui.data.AnalysisPanel.view')}
             data={ANALYSIS_VIEWS}
             value={view}
             onChange={(value) => value && setView(value as AnalysisView)}
@@ -171,7 +218,7 @@ export function AnalysisPanel({
         ) : (
           <SegmentedControl
             size="xs"
-            aria-label="Analysis view"
+            aria-label={i18n.t('ui.data.AnalysisPanel.analysisView')}
             data={ANALYSIS_VIEWS}
             value={view}
             onChange={(value) => setView(value as AnalysisView)}
@@ -255,7 +302,7 @@ export function AnalysisPanel({
             />
           ) : (
             <Text size="sm" c="dimmed">
-              The row analysis is not available here.
+              {i18n.t('ui.data.AnalysisPanel.theRowAnalysisIsNot')}
             </Text>
           ))}
         {view === 'compare' && (

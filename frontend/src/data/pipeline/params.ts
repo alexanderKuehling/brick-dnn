@@ -7,6 +7,7 @@ import type {
   StepReport,
   StepSpec,
 } from '@/api/types';
+import { i18n } from '@/i18n';
 
 /** The value of a param, or its default if the step does not set it. */
 export function paramValue(param: StepParamSpec, params: Record<string, unknown>): unknown {
@@ -100,15 +101,19 @@ export function columnsProblem(
   if (missing.length > 0) {
     const list = missing.map((name) => `“${name}”`).join(', ');
     return missing.length === 1
-      ? `${list} does not exist at this step.`
-      : `${list} do not exist at this step.`;
+      ? i18n.t('ui.data.params.doesNotExistAtThis', { list })
+      : i18n.t('ui.data.params.doNotExistAtThis', { list });
   }
   if (kinds.length > 0) {
     const wrong = names.filter((name) => !kinds.includes(byName.get(name)!.kind));
     if (wrong.length > 0) {
       const wanted = kinds.map((kind) => KIND_NAMES[kind] ?? kind).join(' or ');
       const column = byName.get(wrong[0])!;
-      return `“${column.name}” is a ${KIND_NAMES[column.kind] ?? column.kind} column; this needs ${wanted} columns.`;
+      return i18n.t('ui.data.params.isAColumnThisNeeds', {
+        name: column.name,
+        value: KIND_NAMES[column.kind] ?? column.kind,
+        wanted,
+      });
     }
   }
   return null;
@@ -117,7 +122,7 @@ export function columnsProblem(
 /** Display name of a data source id. */
 export function sourceLabel(sources: DataSource[], id: unknown): string {
   const source = sources.find((s) => s.id === id);
-  return source ? source.name : `Table #${String(id)}`;
+  return source ? source.name : i18n.t('ui.data.params.table', { String: String(id) });
 }
 
 function optionLabel(param: StepParamSpec, value: unknown): string {

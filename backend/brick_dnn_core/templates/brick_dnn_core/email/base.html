@@ -1,5 +1,5 @@
-<!doctype html>
-<html lang="en">
+{% load i18n %}<!doctype html>
+<html lang="{{ language }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,7 +15,7 @@
 <p style="margin:0 0 16px;">{{ greeting }}</p>
 {% for paragraph in paragraphs %}<p style="margin:0 0 16px;">{{ paragraph }}</p>
 {% endfor %}{% if action %}<p style="margin:24px 0;"><a href="{{ action.1 }}" style="display:inline-block;background:#1971c2;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 20px;border-radius:6px;">{{ action.0 }}</a></p>
-<p style="margin:0 0 16px;font-size:13px;color:#495057;">If the button does not work, copy this address into your browser:<br><a href="{{ action.1 }}" style="color:#1971c2;word-break:break-all;">{{ action.1 }}</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#495057;">{% translate "If the button does not work, copy this address into your browser:" %}<br><a href="{{ action.1 }}" style="color:#1971c2;word-break:break-all;">{{ action.1 }}</a></p>
 {% endif %}{% for paragraph in after %}<p style="margin:0 0 16px;">{{ paragraph }}</p>
 {% endfor %}</td></tr>
 <tr><td style="padding:16px 28px;border-top:1px solid #dee2e6;font-size:12px;color:#868e96;line-height:1.5;">{% if site_url %}<a href="{{ site_url }}" style="color:#868e96;">{{ site_domain }}</a>{% else %}{{ site_name }}{% endif %}{% if reason %}<br>{{ reason }}{% endif %}</td></tr>

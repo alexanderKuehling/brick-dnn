@@ -1,5 +1,6 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
 import type { GraphDocument, GraphEdge, LayerSpec, Params, ParamSpec } from '@/api/types';
+import { i18n } from '@/i18n';
 
 export type LayerNodeData = {
   type: string;
@@ -97,20 +98,20 @@ export function parseGraphFile(text: string): { doc: GraphDocument; name?: strin
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('The file is not valid JSON.');
+    throw new Error(i18n.t('ui.builder.graph.theFileIsNotValid'));
   }
   const record = (data ?? {}) as Record<string, unknown>;
   const graph = (
     record.graph && typeof record.graph === 'object' ? record.graph : record
   ) as Partial<GraphDocument>;
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
-    throw new Error('The file does not contain a Brick DNN graph (missing "nodes" or "edges").');
+    throw new Error(i18n.t('ui.builder.graph.theFileDoesNotContain'));
   }
   const ok =
     graph.nodes.every((n) => n && typeof n === 'object' && 'id' in n && 'type' in n) &&
     graph.edges.every((e) => e && typeof e === 'object' && 'source' in e && 'target' in e);
   if (!ok) {
-    throw new Error('The graph contains malformed layers or connections.');
+    throw new Error(i18n.t('ui.builder.graph.theGraphContainsMalformedLayers'));
   }
   return {
     doc: { version: 1, nodes: graph.nodes, edges: graph.edges },

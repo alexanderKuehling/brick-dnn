@@ -4,6 +4,7 @@ import type { RowAnalysis } from '@/api/types';
 import { MAX_SCATTER_SERIES } from '@/components/charts/colors';
 import { formatNumber, formatPercent } from '@/components/charts/format';
 import { ScatterPlot, type ScatterColor } from '@/components/charts/ScatterPlot';
+import { i18n, useTranslation } from '@/i18n';
 import { rowName, type Thresholds } from './rowsData';
 
 export type ProjectionColor = 'structure' | 'split' | 'target' | 'spread' | 'nn_ratio';
@@ -34,6 +35,7 @@ export function ProjectionView({
   active,
   onActivate,
 }: ProjectionViewProps) {
+  useTranslation();
   const { rows } = analysis;
   // Rows without a projection (no values) are left out; `shown` maps points back to rows.
   const shown = useMemo(
@@ -44,11 +46,13 @@ export function ProjectionView({
   const y = useMemo(() => shown.map((i) => rows.pc2[i]!), [rows, shown]);
 
   const colorOptions = [
-    { value: 'structure', label: 'Typical / near twin' },
-    ...(rows.split ? [{ value: 'split', label: 'Split part' }] : []),
-    ...(rows.target ? [{ value: 'target', label: analysis.target ?? 'Target' }] : []),
-    { value: 'spread', label: 'Spread' },
-    { value: 'nn_ratio', label: 'NN ratio' },
+    { value: 'structure', label: i18n.t('ui.data.ProjectionView.typicalNearTwin') },
+    ...(rows.split ? [{ value: 'split', label: i18n.t('ui.data.ProjectionView.splitPart') }] : []),
+    ...(rows.target
+      ? [{ value: 'target', label: analysis.target ?? i18n.t('ui.data.ProjectionView.target') }]
+      : []),
+    { value: 'spread', label: i18n.t('ui.data.ProjectionView.spread') },
+    { value: 'nn_ratio', label: i18n.t('ui.data.ProjectionView.nnRatio') },
   ];
   const used = colorOptions.some((o) => o.value === color) ? color : 'structure';
 
@@ -57,12 +61,12 @@ export function ProjectionView({
       const codes = { train: 0, val: 1, test: 2 } as const;
       return {
         type: 'category',
-        label: 'Split part',
+        label: i18n.t('ui.data.ProjectionView.splitPart'),
         values: shown.map((i) => codes[rows.split![i]]),
         categories: [
-          { key: 'train', label: 'Train', slot: 0 },
-          { key: 'val', label: 'Validation', slot: 1 },
-          { key: 'test', label: 'Test', slot: 2 },
+          { key: 'train', label: i18n.t('ui.data.ProjectionView.train'), slot: 0 },
+          { key: 'val', label: i18n.t('ui.data.ProjectionView.validation'), slot: 1 },
+          { key: 'test', label: i18n.t('ui.data.ProjectionView.test'), slot: 2 },
         ],
       };
     }
@@ -70,7 +74,7 @@ export function ProjectionView({
       if (analysis.task === 'regression') {
         return {
           type: 'numeric',
-          label: analysis.target ?? 'Target',
+          label: analysis.target ?? i18n.t('ui.data.ProjectionView.target'),
           values: shown.map((i) =>
             typeof rows.target![i] === 'number' ? (rows.target![i] as number) : NAN
           ),
@@ -88,11 +92,11 @@ export function ProjectionView({
         .map(([name]) => name);
       const categories = [
         ...top.map((name, slot) => ({ key: name, label: name, slot })),
-        { key: '__other', label: 'Other', slot: -1 },
+        { key: '__other', label: i18n.t('ui.data.ProjectionView.other'), slot: -1 },
       ];
       return {
         type: 'category',
-        label: analysis.target ?? 'Target',
+        label: analysis.target ?? i18n.t('ui.data.ProjectionView.target'),
         values: shown.map((i) => {
           const at = top.indexOf(String(rows.target![i]));
           return at >= 0 ? at : top.length;
@@ -103,7 +107,10 @@ export function ProjectionView({
     if (used === 'spread' || used === 'nn_ratio') {
       return {
         type: 'numeric',
-        label: used === 'spread' ? 'Spread' : 'NN ratio',
+        label:
+          used === 'spread'
+            ? i18n.t('ui.data.ProjectionView.spread')
+            : i18n.t('ui.data.ProjectionView.nnRatio'),
         values: shown.map((i) => asNumbers(rows[used])[i]),
         format: (v) => formatNumber(v, 3),
       };
@@ -111,7 +118,7 @@ export function ProjectionView({
     // Structure: too typical, has a near twin, other.
     return {
       type: 'category',
-      label: 'Row',
+      label: i18n.t('ui.data.ProjectionView.row'),
       values: shown.map((i) => {
         const spread = rows.spread[i];
         const ratio = rows.nn_ratio[i];
@@ -121,9 +128,9 @@ export function ProjectionView({
         return ratio !== null && ratio < thresholds.twins ? 1 : 2;
       }),
       categories: [
-        { key: 'atypical', label: 'Unusually typical', slot: 1 },
-        { key: 'twin', label: 'Has a near twin', slot: 0 },
-        { key: 'other', label: 'Other rows', slot: -1 },
+        { key: 'atypical', label: i18n.t('ui.data.ProjectionView.unusuallyTypical'), slot: 1 },
+        { key: 'twin', label: i18n.t('ui.data.ProjectionView.hasANearTwin'), slot: 0 },
+        { key: 'other', label: i18n.t('ui.data.ProjectionView.otherRows'), slot: -1 },
       ],
     };
   }, [used, rows, shown, analysis.task, analysis.target, thresholds]);
@@ -132,13 +139,16 @@ export function ProjectionView({
   const activePoint = active === null ? null : shown.indexOf(active);
   return (
     <ScatterPlot
-      title="Rows on the two main directions (PCA)"
-      subtitle={`Principal components of the compared columns (${formatPercent(explained[0] ?? 0)} and ${formatPercent(explained[1] ?? 0)} of the variance). Near twins sit on top of each other; click a point to see its similar rows.`}
+      title={i18n.t('ui.data.ProjectionView.rowsOnTheTwoMain')}
+      subtitle={i18n.t('ui.data.ProjectionView.principalComponentsOfTheCompared', {
+        value: formatPercent(explained[0] ?? 0),
+        value2: formatPercent(explained[1] ?? 0),
+      })}
       controls={
         <Select
           size="xs"
           w={190}
-          label="Colour by"
+          label={i18n.t('ui.data.ProjectionView.colourBy')}
           data={colorOptions}
           value={used}
           allowDeselect={false}
@@ -148,8 +158,8 @@ export function ProjectionView({
       }
       x={x}
       y={y}
-      xLabel="Component 1"
-      yLabel="Component 2"
+      xLabel={i18n.t('ui.data.ProjectionView.component1')}
+      yLabel={i18n.t('ui.data.ProjectionView.component2')}
       color={scatterColor}
       pointLabel={(point) => rowName(analysis, shown[point])}
       onPointClick={(point) => onActivate(shown[point])}

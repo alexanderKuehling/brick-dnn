@@ -1,4 +1,5 @@
 /** Times in the history and in comments: relative while recent, else date and time. */
+import { currentLocale, i18n } from '@/i18n';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -17,25 +18,25 @@ function startOfDay(time: Date): number {
 
 /** "14:20" (in the user's locale). */
 export function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 /** The full date and time, e.g. for tooltips. */
 export function fullDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
+  return new Date(iso).toLocaleString(currentLocale(), { dateStyle: 'full', timeStyle: 'short' });
 }
 
 /** "just now", "5 min ago" or "3 h ago" within a day; null for older times. */
 function ago(iso: string, now: Date): string | null {
   const elapsed = now.getTime() - new Date(iso).getTime();
   if (elapsed < MINUTE) {
-    return 'just now'; // Also slightly in the future (clocks differ).
+    return i18n.t('common.time.justNow'); // Also slightly in the future (clocks differ).
   }
   if (elapsed < HOUR) {
-    return `${Math.floor(elapsed / MINUTE)} min ago`;
+    return i18n.t('common.time.minutesAgo', { count: Math.floor(elapsed / MINUTE) });
   }
   if (elapsed < DAY) {
-    return `${Math.floor(elapsed / HOUR)} h ago`;
+    return i18n.t('common.time.hoursAgo', { count: Math.floor(elapsed / HOUR) });
   }
   return null;
 }
@@ -48,9 +49,9 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   }
   const time = new Date(iso);
   if (time.getFullYear() !== now.getFullYear()) {
-    return time.toLocaleDateString(undefined, { dateStyle: 'medium' });
+    return time.toLocaleDateString(currentLocale(), { dateStyle: 'medium' });
   }
-  const date = time.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const date = time.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' });
   return `${date}, ${clockTime(iso)}`;
 }
 
@@ -63,15 +64,19 @@ export function timeInDay(iso: string, now: Date = new Date()): string {
 export function dayLabel(time: Date, now: Date = new Date()): string {
   const days = Math.round((startOfDay(now) - startOfDay(time)) / DAY);
   if (days === 0) {
-    return 'Today';
+    return i18n.t('common.time.today');
   }
   if (days === 1) {
-    return 'Yesterday';
+    return i18n.t('common.time.yesterday');
   }
   if (time.getFullYear() === now.getFullYear()) {
-    return time.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    return time.toLocaleDateString(currentLocale(), {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
   }
-  return time.toLocaleDateString(undefined, { dateStyle: 'long' });
+  return time.toLocaleDateString(currentLocale(), { dateStyle: 'long' });
 }
 
 export interface DayGroup<T> {

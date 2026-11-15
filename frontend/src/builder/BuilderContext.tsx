@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { Analysis, LayerSpec, Params } from '@/api/types';
+import { i18n } from '@/i18n';
 import type { PresenceStore } from '@/live/presence';
 import type { LayerNodeData } from './graph';
 
@@ -44,7 +45,7 @@ export const BuilderContext = createContext<BuilderContextValue | null>(null);
 export function useBuilder(): BuilderContextValue {
   const context = useContext(BuilderContext);
   if (!context) {
-    throw new Error('useBuilder must be used inside the builder');
+    throw new Error(i18n.t('ui.builder.BuilderContext.usebuilderMustBeUsedInside'));
   }
   return context;
 }

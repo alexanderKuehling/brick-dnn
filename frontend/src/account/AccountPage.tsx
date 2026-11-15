@@ -31,6 +31,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { PlanSection } from '@/billing/PlanSection';
 import { useBillingInfo } from '@/billing/useBillingInfo';
 import { downloadBlob } from '@/builder/download';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { LegalLinks } from '@/legal/LegalLinks';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { formatBytes, formatDate } from '@/training/format';
@@ -39,7 +40,7 @@ import { fieldError } from './fieldError';
 import { TwoFactorSection } from './TwoFactorSection';
 
 function plural(count: number, word: string, words = `${word}s`): string {
-  return `${count.toLocaleString('en-US')} ${count === 1 ? word : words}`;
+  return `${count.toLocaleString(currentLocale())} ${count === 1 ? word : words}`;
 }
 
 /** "3 networks, 2 comments, 1 dataset …": what the server keeps for the account. */
@@ -88,6 +89,7 @@ function Section({
 
 /** Whether the address is confirmed, and sending the link again. */
 function EmailStatus({ account }: { account: Account }) {
+  useTranslation();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -98,7 +100,7 @@ function EmailStatus({ account }: { account: Account }) {
     return (
       <Group gap={6}>
         <Badge color="green" variant="light" leftSection={<IconCircleCheck size={12} />}>
-          Confirmed
+          {i18n.t('ui.account.AccountPage.confirmed')}
         </Badge>
         {account.email_verified_at && (
           <Text size="xs" c="dimmed">
@@ -118,7 +120,7 @@ function EmailStatus({ account }: { account: Account }) {
     } catch (err) {
       notifications.show({
         color: 'red',
-        title: 'Could not send the link',
+        title: i18n.t('ui.account.AccountPage.couldNotSendTheLink'),
         message: (err as Error).message,
       });
     } finally {
@@ -127,16 +129,22 @@ function EmailStatus({ account }: { account: Account }) {
   };
 
   return (
-    <Alert color="yellow" icon={<IconMailQuestion size={18} />} title="Not confirmed yet">
+    <Alert
+      color="yellow"
+      icon={<IconMailQuestion size={18} />}
+      title={i18n.t('ui.account.AccountPage.notConfirmedYet')}
+    >
       <Stack gap="xs">
         <Text size="sm">
           {account.password_reset_available
-            ? 'Open the link we sent to this address to confirm it.'
-            : 'Open the link we sent to this address to confirm it. Until then, a forgotten password cannot be reset by e-mail.'}
+            ? i18n.t('ui.account.AccountPage.openTheLinkWeSent')
+            : i18n.t('ui.account.AccountPage.openTheLinkWeSent2')}
         </Text>
         <Group>
           <Button size="xs" variant="light" color="yellow" loading={busy} onClick={resend}>
-            {sent ? 'Send the link again' : 'Send me a new link'}
+            {sent
+              ? i18n.t('ui.account.AccountPage.sendTheLinkAgain')
+              : i18n.t('ui.account.AccountPage.sendMeANewLink')}
           </Button>
         </Group>
       </Stack>
@@ -145,6 +153,7 @@ function EmailStatus({ account }: { account: Account }) {
 }
 
 function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Account) => void }) {
+  useTranslation();
   const [email, setEmail] = useState(account.email);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -161,8 +170,8 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
       notifications.show({
         color: 'green',
         message: updated.email_sending
-          ? `Your e-mail address was changed. We sent a link to ${updated.email} to confirm it.`
-          : 'Your e-mail address was changed.',
+          ? i18n.t('ui.account.AccountPage.yourEMailAddressWas', { email: updated.email })
+          : i18n.t('ui.account.AccountPage.yourEMailAddressWas2'),
       });
     } catch (err) {
       setError(fieldError(err, 'email') ?? (err as Error).message);
@@ -176,18 +185,18 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
       <Stack gap="sm">
         {!account.email && (
           <Alert color="yellow" icon={<IconAlertTriangle size={18} />}>
-            Your account has no e-mail address yet. Add one, so that people can invite you to their
-            networks by e-mail{account.email_sending && ' and you can reset a forgotten password'}.
+            {i18n.t('ui.account.AccountPage.yourAccountHasNoE')}
+            {account.email_sending && i18n.t('ui.account.AccountPage.andYouCanResetA')}.
           </Alert>
         )}
         <TextInput
-          label="Username"
+          label={i18n.t('ui.account.AccountPage.username')}
           value={account.username}
           readOnly
-          description="Usernames cannot be changed."
+          description={i18n.t('ui.account.AccountPage.usernamesCannotBeChanged')}
         />
         <TextInput
-          label="E-mail address"
+          label={i18n.t('ui.account.AccountPage.eMailAddress')}
           type="email"
           autoComplete="email"
           required
@@ -198,7 +207,7 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
         {!changed && <EmailStatus account={account} />}
         <Group justify="flex-end">
           <Button type="submit" loading={busy} disabled={!changed}>
-            Save e-mail address
+            {i18n.t('ui.account.AccountPage.saveEMailAddress')}
           </Button>
         </Group>
       </Stack>
@@ -207,6 +216,7 @@ function EmailForm({ account, onSaved }: { account: Account; onSaved: (a: Accoun
 }
 
 function PasswordForm() {
+  useTranslation();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [errors, setErrors] = useState<{ current?: string; next?: string; other?: string }>({});
@@ -223,7 +233,7 @@ function PasswordForm() {
       setNext('');
       notifications.show({
         color: 'green',
-        message: 'Your password was changed. You were logged out everywhere else.',
+        message: i18n.t('ui.account.AccountPage.yourPasswordWasChangedYou'),
       });
     } catch (err) {
       const fields = {
@@ -247,7 +257,7 @@ function PasswordForm() {
           </Alert>
         )}
         <PasswordInput
-          label="Current password"
+          label={i18n.t('ui.account.AccountPage.currentPassword')}
           autoComplete="current-password"
           required
           value={current}
@@ -255,8 +265,8 @@ function PasswordForm() {
           error={errors.current}
         />
         <PasswordInput
-          label="New password"
-          description="At least 8 characters, not too common."
+          label={i18n.t('ui.account.AccountPage.newPassword')}
+          description={i18n.t('ui.account.AccountPage.atLeast8CharactersNot')}
           autoComplete="new-password"
           required
           value={next}
@@ -265,10 +275,10 @@ function PasswordForm() {
         />
         <Group justify="space-between" align="center" gap="sm">
           <Text size="xs" c="dimmed" style={{ flex: '1 1 12rem' }}>
-            You stay logged in here; other devices are logged out.
+            {i18n.t('ui.account.AccountPage.youStayLoggedInHere')}
           </Text>
           <Button type="submit" loading={busy} disabled={!current || !next}>
-            Change password
+            {i18n.t('ui.account.AccountPage.changePassword')}
           </Button>
         </Group>
       </Stack>
@@ -285,6 +295,7 @@ function DeleteDialog({
   opened: boolean;
   onClose: () => void;
 }) {
+  useTranslation();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
@@ -328,8 +339,8 @@ function DeleteDialog({
     deleted.current = true;
     notifications.show({
       color: 'green',
-      title: 'Your account was deleted',
-      message: 'Everything you stored on this server was deleted with it.',
+      title: i18n.t('ui.account.AccountPage.yourAccountWasDeleted'),
+      message: i18n.t('ui.account.AccountPage.everythingYouStoredOnThis'),
     });
     navigate('/', { replace: true });
   };
@@ -338,37 +349,27 @@ function DeleteDialog({
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Delete your account?"
+      title={i18n.t('ui.account.AccountPage.deleteYourAccount')}
       closeOnClickOutside={!busy}
     >
       <form onSubmit={remove}>
         <Stack gap="sm">
-          <Text size="sm">
-            This deletes your account and everything you stored on this server, for good:
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.AccountPage.thisDeletesYourAccountAnd')}</Text>
           <List size="sm" spacing={4}>
+            <List.Item>{i18n.t('ui.account.AccountPage.yourNetworksWithTheirHistory')}</List.Item>
             <List.Item>
-              your networks with their history and comments (people you shared them with lose
-              access)
+              {i18n.t('ui.account.AccountPage.yourImportedTablesDataPreparations')}
             </List.Item>
-            <List.Item>
-              your imported tables, data preparations, datasets and trainings with their files
-            </List.Item>
-            <List.Item>
-              your comments, API tokens, connected apps, the log of their activity and usage records
-            </List.Item>
+            <List.Item>{i18n.t('ui.account.AccountPage.yourCommentsApiTokensConnected')}</List.Item>
           </List>
-          <Text size="sm">
-            Networks of other people you worked on stay with them. Download your data first if you
-            want to keep it.
-          </Text>
+          <Text size="sm">{i18n.t('ui.account.AccountPage.networksOfOtherPeopleYou')}</Text>
           {errors.other && (
             <Alert color="red" icon={<IconAlertCircle size={18} />}>
               {errors.other}
             </Alert>
           )}
           <PasswordInput
-            label="Your password"
+            label={i18n.t('ui.account.AccountPage.yourPassword')}
             autoComplete="current-password"
             required
             value={password}
@@ -377,7 +378,9 @@ function DeleteDialog({
             data-autofocus
           />
           <TextInput
-            label={`Type your username “${account.username}” to confirm`}
+            label={i18n.t('ui.account.AccountPage.typeYourUsernameToConfirm', {
+              username: account.username,
+            })}
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
@@ -388,7 +391,7 @@ function DeleteDialog({
           />
           <Group justify="flex-end" gap="sm">
             <Button variant="default" onClick={onClose} disabled={busy}>
-              Cancel
+              {i18n.t('ui.account.AccountPage.cancel')}
             </Button>
             <Button
               type="submit"
@@ -397,7 +400,7 @@ function DeleteDialog({
               disabled={!confirmed}
               leftSection={<IconTrash size={16} />}
             >
-              Delete my account
+              {i18n.t('ui.account.AccountPage.deleteMyAccount')}
             </Button>
           </Group>
         </Stack>
@@ -408,6 +411,7 @@ function DeleteDialog({
 
 /** /account: the own account, its data, and deleting it. */
 export function AccountPage() {
+  useTranslation();
   const legal = useLegalInfo();
   const billing = useBillingInfo();
   const [account, setAccount] = useState<Account | null>(null);
@@ -430,7 +434,7 @@ export function AccountPage() {
     } catch (err) {
       notifications.show({
         color: 'red',
-        title: 'Could not export your data',
+        title: i18n.t('ui.account.AccountPage.couldNotExportYourData'),
         message: (err as Error).message,
       });
     } finally {
@@ -461,23 +465,28 @@ export function AccountPage() {
 
   return (
     <Container size="sm" py="xl">
-      <Title order={2}>Account</Title>
+      <Title order={2}>{i18n.t('ui.account.AccountPage.account')}</Title>
       <Text c="dimmed" size="sm" mt={4}>
-        Signed up {formatDate(account.date_joined)}
-        {account.terms_accepted_at &&
-          ` · accepted the terms of use ${formatDate(account.terms_accepted_at)}`}
+        {i18n.t('ui.account.AccountPage.signedUp', {
+          date_joined: formatDate(account.date_joined),
+          value:
+            account.terms_accepted_at &&
+            i18n.t('ui.account.AccountPage.acceptedTheTermsOfUse', {
+              terms_accepted_at: formatDate(account.terms_accepted_at),
+            }),
+        })}
       </Text>
 
       <Stack gap="lg" mt="xl">
-        <Section title="Profile">
+        <Section title={i18n.t('ui.account.AccountPage.profile')}>
           <EmailForm account={account} onSaved={setAccount} />
         </Section>
 
-        <Section title="Password">
+        <Section title={i18n.t('ui.account.AccountPage.password')}>
           <PasswordForm />
         </Section>
 
-        <Section title="Two-factor authentication">
+        <Section title={i18n.t('ui.account.AccountPage.twoFactorAuthentication')}>
           <TwoFactorSection
             username={account.username}
             state={account.two_factor}
@@ -486,21 +495,21 @@ export function AccountPage() {
         </Section>
 
         {billing && (
-          <Section title="Plan & billing">
+          <Section title={i18n.t('ui.account.AccountPage.planBilling')}>
             <PlanSection info={billing} />
           </Section>
         )}
 
-        <Section title="Usage & budget">
+        <Section title={i18n.t('ui.account.AccountPage.usageBudget')}>
           <UsageSection />
         </Section>
 
-        <Section title="Your data">
+        <Section title={i18n.t('ui.account.AccountPage.yourData')}>
           <Stack gap="sm">
             <Text size="sm">
               {stored.length > 0
-                ? 'Besides your username and e-mail address, this server stores:'
-                : 'This server stores your username and e-mail address, nothing else yet.'}
+                ? i18n.t('ui.account.AccountPage.besidesYourUsernameAndE')
+                : i18n.t('ui.account.AccountPage.thisServerStoresYourUsername')}
             </Text>
             {stored.length > 0 && (
               <List size="sm" spacing={2}>
@@ -509,7 +518,9 @@ export function AccountPage() {
                 ))}
                 {account.stored.upload_bytes > 0 && (
                   <List.Item>
-                    {formatBytes(account.stored.upload_bytes)} of uploaded files
+                    {i18n.t('ui.account.AccountPage.ofUploadedFiles', {
+                      upload_bytes: formatBytes(account.stored.upload_bytes),
+                    })}
                   </List.Item>
                 )}
               </List>
@@ -517,15 +528,16 @@ export function AccountPage() {
             {(uploadDays > 0 || accountDays > 0) && (
               <Text size="sm" c="dimmed">
                 {uploadDays > 0 &&
-                  `Uploads and finished trainings nobody has used for ${uploadDays} days are deleted automatically. `}
+                  i18n.t('ui.account.AccountPage.uploadsAndFinishedTrainingsNobody', {
+                    uploadDays,
+                  })}
                 {accountDays > 0 &&
-                  `Accounts nobody has logged in to for ${accountDays} days are deleted with everything in them.`}
+                  i18n.t('ui.account.AccountPage.accountsNobodyHasLoggedIn', { accountDays })}
               </Text>
             )}
             <Group justify="space-between" align="center" gap="sm">
               <Text size="xs" c="dimmed" style={{ flex: '1 1 14rem' }}>
-                A ZIP file with your account, networks, comments, data preparations, trainings and
-                uploaded files.
+                {i18n.t('ui.account.AccountPage.aZipFileWithYour')}
               </Text>
               <Button
                 variant="light"
@@ -533,16 +545,16 @@ export function AccountPage() {
                 loading={exporting}
                 onClick={exportData}
               >
-                Download my data
+                {i18n.t('ui.account.AccountPage.downloadMyData')}
               </Button>
             </Group>
           </Stack>
         </Section>
 
-        <Section title="Delete account" danger>
+        <Section title={i18n.t('ui.account.AccountPage.deleteAccount')} danger>
           <Group justify="space-between" align="center" gap="sm">
             <Text size="sm" style={{ flex: '1 1 14rem' }}>
-              Delete your account and everything you stored on this server. This cannot be undone.
+              {i18n.t('ui.account.AccountPage.deleteYourAccountAndEverything')}
             </Text>
             <Button
               color="red"
@@ -550,7 +562,7 @@ export function AccountPage() {
               leftSection={<IconTrash size={16} />}
               onClick={() => setDeleting(true)}
             >
-              Delete account…
+              {i18n.t('ui.account.AccountPage.deleteAccount2')}
             </Button>
           </Group>
         </Section>

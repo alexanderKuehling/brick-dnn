@@ -9,16 +9,27 @@ import {
 } from '@tabler/icons-react';
 import { Group, Select, Text, type SelectProps } from '@mantine/core';
 import type { ColumnKind } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import classes from './AnalysisPanel.module.css';
 
 export const KIND_ORDER: ColumnKind[] = ['numeric', 'boolean', 'datetime', 'categorical', 'text'];
 
 export const KIND_LABELS: Record<ColumnKind, string> = {
-  numeric: 'Number',
-  boolean: 'Yes/no',
-  datetime: 'Date/time',
-  categorical: 'Category',
-  text: 'Text',
+  get numeric() {
+    return i18n.t('ui.data.shared.number');
+  },
+  get boolean() {
+    return i18n.t('ui.data.shared.yesNo');
+  },
+  get datetime() {
+    return i18n.t('ui.data.shared.dateTime');
+  },
+  get categorical() {
+    return i18n.t('ui.data.shared.category');
+  },
+  get text() {
+    return i18n.t('ui.data.shared.text');
+  },
 };
 
 const KIND_ICONS: Record<ColumnKind, Icon> = {
@@ -53,7 +64,7 @@ export function ColumnSelect({
   value,
   onChange,
   label,
-  placeholder = 'Pick a column',
+  placeholder = i18n.t('ui.data.shared.pickAColumn'),
   clearable = false,
   extra,
   ...props
@@ -67,6 +78,7 @@ export function ColumnSelect({
   /** Options before the columns, e.g. "None". */
   extra?: { value: string; label: string }[];
 } & Pick<SelectProps, 'w' | 'miw' | 'maw' | 'size' | 'style' | 'description'>) {
+  useTranslation();
   const kinds = new Map(columns.map((c) => [c.name, c.kind]));
   return (
     <Select
@@ -78,7 +90,7 @@ export function ColumnSelect({
       searchable
       clearable={clearable}
       allowDeselect={false}
-      nothingFoundMessage="No column with this name"
+      nothingFoundMessage={i18n.t('ui.data.shared.noColumnWithThisName')}
       maxDropdownHeight={280}
       comboboxProps={{ withinPortal: true }}
       leftSection={value && kinds.has(value) ? <KindIcon kind={kinds.get(value)!} /> : undefined}

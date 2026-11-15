@@ -9,6 +9,7 @@ import {
   type ScatterColor,
 } from '@/components/charts/ScatterPlot';
 import { spearman } from '@/components/charts/stats';
+import { i18n, useTranslation } from '@/i18n';
 import {
   categoryKey,
   classGroups,
@@ -103,7 +104,10 @@ function categoryColor(
     if (other) {
       categories.push({
         key: '__other__',
-        label: groups.groups.length > shown.length ? 'Other / missing' : 'Missing',
+        label:
+          groups.groups.length > shown.length
+            ? i18n.t('ui.data.ScatterView.otherMissing')
+            : i18n.t('ui.data.ScatterView.missing'),
         slot: -1,
       });
     }
@@ -139,7 +143,10 @@ function categoryColor(
   if (other) {
     categories.push({
       key: '__other__',
-      label: keys.length > shown.length ? 'Other / missing' : 'Missing',
+      label:
+        keys.length > shown.length
+          ? i18n.t('ui.data.ScatterView.otherMissing')
+          : i18n.t('ui.data.ScatterView.missing'),
       slot: -1,
     });
   }
@@ -154,6 +161,7 @@ export function ScatterView({
   options,
   onOptionsChange,
 }: ScatterViewProps) {
+  useTranslation();
   const axisColumns = sample.columns.filter((c) => isNumericKind(c.kind));
   const colorColumns = sample.columns.filter((c) => c.kind !== 'text');
   const xColumn = sampleColumn(sample, options.x);
@@ -190,7 +198,7 @@ export function ScatterView({
   if (axisColumns.length === 0) {
     return (
       <Text size="sm" c="dimmed">
-        A scatter plot needs number, yes/no or date columns.
+        {i18n.t('ui.data.ScatterView.aScatterPlotNeedsNumber')}
       </Text>
     );
   }
@@ -205,39 +213,39 @@ export function ScatterView({
     <Stack gap="md">
       <Group gap="sm" align="flex-end" wrap="wrap">
         <ColumnSelect
-          label="X axis"
+          label={i18n.t('ui.data.ScatterView.xAxis')}
           columns={axisColumns}
           value={options.x}
           onChange={(x) => set({ x })}
           w={190}
         />
         <ColumnSelect
-          label="Y axis"
+          label={i18n.t('ui.data.ScatterView.yAxis')}
           columns={axisColumns}
           value={options.y}
           onChange={(y) => set({ y })}
           w={190}
         />
         <ColumnSelect
-          label="Colour"
+          label={i18n.t('ui.data.ScatterView.colour')}
           columns={colorColumns}
           value={options.color ?? '__none__'}
           onChange={(color) => set({ color: color === '__none__' ? null : color })}
-          extra={[{ value: '__none__', label: 'None' }]}
+          extra={[{ value: '__none__', label: i18n.t('ui.data.ScatterView.none') }]}
           w={190}
         />
       </Group>
       <Group gap="md">
         <Switch
           size="xs"
-          label="Trend line"
+          label={i18n.t('ui.data.ScatterView.trendLine')}
           checked={options.trend}
           onChange={(e) => set({ trend: e.currentTarget.checked })}
         />
         <Switch
           size="xs"
-          label="Jitter"
-          description={discrete ? 'Spreads points that sit on top of each other' : undefined}
+          label={i18n.t('ui.data.ScatterView.jitter')}
+          description={discrete ? i18n.t('ui.data.ScatterView.spreadsPointsThatSitOn') : undefined}
           checked={options.jitter}
           onChange={(e) => set({ jitter: e.currentTarget.checked })}
         />
@@ -245,8 +253,12 @@ export function ScatterView({
 
       {data && xColumn && yColumn ? (
         <ScatterPlot
-          title={`${yColumn.name} vs ${xColumn.name}`}
-          subtitle={`${formatCount(data.x.length)} of ${formatCount(sample.rows)} sample rows have both values. ${sampleNote(sample)}`}
+          title={i18n.t('ui.data.ScatterView.vs', { name: yColumn.name, name2: xColumn.name })}
+          subtitle={i18n.t('ui.data.ScatterView.ofSampleRowsHaveBoth', {
+            length: formatCount(data.x.length),
+            rows: formatCount(sample.rows),
+            sampleNote: sampleNote(sample),
+          })}
           x={data.x}
           y={data.y}
           xLabel={xColumn.name}
@@ -259,20 +271,18 @@ export function ScatterView({
           pointLabel={(i) => rowName(sample, data.rows[i])}
           caption={
             data.rho !== null
-              ? `Spearman ρ (rank correlation) in the sample: ${formatCoefficient(data.rho)}.`
+              ? i18n.t('ui.data.ScatterView.spearmanRankCorrelationInThe', {
+                  rho: formatCoefficient(data.rho),
+                })
               : undefined
           }
         />
       ) : (
         <Text size="sm" c="dimmed">
-          Pick two columns.
+          {i18n.t('ui.data.ScatterView.pickTwoColumns')}
         </Text>
       )}
-      <Note>
-        The trend line is an ordinary least-squares fit; r is Pearson&apos;s correlation in the
-        sample, R² the share of the variance of {yColumn?.name ?? 'y'} it explains. Correlation is
-        not causation.
-      </Note>
+      <Note>{i18n.t('ui.data.ScatterView.theTrendLineIsAn', { value: yColumn?.name ?? 'y' })}</Note>
     </Stack>
   );
 }

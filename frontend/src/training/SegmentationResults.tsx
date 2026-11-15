@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Group, Loader, Paper, ScrollArea, Stack, Table, Text } from '@mantine/core';
 import { api, type RunDetail, type RunPreviews, type SegmentationRunState } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { formatPercent } from './format';
 import classes from './Training.module.css';
 
@@ -25,8 +26,14 @@ export function ClassLegend({
   /** Set if some pixels of the masks are ignored. */
   ignoreColor?: string | null;
 }) {
+  useTranslation();
   return (
-    <Group gap="sm" style={{ rowGap: 4 }} role="list" aria-label="Classes">
+    <Group
+      gap="sm"
+      style={{ rowGap: 4 }}
+      role="list"
+      aria-label={i18n.t('ui.training.SegmentationResults.classes')}
+    >
       {names.map((name, index) => (
         <Group key={`${index}-${name}`} gap={6} wrap="nowrap" role="listitem">
           <Swatch color={colors[index] ?? '#888'} />
@@ -37,7 +44,7 @@ export function ClassLegend({
         <Group gap={6} wrap="nowrap" role="listitem">
           <Swatch color={ignoreColor} />
           <Text size="xs" c="dimmed">
-            ignored
+            {i18n.t('ui.training.SegmentationResults.ignored')}
           </Text>
         </Group>
       )}
@@ -47,6 +54,7 @@ export function ClassLegend({
 
 /** The IoU of every class for the kept weights: validation and, if measured, test. */
 export function ClassTable({ results }: { results: SegmentationRunState }) {
+  useTranslation();
   const { validation, test } = results;
   if (!validation && !test) {
     return null;
@@ -56,19 +64,25 @@ export function ClassTable({ results }: { results: SegmentationRunState }) {
     <div>
       <Group justify="space-between" gap="xs" mb={4}>
         <Text size="sm" fw={600}>
-          IoU per class
+          {i18n.t('ui.training.SegmentationResults.iouPerClass')}
         </Text>
         <Text size="xs" c="dimmed">
-          {typeof epoch === 'number' ? `Weights of epoch ${epoch}` : 'The kept weights'}
+          {typeof epoch === 'number'
+            ? i18n.t('ui.training.SegmentationResults.weightsOfEpoch2', { epoch })
+            : i18n.t('ui.training.SegmentationResults.theKeptWeights')}
         </Text>
       </Group>
       <ScrollArea type="auto">
-        <Table fz="xs" aria-label="Results per class">
+        <Table fz="xs" aria-label={i18n.t('ui.training.SegmentationResults.resultsPerClass')}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Class</Table.Th>
-              {validation && <Table.Th ta="right">Val. IoU</Table.Th>}
-              {test && <Table.Th ta="right">Test IoU</Table.Th>}
+              <Table.Th>{i18n.t('ui.training.SegmentationResults.class')}</Table.Th>
+              {validation && (
+                <Table.Th ta="right">{i18n.t('ui.training.SegmentationResults.valIou')}</Table.Th>
+              )}
+              {test && (
+                <Table.Th ta="right">{i18n.t('ui.training.SegmentationResults.testIou')}</Table.Th>
+              )}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -87,7 +101,7 @@ export function ClassTable({ results }: { results: SegmentationRunState }) {
               </Table.Tr>
             ))}
             <Table.Tr fw={700}>
-              <Table.Td>Mean</Table.Td>
+              <Table.Td>{i18n.t('ui.training.SegmentationResults.mean')}</Table.Td>
               {validation && <Table.Td ta="right">{formatPercent(validation.iou)}</Table.Td>}
               {test && <Table.Td ta="right">{formatPercent(test.iou)}</Table.Td>}
             </Table.Tr>
@@ -95,18 +109,37 @@ export function ClassTable({ results }: { results: SegmentationRunState }) {
         </Table>
       </ScrollArea>
       <Text size="xs" c="dimmed" mt={4}>
-        IoU: the overlap of the predicted and the true area of a class, divided by their union. “–”:
-        the class does not occur.
+        {i18n.t('ui.training.SegmentationResults.iouTheOverlapOfThe')}
       </Text>
     </div>
   );
 }
 
 const PARTS = [
-  { key: 'image', label: 'Image' },
-  { key: 'truth', label: 'Mask' },
-  { key: 'prediction', label: 'Prediction' },
-  { key: 'overlay', label: 'Overlay' },
+  {
+    key: 'image',
+    get label() {
+      return i18n.t('ui.training.SegmentationResults.image2');
+    },
+  },
+  {
+    key: 'truth',
+    get label() {
+      return i18n.t('ui.training.SegmentationResults.mask');
+    },
+  },
+  {
+    key: 'prediction',
+    get label() {
+      return i18n.t('ui.training.SegmentationResults.prediction');
+    },
+  },
+  {
+    key: 'overlay',
+    get label() {
+      return i18n.t('ui.training.SegmentationResults.overlay');
+    },
+  },
 ] as const;
 
 /**
@@ -124,7 +157,7 @@ function galleryNote(previews: RunPreviews): string {
     split === 'training' ? ' (seen in training)' : ''
   }`;
   return typeof previews.epoch === 'number'
-    ? `${images} · weights of epoch ${previews.epoch}`
+    ? i18n.t('ui.training.SegmentationResults.weightsOfEpoch', { images, epoch: previews.epoch })
     : images;
 }
 
@@ -160,6 +193,7 @@ function usePreviews(runId: string, enabled: boolean) {
  * predicted mask and the prediction over the image.
  */
 export function PreviewGallery({ run }: { run: RunDetail }) {
+  useTranslation();
   const count = run.state?.segmentation?.previews?.count ?? 0;
   const { previews, error } = usePreviews(run.id, run.has_weights && count > 0);
   if (count === 0 || !run.has_weights) {
@@ -169,17 +203,26 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
   const kind = `${split[0].toUpperCase()}${split.slice(1)}`;
   const ignored = run.state?.segmentation?.ignore_index != null;
   return (
-    <Stack gap="xs" component="section" aria-label="Predictions">
+    <Stack
+      gap="xs"
+      component="section"
+      aria-label={i18n.t('ui.training.SegmentationResults.predictions')}
+    >
       <Group justify="space-between" gap="xs">
         <Text size="sm" fw={600}>
-          Predictions
+          {i18n.t('ui.training.SegmentationResults.predictions')}
         </Text>
         <Text size="xs" c="dimmed">
-          {previews ? galleryNote(previews) : `${count} ${split} images`}
+          {previews
+            ? galleryNote(previews)
+            : i18n.t('ui.training.SegmentationResults.images', { count, split })}
         </Text>
       </Group>
       {error && (
-        <Alert color="red" title="Cannot load the predictions">
+        <Alert
+          color="red"
+          title={i18n.t('ui.training.SegmentationResults.cannotLoadThePredictions')}
+        >
           {error}
         </Alert>
       )}
@@ -187,7 +230,7 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
         <Group gap="xs">
           <Loader size="xs" />
           <Text size="sm" c="dimmed">
-            Loading the predictions …
+            {i18n.t('ui.training.SegmentationResults.loadingThePredictions')}
           </Text>
         </Group>
       )}
@@ -214,7 +257,10 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
                 radius="sm"
                 component="figure"
                 m={0}
-                aria-label={`${kind} image ${sample.index + 1}`}
+                aria-label={i18n.t('ui.training.SegmentationResults.image', {
+                  kind,
+                  value: sample.index + 1,
+                })}
               >
                 <div className={classes.previewRow}>
                   {PARTS.map((part) => (
@@ -223,7 +269,11 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
                       component="img"
                       className={classes.previewImage}
                       src={sample[part.key].url}
-                      alt={`${part.label} of ${split} image ${sample.index + 1}`}
+                      alt={i18n.t('ui.training.SegmentationResults.ofImage', {
+                        label: part.label,
+                        split,
+                        value: sample.index + 1,
+                      })}
                       width={previews.width}
                       height={previews.height}
                       loading="lazy"
@@ -231,9 +281,13 @@ export function PreviewGallery({ run }: { run: RunDetail }) {
                   ))}
                 </div>
                 <Text component="figcaption" size="xs" c="dimmed" mt={4}>
-                  IoU {formatPercent(sample.iou)} · pixel accuracy{' '}
-                  {formatPercent(sample.pixel_accuracy)} ·{' '}
-                  {sample.classes.map((index) => previews.class_names[index] ?? index).join(', ')}
+                  {i18n.t('ui.training.SegmentationResults.iouPixelAccuracy', {
+                    iou: formatPercent(sample.iou),
+                    pixel_accuracy: formatPercent(sample.pixel_accuracy),
+                    map: sample.classes
+                      .map((index) => previews.class_names[index] ?? index)
+                      .join(', '),
+                  })}
                 </Text>
               </Paper>
             ))}

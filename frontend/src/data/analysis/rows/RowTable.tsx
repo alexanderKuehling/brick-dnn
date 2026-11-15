@@ -3,6 +3,7 @@ import { IconArrowDown, IconArrowUp } from '@tabler/icons-react';
 import { Checkbox } from '@mantine/core';
 import type { RowAnalysis } from '@/api/types';
 import { formatCount, formatNumber } from '@/components/charts/format';
+import { i18n, useTranslation } from '@/i18n';
 import { rowRange } from '../../table/virtual';
 import { sortRows, type RowSort, type RowSortKey } from './rowsData';
 import classes from './RowsView.module.css';
@@ -10,7 +11,17 @@ import classes from './RowsView.module.css';
 const ROW_HEIGHT = 30;
 const VIEWPORT = 380;
 const OVERSCAN = 10;
-const SPLIT_LABELS = { train: 'Train', val: 'Validation', test: 'Test' } as const;
+const SPLIT_LABELS = {
+  get train() {
+    return i18n.t('ui.data.RowTable.train');
+  },
+  get val() {
+    return i18n.t('ui.data.RowTable.validation');
+  },
+  get test() {
+    return i18n.t('ui.data.RowTable.test');
+  },
+} as const;
 
 export interface RowTableProps {
   analysis: RowAnalysis;
@@ -39,6 +50,7 @@ export function RowTable({
   active,
   onActivate,
 }: RowTableProps) {
+  useTranslation();
   const [scrollTop, setScrollTop] = useState(0);
   const sorted = useMemo(() => sortRows(analysis, indices, sort), [analysis, indices, sort]);
   const range = rowRange(scrollTop, VIEWPORT, ROW_HEIGHT, sorted.length, OVERSCAN);
@@ -94,7 +106,7 @@ export function RowTable({
     >
       <table
         className={classes.table}
-        aria-label="Rows with their statistics"
+        aria-label={i18n.t('ui.data.RowTable.rowsWithTheirStatistics')}
         aria-rowcount={sorted.length + 1}
       >
         <thead>
@@ -102,7 +114,7 @@ export function RowTable({
             <th>
               <Checkbox
                 size="xs"
-                aria-label="Select all rows shown"
+                aria-label={i18n.t('ui.data.RowTable.selectAllRowsShown')}
                 checked={allShown}
                 indeterminate={!allShown && sorted.some((i) => selected.has(i))}
                 onChange={() => {
@@ -126,7 +138,7 @@ export function RowTable({
             {header('spread', 'Spread', true)}
             {header('missing', 'Missing', true)}
             {header('nn_ratio', 'NN ratio', true)}
-            <th>Nearest row</th>
+            <th>{i18n.t('ui.data.RowTable.nearestRow')}</th>
             {header('group_size', 'Group', true)}
           </tr>
         </thead>
@@ -149,7 +161,7 @@ export function RowTable({
                 <td onClick={(event) => event.stopPropagation()}>
                   <Checkbox
                     size="xs"
-                    aria-label={`Select row ${rows.position[i]}`}
+                    aria-label={i18n.t('ui.data.RowTable.selectRow', { value: rows.position[i] })}
                     checked={selected.has(i)}
                     onChange={() => toggle(i)}
                   />
@@ -173,7 +185,9 @@ export function RowTable({
                   {neighbor >= 0
                     ? rows.id && showId
                       ? `${rows.id[neighbor] ?? '–'}`
-                      : `Row ${formatCount(rows.position[neighbor])}`
+                      : i18n.t('ui.data.RowTable.row', {
+                          value: formatCount(rows.position[neighbor]),
+                        })
                     : '–'}
                 </td>
                 <td className={classes.numeric}>

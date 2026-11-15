@@ -26,6 +26,7 @@ import { divergingColor, useChartScheme } from '@/components/charts/colors';
 import { formatCoefficient, formatCount, formatPercent } from '@/components/charts/format';
 import { Heatmap } from '@/components/charts/Heatmap';
 import { ScatterPlot } from '@/components/charts/ScatterPlot';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { CorrelationsView, type CorrelationMethod } from './CorrelationsView';
 import { BELOW_COLOR, clampThreshold, PartnerHistogram } from './PartnerHistogram';
@@ -64,13 +65,17 @@ type HeatmapChoice = 'pairs' | 'selected' | 'filtered' | 'focus' | 'block' | `gr
 
 /** Bar of |value| on the diverging scale, with the value. */
 function StrengthBar({ value }: { value: number | null }) {
+  useTranslation();
   const scheme = useChartScheme();
   if (value === null) {
     return <span className={classes.dimmed}>–</span>;
   }
   const width = 48;
   return (
-    <span className={classes.association} title={`Spearman ρ = ${formatCoefficient(value)}`}>
+    <span
+      className={classes.association}
+      title={i18n.t('ui.data.RelationshipsView.spearman', { value: formatCoefficient(value) })}
+    >
       <svg width={width} height={8} aria-hidden="true" style={{ flexShrink: 0 }}>
         <rect width={width} height={8} rx={4} style={{ fill: 'var(--chart-track)' }} />
         <rect
@@ -103,7 +108,7 @@ const RelationRowView = memo(
       <td>
         <Checkbox
           size="xs"
-          aria-label={`Select ${row.name}`}
+          aria-label={i18n.t('ui.data.RelationshipsView.select', { name: row.name })}
           checked={selected}
           onChange={() => onToggle(row.name)}
         />
@@ -111,7 +116,12 @@ const RelationRowView = memo(
       <td>
         <span className={classes.nameCell}>
           {below && (
-            <svg width={8} height={8} aria-label="No partner above the threshold" role="img">
+            <svg
+              width={8}
+              height={8}
+              aria-label={i18n.t('ui.data.RelationshipsView.noPartnerAboveTheThreshold')}
+              role="img"
+            >
               <circle cx={4} cy={4} r={4} style={{ fill: BELOW_COLOR }} />
             </svg>
           )}
@@ -119,7 +129,7 @@ const RelationRowView = memo(
             type="button"
             className={classes.linkButton}
             onClick={() => onFocus(row.name)}
-            title={`Show the partners of ${row.name}`}
+            title={i18n.t('ui.data.RelationshipsView.showThePartnersOf', { name: row.name })}
           >
             {row.name}
           </button>
@@ -141,11 +151,12 @@ const RelationRowView = memo(
 /** All columns in the clustered order, in blocks; a click picks the columns of two blocks. */
 const OverviewHeatmap = memo(
   ({ relations, onPick }: { relations: ColumnRelations; onPick: (columns: string[]) => void }) => {
+    useTranslation();
     const { overview, order } = relations;
     if (!overview || !order) {
       return (
         <Text size="sm" c="dimmed">
-          Too many columns for the overview; use the table and the heatmap of chosen columns.
+          {i18n.t('ui.data.RelationshipsView.tooManyColumnsForThe')}
         </Text>
       );
     }
@@ -160,11 +171,15 @@ const OverviewHeatmap = memo(
     });
     return (
       <Heatmap
-        title="All columns, related ones together"
+        title={i18n.t('ui.data.RelationshipsView.allColumnsRelatedOnesTogether')}
         subtitle={
           overview.starts.length < n
-            ? `${formatCount(n)} columns in ${overview.starts.length} blocks of about ${Math.round(n / overview.starts.length)}; each cell is the mean |ρ| of two blocks. A click shows them in the heatmap below.`
-            : 'Each cell is |ρ| of two columns; a click shows them in the heatmap below.'
+            ? i18n.t('ui.data.RelationshipsView.columnsInBlocksOfAbout', {
+                n: formatCount(n),
+                length: overview.starts.length,
+                round: Math.round(n / overview.starts.length),
+              })
+            : i18n.t('ui.data.RelationshipsView.eachCellIsOfTwo')
         }
         rows={labels}
         columns={labels}
@@ -192,6 +207,7 @@ function ColumnFocus({
   onScatter: (x: string, y: string) => void;
   onClose: () => void;
 }) {
+  useTranslation();
   const index = relations.columns.indexOf(name);
   const top = relations.top[index] ?? [];
   const partner = top.length ? relations.columns[top[0]] : null;
@@ -204,9 +220,14 @@ function ColumnFocus({
     <Paper withBorder p="sm" radius="sm">
       <Group justify="space-between" wrap="nowrap" mb={6}>
         <Text size="sm" fw={600}>
-          Partners of {name}
+          {i18n.t('ui.data.RelationshipsView.partnersOf', { name })}
         </Text>
-        <ActionIcon variant="subtle" color="gray" aria-label="Close" onClick={onClose}>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          aria-label={i18n.t('ui.data.RelationshipsView.close')}
+          onClick={onClose}
+        >
           <IconX size={16} />
         </ActionIcon>
       </Group>
@@ -214,7 +235,7 @@ function ColumnFocus({
         <Stack gap={4}>
           {top.length === 0 && (
             <Text size="sm" c="dimmed">
-              No partner could be computed.
+              {i18n.t('ui.data.RelationshipsView.noPartnerCouldBeComputed')}
             </Text>
           )}
           <ul className={classes.pairList}>
@@ -227,7 +248,10 @@ function ColumnFocus({
                     className={classes.pair}
                     fz="xs"
                     onClick={() => onScatter(other, name)}
-                    aria-label={`${other}: Spearman ρ ${formatCoefficient(value)}. Open the scatter plot.`}
+                    aria-label={i18n.t('ui.data.RelationshipsView.spearmanOpenTheScatterPlot', {
+                      other,
+                      value: formatCoefficient(value),
+                    })}
                   >
                     <StrengthBar value={value} />
                     <Text size="xs" truncate style={{ flex: 1 }}>
@@ -239,14 +263,16 @@ function ColumnFocus({
             })}
           </ul>
           <Note>
-            {relations.partners[index] ?? 0} partners at |ρ| ≥ {relations.partner_level}. A click
-            opens the scatter plot.
+            {i18n.t('ui.data.RelationshipsView.partnersAtAClickOpens', {
+              value: relations.partners[index] ?? 0,
+              partner_level: relations.partner_level,
+            })}
           </Note>
         </Stack>
         {pairs && partner && pairs.x.length > 1 ? (
           <ScatterPlot
-            title={`${name} against ${partner}`}
-            subtitle="Its strongest partner, sample rows."
+            title={i18n.t('ui.data.RelationshipsView.against', { name, partner })}
+            subtitle={i18n.t('ui.data.RelationshipsView.itsStrongestPartnerSampleRows')}
             x={pairs.x}
             y={pairs.y}
             xLabel={partner}
@@ -277,6 +303,7 @@ export function RelationshipsView({
   method,
   onMethodChange,
 }: RelationshipsViewProps) {
+  useTranslation();
   const relations = profile.relations ?? null;
   const { readOnly } = usePrepAccess();
   const [threshold, setThreshold] = useState(() => relations?.suggested_level ?? 0.15);
@@ -398,17 +425,44 @@ export function RelationshipsView({
   const filteredCount = filtered.length;
   const chooser = useMemo(() => {
     const options = [
-      { value: 'pairs', label: `Strongest pairs (${DEFAULT_HEATMAP_COLUMNS} columns)` },
-      { value: 'filtered', label: `Table: matching the filter (${formatCount(filteredCount)})` },
-      { value: 'selected', label: `Table: selected (${formatCount(selected.size)})` },
-      ...(focus ? [{ value: 'focus', label: `${focus} and its partners` }] : []),
-      ...(block.length ? [{ value: 'block', label: `Overview blocks (${block.length})` }] : []),
-      ...groupSizes.map((size, g) => ({ value: `group:${g}`, label: `Group ${g + 1} (${size})` })),
+      {
+        value: 'pairs',
+        label: i18n.t('ui.data.RelationshipsView.strongestPairsColumns', {
+          DEFAULT_HEATMAP_COLUMNS,
+        }),
+      },
+      {
+        value: 'filtered',
+        label: i18n.t('ui.data.RelationshipsView.tableMatchingTheFilter', {
+          filteredCount: formatCount(filteredCount),
+        }),
+      },
+      {
+        value: 'selected',
+        label: i18n.t('ui.data.RelationshipsView.tableSelected', {
+          size: formatCount(selected.size),
+        }),
+      },
+      ...(focus
+        ? [{ value: 'focus', label: i18n.t('ui.data.RelationshipsView.andItsPartners', { focus }) }]
+        : []),
+      ...(block.length
+        ? [
+            {
+              value: 'block',
+              label: i18n.t('ui.data.RelationshipsView.overviewBlocks', { length: block.length }),
+            },
+          ]
+        : []),
+      ...groupSizes.map((size, g) => ({
+        value: `group:${g}`,
+        label: i18n.t('ui.data.RelationshipsView.group', { value: g + 1, size }),
+      })),
     ];
     return (
       <Select
         size="xs"
-        label="Columns"
+        label={i18n.t('ui.data.RelationshipsView.columns')}
         data={options}
         value={choice}
         allowDeselect={false}
@@ -473,35 +527,44 @@ export function RelationshipsView({
   };
 
   const strengthOptions: { value: StrengthFilter; label: string }[] = [
-    { value: 'all', label: 'All columns' },
-    { value: 'below', label: `No partner at |ρ| ≥ ${threshold.toFixed(2)}` },
-    { value: 'above', label: `A partner at |ρ| ≥ ${threshold.toFixed(2)}` },
+    { value: 'all', label: i18n.t('ui.data.RelationshipsView.allColumns') },
+    {
+      value: 'below',
+      label: i18n.t('ui.data.RelationshipsView.noPartnerAt', { threshold: threshold.toFixed(2) }),
+    },
+    {
+      value: 'above',
+      label: i18n.t('ui.data.RelationshipsView.aPartnerAt', { threshold: threshold.toFixed(2) }),
+    },
   ];
   const groupOptions = [
-    { value: 'none', label: 'In no group' },
+    { value: 'none', label: i18n.t('ui.data.RelationshipsView.inNoGroup') },
     ...Array.from({ length: groups }, (_, g) => ({
       value: String(g),
-      label: `Group ${g + 1} (${groupSizes[g]})`,
+      label: i18n.t('ui.data.RelationshipsView.group2', { value: g + 1, value2: groupSizes[g] }),
     })),
   ];
 
   return (
     <Stack gap="md">
       <Text size="sm">
-        How the {formatCount(n)} number and yes/no columns relate: each column’s{' '}
-        <b>strongest partner</b> is the other column it correlates with most (Spearman ρ, on{' '}
-        {sampled
-          ? `a random sample of ${formatCount(relations.rows)} of ${formatCount(relations.pool_rows)} ${rowsText}`
-          : `${formatCount(relations.rows)} ${rowsText}`}
-        ). Measurements of the same thing usually have partners; a column related to no other is
-        often noise.
+        <Trans
+          i18nKey="ui.data.RelationshipsView.howTheNumberAndYes"
+          values={{
+            n: formatCount(n),
+            value: sampled
+              ? `a random sample of ${formatCount(relations.rows)} of ${formatCount(relations.pool_rows)} ${rowsText}`
+              : `${formatCount(relations.rows)} ${rowsText}`,
+          }}
+          components={[<b />]}
+        />
       </Text>
 
       <SimpleGrid type="container" cols={{ base: 1, '900px': 2 }} spacing="md">
         <Stack gap={6}>
           <PartnerHistogram
-            title="Strongest partner of each column"
-            subtitle="Columns by their largest |ρ| with any other column. Drag the line to set the threshold."
+            title={i18n.t('ui.data.RelationshipsView.strongestPartnerOfEachColumn')}
+            subtitle={i18n.t('ui.data.RelationshipsView.columnsByTheirLargestWith')}
             edges={relations.histogram.edges}
             counts={relations.histogram.counts}
             threshold={threshold}
@@ -513,7 +576,7 @@ export function RelationshipsView({
           <Group gap="xs" wrap="wrap" align="flex-end">
             <NumberInput
               size="xs"
-              label="Threshold |ρ|"
+              label={i18n.t('ui.data.RelationshipsView.threshold')}
               value={threshold}
               min={0}
               max={1}
@@ -535,7 +598,7 @@ export function RelationshipsView({
                 setLimit(PAGE);
               }}
             >
-              Show the {formatCount(below)} in the table
+              {i18n.t('ui.data.RelationshipsView.showTheInTheTable', { below: formatCount(below) })}
             </Button>
             {!readOnly && (
               <Button
@@ -555,19 +618,25 @@ export function RelationshipsView({
                 }
               >
                 {addedKeys.includes(`select:${threshold}`)
-                  ? 'Step added'
-                  : `Drop the ${formatCount(below)} without a partner`}
+                  ? i18n.t('ui.data.RelationshipsView.stepAdded')
+                  : i18n.t('ui.data.RelationshipsView.dropTheWithoutAPartner', {
+                      below: formatCount(below),
+                    })}
               </Button>
             )}
           </Group>
           <Note>
-            Unrelated columns reach about |ρ| = {relations.chance?.toFixed(2) ?? '–'} by chance with
-            this many rows and columns (99.9 % stay below {relations.chance_high?.toFixed(2) ?? '–'}
-            ); suggested threshold {relations.suggested_level.toFixed(2)}. A clear gap between two
-            humps means two kinds of columns. Dropping adds a step “Select features: no strong
-            partner”, learned on the training rows.
+            {i18n.t('ui.data.RelationshipsView.unrelatedColumnsReachAbout')}{' '}
+            {relations.chance?.toFixed(2) ?? '–'}{' '}
+            {i18n.t('ui.data.RelationshipsView.byChanceWithThisMany')}{' '}
+            {relations.chance_high?.toFixed(2) ?? '–'}
+            {i18n.t('ui.data.RelationshipsView.suggestedThreshold')}{' '}
+            {relations.suggested_level.toFixed(2)}
+            {i18n.t('ui.data.RelationshipsView.aClearGapBetweenTwo')}
             {relations.skipped.length > 0 &&
-              ` ${formatCount(relations.skipped.length)} constant columns are not shown and are dropped by that step too.`}
+              i18n.t('ui.data.RelationshipsView.constantColumnsAreNotShown', {
+                length: formatCount(relations.skipped.length),
+              })}
           </Note>
         </Stack>
         <OverviewHeatmap relations={relations} onPick={pickBlocks} />
@@ -575,21 +644,22 @@ export function RelationshipsView({
 
       {relations.sampled_columns && (
         <Note>
-          The table has {formatCount(relations.total)} number columns; a random sample of{' '}
-          {formatCount(n + relations.skipped.length)} of them is analysed here. The step “Select
-          features: no strong partner” looks at all of them.
+          {i18n.t('ui.data.RelationshipsView.theTableHasNumberColumns', {
+            total: formatCount(relations.total),
+            value: formatCount(n + relations.skipped.length),
+          })}
         </Note>
       )}
 
       <Stack gap="xs">
         <Text size="sm" fw={600}>
-          Columns and their partners
+          {i18n.t('ui.data.RelationshipsView.columnsAndTheirPartners')}
         </Text>
         <Group gap="xs" wrap="wrap" align="flex-end">
           <TextInput
             size="xs"
-            placeholder="Search columns"
-            aria-label="Search columns"
+            placeholder={i18n.t('ui.data.RelationshipsView.searchColumns')}
+            aria-label={i18n.t('ui.data.RelationshipsView.searchColumns')}
             leftSection={<IconSearch size={14} />}
             value={filter.query}
             onChange={(event) => {
@@ -601,7 +671,7 @@ export function RelationshipsView({
           />
           <Select
             size="xs"
-            aria-label="Strongest partner"
+            aria-label={i18n.t('ui.data.RelationshipsView.strongestPartner')}
             data={strengthOptions}
             value={filter.strength}
             allowDeselect={false}
@@ -614,8 +684,10 @@ export function RelationshipsView({
           />
           <NumberInput
             size="xs"
-            aria-label={`Partners at |ρ| ≥ ${relations.partner_level} at least`}
-            placeholder="Partners ≥ …"
+            aria-label={i18n.t('ui.data.RelationshipsView.partnersAtAtLeast', {
+              partner_level: relations.partner_level,
+            })}
+            placeholder={i18n.t('ui.data.RelationshipsView.partners')}
             value={filter.minPartners ?? ''}
             min={0}
             step={1}
@@ -628,8 +700,8 @@ export function RelationshipsView({
           {groups > 0 && (
             <Select
               size="xs"
-              aria-label="Group"
-              placeholder="All groups"
+              aria-label={i18n.t('ui.data.RelationshipsView.group3')}
+              placeholder={i18n.t('ui.data.RelationshipsView.allGroups')}
               data={groupOptions}
               value={
                 filter.group === null ? null : filter.group < 0 ? 'none' : String(filter.group)
@@ -647,15 +719,20 @@ export function RelationshipsView({
           )}
           <Text size="xs" c="dimmed">
             {filtered.length === n
-              ? `${formatCount(n)} columns`
-              : `${formatCount(filtered.length)} of ${formatCount(n)} columns`}
+              ? i18n.t('ui.data.RelationshipsView.columns2', { n: formatCount(n) })
+              : i18n.t('ui.data.RelationshipsView.ofColumns', {
+                  length: formatCount(filtered.length),
+                  n: formatCount(n),
+                })}
           </Text>
         </Group>
 
         <Group gap="xs" wrap="wrap">
           <Checkbox
             size="xs"
-            label={`Select all ${formatCount(filtered.length)} matching`}
+            label={i18n.t('ui.data.RelationshipsView.selectAllMatching', {
+              length: formatCount(filtered.length),
+            })}
             checked={allFilteredSelected}
             indeterminate={!allFilteredSelected && filtered.some((r) => selected.has(r.name))}
             onChange={() =>
@@ -673,16 +750,16 @@ export function RelationshipsView({
             }
           />
           <Text size="xs" c="dimmed">
-            {formatCount(selected.size)} selected
+            {i18n.t('ui.data.RelationshipsView.selected', { size: formatCount(selected.size) })}
           </Text>
           {selected.size > 0 && (
             <Button size="compact-xs" variant="subtle" onClick={() => setSelection(new Set())}>
-              Clear
+              {i18n.t('ui.data.RelationshipsView.clear')}
             </Button>
           )}
           {selected.size > 0 && (
             <Button size="compact-xs" variant="subtle" onClick={() => setChoice('selected')}>
-              Show in the heatmap
+              {i18n.t('ui.data.RelationshipsView.showInTheHeatmap')}
             </Button>
           )}
           {!readOnly && selected.size > 0 && (
@@ -697,31 +774,40 @@ export function RelationshipsView({
                 }
               >
                 {addedKeys.includes('drop')
-                  ? 'Step added'
-                  : `Drop selected (${formatCount(selected.size)})`}
+                  ? i18n.t('ui.data.RelationshipsView.stepAdded')
+                  : i18n.t('ui.data.RelationshipsView.dropSelected', {
+                      size: formatCount(selected.size),
+                    })}
               </Button>
               <Button
                 size="compact-xs"
                 variant="light"
                 disabled={others.length === 0 || addedKeys.includes('keep')}
-                title={`Drops the other ${formatCount(others.length)} number columns; other kinds of columns stay.`}
+                title={i18n.t('ui.data.RelationshipsView.dropsTheOtherNumberColumns', {
+                  length: formatCount(others.length),
+                })}
                 onClick={() => add('keep', { type: 'drop_columns', params: { columns: others } })}
               >
                 {addedKeys.includes('keep')
-                  ? 'Step added'
-                  : `Keep only selected (drop ${formatCount(others.length)})`}
+                  ? i18n.t('ui.data.RelationshipsView.stepAdded')
+                  : i18n.t('ui.data.RelationshipsView.keepOnlySelectedDrop', {
+                      length: formatCount(others.length),
+                    })}
               </Button>
             </>
           )}
         </Group>
 
         <div className={classes.tableScroll}>
-          <table className={classes.table} aria-label="Columns and their strongest partners">
+          <table
+            className={classes.table}
+            aria-label={i18n.t('ui.data.RelationshipsView.columnsAndTheirStrongestPartners')}
+          >
             <thead>
               <tr>
-                <th aria-label="Selected" />
+                <th aria-label={i18n.t('ui.data.RelationshipsView.selected2')} />
                 {header('name', 'Column', false)}
-                <th>Strongest partner</th>
+                <th>{i18n.t('ui.data.RelationshipsView.strongestPartner')}</th>
                 {header(
                   'strength',
                   'ρ',
@@ -733,7 +819,9 @@ export function RelationshipsView({
                 {header('group', 'Group', true, 'Group of related columns (clustering)')}
                 {target &&
                   header('target', 'Target', true, `Association with ${target} (all rows)`)}
-                {!target && <th className={classes.right}>Target</th>}
+                {!target && (
+                  <th className={classes.right}>{i18n.t('ui.data.RelationshipsView.target')}</th>
+                )}
                 {header('missing', 'Missing')}
               </tr>
             </thead>
@@ -753,7 +841,7 @@ export function RelationshipsView({
         </div>
         {sorted.length === 0 && (
           <Text size="sm" c="dimmed">
-            No column matches the filter.
+            {i18n.t('ui.data.RelationshipsView.noColumnMatchesTheFilter')}
           </Text>
         )}
         {sorted.length > limit && (
@@ -763,14 +851,17 @@ export function RelationshipsView({
             onClick={() => setLimit((l) => l + PAGE)}
             style={{ alignSelf: 'flex-start' }}
           >
-            Show {formatCount(Math.min(PAGE, sorted.length - limit))} more of{' '}
-            {formatCount(sorted.length - limit)}
+            {i18n.t('ui.data.RelationshipsView.showMoreOf', {
+              min: formatCount(Math.min(PAGE, sorted.length - limit)),
+              value: formatCount(sorted.length - limit),
+            })}
           </Button>
         )}
         <Note>
-          Sorted by “ρ” ascending, columns without a partner come first. “Order” (the default) puts
-          related columns together. {formatCount(groups)} groups of related columns (average |ρ| ≥{' '}
-          {relations.partner_level}). A click on a name shows its partners.
+          {i18n.t('ui.data.RelationshipsView.sortedByAscendingColumnsWithout', {
+            groups: formatCount(groups),
+            partner_level: relations.partner_level,
+          })}
         </Note>
       </Stack>
 
@@ -788,7 +879,7 @@ export function RelationshipsView({
 
       <Stack gap="xs">
         <Text size="sm" fw={600}>
-          Heatmap of chosen columns
+          {i18n.t('ui.data.RelationshipsView.heatmapOfChosenColumns')}
         </Text>
         <CorrelationsView
           profile={profile}

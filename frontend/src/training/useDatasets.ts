@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { api, type Dataset } from '@/api';
 import { useUploadProgress, type UploadBytes } from '@/components/useUploadProgress';
+import { i18n } from '@/i18n';
 import { formatBytes } from './format';
 import { loadSource, saveSource, type SourceChoice } from './settings';
 
@@ -125,7 +126,10 @@ export function useDatasets(
       setUploadError(null);
       if (maxUploadMb !== null && file.size > maxUploadMb * 1024 * 1024) {
         setUploadError(
-          `The file is ${formatBytes(file.size)}; the server accepts up to ${maxUploadMb} MB.`
+          i18n.t('ui.training.useDatasets.theFileIsTheServer', {
+            size: formatBytes(file.size),
+            maxUploadMb,
+          })
         );
         return;
       }
@@ -155,8 +159,8 @@ export function useDatasets(
           if (!setupVisible()) {
             notifications.show({
               color: 'green',
-              title: 'Upload finished',
-              message: `“${dataset.name}” is ready for training.`,
+              title: i18n.t('ui.training.useDatasets.uploadFinished'),
+              message: i18n.t('ui.training.useDatasets.isReadyForTraining', { name: dataset.name }),
             });
           }
         })
@@ -168,7 +172,7 @@ export function useDatasets(
           if (!setupVisible()) {
             notifications.show({
               color: 'red',
-              title: `Uploading “${file.name}” failed`,
+              title: i18n.t('ui.training.useDatasets.uploadingFailed', { name: file.name }),
               message: error.message,
             });
           }

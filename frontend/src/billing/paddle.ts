@@ -6,6 +6,7 @@
  * until then no request goes to Paddle.
  */
 import type { BillingCheckout, BillingEnabled } from '@/api';
+import { i18n } from '@/i18n';
 
 export const PADDLE_SCRIPT_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 
@@ -56,7 +57,7 @@ function inject(): Promise<void> {
     script.onload = () => resolve();
     script.onerror = () => {
       script.remove();
-      reject(new Error('The checkout could not be loaded from Paddle. Check your connection.'));
+      reject(new Error(i18n.t('ui.billing.paddle.theCheckoutCouldNotBe')));
     };
     document.head.appendChild(script);
   });
@@ -69,7 +70,7 @@ export function loadPaddle(info: BillingEnabled): Promise<PaddleJs> {
       .then(() => {
         const paddle = window.Paddle;
         if (!paddle) {
-          throw new Error('The checkout could not be loaded from Paddle.');
+          throw new Error(i18n.t('ui.billing.paddle.theCheckoutCouldNotBe2'));
         }
         // The live environment is the default; test tokens only work in the sandbox.
         if (info.environment === 'sandbox') {

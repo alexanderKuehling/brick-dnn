@@ -15,6 +15,7 @@ import {
   Text,
 } from '@mantine/core';
 import { api, type Plan, type Usage } from '@/api';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import { BudgetEditor } from './BudgetEditor';
 import { formatCpu, formatMoney, formatResetDate, usageColor, usagePercent } from './format';
@@ -33,6 +34,7 @@ function Meter({
   value: string;
   detail?: React.ReactNode;
 }) {
+  useTranslation();
   const percent = usagePercent(used, limit);
   return (
     <div>
@@ -46,7 +48,7 @@ function Meter({
         <Progress
           value={percent}
           color={usageColor(percent)}
-          aria-label={`${label}: ${Math.round(percent)}% used`}
+          aria-label={i18n.t('ui.usage.UsageSection.used', { label, round: Math.round(percent) })}
         />
       )}
       {detail && (
@@ -82,7 +84,7 @@ export function planLimits(plan: Plan): string {
       ? `${formatHours(plan.cpu_hours_per_month)} per month`
       : 'unlimited compute',
     plan.storage_gb !== null
-      ? `${plan.storage_gb.toLocaleString('en-US')} GB`
+      ? `${plan.storage_gb.toLocaleString(currentLocale())} GB`
       : 'unlimited storage',
   ];
   if (plan.cpu_minutes_per_run !== null) {
@@ -96,27 +98,34 @@ export function planLimits(plan: Plan): string {
 }
 
 function formatHours(hours: number): string {
-  return `${hours.toLocaleString('en-US', { maximumFractionDigits: 2 })} CPU h`;
+  return `${hours.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })} CPU h`;
 }
 
 function planPrice(plan: Plan): string {
   if (plan.price === null) {
     return '';
   }
-  return plan.price === 0 ? 'no charge' : `${formatMoney(plan.price, plan.currency)} per month`;
+  return plan.price === 0
+    ? 'no charge'
+    : i18n.t('ui.usage.UsageSection.perMonth', { price: formatMoney(plan.price, plan.currency) });
 }
 
 /** "Starter (€5.00 per month): 10 CPU h, 5 GB". */
 function otherPlan(plan: Plan): string {
   const limits = [
     plan.cpu_hours_per_month !== null ? formatHours(plan.cpu_hours_per_month) : 'unlimited',
-    plan.storage_gb !== null ? `${plan.storage_gb.toLocaleString('en-US')} GB` : null,
+    plan.storage_gb !== null ? `${plan.storage_gb.toLocaleString(currentLocale())} GB` : null,
   ].filter(Boolean);
   const price = planPrice(plan);
-  return `${plan.name}${price ? ` (${price})` : ''}: ${limits.join(', ')}`;
+  return i18n.t('ui.usage.UsageSection.text', {
+    name: plan.name,
+    value: price ? ` (${price})` : '',
+    limits: limits.join(', '),
+  });
 }
 
 function PlanInfo({ usage }: { usage: Usage }) {
+  useTranslation();
   const { plan, unlimited } = usage;
   if (!plan || (plan.key === 'default' && !unlimited)) {
     return null; // a server without plans: the limits below say it all
@@ -127,7 +136,9 @@ function PlanInfo({ usage }: { usage: Usage }) {
     <div>
       <Group gap="xs" wrap="wrap">
         <Text size="sm" fw={600}>
-          {plan.key === 'default' ? 'Your account' : `${plan.name} plan`}
+          {plan.key === 'default'
+            ? i18n.t('ui.usage.UsageSection.yourAccount')
+            : i18n.t('ui.usage.UsageSection.plan', { name: plan.name })}
         </Text>
         {price && !unlimited && (
           <Text size="sm" c="dimmed">
@@ -136,28 +147,26 @@ function PlanInfo({ usage }: { usage: Usage }) {
         )}
         {unlimited && (
           <Badge variant="light" color="green">
-            Unlimited
+            {i18n.t('ui.usage.UsageSection.unlimited')}
           </Badge>
         )}
       </Group>
       <Text size="xs" c="dimmed" mt={2}>
-        {unlimited
-          ? 'No limits apply to your account; its usage is still shown here. Budgets you set yourself still apply.'
-          : planLimits(plan)}
+        {unlimited ? i18n.t('ui.usage.UsageSection.noLimitsApplyToYour') : planLimits(plan)}
       </Text>
       {usage.upgrade_url && !unlimited ? (
         // The server sells plans: the pricing page compares them and has the checkout.
         <Text size="xs" c="dimmed" mt={2}>
-          Need more?{' '}
-          <Anchor component={Link} to="/pricing" size="xs">
-            Compare plans and prices
-          </Anchor>
+          <Trans
+            i18nKey="ui.usage.UsageSection.needMoreComparePlansAnd"
+            components={[<Anchor component={Link} to="/pricing" size="xs" />]}
+          />
         </Text>
       ) : (
         others.length > 0 &&
         !unlimited && (
           <Text size="xs" c="dimmed" mt={2}>
-            Other plans: {others.map(otherPlan).join(' · ')}.
+            {i18n.t('ui.usage.UsageSection.otherPlans', { map: others.map(otherPlan).join(' · ') })}
           </Text>
         )
       )}
@@ -166,6 +175,7 @@ function PlanInfo({ usage }: { usage: Usage }) {
 }
 
 function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage) => void }) {
+  useTranslation();
   const overage = usage.overage!;
   const [enabled, setEnabled] = useState(overage.enabled);
   const [cap, setCap] = useState<string | number>(overage.cap_cpu_hours ?? '');
@@ -192,16 +202,16 @@ function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage)
     <form onSubmit={save}>
       <Stack gap="xs">
         <Switch
-          label="Allow compute beyond the monthly allowance"
-          description={`Billed at ${price} per CPU hour at the end of the month. Off: trainings stop when the allowance is used up.`}
+          label={i18n.t('ui.usage.UsageSection.allowComputeBeyondTheMonthly')}
+          description={i18n.t('ui.usage.UsageSection.billedAtPerCpuHour', { price })}
           checked={enabled}
           onChange={(event) => setEnabled(event.currentTarget.checked)}
         />
         {enabled && (
           <NumberInput
-            label="Most beyond the allowance"
-            description="CPU hours per month. Empty: no cap."
-            placeholder="No cap"
+            label={i18n.t('ui.usage.UsageSection.mostBeyondTheAllowance')}
+            description={i18n.t('ui.usage.UsageSection.cpuHoursPerMonthEmpty')}
+            placeholder={i18n.t('ui.usage.UsageSection.noCap')}
             min={0}
             decimalScale={2}
             suffix=" CPU h"
@@ -212,7 +222,8 @@ function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage)
         )}
         {overage.used_cpu_minutes > 0 && (
           <Text size="xs" c="dimmed">
-            Beyond the allowance this month: {formatCpu(overage.used_cpu_minutes)}
+            {i18n.t('ui.usage.UsageSection.beyondTheAllowanceThisMonth')}{' '}
+            {formatCpu(overage.used_cpu_minutes)}
             {overage.cost !== null && ` (${formatMoney(overage.cost, overage.currency)})`}
           </Text>
         )}
@@ -224,7 +235,7 @@ function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage)
         {changed && (
           <Group justify="flex-end">
             <Button type="submit" size="xs" loading={busy}>
-              Save
+              {i18n.t('ui.usage.UsageSection.save')}
             </Button>
           </Group>
         )}
@@ -235,6 +246,7 @@ function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage)
 
 /** The account page's "Usage & budget": the plan, compute this month, storage, budgets. */
 export function UsageSection() {
+  useTranslation();
   const [usage, setUsage] = useState<Usage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -281,14 +293,17 @@ export function UsageSection() {
     <Stack gap="md">
       <PlanInfo usage={usage} />
       <Meter
-        label="Compute this month"
+        label={i18n.t('ui.usage.UsageSection.computeThisMonth')}
         used={compute.used}
         limit={compute.limit}
         value={money ? `${computeValue} (${money})` : computeValue}
-        detail={`CPU time of trainings and predictions; ${breakdown(usage)}. Resets on ${resets} (UTC).`}
+        detail={i18n.t('ui.usage.UsageSection.cpuTimeOfTrainingsAnd', {
+          breakdown: breakdown(usage),
+          resets,
+        })}
       />
       <Meter
-        label="Storage"
+        label={i18n.t('ui.usage.UsageSection.storage')}
         used={storage.used_bytes}
         limit={storage.limit_bytes}
         value={
@@ -296,24 +311,40 @@ export function UsageSection() {
             ? `${formatBytes(storage.used_bytes)} of ${formatBytes(storage.limit_bytes)}`
             : `${formatBytes(storage.used_bytes)} · no limit`
         }
-        detail={`Imported tables ${formatBytes(storage.by_kind.data_sources)} · datasets ${formatBytes(storage.by_kind.datasets)} · trained weights ${formatBytes(storage.by_kind.training_runs)}`}
+        detail={i18n.t('ui.usage.UsageSection.importedTablesDatasetsTrainedWeights', {
+          data_sources: formatBytes(storage.by_kind.data_sources),
+          datasets: formatBytes(storage.by_kind.datasets),
+          training_runs: formatBytes(storage.by_kind.training_runs),
+        })}
       />
       <Group justify="space-between" align="center" gap="sm">
         <Text size="xs" c="dimmed" style={{ flex: '1 1 14rem' }}>
-          {compute.own_budget !== null
-            ? `Your monthly budget: ${formatCpu(compute.own_budget)}. `
-            : 'Set a monthly budget to limit what your account may use. '}
-          {compute.allowance !== null
-            ? `Your plan allows ${formatCpu(compute.allowance)} per month`
-            : 'No monthly limit applies'}
-          {compute.run_limit !== null ? ` and ${formatCpu(compute.run_limit)} per training.` : '.'}{' '}
-          API tokens and apps can have budgets of their own (API tokens page).
+          {i18n.t('ui.usage.UsageSection.apiTokensAndAppsCan', {
+            value:
+              compute.own_budget !== null
+                ? i18n.t('ui.usage.UsageSection.yourMonthlyBudget', {
+                    own_budget: formatCpu(compute.own_budget),
+                  })
+                : i18n.t('ui.usage.UsageSection.setAMonthlyBudgetTo'),
+            value2:
+              compute.allowance !== null
+                ? i18n.t('ui.usage.UsageSection.yourPlanAllowsPerMonth', {
+                    allowance: formatCpu(compute.allowance),
+                  })
+                : i18n.t('ui.usage.UsageSection.noMonthlyLimitApplies'),
+            value3:
+              compute.run_limit !== null
+                ? i18n.t('ui.usage.UsageSection.andPerTraining', {
+                    run_limit: formatCpu(compute.run_limit),
+                  })
+                : '.',
+          })}
         </Text>
         <BudgetEditor
           budget={compute.own_budget}
           label="your account"
           onSave={save}
-          description="CPU minutes per month for your whole account. Empty: no budget of your own."
+          description={i18n.t('ui.usage.UsageSection.cpuMinutesPerMonthFor')}
         />
       </Group>
       {usage.overage?.available && (

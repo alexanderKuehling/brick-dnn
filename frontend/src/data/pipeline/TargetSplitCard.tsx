@@ -18,6 +18,7 @@ import {
   type ComboboxLikeRenderOptionInput,
 } from '@mantine/core';
 import type { ColumnInfo, PrepSettings, PrepTask, SplitInfo } from '@/api/types';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatCount } from '../table/format';
 import { KIND_LABELS, KindIcon } from '../table/kinds';
 import {
@@ -51,9 +52,24 @@ interface TargetSplitCardProps {
 }
 
 const TASKS: { value: PrepTask; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'classification', label: 'Classification' },
-  { value: 'regression', label: 'Regression' },
+  {
+    value: 'auto',
+    get label() {
+      return i18n.t('ui.data.TargetSplitCard.auto');
+    },
+  },
+  {
+    value: 'classification',
+    get label() {
+      return i18n.t('ui.data.TargetSplitCard.classification');
+    },
+  },
+  {
+    value: 'regression',
+    get label() {
+      return i18n.t('ui.data.TargetSplitCard.regression');
+    },
+  },
 ];
 
 const TASK_NAMES = { classification: 'classification', regression: 'regression' } as const;
@@ -72,6 +88,7 @@ export function TargetSplitCard({
   onAddJoin,
   joinUnavailable = null,
 }: TargetSplitCardProps) {
+  useTranslation();
   const { split } = settings;
   const kinds = new Map(columns.map((column) => [column.name, column.kind]));
   const target = settings.target;
@@ -98,9 +115,9 @@ export function TargetSplitCard({
   const draftVal = draftShare('val');
   const draftTest = draft.test === '' ? 0 : draftShare('test');
   const errors = Number.isNaN(draftVal)
-    ? { val: 'Enter a share.' }
+    ? { val: i18n.t('ui.data.TargetSplitCard.enterAShare') }
     : Number.isNaN(draftTest)
-      ? { test: 'Enter a share.' }
+      ? { test: i18n.t('ui.data.TargetSplitCard.enterAShare') }
       : splitError(draftVal, draftTest);
 
   const setShare = (key: ShareKey) => (raw: number | string) => {
@@ -151,17 +168,17 @@ export function TargetSplitCard({
 
   let taskHint: string;
   if (settings.task === 'classification') {
-    taskHint = 'Predicts a class for every row.';
+    taskHint = i18n.t('ui.data.TargetSplitCard.predictsAClassForEvery');
   } else if (settings.task === 'regression') {
-    taskHint = 'Predicts a number for every row.';
+    taskHint = i18n.t('ui.data.TargetSplitCard.predictsANumberForEvery');
   } else if (!target) {
-    taskHint = 'Choose a target to detect the task.';
+    taskHint = i18n.t('ui.data.TargetSplitCard.chooseATargetToDetect');
   } else if (task !== null) {
-    taskHint = `Detected: ${TASK_NAMES[task]}.`;
+    taskHint = i18n.t('ui.data.TargetSplitCard.detected', { value: TASK_NAMES[task] });
   } else {
     taskHint = targetMissing
-      ? 'No task: the target column is missing.'
-      : 'Detected once the preview has run.';
+      ? i18n.t('ui.data.TargetSplitCard.noTaskTheTargetColumn')
+      : i18n.t('ui.data.TargetSplitCard.detectedOnceThePreviewHas');
   }
 
   return (
@@ -170,58 +187,63 @@ export function TargetSplitCard({
         <Group gap={8} wrap="nowrap">
           <IconTarget size={18} aria-hidden color="var(--mantine-color-green-light-color)" />
           <Title order={3} size="h5">
-            Target &amp; split
+            {i18n.t('ui.data.TargetSplitCard.targetSplit')}
           </Title>
         </Group>
 
         <Select
-          label="Target column"
+          label={i18n.t('ui.data.TargetSplitCard.targetColumn')}
           description={
             <>
-              The column to predict; all other columns are features.
+              {i18n.t('ui.data.TargetSplitCard.theColumnToPredictAll')}
               {!readOnly && (
                 <>
                   {' '}
-                  Is it in another table?{' '}
+                  {i18n.t('ui.data.TargetSplitCard.isItInAnotherTable')}{' '}
                   {onAddJoin ? (
                     <>
-                      <Anchor component="button" type="button" size="xs" onClick={onAddJoin}>
-                        Add a join step
-                      </Anchor>{' '}
-                      to bring it in through a column both tables share, such as an id.
+                      <Trans
+                        i18nKey="ui.data.TargetSplitCard.addAJoinStepTo"
+                        components={[
+                          <Anchor component="button" type="button" size="xs" onClick={onAddJoin} />,
+                        ]}
+                      />
                     </>
                   ) : (
-                    (joinUnavailable ??
-                    'Bring it in with a “Join another table” step through a column both tables share.')
+                    (joinUnavailable ?? i18n.t('ui.data.TargetSplitCard.bringItInWithA'))
                   )}
                 </>
               )}
             </>
           }
-          placeholder="Choose a column"
+          placeholder={i18n.t('ui.data.TargetSplitCard.chooseAColumn')}
           data={data}
           value={target}
           readOnly={readOnly}
           searchable={!readOnly}
           clearable={!readOnly}
-          nothingFoundMessage="No matching column"
+          nothingFoundMessage={i18n.t('ui.data.TargetSplitCard.noMatchingColumn')}
           renderOption={renderOption}
           leftSection={target && kinds.has(target) ? <KindIcon kind={kinds.get(target)!} /> : null}
           comboboxProps={{ withinPortal: true, shadow: 'md' }}
           error={
             targetMissing
-              ? `“${target}” does not exist after the steps. Choose the target again.`
+              ? i18n.t('ui.data.TargetSplitCard.doesNotExistAfterThe', { target })
               : undefined
           }
           onChange={(next) => onSettingsChange({ ...settings, target: next })}
         />
 
-        <Input.Wrapper label="Task" labelElement="div" description={taskHint}>
+        <Input.Wrapper
+          label={i18n.t('ui.data.TargetSplitCard.task')}
+          labelElement="div"
+          description={taskHint}
+        >
           <SegmentedControl
             fullWidth
             size="xs"
             mt={6}
-            aria-label="Task"
+            aria-label={i18n.t('ui.data.TargetSplitCard.task')}
             data={TASKS}
             value={settings.task}
             readOnly={readOnly}
@@ -231,7 +253,7 @@ export function TargetSplitCard({
 
         <SimpleGrid cols={2} spacing="sm">
           <NumberInput
-            label="Validation"
+            label={i18n.t('ui.data.TargetSplitCard.validation')}
             value={draft.val}
             onChange={setShare('val')}
             min={0}
@@ -246,7 +268,7 @@ export function TargetSplitCard({
             error={errors?.val}
           />
           <NumberInput
-            label="Test"
+            label={i18n.t('ui.data.TargetSplitCard.test')}
             value={draft.test}
             onChange={setShare('test')}
             min={0}
@@ -271,8 +293,8 @@ export function TargetSplitCard({
 
         <SimpleGrid cols={2} spacing="sm">
           <NumberInput
-            label="Seed"
-            description="Same seed, same split"
+            label={i18n.t('ui.data.TargetSplitCard.seed')}
+            description={i18n.t('ui.data.TargetSplitCard.sameSeedSameSplit')}
             value={seedDraft}
             min={0}
             max={MAX_SEED}
@@ -280,7 +302,11 @@ export function TargetSplitCard({
             allowNegative={false}
             readOnly={readOnly}
             hideControls={readOnly}
-            error={seedValid(seedDraft) ? undefined : 'Enter a whole number ≥ 0.'}
+            error={
+              seedValid(seedDraft)
+                ? undefined
+                : i18n.t('ui.data.TargetSplitCard.enterAWholeNumber0')
+            }
             onChange={(raw) => {
               setSeedDraft(raw);
               if (seedValid(raw)) {
@@ -290,15 +316,15 @@ export function TargetSplitCard({
             }}
           />
           <Tooltip
-            label="Stratifying needs a classification target."
+            label={i18n.t('ui.data.TargetSplitCard.stratifyingNeedsAClassificationTarget')}
             disabled={!regression}
             multiline
             w={220}
           >
             <div className={classes.stratify}>
               <Switch
-                label="Stratify"
-                description="Same class shares in every part"
+                label={i18n.t('ui.data.TargetSplitCard.stratify')}
+                description={i18n.t('ui.data.TargetSplitCard.sameClassSharesInEvery')}
                 checked={split.stratify && !regression}
                 disabled={regression || readOnly}
                 onChange={(event) =>
@@ -343,6 +369,7 @@ export function GroupSplitField({
   readOnly,
   renderOption,
 }: GroupSplitFieldProps) {
+  useTranslation();
   const { split } = settings;
   const groupBy = split.group_by ?? null;
   const target = settings.target;
@@ -358,33 +385,35 @@ export function GroupSplitField({
   if (groupBy && groups) {
     summary = (
       <Text size="xs" c="dimmed" data-testid="group-split-summary">
-        {formatCount(groups.count)} {groups.count === 1 ? 'group' : 'groups'} (
-        {formatCount(groups.multi)} with several rows, the largest {formatCount(groups.largest)}{' '}
-        rows);{' '}
-        {groups.mixed === 0 ? 'no group is in two parts' : `${groups.mixed} groups are split`}.
-        Training / validation / test hold {groups.per_part.map(formatCount).join(' / ')} groups.
+        {i18n.t('ui.data.TargetSplitCard.withSeveralRowsTheLargest', {
+          count: formatCount(groups.count),
+          value:
+            groups.count === 1
+              ? i18n.t('ui.data.TargetSplitCard.group')
+              : i18n.t('ui.data.TargetSplitCard.groups'),
+          multi: formatCount(groups.multi),
+          largest: formatCount(groups.largest),
+          value2:
+            groups.mixed === 0
+              ? i18n.t('ui.data.TargetSplitCard.noGroupIsInTwo')
+              : i18n.t('ui.data.TargetSplitCard.groupsAreSplit', { mixed: groups.mixed }),
+          map: groups.per_part.map(formatCount).join(' / '),
+        })}
       </Text>
     );
   }
   return (
     <Stack gap={4}>
       <Select
-        label="Keep rows of a group together"
-        description={
-          <>
-            Rows with the same value (e.g. a person id, or the column of “Find near-duplicate
-            groups”) all go to the same part, so validation and test rows have no twin in training.
-            The column must exist before the split: in the data, from a combine step or from a step
-            that runs before the split.
-          </>
-        }
-        placeholder="Off: rows are split one by one"
+        label={i18n.t('ui.data.TargetSplitCard.keepRowsOfAGroup')}
+        description={<>{i18n.t('ui.data.TargetSplitCard.rowsWithTheSameValue')}</>}
+        placeholder={i18n.t('ui.data.TargetSplitCard.offRowsAreSplitOne')}
         data={data}
         value={groupBy}
         readOnly={readOnly}
         searchable={!readOnly}
         clearable={!readOnly}
-        nothingFoundMessage="No matching column"
+        nothingFoundMessage={i18n.t('ui.data.TargetSplitCard.noMatchingColumn')}
         renderOption={renderOption}
         comboboxProps={{ withinPortal: true, shadow: 'md' }}
         error={error ?? undefined}
@@ -405,10 +434,15 @@ interface SplitBarProps {
 
 /** The three parts as a bar with their shares and row counts. */
 function SplitBar({ val, test, shown }: SplitBarProps) {
+  useTranslation();
   const parts = [
-    { key: 'train', label: 'Train', share: Math.max(0, 1 - val - test) },
-    { key: 'val', label: 'Validation', share: val },
-    { key: 'test', label: 'Test', share: test },
+    {
+      key: 'train',
+      label: i18n.t('ui.data.TargetSplitCard.train'),
+      share: Math.max(0, 1 - val - test),
+    },
+    { key: 'val', label: i18n.t('ui.data.TargetSplitCard.validation'), share: val },
+    { key: 'test', label: i18n.t('ui.data.TargetSplitCard.test'), share: test },
   ];
   const counts = shown?.counts;
   const prefix = shown?.estimated ? '≈ ' : '';
@@ -429,11 +463,16 @@ function SplitBar({ val, test, shown }: SplitBarProps) {
           <Text key={part.key} size="xs" c="dimmed">
             <span className={classes.splitDot} data-part={part.key} aria-hidden />
             {part.key !== 'train' && part.share <= 0 ? (
-              `${part.label}: none`
+              i18n.t('ui.data.TargetSplitCard.none', { label: part.label })
             ) : (
               <>
                 {part.label} {shareToPercent(part.share)}&nbsp;%
-                {counts ? ` · ${prefix}${formatCount(counts[index])} rows` : ''}
+                {counts
+                  ? i18n.t('ui.data.TargetSplitCard.rows', {
+                      prefix,
+                      value: formatCount(counts[index]),
+                    })
+                  : ''}
               </>
             )}
           </Text>

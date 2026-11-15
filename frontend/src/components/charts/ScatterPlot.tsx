@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { extent, linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { timeTicks, valueAxis, type Axis } from './axes';
 import {
   ChartEmpty,
@@ -133,6 +134,7 @@ export function ScatterPlot({
   height = 320,
   width: fixedWidth,
 }: ScatterPlotProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const scheme = useChartScheme();
@@ -307,17 +309,30 @@ export function ScatterPlot({
   };
   const pointText = (i: number) => {
     const c = colorText(i);
-    return (
-      `${pointLabel ? `${pointLabel(i)}: ` : ''}${xLabel} ${fx(x[i])}, ${yLabel} ${fy(y[i])}` +
-      `${c !== null && color ? `, ${color.label} ${c}` : ''}`
-    );
+    return i18n.t('ui.components.ScatterPlot.text', {
+      point: pointLabel ? `${pointLabel(i)}: ` : '',
+      xLabel,
+      fx: fx(x[i]),
+      yLabel,
+      fy: fy(y[i]),
+      colour: c !== null && color ? `, ${color.label} ${c}` : '',
+    });
   };
   const fitText = fit
-    ? `Trend (least squares): r = ${formatCoefficient(fit.r)}, R² = ${formatCoefficient(fit.r2)}`
+    ? i18n.t('ui.components.ScatterPlot.trendLeastSquaresRR', {
+        r: formatCoefficient(fit.r),
+        r2: formatCoefficient(fit.r2),
+      })
     : null;
-  const summary =
-    `${title}. ${formatCount(n)} points, ${xLabel} on the horizontal axis, ${yLabel} on the vertical axis.` +
-    `${fitText ? ` ${fitText}, slope ${formatNumber(fit!.slope)}.` : ''}`;
+  const summary = i18n.t('ui.components.ScatterPlot.pointsOnTheHorizontalAxis', {
+    title,
+    n: formatCount(n),
+    xLabel,
+    yLabel,
+    value: fitText
+      ? i18n.t('ui.components.ScatterPlot.slope', { fitText, slope: formatNumber(fit!.slope) })
+      : '',
+  });
 
   const legend: LegendItem[] =
     color?.type === 'category'
@@ -332,7 +347,11 @@ export function ScatterPlot({
     <>
       {color?.type === 'numeric' && colorRange && (
         <GradientLegend
-          label={`Colour: ${color.label} from ${(color.format ?? formatNumber)(colorRange[0])} to ${(color.format ?? formatNumber)(colorRange[1])}`}
+          label={i18n.t('ui.components.ScatterPlot.colourFromTo', {
+            label: color.label,
+            value: (color.format ?? formatNumber)(colorRange[0]),
+            value2: (color.format ?? formatNumber)(colorRange[1]),
+          })}
           stops={[
             sequentialColor(0, scheme),
             sequentialColor(0.5, scheme),
@@ -440,7 +459,7 @@ export function ScatterPlot({
       })}
     >
       {n === 0 ? (
-        <ChartEmpty>No rows with both values</ChartEmpty>
+        <ChartEmpty>{i18n.t('ui.components.ScatterPlot.noRowsWithBothValues')}</ChartEmpty>
       ) : (
         <div ref={ref} className={classes.plot} style={{ height }}>
           {width > 0 && (
@@ -542,7 +561,7 @@ export function ScatterPlot({
             className={classes.overlay}
             role="slider"
             tabIndex={0}
-            aria-label={`${title}: use the arrow keys to read the points from left to right`}
+            aria-label={i18n.t('ui.components.ScatterPlot.useTheArrowKeysTo', { title })}
             aria-valuemin={1}
             aria-valuemax={n}
             aria-valuenow={(cursor.active ?? 0) + 1}

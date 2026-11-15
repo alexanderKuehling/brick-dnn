@@ -8,6 +8,7 @@ import { OTHER_COLOR, seriesColor } from '@/components/charts/colors';
 import { formatCount, formatDate, formatNumber } from '@/components/charts/format';
 import { Histogram } from '@/components/charts/Histogram';
 import { boxFromStats } from '@/components/charts/stats';
+import { i18n, useTranslation } from '@/i18n';
 import { valueLabel } from './sampleData';
 import { ColumnSelect, KIND_LABELS, Note } from './shared';
 import classes from './AnalysisPanel.module.css';
@@ -22,8 +23,20 @@ export interface CompareViewProps {
   onLogChange: (log: boolean) => void;
 }
 
-const BEFORE = { key: 'before', label: 'Before', color: OTHER_COLOR };
-const AFTER = { key: 'after', label: 'After', color: seriesColor(0) };
+const BEFORE = {
+  key: 'before',
+  get label() {
+    return i18n.t('ui.data.CompareView.before');
+  },
+  color: OTHER_COLOR,
+};
+const AFTER = {
+  key: 'after',
+  get label() {
+    return i18n.t('ui.data.CompareView.after');
+  },
+  color: seriesColor(0),
+};
 const TOP = 12;
 
 function change(before: number | null | undefined, after: number | null | undefined): string {
@@ -44,15 +57,16 @@ function ComparisonTable({
   rows: [string, string, string, string][];
   label: string;
 }) {
+  useTranslation();
   return (
     <Table.ScrollContainer minWidth={360} type="native">
       <Table fz="xs" verticalSpacing={3} aria-label={label} className={classes.kv}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th />
-            <Table.Th ta="right">Before</Table.Th>
-            <Table.Th ta="right">After</Table.Th>
-            <Table.Th ta="right">Change</Table.Th>
+            <Table.Th ta="right">{i18n.t('ui.data.CompareView.before')}</Table.Th>
+            <Table.Th ta="right">{i18n.t('ui.data.CompareView.after')}</Table.Th>
+            <Table.Th ta="right">{i18n.t('ui.data.CompareView.change')}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -86,6 +100,7 @@ export function CompareView({
   log,
   onLogChange,
 }: CompareViewProps) {
+  useTranslation();
   // Ask for the "before" profile whenever it is missing (also after it was dropped again).
   const request = useRef(onRequestCompare);
   useEffect(() => {
@@ -110,7 +125,7 @@ export function CompareView({
       <Group gap="sm" role="status">
         <Loader size="sm" />
         <Text size="sm" c="dimmed">
-          Profiling the data before the cleaning steps…
+          {i18n.t('ui.data.CompareView.profilingTheDataBeforeThe')}
         </Text>
       </Group>
     );
@@ -130,7 +145,7 @@ export function CompareView({
   return (
     <Stack gap="md">
       <ComparisonTable
-        label="Data before and after the steps"
+        label={i18n.t('ui.data.CompareView.dataBeforeAndAfterThe')}
         rows={[
           [
             'Rows',
@@ -166,14 +181,18 @@ export function CompareView({
       />
       {(added.length > 0 || removed.length > 0) && (
         <Stack gap={4}>
-          {added.length > 0 && <NameList label="Added" names={added} color="blue" />}
-          {removed.length > 0 && <NameList label="Removed" names={removed} color="gray" />}
+          {added.length > 0 && (
+            <NameList label={i18n.t('ui.data.CompareView.added')} names={added} color="blue" />
+          )}
+          {removed.length > 0 && (
+            <NameList label={i18n.t('ui.data.CompareView.removed')} names={removed} color="gray" />
+          )}
         </Stack>
       )}
 
       <Group gap="sm" align="flex-end" wrap="wrap">
         <ColumnSelect
-          label="Column"
+          label={i18n.t('ui.data.CompareView.column')}
           columns={columns}
           value={name}
           onChange={(value) => value && onColumnChange(value)}
@@ -182,7 +201,7 @@ export function CompareView({
         {a && b && (a.kind === 'numeric' || a.kind === 'datetime') && a.kind === b.kind && (
           <Switch
             size="xs"
-            label="Log scale (counts)"
+            label={i18n.t('ui.data.CompareView.logScaleCounts')}
             checked={log}
             onChange={(e) => onLogChange(e.currentTarget.checked)}
           />
@@ -200,24 +219,28 @@ export function CompareView({
       ) : null}
       {a && !b && (
         <Text size="sm" c="dimmed">
-          {a.name} was removed by the steps ({KIND_LABELS[a.kind].toLowerCase()},{' '}
-          {formatCount(a.missing)} missing).
+          {i18n.t('ui.data.CompareView.wasRemovedByTheSteps', {
+            name: a.name,
+            value: KIND_LABELS[a.kind].toLowerCase(),
+            missing: formatCount(a.missing),
+          })}
         </Text>
       )}
       {!a && b && (
         <Text size="sm" c="dimmed">
-          {b.name} was added by the steps ({KIND_LABELS[b.kind].toLowerCase()}).
+          {i18n.t('ui.data.CompareView.wasAddedByTheSteps', {
+            name: b.name,
+            value: KIND_LABELS[b.kind].toLowerCase(),
+          })}
         </Text>
       )}
-      <Note>
-        Before: the data after combining tables and assigning the split, before any cleaning step.
-        After: the data at the previewed step. Both from all rows.
-      </Note>
+      <Note>{i18n.t('ui.data.CompareView.beforeTheDataAfterCombining')}</Note>
     </Stack>
   );
 }
 
 function NameList({ label, names, color }: { label: string; names: string[]; color: string }) {
+  useTranslation();
   const shown = names.slice(0, 30);
   return (
     <Group gap={4} wrap="wrap">
@@ -231,7 +254,9 @@ function NameList({ label, names, color }: { label: string; names: string[]; col
       ))}
       {names.length > shown.length && (
         <Text size="xs" c="dimmed">
-          and {formatCount(names.length - shown.length)} more
+          {i18n.t('ui.data.CompareView.andMore', {
+            value: formatCount(names.length - shown.length),
+          })}
         </Text>
       )}
     </Group>
@@ -251,6 +276,7 @@ function ColumnComparison({
   rowsBefore: number;
   rowsAfter: number;
 }) {
+  useTranslation();
   const time = after.kind === 'datetime';
   const fmt = (v: number | null | undefined) =>
     typeof v !== 'number' ? '–' : time ? formatDate(v) : formatNumber(v);
@@ -323,8 +349,18 @@ function ColumnComparison({
     const x = boxFromStats(before.stats, before.count);
     const y = boxFromStats(after.stats, after.count);
     if (x && y) {
-      boxes.push({ key: 'before', label: 'Before', color: OTHER_COLOR, box: x });
-      boxes.push({ key: 'after', label: 'After', color: seriesColor(0), box: y });
+      boxes.push({
+        key: 'before',
+        label: i18n.t('ui.data.CompareView.before'),
+        color: OTHER_COLOR,
+        box: x,
+      });
+      boxes.push({
+        key: 'after',
+        label: i18n.t('ui.data.CompareView.after'),
+        color: seriesColor(0),
+        box: y,
+      });
     }
   }
 
@@ -346,7 +382,11 @@ function ColumnComparison({
       values: [count(before, key), count(after, key)],
     }));
     if (before.missing || after.missing) {
-      rows.push({ key: '__missing__', label: 'Missing', values: [before.missing, after.missing] });
+      rows.push({
+        key: '__missing__',
+        label: i18n.t('ui.data.CompareView.missing'),
+        values: [before.missing, after.missing],
+      });
     }
     return rows;
   }, [before, after, kindChanged]);
@@ -356,11 +396,14 @@ function ColumnComparison({
     <Stack gap="md">
       {histograms && (
         <Histogram
-          title={`${after.name} before and after`}
+          title={i18n.t('ui.data.CompareView.beforeAndAfter', { name: after.name })}
           subtitle={
             histograms.exact
-              ? `Rows per bin: before ${formatCount(rowsBefore)}, after ${formatCount(rowsAfter)} rows.`
-              : 'Rows per bin on shared bins (counts spread evenly within the original bins, so heights are estimates).'
+              ? i18n.t('ui.data.CompareView.rowsPerBinBeforeAfter', {
+                  rowsBefore: formatCount(rowsBefore),
+                  rowsAfter: formatCount(rowsAfter),
+                })
+              : i18n.t('ui.data.CompareView.rowsPerBinOnShared')
           }
           edges={histograms.edges}
           series={histograms.series}
@@ -373,23 +416,26 @@ function ColumnComparison({
       )}
       {boxes.length === 2 && (
         <BoxPlot
-          title="Box plots"
-          subtitle="Quartiles from all rows; whiskers at most 1.5 × IQR beyond the box."
+          title={i18n.t('ui.data.CompareView.boxPlots')}
+          subtitle={i18n.t('ui.data.CompareView.quartilesFromAllRowsWhiskers')}
           groups={boxes}
           time={time}
         />
       )}
       {bars && bars.length > 0 && (
         <BarChart
-          title={`${after.name} before and after`}
-          subtitle="Rows per value (the most frequent values)."
+          title={i18n.t('ui.data.CompareView.beforeAndAfter', { name: after.name })}
+          subtitle={i18n.t('ui.data.CompareView.rowsPerValueTheMost')}
           rows={bars}
           series={barSeries}
           layout="grouped"
           unit="rows"
         />
       )}
-      <ComparisonTable label={`${after.name} before and after`} rows={statRows} />
+      <ComparisonTable
+        label={i18n.t('ui.data.CompareView.beforeAndAfter', { name: after.name })}
+        rows={statRows}
+      />
     </Stack>
   );
 }

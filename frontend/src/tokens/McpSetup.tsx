@@ -1,5 +1,6 @@
 import { Code, Stack, Tabs, Text } from '@mantine/core';
 import { apiBaseUrl } from '@/api';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import {
   claudeCodeCommand,
   curlCommand,
@@ -20,6 +21,7 @@ interface McpSetupProps {
 
 /** The MCP server URL and how to add it to an assistant (or use a token in a script). */
 export function McpSetup({ token }: McpSetupProps) {
+  useTranslation();
   const apiUrl = apiBaseUrl();
   const url = mcpUrl(apiUrl);
   const secret = token || TOKEN_PLACEHOLDER;
@@ -28,28 +30,30 @@ export function McpSetup({ token }: McpSetupProps) {
     <Stack gap="md">
       <div>
         <Text size="sm" fw={500} mb={6}>
-          MCP server URL
+          {i18n.t('ui.tokens.McpSetup.mcpServerUrl')}
         </Text>
         <Snippet value={url} copyLabel="Copy MCP server URL" />
       </div>
 
       <Tabs defaultValue={token ? 'claude-code' : 'claude-app'}>
         <Tabs.List>
-          {!token && <Tabs.Tab value="claude-app">Claude app</Tabs.Tab>}
-          <Tabs.Tab value="claude-code">Claude Code</Tabs.Tab>
-          <Tabs.Tab value="json">Other clients</Tabs.Tab>
+          {!token && (
+            <Tabs.Tab value="claude-app">{i18n.t('ui.tokens.McpSetup.claudeApp')}</Tabs.Tab>
+          )}
+          <Tabs.Tab value="claude-code">{i18n.t('ui.tokens.McpSetup.claudeCode')}</Tabs.Tab>
+          <Tabs.Tab value="json">{i18n.t('ui.tokens.McpSetup.otherClients')}</Tabs.Tab>
         </Tabs.List>
         {!token && (
           <Tabs.Panel value="claude-app" pt="sm">
             <Text size="sm">
-              In Claude: <strong>Settings → Connectors → Add custom connector</strong>, and paste
-              the MCP server URL. Claude then asks you to sign in to Brick DNN and allow access — no
-              token needed.
+              <Trans
+                i18nKey="ui.tokens.McpSetup.inClaudeSettingsConnectorsAdd"
+                components={[<strong />]}
+              />
             </Text>
             {isLocalUrl(url) && (
               <Text size="xs" c="dimmed" mt="xs">
-                Claude connects to the server over the internet, so this does not work while Brick
-                DNN only runs on your own computer. Use Claude Code there.
+                {i18n.t('ui.tokens.McpSetup.claudeConnectsToTheServer')}
               </Text>
             )}
           </Tabs.Panel>
@@ -58,7 +62,7 @@ export function McpSetup({ token }: McpSetupProps) {
           {token ? (
             <>
               <Text size="sm" mb={6}>
-                Run this in a terminal:
+                {i18n.t('ui.tokens.McpSetup.runThisInATerminal')}
               </Text>
               <Snippet value={claudeCodeCommand(url, secret)} copyLabel="Copy command" />
             </>
@@ -66,14 +70,13 @@ export function McpSetup({ token }: McpSetupProps) {
             <Stack gap="sm">
               <div>
                 <Text size="sm" mb={6}>
-                  Run this in a terminal, then type <Code>/mcp</Code> in Claude Code and sign in to
-                  Brick DNN in the browser:
+                  <Trans i18nKey="ui.tokens.McpSetup.runThisInATerminal2" components={[<Code />]} />
                 </Text>
                 <Snippet value={claudeCodeCommand(url)} copyLabel="Copy command" />
               </div>
               <div>
                 <Text size="sm" mb={6}>
-                  Or use an API token instead of signing in:
+                  {i18n.t('ui.tokens.McpSetup.orUseAnApiToken')}
                 </Text>
                 <Snippet
                   value={claudeCodeCommand(url, secret)}
@@ -85,9 +88,8 @@ export function McpSetup({ token }: McpSetupProps) {
         </Tabs.Panel>
         <Tabs.Panel value="json" pt="sm">
           <Text size="sm" mb={6}>
-            {!token && 'Clients that can sign in with OAuth only need the MCP server URL. '}
-            For clients that support remote MCP servers with headers, use a token. Where this goes
-            depends on the client; see its documentation.
+            {!token && i18n.t('ui.tokens.McpSetup.clientsThatCanSignIn')}
+            {i18n.t('ui.tokens.McpSetup.forClientsThatSupportRemote')}
           </Text>
           <Snippet value={mcpJsonConfig(url, secret)} copyLabel="Copy configuration" />
         </Tabs.Panel>
@@ -95,15 +97,18 @@ export function McpSetup({ token }: McpSetupProps) {
 
       <div>
         <Text size="sm" mb={6}>
-          Your own scripts can use a token with the REST API, too:
+          {i18n.t('ui.tokens.McpSetup.yourOwnScriptsCanUse')}
         </Text>
         <Snippet value={curlCommand(apiUrl, secret)} copyLabel="Copy curl command" />
       </div>
 
       {!token && (
         <Text size="xs" c="dimmed">
-          Replace <Code>{TOKEN_PLACEHOLDER}</Code> with one of your tokens. A token is only shown
-          once, right after you create it.
+          <Trans
+            i18nKey="ui.tokens.McpSetup.replaceWithOneOfYour"
+            values={{ TOKEN_PLACEHOLDER }}
+            components={[<Code />]}
+          />
         </Text>
       )}
     </Stack>

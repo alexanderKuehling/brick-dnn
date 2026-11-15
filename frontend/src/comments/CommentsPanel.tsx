@@ -13,6 +13,7 @@ import {
 } from '@mantine/core';
 import { useStoreState } from '@/collab/context';
 import type { CollabStore } from '@/collab/store';
+import { i18n, useTranslation } from '@/i18n';
 import { CommentComposer } from './CommentComposer';
 import { CommentThread } from './CommentThread';
 import { buildThreads, filterThreads, type CommentViewer, type ThreadFilter } from './threads';
@@ -26,9 +27,15 @@ export interface CommentsPanelProps {
 }
 
 const EMPTY_TEXT: Record<ThreadFilter, string> = {
-  all: 'No comments yet.',
-  open: 'No open comments.',
-  resolved: 'No resolved comments.',
+  get all() {
+    return i18n.t('ui.comments.CommentsPanel.noCommentsYet');
+  },
+  get open() {
+    return i18n.t('ui.comments.CommentsPanel.noOpenComments');
+  },
+  get resolved() {
+    return i18n.t('ui.comments.CommentsPanel.noResolvedComments');
+  },
 };
 
 /**
@@ -36,6 +43,7 @@ const EMPTY_TEXT: Record<ThreadFilter, string> = {
  * state (and layer), and a field for a new comment. Everyone with access may comment.
  */
 export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelProps) {
+  useTranslation();
   const state = useStoreState(store);
   const { comments, loaded, error, layer } = state;
   const [filter, setFilter] = useState<ThreadFilter>('open');
@@ -49,7 +57,8 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
     open: inLayer.filter((thread) => !thread.root.resolved).length,
     resolved: inLayer.filter((thread) => thread.root.resolved).length,
   };
-  const layerLabel = layer === null ? null : (layerName(layer) ?? 'Deleted layer');
+  const layerLabel =
+    layer === null ? null : (layerName(layer) ?? i18n.t('ui.comments.CommentsPanel.deletedLayer'));
 
   const segment = (value: ThreadFilter, label: string) => ({
     value,
@@ -68,7 +77,7 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
             leftSection={<IconStack2 size={14} />}
             style={{ minWidth: 0 }}
           >
-            On {layerLabel}
+            {i18n.t('ui.comments.CommentsPanel.on', { layerLabel })}
           </Badge>
           <Button
             variant="subtle"
@@ -76,15 +85,23 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
             rightSection={<IconX size={14} />}
             onClick={() => store.setLayer(null)}
           >
-            All comments
+            {i18n.t('ui.comments.CommentsPanel.allComments')}
           </Button>
         </Group>
       )}
 
       <CommentComposer
         key={layer ?? ''}
-        label={layerLabel === null ? 'Comment on the network' : `Comment on ${layerLabel}`}
-        placeholder={layerLabel === null ? 'Comment on the network…' : `Comment on ${layerLabel}…`}
+        label={
+          layerLabel === null
+            ? i18n.t('ui.comments.CommentsPanel.commentOnTheNetwork')
+            : i18n.t('ui.comments.CommentsPanel.commentOn', { layerLabel })
+        }
+        placeholder={
+          layerLabel === null
+            ? i18n.t('ui.comments.CommentsPanel.commentOnTheNetwork2')
+            : i18n.t('ui.comments.CommentsPanel.commentOn2', { layerLabel })
+        }
         submitLabel="Comment"
         onSubmit={async (text) => {
           await store.add(text, layer);
@@ -93,7 +110,7 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
       />
       {layer === null && (
         <Text size="xs" c="dimmed" mt={-6}>
-          To comment on a layer, select it and use “Add comment” in its properties.
+          {i18n.t('ui.comments.CommentsPanel.toCommentOnALayer')}
         </Text>
       )}
 
@@ -103,14 +120,18 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
         value={filter}
         onChange={(value) => setFilter(value as ThreadFilter)}
         data={[segment('all', 'All'), segment('open', 'Open'), segment('resolved', 'Resolved')]}
-        aria-label="Show comments"
+        aria-label={i18n.t('ui.comments.CommentsPanel.showComments')}
       />
 
       {error && !loaded && (
-        <Alert color="red" variant="light" title="Could not load the comments">
+        <Alert
+          color="red"
+          variant="light"
+          title={i18n.t('ui.comments.CommentsPanel.couldNotLoadTheComments')}
+        >
           {error}{' '}
           <Button variant="subtle" size="compact-xs" onClick={() => void store.load()}>
-            Try again
+            {i18n.t('ui.comments.CommentsPanel.tryAgain')}
           </Button>
         </Alert>
       )}

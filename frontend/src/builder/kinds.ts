@@ -14,6 +14,7 @@ import type {
   NodeAnalysis,
   OutputKind,
 } from '@/api/types';
+import { i18n } from '@/i18n';
 
 /** What a brick takes. Catalogues of older servers only know one tensor input. */
 export function inputSlots(spec: LayerSpec | undefined): InputSlot[] {
@@ -27,7 +28,13 @@ export function inputSlots(spec: LayerSpec | undefined): InputSlot[] {
     return [];
   }
   return [
-    { name: 'input', label: 'Input', kind: 'tensor', min: spec.min_inputs, max: spec.max_inputs },
+    {
+      name: 'input',
+      label: i18n.t('ui.builder.kinds.input'),
+      kind: 'tensor',
+      min: spec.min_inputs,
+      max: spec.max_inputs,
+    },
   ];
 }
 
@@ -57,11 +64,9 @@ export function isEnsemble(type: string | null | undefined): boolean {
 }
 
 /** What a connection of `kind` carries, in words: "data", "a kernel", "a model". */
-const KIND_WORDS: Record<OutputKind, string> = {
-  tensor: 'data',
-  kernel: 'a kernel',
-  estimator: 'a model',
-};
+function kindWord(kind: OutputKind): string {
+  return i18n.t(`builder.connect.kinds.${kind}`);
+}
 
 /** Handle id of a slot: only bricks with several slots name their handles. */
 export function slotHandle(slots: InputSlot[], slot: InputSlot): string | undefined {
@@ -98,27 +103,27 @@ export function connectionProblem(
   }
   const slots = inputSlots(target);
   if (slots.length === 0) {
-    return `${target.label} takes no inputs.`;
+    return i18n.t('builder.connect.noInputs', { target: target.label });
   }
   const kind = outputKind(source);
   const slot = slotFor(slots, kind, slots.length > 1 ? targetHandle : null);
   if (!slot) {
     if (kind === 'estimator') {
       // A classical model ends the network, unless an ensemble combines it.
-      return `Nothing can follow ${source.label} except an ensemble (voting or stacking).`;
+      return i18n.t('builder.connect.onlyEnsemble', { source: source.label });
     }
     if (kind === 'kernel') {
-      return `${target.label} cannot take a kernel.`;
+      return i18n.t('builder.connect.noKernel', { target: target.label });
     }
     return slots.every((s) => s.kind === 'estimator')
-      ? `${target.label} only takes classical models: connect the Input to the models.`
-      : `${target.label} only takes kernels.`;
+      ? i18n.t('builder.connect.onlyModels', { target: target.label })
+      : i18n.t('builder.connect.onlyKernels', { target: target.label });
   }
   if (slot.kind !== kind) {
-    const input = `The ${slot.label.toLowerCase()} input of ${target.label}`;
+    const values = { slot: slot.label.toLowerCase(), target: target.label };
     return slot.kind === 'tensor'
-      ? `${input} takes data, not ${KIND_WORDS[kind]}.`
-      : `${input} only takes ${KIND_WORDS[slot.kind]}.`;
+      ? i18n.t('builder.connect.dataNot', { ...values, kind: kindWord(kind) })
+      : i18n.t('builder.connect.onlyKind', { ...values, kind: kindWord(slot.kind) });
   }
   return null;
 }
@@ -179,12 +184,22 @@ export function isFeatureEdge(
 
 /** Short names of scikit-learn's kernels for the canvas. */
 const SHORT_KERNEL_NAMES: Record<string, string> = {
-  ConstantKernel: 'Constant',
-  WhiteKernel: 'White',
-  ExpSineSquared: 'Periodic',
+  get ConstantKernel() {
+    return i18n.t('ui.builder.kinds.constant');
+  },
+  get WhiteKernel() {
+    return i18n.t('ui.builder.kinds.white');
+  },
+  get ExpSineSquared() {
+    return i18n.t('ui.builder.kinds.periodic');
+  },
   RationalQuadratic: 'RQ',
-  DotProduct: 'Dot',
-  Matern: 'Matérn',
+  get DotProduct() {
+    return i18n.t('ui.builder.kinds.dot');
+  },
+  get Matern() {
+    return i18n.t('ui.builder.kinds.matRn');
+  },
 };
 
 /**

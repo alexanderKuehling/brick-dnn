@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+import { i18n, LANGUAGE_STORAGE_KEY } from './src/i18n';
 
 const { getComputedStyle } = window;
 window.getComputedStyle = (elt) => getComputedStyle(elt);
@@ -33,3 +34,15 @@ if (!document.fonts) {
     value: { addEventListener() {}, removeEventListener() {} },
   });
 }
+
+// Tests run in English (jsdom's browser language) unless they switch; each starts over.
+afterEach(async () => {
+  try {
+    localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+  } catch {
+    // No storage in this test.
+  }
+  if (i18n.language !== 'en') {
+    await i18n.changeLanguage('en');
+  }
+});

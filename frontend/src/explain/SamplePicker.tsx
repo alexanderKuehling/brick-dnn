@@ -24,6 +24,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import { formatValue } from './format';
 import { canvasPixels, loadImage, type ImageFormat } from './pixels';
 import type { ListedSample, PickedSample, SamplesAnswer } from './types';
@@ -61,6 +62,7 @@ export function ImageSamplePicker({
   onPick,
   format,
 }: PickerProps & { format: ImageFormat | null }) {
+  useTranslation();
   const [drawing, setDrawing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -73,7 +75,7 @@ export function ImageSamplePicker({
       const image = await loadImage(file);
       const pixels = canvasPixels(image, format);
       if (!pixels) {
-        throw new Error('This browser cannot read images.');
+        throw new Error(i18n.t('ui.explain.SamplePicker.thisBrowserCannotReadImages'));
       }
       onPick({ kind: 'input', input: pixels, scale: 'raw', label: file.name });
     } catch (exc) {
@@ -85,7 +87,7 @@ export function ImageSamplePicker({
     <Stack gap="xs">
       <Group justify="space-between" gap="xs">
         <Text size="sm" fw={600}>
-          Pick an image
+          {i18n.t('ui.explain.SamplePicker.pickAnImage')}
         </Text>
         {format && (
           <Group gap={6}>
@@ -95,7 +97,7 @@ export function ImageSamplePicker({
               leftSection={<IconBrush size={14} />}
               onClick={() => setDrawing((open) => !open)}
             >
-              Draw
+              {i18n.t('ui.explain.SamplePicker.draw')}
             </Button>
             <FileButton onChange={(file) => void upload(file)} accept="image/*">
               {(props) => (
@@ -105,7 +107,7 @@ export function ImageSamplePicker({
                   leftSection={<IconUpload size={14} />}
                   {...props}
                 >
-                  Upload
+                  {i18n.t('ui.explain.SamplePicker.upload')}
                 </Button>
               )}
             </FileButton>
@@ -137,10 +139,11 @@ export function ImageSamplePicker({
             {samples.samples.map((sample) => (
               <Tooltip
                 key={sample.index}
-                label={`True: ${sample.label} · model: ${sample.predicted} (${formatValue(
-                  (sample.probability ?? 0) * 100,
-                  2
-                )} %)`}
+                label={i18n.t('ui.explain.SamplePicker.trueModel', {
+                  label: sample.label,
+                  predicted: sample.predicted,
+                  value: formatValue((sample.probability ?? 0) * 100, 2),
+                })}
               >
                 <UnstyledButton
                   className={classes.thumb}
@@ -149,7 +152,11 @@ export function ImageSamplePicker({
                   onClick={() =>
                     onPick({ kind: 'validation', index: sample.index, label: sample.label })
                   }
-                  aria-label={`Sample ${sample.index}: ${sample.label}, predicted ${sample.predicted}`}
+                  aria-label={i18n.t('ui.explain.SamplePicker.samplePredicted', {
+                    index: sample.index,
+                    label: sample.label,
+                    predicted: sample.predicted,
+                  })}
                 >
                   <img src={sample.png} alt="" className={classes.pixelated} />
                   <Group gap={2} wrap="nowrap" justify="center">
@@ -163,10 +170,17 @@ export function ImageSamplePicker({
             ))}
           </div>
           <Text size="xs" c="dimmed">
-            {samples.source === 'training'
-              ? 'Training images (the model learned from them: the run held out no others)'
-              : `${samples.source === 'test' ? 'Test' : 'Validation'} images the model did not train on`}
-            , with its guess (✓ right, ✗ wrong). The last ones are mistakes: interesting to explain.
+            {i18n.t('ui.explain.SamplePicker.withItsGuessRightWrong', {
+              value:
+                samples.source === 'training'
+                  ? i18n.t('ui.explain.SamplePicker.trainingImagesTheModelLearned')
+                  : i18n.t('ui.explain.SamplePicker.imagesTheModelDidNot', {
+                      value:
+                        samples.source === 'test'
+                          ? i18n.t('ui.explain.SamplePicker.test')
+                          : i18n.t('ui.explain.SamplePicker.validation'),
+                    }),
+            })}
           </Text>
         </>
       )}
@@ -182,6 +196,7 @@ export function DrawPad({
   format: ImageFormat;
   onUse: (pixels: number[][][]) => void;
 }) {
+  useTranslation();
   const canvas = useRef<HTMLCanvasElement>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
   const size = 196;
@@ -227,7 +242,7 @@ export function DrawPad({
           width={size}
           height={size}
           className={classes.drawPad}
-          aria-label="Drawing pad"
+          aria-label={i18n.t('ui.explain.SamplePicker.drawingPad')}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture(event.pointerId);
             last.current = null;
@@ -244,8 +259,10 @@ export function DrawPad({
         />
         <Stack gap={6}>
           <Text size="xs" c="dimmed" maw={180}>
-            Draw large and centred, like the digits of MNIST. It is scaled down to {format.width}×
-            {format.height} pixels.
+            {i18n.t('ui.explain.SamplePicker.drawLargeAndCentredLike', {
+              width: format.width,
+              height: format.height,
+            })}
           </Text>
           <Group gap={6}>
             <Button
@@ -257,7 +274,7 @@ export function DrawPad({
                 }
               }}
             >
-              Explain it
+              {i18n.t('ui.explain.SamplePicker.explainIt')}
             </Button>
             <Button
               size="compact-sm"
@@ -265,7 +282,7 @@ export function DrawPad({
               leftSection={<IconEraser size={14} />}
               onClick={clear}
             >
-              Clear
+              {i18n.t('ui.explain.SamplePicker.clear')}
             </Button>
           </Group>
         </Stack>
@@ -275,13 +292,20 @@ export function DrawPad({
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  validation: 'Validation',
-  test: 'Test',
-  training: 'Training',
+  get validation() {
+    return i18n.t('ui.explain.SamplePicker.validation');
+  },
+  get test() {
+    return i18n.t('ui.explain.SamplePicker.test');
+  },
+  get training() {
+    return i18n.t('ui.explain.SamplePicker.training');
+  },
 };
 
 /** Validation rows (test or training rows of a run without them; click one), or own values. */
 export function TabularSamplePicker({ samples, loading, error, picked, onPick }: PickerProps) {
+  useTranslation();
   const [editing, setEditing] = useState(false);
   const columns = samples?.columns ?? [];
   const selected = samples?.samples.find((sample) => isPicked(picked, sample));
@@ -300,7 +324,7 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
     <Stack gap="xs">
       <Group justify="space-between" gap="xs">
         <Text size="sm" fw={600}>
-          Pick a row
+          {i18n.t('ui.explain.SamplePicker.pickARow')}
         </Text>
         {samples && (
           <Button
@@ -309,7 +333,7 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
             leftSection={<IconPencil size={14} />}
             onClick={startEditing}
           >
-            Your own values
+            {i18n.t('ui.explain.SamplePicker.yourOwnValues')}
           </Button>
         )}
       </Group>
@@ -338,10 +362,10 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
                 setEditing(false);
               }}
             >
-              Explain this row
+              {i18n.t('ui.explain.SamplePicker.explainThisRow')}
             </Button>
             <Button size="compact-sm" variant="default" onClick={() => setEditing(false)}>
-              Cancel
+              {i18n.t('ui.explain.SamplePicker.cancel')}
             </Button>
           </Group>
         </Paper>
@@ -368,8 +392,8 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
                 {columns.map((column) => (
                   <Table.Th key={column}>{column}</Table.Th>
                 ))}
-                <Table.Th>{samples.target ?? 'target'}</Table.Th>
-                <Table.Th>model</Table.Th>
+                <Table.Th>{samples.target ?? i18n.t('ui.explain.SamplePicker.target')}</Table.Th>
+                <Table.Th>{i18n.t('ui.explain.SamplePicker.model')}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -410,7 +434,7 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
       )}
       {picked?.kind === 'input' && (
         <Badge variant="light" color="grape">
-          Explaining {picked.label}
+          {i18n.t('ui.explain.SamplePicker.explaining', { label: picked.label })}
         </Badge>
       )}
     </Stack>

@@ -2,7 +2,7 @@ import { render, screen, userEvent, waitFor } from '@test-utils';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, vi } from 'vitest';
 import { api, ApiError } from '@/api';
-import { ForgotPasswordPage, RESET_UNAVAILABLE } from './ForgotPasswordPage';
+import { ForgotPasswordPage } from './ForgotPasswordPage';
 import { ResetPasswordPage } from './ResetPasswordPage';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -61,7 +61,9 @@ describe('forgot password', () => {
   test('says so when the server sends no e-mail', async () => {
     vi.mocked(api.passwordReset.available).mockResolvedValue({ available: false });
     renderAt('/forgot-password');
-    expect(await screen.findByText(RESET_UNAVAILABLE)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Password reset is not available on this server/)
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send me a link' })).not.toBeInTheDocument();
   });
 

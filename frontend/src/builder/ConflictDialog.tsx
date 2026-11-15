@@ -1,5 +1,6 @@
 import { Button, Flex, List, Modal, Text } from '@mantine/core';
 import type { Project } from '@/api';
+import { Trans, useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 
 export type ConflictChoice = 'theirs' | 'mine' | 'copy';
@@ -13,25 +14,34 @@ interface ConflictDialogProps {
 
 /** A save found that someone else changed the network in the meantime. */
 export function ConflictDialog({ project, onChoose, onClose }: ConflictDialogProps) {
-  const who = project?.updated_by ?? 'Someone';
+  const { t } = useTranslation();
+  const who = project?.updated_by ?? t('builder.page.someone');
   return (
-    <Modal opened={project !== null} onClose={onClose} title="This network was changed" size="lg">
-      <Text>{who} changed this network since you opened it.</Text>
+    <Modal
+      opened={project !== null}
+      onClose={onClose}
+      title={t('builder.conflict.title')}
+      size="lg"
+    >
+      <Text>{t('builder.conflict.changed', { user: who })}</Text>
       {project && (
         <Text size="sm" c="dimmed" mt={4}>
-          Their version: “{project.name}”, {project.num_layers} layers, saved{' '}
-          {formatDate(project.updated_at)}.
+          {t('builder.conflict.theirs', {
+            name: project.name,
+            count: project.num_layers,
+            date: formatDate(project.updated_at),
+          })}
         </Text>
       )}
       <List size="sm" mt="md" spacing={6}>
         <List.Item>
-          <b>Load their version</b> replaces the canvas. Your changes are lost.
+          <Trans i18nKey="builder.conflict.loadTheirsHint" components={{ b: <b /> }} />
         </List.Item>
         <List.Item>
-          <b>Keep mine</b> saves your version over theirs.
+          <Trans i18nKey="builder.conflict.keepMineHint" components={{ b: <b /> }} />
         </List.Item>
         <List.Item>
-          <b>Save mine as a copy</b> keeps both: yours becomes a new network.
+          <Trans i18nKey="builder.conflict.copyHint" components={{ b: <b /> }} />
         </List.Item>
       </List>
       <Flex
@@ -42,12 +52,12 @@ export function ConflictDialog({ project, onChoose, onClose }: ConflictDialogPro
         wrap="wrap"
       >
         <Button variant="default" onClick={() => onChoose('theirs')}>
-          Load their version
+          {t('builder.conflict.loadTheirs')}
         </Button>
         <Button variant="default" onClick={() => onChoose('copy')}>
-          Save mine as a copy
+          {t('builder.conflict.copy')}
         </Button>
-        <Button onClick={() => onChoose('mine')}>Keep mine</Button>
+        <Button onClick={() => onChoose('mine')}>{t('builder.conflict.keepMine')}</Button>
       </Flex>
     </Modal>
   );

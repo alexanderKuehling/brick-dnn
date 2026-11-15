@@ -1,13 +1,11 @@
 import { render as testingLibraryRender } from '@testing-library/react';
-import { MantineProvider } from '@mantine/core';
-import { theme } from '../src/theme';
+import { LocalizedMantineProvider } from '../src/i18n/mantine';
 
+/** Mantine with the theme of the app in the current language (English unless a test switches). */
 export function render(ui: React.ReactNode) {
   return testingLibraryRender(ui, {
     wrapper: ({ children }: { children: React.ReactNode }) => (
-      <MantineProvider theme={theme} env="test">
-        {children}
-      </MantineProvider>
+      <LocalizedMantineProvider env="test">{children}</LocalizedMantineProvider>
     ),
   });
 }

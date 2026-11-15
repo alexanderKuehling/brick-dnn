@@ -3,6 +3,7 @@ import { IconMessagePlus } from '@tabler/icons-react';
 import { Anchor, Button, Divider, Stack } from '@mantine/core';
 import { useCollab, useCollabStore } from '@/collab/context';
 import type { CollabState } from '@/collab/store';
+import { i18n, useTranslation } from '@/i18n';
 import { CommentComposer } from './CommentComposer';
 import { CommentThread } from './CommentThread';
 import { buildThreads, filterThreads } from './threads';
@@ -14,6 +15,7 @@ const whole = (state: CollabState) => state;
  * outside the builder or for networks that are not saved. Viewers may comment too.
  */
 export function LayerComments({ nodeId }: { nodeId: string }) {
+  useTranslation();
   const store = useCollabStore();
   const state = useCollab<CollabState | null>(whole, null);
   const [composing, setComposing] = useState(false);
@@ -32,7 +34,7 @@ export function LayerComments({ nodeId }: { nodeId: string }) {
 
   return (
     <Stack gap="xs">
-      <Divider label="Comments" labelPosition="left" />
+      <Divider label={i18n.t('ui.comments.LayerComments.comments')} labelPosition="left" />
       {open.map((thread) => (
         <CommentThread key={thread.root.id} thread={thread} viewer={viewer} store={store} />
       ))}
@@ -44,14 +46,18 @@ export function LayerComments({ nodeId }: { nodeId: string }) {
           ta="left"
           onClick={() => store.openPanel('comments', nodeId)}
         >
-          {resolved === 1 ? '1 resolved comment' : `${resolved} resolved comments`}: show in the
-          comments panel
+          {i18n.t('ui.comments.LayerComments.showInTheCommentsPanel', {
+            value:
+              resolved === 1
+                ? i18n.t('ui.comments.LayerComments.text1ResolvedComment')
+                : i18n.t('ui.comments.LayerComments.resolvedComments', { resolved }),
+          })}
         </Anchor>
       )}
       {composing ? (
         <CommentComposer
-          label="Comment on this layer"
-          placeholder="Comment on this layer…"
+          label={i18n.t('ui.comments.LayerComments.commentOnThisLayer')}
+          placeholder={i18n.t('ui.comments.LayerComments.commentOnThisLayer2')}
           submitLabel="Comment"
           autoFocus
           onSubmit={async (text) => {
@@ -68,7 +74,7 @@ export function LayerComments({ nodeId }: { nodeId: string }) {
           onClick={() => setComposing(true)}
           style={{ alignSelf: 'flex-start' }}
         >
-          Add comment
+          {i18n.t('ui.comments.LayerComments.addComment')}
         </Button>
       )}
     </Stack>

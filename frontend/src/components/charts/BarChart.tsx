@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { formatPercentTick, linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { valueAxis } from './axes';
 import { ChartEmpty, ChartFrame, ChartTooltip, TooltipRow, type LegendItem } from './ChartFrame';
 import { OTHER_COLOR, seriesColor } from './colors';
@@ -52,7 +53,15 @@ export interface BarChartProps {
 }
 
 const MARGIN = { top: 4, right: 8, bottom: 22 };
-const ONE_SERIES: BarSeries[] = [{ key: 'value', label: 'Value', color: seriesColor(0) }];
+const ONE_SERIES: BarSeries[] = [
+  {
+    key: 'value',
+    get label() {
+      return i18n.t('ui.components.BarChart.value');
+    },
+    color: seriesColor(0),
+  },
+];
 
 /**
  * Horizontal bars for categories (long labels fit, many rows stay readable): one series, or
@@ -77,6 +86,7 @@ export function BarChart({
   unit = '',
   width: fixedWidth,
 }: BarChartProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const cursor = useChartCursor(rows.length, {
@@ -154,7 +164,17 @@ export function BarChart({
       .slice(0, 5)
       .map((_, i) => rowText(i))
       .join('; ');
-    return `${title}. ${rows.length} ${rows.length === 1 ? 'bar' : 'bars'}${unit ? ` (${unit})` : ''}. ${top}${rows.length > 5 ? '; …' : ''}.`;
+    return i18n.t('ui.components.BarChart.text', {
+      title,
+      length: rows.length,
+      value:
+        rows.length === 1
+          ? i18n.t('ui.components.BarChart.bar')
+          : i18n.t('ui.components.BarChart.bars'),
+      value2: unit ? ` (${unit})` : '',
+      top,
+      value3: rows.length > 5 ? '; …' : '',
+    });
   };
 
   const pick = (clientY: number, target: HTMLElement) => {
@@ -177,7 +197,7 @@ export function BarChart({
         head: [
           'Category',
           ...(series.length > 1 ? series.map((s) => s.label) : [unit ? capitalize(unit) : 'Value']),
-          ...(stacked ? ['Total'] : []),
+          ...(stacked ? [i18n.t('ui.components.BarChart.total')] : []),
         ],
         rows: rows.map((row) => [
           row.label,
@@ -315,7 +335,13 @@ export function BarChart({
             role="slider"
             tabIndex={0}
             aria-orientation="vertical"
-            aria-label={`${title}: use the arrow keys to read the bars${onSelect && selectHint ? `, Enter to ${selectHint}` : ''}`}
+            aria-label={i18n.t('ui.components.BarChart.useTheArrowKeysTo', {
+              title,
+              value:
+                onSelect && selectHint
+                  ? i18n.t('ui.components.BarChart.enterTo', { selectHint })
+                  : '',
+            })}
             aria-valuemin={1}
             aria-valuemax={rows.length}
             aria-valuenow={(active ?? 0) + 1}

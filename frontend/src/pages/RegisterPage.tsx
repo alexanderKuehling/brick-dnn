@@ -12,11 +12,13 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useAuth } from '@/auth/AuthContext';
+import { Trans, useTranslation } from '@/i18n';
 import { useLegalInfo } from '@/legal/useLegalInfo';
 import { AuthLayout } from './AuthLayout';
 import type { ReturnTo } from './LoginPage';
 
 export function RegisterPage() {
+  const { t } = useTranslation();
   const { user, register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,7 +44,7 @@ export function RegisterPage() {
       await register(username.trim(), email.trim(), password, termsRequired && accepted);
       navigate(from, { replace: true, state: returnState });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed.');
+      setError(err instanceof Error ? err.message : t('auth.register.failed'));
     } finally {
       setBusy(false);
     }
@@ -50,21 +52,20 @@ export function RegisterPage() {
 
   return (
     <AuthLayout
-      title="Create an account"
+      title={t('auth.register.title')}
       subtitle={
-        <>
-          Already registered?{' '}
-          <Anchor component={Link} to="/login" state={{ from, returnState }} size="sm">
-            Log in
-          </Anchor>
-        </>
+        <Trans
+          i18nKey="auth.register.already"
+          components={{
+            anchor: <Anchor component={Link} to="/login" state={{ from, returnState }} size="sm" />,
+          }}
+        />
       }
     >
       <form onSubmit={onSubmit}>
         <Stack>
           <Text size="sm" c="dimmed">
-            An account lets you save networks on this server. Building and exporting code works
-            without one.
+            {t('auth.register.intro')}
           </Text>
           {error && (
             <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -72,15 +73,15 @@ export function RegisterPage() {
             </Alert>
           )}
           <TextInput
-            label="Username"
+            label={t('auth.username')}
             autoComplete="username"
             required
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
           />
           <TextInput
-            label="Email"
-            description="Other people can invite you to their networks with it."
+            label={t('auth.email')}
+            description={t('auth.register.emailHint')}
             type="email"
             autoComplete="email"
             required
@@ -88,8 +89,8 @@ export function RegisterPage() {
             onChange={(e) => setEmail(e.currentTarget.value)}
           />
           <PasswordInput
-            label="Password"
-            description="At least 8 characters, not too common."
+            label={t('auth.password')}
+            description={t('auth.passwordHint')}
             autoComplete="new-password"
             required
             value={password}
@@ -101,37 +102,33 @@ export function RegisterPage() {
               checked={accepted}
               onChange={(e) => setAccepted(e.currentTarget.checked)}
               label={
-                <>
-                  I agree to the{' '}
-                  <Anchor component={Link} to="/terms" target="_blank" inherit>
-                    terms of use
-                  </Anchor>
-                  {legal?.pages.privacy && (
-                    <>
-                      {' '}
-                      and have read the{' '}
-                      <Anchor component={Link} to="/privacy" target="_blank" inherit>
-                        privacy policy
-                      </Anchor>
-                    </>
-                  )}
-                  .
-                </>
+                <Trans
+                  i18nKey={
+                    legal?.pages.privacy
+                      ? 'auth.register.acceptTermsAndPrivacy'
+                      : 'auth.register.acceptTerms'
+                  }
+                  components={{
+                    terms: <Anchor component={Link} to="/terms" target="_blank" inherit />,
+                    privacy: <Anchor component={Link} to="/privacy" target="_blank" inherit />,
+                  }}
+                />
               }
             />
           ) : (
             legal?.pages.privacy && (
               <Text size="xs" c="dimmed">
-                How this server handles your data:{' '}
-                <Anchor component={Link} to="/privacy" target="_blank" inherit>
-                  privacy policy
-                </Anchor>
-                .
+                <Trans
+                  i18nKey="auth.register.privacyNote"
+                  components={{
+                    privacy: <Anchor component={Link} to="/privacy" target="_blank" inherit />,
+                  }}
+                />
               </Text>
             )
           )}
           <Button type="submit" loading={busy} fullWidth mt="sm">
-            Create account
+            {t('auth.register.submit')}
           </Button>
         </Stack>
       </form>

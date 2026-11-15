@@ -1,3 +1,5 @@
+import { currentLocale } from '@/i18n';
+
 /** Number and date formatting for charts and statistics (English, UTC dates). */
 
 const isNumber = (value: unknown): value is number =>
@@ -5,7 +7,7 @@ const isNumber = (value: unknown): value is number =>
 
 /** 1234567 → "1,234,567". */
 export function formatCount(value: number | null | undefined): string {
-  return isNumber(value) ? Math.round(value).toLocaleString('en-US') : '–';
+  return isNumber(value) ? Math.round(value).toLocaleString(currentLocale()) : '–';
 }
 
 /**
@@ -21,13 +23,19 @@ export function formatNumber(value: number | null | undefined, digits = 4): stri
     return value.toExponential(Math.max(0, digits - 2)).replace(/\.?0+e/, 'e');
   }
   if (size >= 10 ** digits) {
-    return Math.round(value).toLocaleString('en-US');
+    return Math.round(value).toLocaleString(currentLocale());
   }
-  const text = value.toLocaleString('en-US', { maximumSignificantDigits: digits });
+  const text = value.toLocaleString(currentLocale(), { maximumSignificantDigits: digits });
   return text === '-0' ? '0' : text;
 }
 
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const compact = {
+  format: (value: number) =>
+    new Intl.NumberFormat(currentLocale(), {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value),
+};
 
 /** 12900 → "12.9K", 4200000 → "4.2M"; small numbers like formatNumber. */
 export function formatCompact(value: number | null | undefined): string {

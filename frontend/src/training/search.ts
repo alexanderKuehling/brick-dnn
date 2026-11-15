@@ -11,6 +11,7 @@ import type {
   TuningMetric,
   TuningRange,
 } from '@/api/types';
+import { currentLocale, i18n } from '@/i18n';
 
 // --------------------------------------------------------------------------
 // Objective metrics
@@ -30,10 +31,21 @@ export interface MetricInfo {
 }
 
 export const METRICS: MetricInfo[] = [
-  { name: 'loss', label: 'Loss', maximize: false, task: null, binary: false, percent: false },
+  {
+    name: 'loss',
+    get label() {
+      return i18n.t('ui.training.search.loss');
+    },
+    maximize: false,
+    task: null,
+    binary: false,
+    percent: false,
+  },
   {
     name: 'accuracy',
-    label: 'Accuracy',
+    get label() {
+      return i18n.t('ui.training.search.accuracy');
+    },
     maximize: true,
     task: 'classification',
     binary: false,
@@ -41,7 +53,9 @@ export const METRICS: MetricInfo[] = [
   },
   {
     name: 'balanced_accuracy',
-    label: 'Balanced accuracy',
+    get label() {
+      return i18n.t('ui.training.search.balancedAccuracy');
+    },
     maximize: true,
     task: 'classification',
     binary: false,
@@ -49,7 +63,9 @@ export const METRICS: MetricInfo[] = [
   },
   {
     name: 'macro_f1',
-    label: 'Macro F1',
+    get label() {
+      return i18n.t('ui.training.search.macroF1');
+    },
     maximize: true,
     task: 'classification',
     binary: false,
@@ -136,7 +152,9 @@ export function metricInSentence(name: TuningMetric | null | undefined): string 
 
 /** "higher is better" or "lower is better". */
 export function metricDirection(name: TuningMetric | null | undefined): string {
-  return metricInfo(name).maximize ? 'higher is better' : 'lower is better';
+  return metricInfo(name).maximize
+    ? i18n.t('ui.training.search.higherIsBetter')
+    : i18n.t('ui.training.search.lowerIsBetter');
 }
 
 /** A value of the metric as shown in tables: "93.1%", "0.912" or "–". */
@@ -148,9 +166,13 @@ export function formatMetricValue(
     return '–';
   }
   if (metricInfo(name).percent) {
-    return `${(value * 100).toFixed(1)}%`;
+    return value.toLocaleString(currentLocale(), {
+      style: 'percent',
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
   }
-  return value.toLocaleString('en-US', { maximumSignificantDigits: 4 });
+  return value.toLocaleString(currentLocale(), { maximumSignificantDigits: 4 });
 }
 
 // --------------------------------------------------------------------------
@@ -220,7 +242,9 @@ const BOOSTING = [
     min: 1,
     max: 100,
     none: true,
-    help: '"none": no limit',
+    get help() {
+      return i18n.t('ui.training.search.noneNoLimit');
+    },
   }),
   tunable('min_samples_leaf', 'Min. rows per leaf', 'int', { min: 5, max: 100 }, { min: 1 }),
   tunable('l2_regularization', 'L2 regularisation', 'float', [0, 0.1, 1, 10], { max: 1e4 }),
@@ -236,7 +260,9 @@ const SVM = [
       max: 1e4,
       minExclusive: true,
       options: ['scale', 'auto'],
-      help: 'Numbers, or scale and auto in a list',
+      get help() {
+        return i18n.t('ui.training.search.numbersOrScaleAndAuto');
+      },
     }
   ),
   tunable('kernel', 'Kernel', 'choice', ['rbf', 'linear'], {
@@ -345,15 +371,19 @@ function parseNumber(value: number | string): number | '' {
 
 function checkNumber(item: Tunable, value: number): string | null {
   if (!Number.isFinite(value)) {
-    return 'Enter numbers';
+    return i18n.t('ui.training.search.enterNumbers');
   }
   if (item.kind === 'int' && !Number.isInteger(value)) {
-    return 'Whole numbers';
+    return i18n.t('ui.training.search.wholeNumbers');
   }
   const low = item.minExclusive ? value <= item.min : value < item.min;
   if (low || value > item.max) {
     const bound = item.minExclusive ? 'Greater than' : 'At least';
-    return `${bound} ${item.min.toLocaleString('en-US')}, at most ${item.max.toLocaleString('en-US')}`;
+    return i18n.t('ui.training.search.atMost', {
+      bound,
+      min: item.min.toLocaleString(currentLocale()),
+      max: item.max.toLocaleString(currentLocale()),
+    });
   }
   return null;
 }
@@ -362,7 +392,7 @@ function checkNumber(item: Tunable, value: number): string | null {
 export function parseList(item: Tunable, state: ParamState): ClassicalValue[] | string {
   if (item.kind === 'choice' || item.kind === 'bool') {
     if (state.choices.length === 0) {
-      return 'Choose at least one';
+      return i18n.t('ui.training.search.chooseAtLeastOne');
     }
     return item.options.filter((option) => state.choices.includes(String(option)));
   }
@@ -371,7 +401,7 @@ export function parseList(item: Tunable, state: ParamState): ClassicalValue[] | 
     .map((part) => part.trim())
     .filter(Boolean);
   if (parts.length === 0) {
-    return 'Enter at least one value';
+    return i18n.t('ui.training.search.enterAtLeastOneValue');
   }
   const values: ClassicalValue[] = [];
   for (const part of parts) {
@@ -397,17 +427,17 @@ export function rangeError(item: Tunable, state: ParamState): string | null {
   const lo = parseNumber(state.min);
   const hi = parseNumber(state.max);
   if (lo === '' || hi === '') {
-    return 'Enter both ends';
+    return i18n.t('ui.training.search.enterBothEnds');
   }
   const error = checkNumber(item, lo) ?? checkNumber(item, hi);
   if (error) {
     return error;
   }
   if (lo > hi) {
-    return 'The minimum is larger than the maximum';
+    return i18n.t('ui.training.search.theMinimumIsLargerThan');
   }
   if (state.scale === 'log' && lo <= 0) {
-    return 'A log range needs a minimum above 0: use linear, or a list';
+    return i18n.t('ui.training.search.aLogRangeNeedsA');
   }
   return null;
 }

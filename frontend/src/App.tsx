@@ -4,8 +4,7 @@ import '@xyflow/react/dist/style.css';
 import './global.css';
 
 import { BrowserRouter, Route } from 'react-router-dom';
-import { AppShell, MantineProvider } from '@mantine/core';
-import { ModalsProvider } from '@mantine/modals';
+import { AppShell } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { AccountPage } from './account/AccountPage';
 import { AgentActivityPage } from './activity/AgentActivityPage';
@@ -16,6 +15,7 @@ import { AppHeader, HEADER_HEIGHT } from './components/AppHeader';
 import { EDITOR_PATH, RedirectToEditor } from './components/RedirectToEditor';
 import { RequireAuth } from './components/RequireAuth';
 import { DataPage } from './data/DataPage';
+import { LocalizedMantineProvider, LocalizedModalsProvider } from './i18n/mantine';
 import { LegalPage } from './legal/LegalPage';
 import { MonitoredRoutes } from './monitoring';
 import { AuthorizePage } from './oauth/AuthorizePage';
@@ -27,13 +27,12 @@ import { RegisterPage } from './pages/RegisterPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { SharedNetworkPage } from './sharing/SharedNetworkPage';
-import { theme } from './theme';
 import { ApiTokensPage } from './tokens/ApiTokensPage';
 
 export default function App() {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="auto">
-      <ModalsProvider>
+    <LocalizedMantineProvider defaultColorScheme="auto">
+      <LocalizedModalsProvider>
         <Notifications position="top-right" />
         <AuthProvider>
           <BrowserRouter>
@@ -118,7 +117,7 @@ export default function App() {
             </AppShell>
           </BrowserRouter>
         </AuthProvider>
-      </ModalsProvider>
-    </MantineProvider>
+      </LocalizedModalsProvider>
+    </LocalizedMantineProvider>
   );
 }

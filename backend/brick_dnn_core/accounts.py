@@ -39,6 +39,7 @@ from django.db.models import Sum
 from django.http import FileResponse
 from django.utils import timezone
 from django.utils.text import get_valid_filename, slugify
+from django.utils.translation import gettext
 from rest_framework import serializers, status
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
@@ -56,7 +57,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from brickdnn.training import ACTIVE_STATUSES
 
-from . import billing, budgets, data_service, live
+from . import billing, budgets, data_service, languages, live
 from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
@@ -235,6 +236,7 @@ def _account(user) -> dict[str, Any]:
         "terms_accepted_at": profile.terms_accepted_at if profile else None,
         "terms_version": (profile.terms_version or None) if profile else None,
         "privacy_version": (profile.privacy_version or None) if profile else None,
+        "language": (profile.language or None) if profile else None,
         # Whether it is on, since when and how many recovery codes are left; never the secret.
         "two_factor": two_factor.state(user),
     }
@@ -604,13 +606,31 @@ class AccountView(AccountApiView):
         return Response(account_data(user))
 
 
+class LanguageView(APIView):
+    """``PATCH {"language": "de"}``: the language of the app and of e-mails, saved on the account
+    so it follows the user to other devices (languages.py). Any login of the website."""
+
+    permission_classes = [WebsiteLogin]
+
+    def get(self, request: Request) -> Response:
+        return Response({"language": languages.saved_language(request.user) or ""})
+
+    def patch(self, request: Request) -> Response:
+        from .serializers import LanguageSerializer
+
+        serializer = LanguageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        languages.save_language(request.user, serializer.validated_data["language"])
+        return Response({"language": languages.saved_language(request.user) or ""})
+
+
 class PasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True)
 
     def validate_current_password(self, value: str) -> str:
         if not self.context["user"].check_password(value):
-            raise serializers.ValidationError("The current password is wrong.")
+            raise serializers.ValidationError(gettext("The current password is wrong."))
         return value
 
     def validate_new_password(self, value: str) -> str:
@@ -703,11 +723,13 @@ class AccountBudgetSerializer(serializers.Serializer):
         plan = budgets.plan_of(user)
         if value and (plan.overage_price_per_cpu_hour is None or budgets.is_unlimited(user)):
             raise serializers.ValidationError(
-                "Your plan has no compute beyond its monthly allowance."
+                gettext("Your plan has no compute beyond its monthly allowance.")
             )
         if value and not budgets.overage_billable(user):
             raise serializers.ValidationError(
-                "Compute beyond the allowance needs a subscription that is paid and not cancelled."
+                gettext(
+                    "Compute beyond the allowance needs a subscription that is paid and not cancelled."
+                )
             )
         return value
 
@@ -748,12 +770,12 @@ class DeleteAccountSerializer(serializers.Serializer):
 
     def validate_password(self, value: str) -> str:
         if not self.context["user"].check_password(value):
-            raise serializers.ValidationError("The password is wrong.")
+            raise serializers.ValidationError(gettext("The password is wrong."))
         return value
 
     def validate_username(self, value: str) -> str:
         if value != self.context["user"].get_username():
-            raise serializers.ValidationError("Type your username exactly to confirm.")
+            raise serializers.ValidationError(gettext("Type your username exactly to confirm."))
         return value
 
 

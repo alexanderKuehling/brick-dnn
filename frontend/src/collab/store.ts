@@ -1,5 +1,6 @@
 import { api, type ProjectComment, type ProjectRole } from '@/api';
 import { openThreadCount, openThreadsByLayer, sortComments } from '@/comments/threads';
+import { i18n } from '@/i18n';
 import type { CommentEvent } from './events';
 
 /** The side panels of a saved network. */
@@ -164,7 +165,7 @@ export class CollabStore {
   private requireProject(): number {
     const { projectId } = this.state;
     if (projectId === null) {
-      throw new Error('No saved network is open.');
+      throw new Error(i18n.t('ui.collab.store.noSavedNetworkIsOpen'));
     }
     return projectId;
   }

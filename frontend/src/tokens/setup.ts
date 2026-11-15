@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n';
+
 /** Shown in the setup snippets instead of a token. */
 export const TOKEN_PLACEHOLDER = '<YOUR_TOKEN>';
 
@@ -15,7 +17,7 @@ export function mcpUrl(apiUrl: string): string {
  */
 export function claudeCodeCommand(url: string, token?: string): string {
   const command = `claude mcp add --transport http ${SERVER_NAME} ${url}`;
-  return token ? `${command} --header "Authorization: Bearer ${token}"` : command;
+  return token ? i18n.t('ui.tokens.setup.headerAuthorizationBearer', { command, token }) : command;
 }
 
 /** Whether `url` is on this computer, where apps that connect from the internet cannot reach it. */
@@ -45,5 +47,5 @@ export function mcpJsonConfig(url: string, token: string): string {
 
 /** A REST API call with the token, for scripts. */
 export function curlCommand(apiUrl: string, token: string): string {
-  return `curl -H "Authorization: Bearer ${token}" ${apiUrl}/api/projects/`;
+  return i18n.t('ui.tokens.setup.curlHAuthorizationBearerApi', { token, apiUrl });
 }

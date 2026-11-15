@@ -42,6 +42,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
+from django.utils.translation import gettext
 from rest_framework import serializers, status
 from rest_framework.exceptions import Throttled
 from rest_framework.request import Request
@@ -343,7 +344,10 @@ class TwoFactorLoginView(APIView):
         user = read_challenge(serializer.validated_data["challenge"])
         if user is None or not is_enabled(user):
             return Response(
-                {"detail": "The login has expired. Log in again.", "code": "challenge_expired"},
+                {
+                    "detail": gettext("The login has expired. Log in again."),
+                    "code": "challenge_expired",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
@@ -352,7 +356,7 @@ class TwoFactorLoginView(APIView):
             raise Throttled(detail=exc.message) from None
         if used is None:
             return Response(
-                {"code": ["The code is wrong or was used already."]},
+                {"code": [gettext("The code is wrong or was used already.")]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         response = issue_login(user)
@@ -368,7 +372,7 @@ class TwoFactorLoginView(APIView):
 
 def _check_password(user, value: str) -> str:
     if not user.check_password(value):
-        raise serializers.ValidationError("The password is wrong.")
+        raise serializers.ValidationError(gettext("The password is wrong."))
     return value
 
 
@@ -393,7 +397,9 @@ def _code_or_error(user, code: str, **kwargs) -> str:
     except TooManyAttempts as exc:
         raise Throttled(detail=exc.message) from None
     if used is None:
-        raise serializers.ValidationError({"code": ["The code is wrong or was used already."]})
+        raise serializers.ValidationError(
+            {"code": [gettext("The code is wrong or was used already.")]}
+        )
     return used
 
 
@@ -414,7 +420,7 @@ class TwoFactorSetupView(AccountApiView):
         PasswordSerializer(data=request.data, context={"user": user}).is_valid(raise_exception=True)
         if is_enabled(user):
             return Response(
-                {"detail": "Two-factor authentication is on already."},
+                {"detail": gettext("Two-factor authentication is on already.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         secret, uri = start_setup(user)
@@ -433,19 +439,21 @@ class TwoFactorEnableView(AccountApiView):
         serializer.is_valid(raise_exception=True)
         if is_enabled(user):
             return Response(
-                {"detail": "Two-factor authentication is on already."},
+                {"detail": gettext("Two-factor authentication is on already.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if not TwoFactorAuth.objects.filter(user=user, confirmed_at__isnull=True).exists():
             return Response(
-                {"detail": "Start the setup first."}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": gettext("Start the setup first.")}, status=status.HTTP_400_BAD_REQUEST
             )
         try:
             codes = enable(user, serializer.validated_data["code"])
         except TooManyAttempts as exc:
             raise Throttled(detail=exc.message) from None
         if codes is None:
-            raise serializers.ValidationError({"code": ["The code is wrong. Check the app."]})
+            raise serializers.ValidationError(
+                {"code": [gettext("The code is wrong. Check the app.")]}
+            )
         log_out_everywhere(user)
         notices.two_factor_changed(user, enabled=True, request=request)
         response = Response(
@@ -480,7 +488,7 @@ class RecoveryCodesView(AccountApiView):
         serializer.is_valid(raise_exception=True)
         if not is_enabled(user):
             return Response(
-                {"detail": "Two-factor authentication is off."},
+                {"detail": gettext("Two-factor authentication is off.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         _code_or_error(user, serializer.validated_data["code"])

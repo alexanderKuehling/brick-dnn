@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Badge, Group, Paper, SegmentedControl, Select, Stack, Table, Text } from '@mantine/core';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatSigned, formatValue, heatColor, percent } from './format';
 import { METHOD_TEXT } from './texts';
 import type { BoundaryAnswer, PermutationAnswer, TabularAnswer } from './types';
@@ -42,6 +43,7 @@ interface TabularExplanationProps {
 
 /** Shapley values (and integrated gradients) of one row as bars around zero. */
 export function TabularExplanation({ answer, classNames, onTarget }: TabularExplanationProps) {
+  useTranslation();
   const hasIg = answer.features.some((f) => f.integrated_gradients !== undefined);
   const [method, setMethod] = useState<'shapley' | 'integrated_gradients'>('shapley');
   const shown = hasIg ? method : 'shapley';
@@ -54,35 +56,47 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
     <Stack gap="sm">
       <Group gap="xs" wrap="wrap">
         <Text size="sm">
-          Model:{' '}
+          {i18n.t('ui.explain.TabularViews.model')}{' '}
           <b>
             {prediction.class !== undefined
               ? `${prediction.class} (${percent(prediction.probability)})`
               : formatValue(prediction.value, 4)}
           </b>
           {prediction.std !== undefined && prediction.std !== null && (
-            <> ± {formatValue(prediction.std)} (std of the Gaussian process)</>
+            <>
+              {' '}
+              {i18n.t('ui.explain.TabularViews.stdOfTheGaussianProcess', {
+                std: formatValue(prediction.std),
+              })}
+            </>
           )}
         </Text>
         {answer.sample.label !== undefined && (
           <Badge color={answer.sample.label === prediction.class ? 'teal' : 'red'} variant="light">
-            true class: {answer.sample.label}
+            {i18n.t('ui.explain.TabularViews.trueClass', { label: answer.sample.label })}
           </Badge>
         )}
         {answer.sample.value !== undefined && (
-          <Badge variant="light">true value: {formatValue(answer.sample.value, 4)}</Badge>
+          <Badge variant="light">
+            {i18n.t('ui.explain.TabularViews.trueValue', {
+              value: formatValue(answer.sample.value, 4),
+            })}
+          </Badge>
         )}
       </Group>
       <Group gap="md" align="flex-end" wrap="wrap">
         {classNames && answer.target && (
           <Select
-            label="Explain the probability of"
+            label={i18n.t('ui.explain.TabularViews.explainTheProbabilityOf')}
             size="xs"
             w={200}
             value={String(answer.target.index)}
             data={classNames.map((name, index) => ({
               value: String(index),
-              label: index === prediction.index ? `${name} (predicted)` : name,
+              label:
+                index === prediction.index
+                  ? i18n.t('ui.explain.TabularViews.predicted', { name })
+                  : name,
             }))}
             onChange={(value) =>
               onTarget(
@@ -98,33 +112,42 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
             value={method}
             onChange={(value) => setMethod(value as typeof method)}
             data={[
-              { value: 'shapley', label: 'Shapley values' },
-              { value: 'integrated_gradients', label: 'Integrated gradients' },
+              { value: 'shapley', label: i18n.t('ui.explain.TabularViews.shapleyValues') },
+              {
+                value: 'integrated_gradients',
+                label: i18n.t('ui.explain.TabularViews.integratedGradients'),
+              },
             ]}
           />
         )}
       </Group>
       <Text size="sm">
-        {answer.explains.charAt(0).toUpperCase() + answer.explains.slice(1)}:{' '}
-        <b>{formatValue(answer.base_value, 4)}</b> for an average row (the mean of the training
-        rows), <b>{formatValue(answer.value, 4)}</b> for this one.
+        <Trans
+          i18nKey="ui.explain.TabularViews.forAnAverageRowThe"
+          values={{
+            value: answer.explains.charAt(0).toUpperCase() + answer.explains.slice(1),
+            base_value: formatValue(answer.base_value, 4),
+            value2: formatValue(answer.value, 4),
+          }}
+          components={[<b />, <b />]}
+        />
       </Text>
       <Table fz="xs" verticalSpacing={4} withRowBorders={false}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Feature</Table.Th>
-            <Table.Th>Value</Table.Th>
+            <Table.Th>{i18n.t('ui.explain.TabularViews.feature')}</Table.Th>
+            <Table.Th>{i18n.t('ui.explain.TabularViews.value')}</Table.Th>
             <Table.Th w="45%">
               <Group justify="space-between" gap={4} wrap="nowrap">
                 <Text size="xs" c="blue">
-                  lowers it
+                  {i18n.t('ui.explain.TabularViews.lowersIt')}
                 </Text>
                 <Text size="xs" c="red">
-                  raises it
+                  {i18n.t('ui.explain.TabularViews.raisesIt')}
                 </Text>
               </Group>
             </Table.Th>
-            <Table.Th ta="right">Effect</Table.Th>
+            <Table.Th ta="right">{i18n.t('ui.explain.TabularViews.effect')}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -150,8 +173,10 @@ export function TabularExplanation({ answer, classNames, onTarget }: TabularExpl
         {shown === 'shapley' ? METHOD_TEXT.shapley : METHOD_TEXT.integrated}
         {shown === 'shapley' &&
           (answer.exact
-            ? ' Computed exactly (all combinations of features).'
-            : ` Estimated from ${answer.orders} random orders of the features.`)}
+            ? i18n.t('ui.explain.TabularViews.computedExactlyAllCombinationsOf')
+            : i18n.t('ui.explain.TabularViews.estimatedFromRandomOrdersOf', {
+                orders: answer.orders,
+              }))}
       </Text>
     </Stack>
   );
@@ -171,6 +196,7 @@ export function PermutationView({
   limit?: number;
   compact?: boolean;
 }) {
+  useTranslation();
   const top = Math.max(1e-12, ...answer.features.map((f) => Math.abs(f.mean ?? 0) + (f.std ?? 0)));
   const features =
     limit === undefined
@@ -191,15 +217,23 @@ export function PermutationView({
   return (
     <Stack gap="sm">
       <Text size={compact ? 'xs' : 'sm'} c={compact ? 'dimmed' : undefined}>
-        Validation {metric} {show(answer.baseline)} on {answer.rows} rows; drop when a feature is
-        shuffled ({answer.repeats} {answer.repeats === 1 ? 'repeat' : 'repeats'}):
+        {i18n.t('ui.explain.TabularViews.validationOnRowsDropWhen', {
+          metric,
+          show: show(answer.baseline),
+          rows: answer.rows,
+          repeats: answer.repeats,
+          value:
+            answer.repeats === 1
+              ? i18n.t('ui.explain.TabularViews.repeat')
+              : i18n.t('ui.explain.TabularViews.repeats'),
+        })}
       </Text>
       <Table
         fz="xs"
         verticalSpacing={4}
         withRowBorders={false}
         layout={compact ? 'fixed' : undefined}
-        aria-label="Permutation importance"
+        aria-label={i18n.t('ui.explain.TabularViews.permutationImportance')}
       >
         <Table.Tbody>
           {features.map((feature) => {
@@ -280,6 +314,7 @@ export function BoundaryView({
   answer: BoundaryAnswer;
   compact?: boolean;
 }) {
+  useTranslation();
   const [view, setView] = useState<'prediction' | 'std'>('prediction');
   const { width, height, left, bottom, top, right } = PLOT;
   const innerW = width - left - right;
@@ -306,8 +341,8 @@ export function BoundaryView({
           value={view}
           onChange={(value) => setView(value as typeof view)}
           data={[
-            { value: 'prediction', label: 'Prediction' },
-            { value: 'std', label: 'Uncertainty (std)' },
+            { value: 'prediction', label: i18n.t('ui.explain.TabularViews.prediction') },
+            { value: 'std', label: i18n.t('ui.explain.TabularViews.uncertaintyStd') },
           ]}
           w="fit-content"
         />
@@ -316,7 +351,10 @@ export function BoundaryView({
         viewBox={`0 0 ${width} ${height}`}
         className={compact ? classes.plotSmall : classes.plot}
         role="img"
-        aria-label={`Decision boundary over ${answer.features[0]} and ${answer.features[1]}`}
+        aria-label={i18n.t('ui.explain.TabularViews.decisionBoundaryOverAnd', {
+          value: answer.features[0],
+          value2: answer.features[1],
+        })}
       >
         <image
           href={background}
@@ -411,15 +449,24 @@ export function BoundaryView({
       ) : (
         <Text size="xs">
           {view === 'std' && answer.std
-            ? `std from ${formatValue(answer.std.range[0])} (dark) to ${formatValue(answer.std.range[1])} (bright)`
-            : `${answer.target ?? 'Prediction'} from ${formatValue(v0)} (dark) to ${formatValue(v1)} (bright)`}
+            ? i18n.t('ui.explain.TabularViews.stdFromDarkToBright', {
+                value: formatValue(answer.std.range[0]),
+                value2: formatValue(answer.std.range[1]),
+              })
+            : i18n.t('ui.explain.TabularViews.fromDarkToBright', {
+                value: answer.target ?? i18n.t('ui.explain.TabularViews.prediction'),
+                formatValue: formatValue(v0),
+                formatValue2: formatValue(v1),
+              })}
         </Text>
       )}
       {!compact && (
         <Paper withBorder p="xs">
           <Text size="xs" c="dimmed">
-            {view === 'std' ? METHOD_TEXT.boundaryStd : METHOD_TEXT.boundary} Points: up to{' '}
-            {answer.points.length} training rows.
+            {i18n.t('ui.explain.TabularViews.pointsUpToTrainingRows', {
+              value: view === 'std' ? METHOD_TEXT.boundaryStd : METHOD_TEXT.boundary,
+              length: answer.points.length,
+            })}
           </Text>
         </Paper>
       )}

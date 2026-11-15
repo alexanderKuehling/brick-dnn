@@ -10,6 +10,7 @@ import type { LayerFlowNode } from '@/builder/graph';
 import { CommentsPanel } from '@/comments/CommentsPanel';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
 import { HistoryPanel } from '@/history/HistoryPanel';
+import { i18n, useTranslation } from '@/i18n';
 import { useCollab, useCollabStore } from './context';
 import type { SubscribeToEvents } from './events';
 import type { CollabPanel, CollabStore } from './store';
@@ -55,6 +56,7 @@ export function Collaboration({
   unsaved = false,
   onRestored,
 }: CollaborationProps) {
+  useTranslation();
   const store = useCollabStore();
   const { user } = useAuth();
   const theme = useMantineTheme();
@@ -118,20 +120,20 @@ export function Collaboration({
           <div className={classes.panelHeader}>
             <Tabs.List grow className={classes.tabs}>
               <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
-                History
+                {i18n.t('ui.collab.Collaboration.history')}
               </Tabs.Tab>
               <Tabs.Tab
                 value="comments"
                 leftSection={<IconMessageCircle size={16} />}
                 rightSection={<OpenBadge count={openCount} />}
               >
-                Comments
+                {i18n.t('ui.collab.Collaboration.comments')}
               </Tabs.Tab>
             </Tabs.List>
             <CloseButton
               className={classes.close}
               onClick={() => store.closePanel()}
-              aria-label="Close the panel"
+              aria-label={i18n.t('ui.collab.Collaboration.closeThePanel')}
             />
           </div>
           <Tabs.Panel value="history" p="md">
@@ -199,6 +201,7 @@ interface CollabButtonsProps {
 
 /** "History" and "Comments" (with the number of open threads) over the canvas. */
 function CollabButtons({ store, panel, openCount }: CollabButtonsProps) {
+  useTranslation();
   const toggle = (target: CollabPanel) =>
     panel === target ? store.closePanel() : store.openPanel(target);
 
@@ -209,26 +212,30 @@ function CollabButtons({ store, panel, openCount }: CollabButtonsProps) {
         size="xs"
         variant={panel === 'history' ? 'light' : 'default'}
         onClick={() => toggle('history')}
-        aria-label="History"
+        aria-label={i18n.t('ui.collab.Collaboration.history')}
         aria-pressed={panel === 'history'}
-        title="Earlier versions of this network"
+        title={i18n.t('ui.collab.Collaboration.earlierVersionsOfThisNetwork')}
       >
         <IconHistory size={16} />
         <Box component="span" visibleFrom="xs" className={classes.buttonLabel}>
-          History
+          {i18n.t('ui.collab.Collaboration.history')}
         </Box>
       </Button>
       <Button
         size="xs"
         variant={panel === 'comments' ? 'light' : 'default'}
         onClick={() => toggle('comments')}
-        aria-label={openCount === 0 ? 'Comments' : `Comments (${openCount} open)`}
+        aria-label={
+          openCount === 0
+            ? i18n.t('ui.collab.Collaboration.comments')
+            : i18n.t('ui.collab.Collaboration.commentsOpen', { openCount })
+        }
         aria-pressed={panel === 'comments'}
-        title="Comments on this network and its layers"
+        title={i18n.t('ui.collab.Collaboration.commentsOnThisNetworkAnd')}
       >
         <IconMessageCircle size={16} />
         <Box component="span" visibleFrom="xs" className={classes.buttonLabel}>
-          Comments
+          {i18n.t('ui.collab.Collaboration.comments')}
         </Box>
         {openCount > 0 && (
           <Box component="span" className={classes.buttonLabel}>

@@ -2,7 +2,9 @@ import { Fragment, useMemo, useRef, useState } from 'react';
 import { IconChartDots3, IconSearch, IconTopologyStar3 } from '@tabler/icons-react';
 import { Group, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
 import type { LayerCatalog, LayerSpec } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { categoryColor } from '@/theme';
+import { categoryLabel } from './categories';
 import { isClassicalSpec, outputKind } from './kinds';
 import { startPointerDrag, type Point } from './pointerDrag';
 import classes from './Palette.module.css';
@@ -10,27 +12,16 @@ import classes from './Palette.module.css';
 type Section = 'neural' | 'classical';
 
 /** Headings between the neural layers and the classical bricks (scikit-learn). */
-const SECTIONS: Record<Section, { title: string; icon: React.ReactNode; hint: string }> = {
-  neural: {
-    title: 'Neural network · PyTorch',
-    icon: <IconTopologyStar3 size={14} aria-hidden />,
-    hint: 'Layers that pass tensors from the Input to the outputs.',
-  },
-  classical: {
-    title: 'Classical · scikit-learn',
-    icon: <IconChartDots3 size={14} aria-hidden />,
-    hint: 'For tabular data: connect the Input straight to a model. Kernels (dashed connections) shape a Gaussian process, ensembles (dotted connections) combine models.',
-  },
+const SECTION_ICONS: Record<Section, React.ReactNode> = {
+  neural: <IconTopologyStar3 size={14} aria-hidden />,
+  classical: <IconChartDots3 size={14} aria-hidden />,
 };
 
-/** Short descriptions under the category headings. */
-const CATEGORY_HINTS: Record<string, string> = {
-  Kernels:
-    'Combine them with Kernel sum and Kernel product, then connect them to a Gaussian process.',
-  'Classical models': 'Fitted once on the training rows; their output is the prediction.',
-  Ensembles:
-    'Connect the Input to two or more models of the same task, and the models to the ensemble: it combines their predictions.',
-};
+/** Short descriptions under the category headings (`builder.palette.hints`). */
+function categoryHint(category: string): string | null {
+  const key = `builder.palette.hints.${category}`;
+  return i18n.exists(key) ? String(i18n.t(key as 'builder.palette.hints.Kernels')) : null;
+}
 
 interface PaletteProps {
   catalog: LayerCatalog;
@@ -42,6 +33,7 @@ interface PaletteProps {
 }
 
 export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
 
   const groups = useMemo(() => {
@@ -51,6 +43,7 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
         !q ||
         layer.label.toLowerCase().includes(q) ||
         layer.category.toLowerCase().includes(q) ||
+        categoryLabel(layer.category).toLowerCase().includes(q) ||
         layer.description.toLowerCase().includes(q)
     );
     return catalog.categories
@@ -69,8 +62,8 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
   return (
     <Stack gap="xs" p="sm" h="100%">
       <TextInput
-        placeholder="Search layers"
-        aria-label="Search layers"
+        placeholder={t('builder.palette.search')}
+        aria-label={t('builder.palette.search')}
         leftSection={<IconSearch size={16} />}
         value={query}
         onChange={(event) => setQuery(event.currentTarget.value)}
@@ -89,13 +82,13 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
                   tt="uppercase"
                   c="dimmed"
                   mt="sm"
-                  mb={CATEGORY_HINTS[category] ? 2 : 6}
+                  mb={categoryHint(category) ? 2 : 6}
                 >
-                  {category}
+                  {categoryLabel(category)}
                 </Text>
-                {CATEGORY_HINTS[category] && (
+                {categoryHint(category) && (
                   <Text size="xs" c="dimmed" mb={6} lh={1.35}>
-                    {CATEGORY_HINTS[category]}
+                    {categoryHint(category)}
                   </Text>
                 )}
                 {layers.map((spec) => (
@@ -113,19 +106,22 @@ export function Palette({ catalog, onAdd, onDrop, onDragStart }: PaletteProps) {
         })}
         {groups.length === 0 && (
           <Text size="sm" c="dimmed" mt="md">
-            No layer matches “{query}”.
+            {t('builder.palette.noMatch', { query })}
           </Text>
         )}
       </ScrollArea>
       <Text size="xs" c="dimmed" className={classes.hint}>
-        Drag a layer onto the canvas, or tap it to append it after the selected layer.
+        {t('builder.palette.hint')}
       </Text>
     </Stack>
   );
 }
 
 function SectionHeading({ section }: { section: Section }) {
-  const { title, icon, hint } = SECTIONS[section];
+  const { t } = useTranslation();
+  const icon = SECTION_ICONS[section];
+  const title = t(`builder.palette.sections.${section}.title`);
+  const hint = t(`builder.palette.sections.${section}.hint`);
   return (
     <div className={classes.section} data-section={section}>
       <Tooltip label={hint} position="right" multiline w={240} openDelay={300} withArrow>

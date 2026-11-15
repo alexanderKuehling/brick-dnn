@@ -8,6 +8,7 @@ import {
   setTokens,
   type User,
 } from '@/api';
+import { currentLanguage, i18n, isLanguage, onLanguageChosen, setLanguage } from '@/i18n';
 
 /** After the password: logged in, or the code of the authenticator app is needed. */
 export type LoginStep = { done: true } | { done: false; challenge: string };
@@ -35,6 +36,26 @@ interface AuthState extends AuthContextValue {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/** Save the language on the account; failures only cost the sync to other devices. */
+function saveLanguage(language: string): void {
+  const save = (api as { account?: { setLanguage?: unknown } }).account?.setLanguage;
+  if (typeof save === 'function' && isLanguage(language)) {
+    void Promise.resolve(api.account.setLanguage(language)).catch(() => undefined);
+  }
+}
+
+/**
+ * After logging in: the language saved on the account wins (it follows the user across
+ * devices); an account without one gets the language the app has now.
+ */
+function adoptLanguage(user: User): void {
+  if (isLanguage(user.language)) {
+    void setLanguage(user.language, { save: false });
+  } else {
+    saveLanguage(currentLanguage());
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
@@ -46,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     api
       .me()
-      .then(setUser)
+      .then((loaded) => {
+        setUser(loaded);
+        adoptLanguage(loaded);
+      })
       .catch((error) => {
         if (error instanceof ApiError && error.status === 401) {
           setTokens(null);
@@ -54,6 +78,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .finally(() => setReady(true));
   }, []);
+
+  // A language chosen with the switch is saved on the account while logged in.
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+    return onLanguageChosen((language) => saveLanguage(language));
+  }, [user]);
 
   // If a token refresh fails somewhere, the session is over.
   useEffect(
@@ -72,14 +104,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { done: false, challenge: result.challenge };
     }
     setTokens({ access: result.access, refresh: result.refresh });
-    setUser(await api.me());
+    const loaded = await api.me();
+    setUser(loaded);
+    adoptLanguage(loaded);
     return { done: true };
   }, []);
 
   const loginWithCode = useCallback(async (challenge: string, code: string) => {
     const { access, refresh } = await api.loginWithCode(challenge, code);
     setTokens({ access, refresh });
-    setUser(await api.me());
+    const loaded = await api.me();
+    setUser(loaded);
+    adoptLanguage(loaded);
   }, []);
 
   const register = useCallback(
@@ -116,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 function useAuthState(): AuthState {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used inside <AuthProvider>');
+    throw new Error(i18n.t('ui.auth.AuthContext.useauthMustBeUsedInside'));
   }
   return context;
 }

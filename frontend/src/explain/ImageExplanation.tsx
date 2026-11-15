@@ -11,6 +11,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatShape, percent } from './format';
 import { METHOD_TEXT } from './texts';
 import type { HeatMap, ImageAnswer } from './types';
@@ -88,6 +89,7 @@ interface ImageExplanationProps {
 }
 
 export function ImageExplanation({ answer, classNames, onTarget, onLayer }: ImageExplanationProps) {
+  useTranslation();
   const [opacity, setOpacity] = useState(0.75);
   const [height, width] = answer.size;
   const aspect = width / height;
@@ -98,32 +100,40 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
     <Stack gap="sm">
       <Group gap="xs" wrap="wrap">
         <Text size="sm">
-          Model: <b>{prediction.class}</b> ({percent(prediction.probability)})
+          <Trans
+            i18nKey="ui.explain.ImageExplanation.model"
+            values={{ class: prediction.class, percent: percent(prediction.probability) }}
+            components={[<b />]}
+          />
         </Text>
         {truth !== undefined && (
           <Badge color={truth === prediction.class ? 'teal' : 'red'} variant="light">
-            true class: {truth}
+            {i18n.t('ui.explain.ImageExplanation.trueClass', { truth })}
           </Badge>
         )}
         {prediction.top && prediction.top.length > 1 && (
           <Text size="xs" c="dimmed">
-            then{' '}
-            {prediction.top
-              .slice(1)
-              .map((top) => `${top.class} ${percent(top.probability)}`)
-              .join(', ')}
+            {i18n.t('ui.explain.ImageExplanation.then', {
+              map: prediction.top
+                .slice(1)
+                .map((top) => `${top.class} ${percent(top.probability)}`)
+                .join(', '),
+            })}
           </Text>
         )}
       </Group>
       <Group gap="md" align="flex-end" wrap="wrap">
         <Select
-          label="Explain the class"
+          label={i18n.t('ui.explain.ImageExplanation.explainTheClass')}
           size="xs"
           w={180}
           value={String(answer.target.index)}
           data={classNames.map((name, index) => ({
             value: String(index),
-            label: index === prediction.index ? `${name} (predicted)` : name,
+            label:
+              index === prediction.index
+                ? i18n.t('ui.explain.ImageExplanation.predicted', { name })
+                : name,
           }))}
           onChange={(value) =>
             onTarget(
@@ -135,7 +145,7 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
         />
         {gradcam.layers && gradcam.layers.length > 1 && (
           <Select
-            label="Grad-CAM brick"
+            label={i18n.t('ui.explain.ImageExplanation.gradCamBrick')}
             size="xs"
             w={220}
             value={gradcam.layer?.id ?? null}
@@ -148,7 +158,7 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
           />
         )}
         <Stack gap={2} w={160}>
-          <Text size="xs">Heatmap opacity</Text>
+          <Text size="xs">{i18n.t('ui.explain.ImageExplanation.heatmapOpacity')}</Text>
           <Slider
             value={opacity}
             onChange={setOpacity}
@@ -156,7 +166,7 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
             max={1}
             step={0.05}
             label={(value) => `${Math.round(value * 100)} %`}
-            aria-label="Heatmap opacity"
+            aria-label={i18n.t('ui.explain.ImageExplanation.heatmapOpacity')}
             size="sm"
           />
         </Stack>
@@ -164,15 +174,20 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
       <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="xs">
         <Paper withBorder p="xs">
           <Stack gap={6}>
-            <Title order={6}>The image</Title>
-            <Overlay image={answer.image} opacity={0} aspect={aspect} label="The image" />
+            <Title order={6}>{i18n.t('ui.explain.ImageExplanation.theImage')}</Title>
+            <Overlay
+              image={answer.image}
+              opacity={0}
+              aspect={aspect}
+              label={i18n.t('ui.explain.ImageExplanation.theImage')}
+            />
             <Text size="xs" c="dimmed">
-              {width}×{height} pixels, as the network sees it.
+              {i18n.t('ui.explain.ImageExplanation.pixelsAsTheNetworkSees', { width, height })}
             </Text>
           </Stack>
         </Paper>
         <MapCard
-          title="Saliency"
+          title={i18n.t('ui.explain.ImageExplanation.saliency')}
           text={METHOD_TEXT.saliency}
           map={answer.saliency}
           image={answer.image}
@@ -189,12 +204,15 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
         >
           {gradcam.layer && (
             <Text size="xs">
-              at {gradcam.layer.name} ({formatShape(gradcam.layer.shape)})
+              {i18n.t('ui.explain.ImageExplanation.at', {
+                name: gradcam.layer.name,
+                shape: formatShape(gradcam.layer.shape),
+              })}
             </Text>
           )}
         </MapCard>
         <MapCard
-          title="Occlusion"
+          title={i18n.t('ui.explain.ImageExplanation.occlusion')}
           text={METHOD_TEXT.occlusion}
           map={answer.occlusion}
           image={answer.image}
@@ -203,15 +221,20 @@ export function ImageExplanation({ answer, classNames, onTarget, onLayer }: Imag
         >
           {answer.occlusion.patch && (
             <Text size="xs">
-              {answer.occlusion.patch}×{answer.occlusion.patch} patches; largest drop{' '}
-              {percent(answer.occlusion.largest_drop)}
+              {i18n.t('ui.explain.ImageExplanation.patchesLargestDrop', {
+                patch: answer.occlusion.patch,
+                patch2: answer.occlusion.patch,
+                percent: percent(answer.occlusion.largest_drop),
+              })}
             </Text>
           )}
         </MapCard>
       </SimpleGrid>
       {answer.target.index !== prediction.index && (
         <Alert variant="light" color="blue">
-          The maps show what speaks for “{answer.target.class}”, not for the predicted class.
+          {i18n.t('ui.explain.ImageExplanation.theMapsShowWhatSpeaks', {
+            class: answer.target.class,
+          })}
         </Alert>
       )}
     </Stack>

@@ -21,6 +21,7 @@ import { notifications } from '@mantine/notifications';
 import type { Analysis, CompatibilityFix, GraphDocument, LayerSpec, Params } from '@/api/types';
 import type { InputFit } from '@/builder/BuilderContext';
 import type { LayerFlowNode, LayerNodeData } from '@/builder/graph';
+import { i18n } from '@/i18n';
 import { canTrain, NO_SCOPE } from './access';
 import { canStartTraining, trainingFamily } from './classical';
 import {
@@ -96,7 +97,7 @@ function showUndo(message: string, undo: () => void) {
             undo();
           }}
         >
-          Undo
+          {i18n.t('ui.training.useDatasetFit.undo')}
         </Button>
       </Group>
     ),

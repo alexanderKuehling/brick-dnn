@@ -18,6 +18,7 @@ import {
 import { ActionIcon, Badge, Menu, UnstyledButton, VisuallyHidden } from '@mantine/core';
 import type { ColumnInfo, ColumnProfile, NewStep } from '@/api/types';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
+import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { columnStepActions, type ColumnActionKey } from './columnActions';
 import { formatCount, formatShare } from './format';
@@ -72,6 +73,7 @@ export function ColumnHeader({
   onRename,
   onCast,
 }: ColumnHeaderProps) {
+  useTranslation();
   // Viewers of a shared preparation cannot add steps or change the target.
   const { readOnly } = usePrepAccess();
   const actions = columnStepActions(column, profile, missing, isTarget);
@@ -94,12 +96,17 @@ export function ColumnHeader({
         <UnstyledButton
           className={classes.headName}
           onClick={onSort}
-          title={`${column.name} (${KIND_LABELS[column.kind]}). Click to sort the sample.`}
+          title={i18n.t('ui.data.ColumnHeader.clickToSortTheSample', {
+            name: column.name,
+            value: KIND_LABELS[column.kind],
+          })}
         >
           <span className={classes.headNameText}>{column.name}</span>
           <VisuallyHidden>
-            , {KIND_LABELS[column.kind]}
-            {sort ? `, sorted ${sort}` : ''}. Sort the sample
+            {i18n.t('ui.data.ColumnHeader.sortTheSample', {
+              value: KIND_LABELS[column.kind],
+              value2: sort ? i18n.t('ui.data.ColumnHeader.sorted', { sort }) : '',
+            })}
           </VisuallyHidden>
           {sort && <SortIcon size={12} aria-hidden className={classes.sortIcon} />}
         </UnstyledButton>
@@ -110,7 +117,7 @@ export function ColumnHeader({
                 size="sm"
                 variant="subtle"
                 color="gray"
-                aria-label={`Actions for column ${column.name}`}
+                aria-label={i18n.t('ui.data.ColumnHeader.actionsForColumn', { name: column.name })}
               >
                 <IconChevronDown size={14} />
               </ActionIcon>
@@ -121,8 +128,7 @@ export function ColumnHeader({
               </Menu.Label>
               {isTarget && (
                 <Menu.Label className={classes.menuNote}>
-                  Target column: what the model learns to predict. It is not encoded, filled or
-                  dropped like a feature.
+                  {i18n.t('ui.data.ColumnHeader.targetColumnWhatTheModel')}
                 </Menu.Label>
               )}
               {!readOnly && (
@@ -131,7 +137,9 @@ export function ColumnHeader({
                   disabled={isTarget}
                   onClick={() => onSetTarget(column.name)}
                 >
-                  {isTarget ? 'This is the target' : 'Use as target'}
+                  {isTarget
+                    ? i18n.t('ui.data.ColumnHeader.thisIsTheTarget')
+                    : i18n.t('ui.data.ColumnHeader.useAsTarget')}
                 </Menu.Item>
               )}
               {onShowColumn && (
@@ -139,13 +147,17 @@ export function ColumnHeader({
                   leftSection={<IconChartHistogram size={14} />}
                   onClick={() => onShowColumn(column.name)}
                 >
-                  Show in Analysis
+                  {i18n.t('ui.data.ColumnHeader.showInAnalysis')}
                 </Menu.Item>
               )}
               {!readOnly && (
                 <>
                   <Menu.Divider />
-                  <Menu.Label>{isTarget ? 'Add a step for the target' : 'Add a step'}</Menu.Label>
+                  <Menu.Label>
+                    {isTarget
+                      ? i18n.t('ui.data.ColumnHeader.addAStepForThe')
+                      : i18n.t('ui.data.ColumnHeader.addAStep')}
+                  </Menu.Label>
                   {others.map((action) => {
                     const ActionIconComponent = ACTION_ICONS[action.key];
                     return (
@@ -159,10 +171,10 @@ export function ColumnHeader({
                     );
                   })}
                   <Menu.Item leftSection={<IconCursorText size={14} />} onClick={onRename}>
-                    Rename…
+                    {i18n.t('ui.data.ColumnHeader.rename')}
                   </Menu.Item>
                   <Menu.Item leftSection={<IconTransform size={14} />} onClick={onCast}>
-                    Change type…
+                    {i18n.t('ui.data.ColumnHeader.changeType')}
                   </Menu.Item>
                   {drop && (
                     <>
@@ -185,14 +197,19 @@ export function ColumnHeader({
       <div className={classes.headMeta}>
         {isTarget && (
           <Badge size="xs" variant="light" color="green" className={classes.targetBadge}>
-            Target
+            {i18n.t('ui.data.ColumnHeader.target')}
           </Badge>
         )}
         <span data-level={share > 0.4 ? 'high' : share > 0 ? 'some' : 'none'}>
-          {missing > 0 ? `${formatShare(missing, rows)} missing` : 'complete'}
+          {missing > 0
+            ? i18n.t('ui.data.ColumnHeader.missing', { missing: formatShare(missing, rows) })
+            : i18n.t('ui.data.ColumnHeader.complete')}
         </span>
         {profile && (column.kind === 'categorical' || column.kind === 'text') && (
-          <span> · {formatCount(profile.unique)} unique</span>
+          <span>
+            {' '}
+            {i18n.t('ui.data.ColumnHeader.unique', { unique: formatCount(profile.unique) })}
+          </span>
         )}
       </div>
       <div className={classes.headDist}>
@@ -211,6 +228,7 @@ function Distribution({
   profile: ColumnProfile | undefined;
   width: number;
 }) {
+  useTranslation();
   if (!profile) {
     return null;
   }
@@ -219,7 +237,9 @@ function Distribution({
   }
   if (column.kind === 'boolean' && profile.top) {
     const ones = profile.top.find((entry) => entry.value === '1')?.count ?? 0;
-    return <span>{formatShare(ones, profile.count)} true</span>;
+    return (
+      <span>{i18n.t('ui.data.ColumnHeader.true', { ones: formatShare(ones, profile.count) })}</span>
+    );
   }
   if (column.kind === 'categorical' && profile.top && profile.top.length > 0) {
     const text = profile.top
@@ -229,7 +249,11 @@ function Distribution({
     return <span title={text}>{text}</span>;
   }
   if (column.kind === 'text' && profile.mean_length !== null) {
-    return <span>avg. {Math.round(profile.mean_length)} characters</span>;
+    return (
+      <span>
+        {i18n.t('ui.data.ColumnHeader.avgCharacters', { round: Math.round(profile.mean_length) })}
+      </span>
+    );
   }
   return null;
 }

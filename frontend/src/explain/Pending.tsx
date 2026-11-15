@@ -1,5 +1,6 @@
 import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
 import { Alert, Button, Group, Loader, Stack, Text } from '@mantine/core';
+import { i18n, useTranslation } from '@/i18n';
 import type { Explanation } from './useExplanation';
 
 /** Loading, error (with a retry) or the content of one explanation, with its notes. */
@@ -12,6 +13,7 @@ export function Pending<T>({
   children: (data: T) => React.ReactNode;
   what: string;
 }) {
+  useTranslation();
   if (result.error) {
     return (
       <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />}>
@@ -23,7 +25,7 @@ export function Pending<T>({
             leftSection={<IconRefresh size={14} />}
             onClick={result.retry}
           >
-            Try again
+            {i18n.t('ui.explain.Pending.tryAgain')}
           </Button>
         </Stack>
       </Alert>
@@ -34,7 +36,7 @@ export function Pending<T>({
       <Group gap="xs" wrap="nowrap">
         <Loader size="sm" />
         <Text size="sm" c="dimmed">
-          Computing {what} on the server …
+          {i18n.t('ui.explain.Pending.computingOnTheServer', { what })}
         </Text>
       </Group>
     );

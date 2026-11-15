@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
+import { i18n, useTranslation } from '@/i18n';
 import { ChartFrame, ChartTooltip, GradientLegend, TooltipRow } from './ChartFrame';
 import {
   divergingColor,
@@ -80,6 +81,7 @@ export function Heatmap({
   scale = 'diverging',
   format = formatCoefficient,
 }: HeatmapProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const scheme = useChartScheme();
@@ -117,9 +119,21 @@ export function Heatmap({
     return `${rows[r]} × ${columns[c]}: ${measure} ${value === null ? 'not defined' : format(value)}`;
   };
   const top3 = strongestPairs(rows, values, 3)
-    .map((p) => `${rows[p.a]} and ${rows[p.b]} (${formatCoefficient(p.value)})`)
+    .map((p) =>
+      i18n.t('ui.components.Heatmap.and', {
+        value: rows[p.a],
+        value2: rows[p.b],
+        value3: formatCoefficient(p.value),
+      })
+    )
     .join(', ');
-  const summary = `${title}. ${n} × ${m} matrix of ${measure}.${top3 ? ` Strongest pairs: ${top3}.` : ''}`;
+  const summary = i18n.t('ui.components.Heatmap.matrixOf', {
+    title,
+    n,
+    m,
+    measure,
+    value: top3 ? i18n.t('ui.components.Heatmap.strongestPairs', { top3 }) : '',
+  });
 
   const pickCell = (clientX: number, clientY: number, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
@@ -137,13 +151,13 @@ export function Heatmap({
       legendExtra={
         scale === 'sequential' ? (
           <GradientLegend
-            label="Colour scale: 0 light, 1 dark"
+            label={i18n.t('ui.components.Heatmap.colourScale0Light1')}
             stops={[SEQUENTIAL[scheme].fillLow, SEQUENTIAL[scheme].high]}
             labels={['0', '1']}
           />
         ) : (
           <GradientLegend
-            label="Colour scale: −1 red, 0 gray, +1 blue"
+            label={i18n.t('ui.components.Heatmap.colourScale1Red0')}
             stops={[
               'var(--chart-diverging-negative)',
               'var(--chart-diverging-midpoint)',
@@ -256,7 +270,13 @@ export function Heatmap({
           data-clickable={onCellClick ? true : undefined}
           role="slider"
           tabIndex={0}
-          aria-label={`${title}: use the arrow keys to read the cells${onCellClick && clickHint ? `, Enter to ${clickHint}` : ''}`}
+          aria-label={i18n.t('ui.components.Heatmap.useTheArrowKeysTo', {
+            title,
+            value:
+              onCellClick && clickHint
+                ? i18n.t('ui.components.Heatmap.enterTo', { clickHint })
+                : '',
+          })}
           aria-valuemin={1}
           aria-valuemax={n * m}
           aria-valuenow={(active ?? 0) + 1}

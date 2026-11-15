@@ -29,6 +29,7 @@ import {
 } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { prepRole } from '@/data/prepAccess';
+import { i18n, useTranslation } from '@/i18n';
 import { isOwnDataset } from '@/training/access';
 import { formatBytes } from '@/training/format';
 import classes from './Sharing.module.css';
@@ -45,14 +46,26 @@ interface OwnItem {
 }
 
 const KIND_TITLES: Record<ProjectDataKind, string> = {
-  dataset: 'Training datasets',
-  prep: 'Data preparations',
+  get dataset() {
+    return i18n.t('ui.sharing.ProjectDataPanel.trainingDatasets');
+  },
+  get prep() {
+    return i18n.t('ui.sharing.ProjectDataPanel.dataPreparations');
+  },
 };
 
 const itemKey = (kind: ProjectDataKind, id: number) => `${kind}:${id}`;
 
 /** What a shared training dataset holds. */
-const DATASET_LABELS = { csv: 'CSV', images: 'Images', segmentation: 'Segmentation' } as const;
+const DATASET_LABELS = {
+  csv: 'CSV',
+  get images() {
+    return i18n.t('ui.sharing.ProjectDataPanel.images');
+  },
+  get segmentation() {
+    return i18n.t('ui.sharing.ProjectDataPanel.segmentation');
+  },
+} as const;
 const DATASET_COLORS = { csv: 'teal', images: 'violet', segmentation: 'grape' } as const;
 
 /**
@@ -61,6 +74,7 @@ const DATASET_COLORS = { csv: 'teal', images: 'violet', segmentation: 'grape' } 
  * them. Mount it while it is shown.
  */
 export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
+  useTranslation();
   const { user } = useAuth();
   const canAdd = project.role === 'owner' || project.role === 'editor';
   const [data, setData] = useState<ProjectData | null>(null);
@@ -138,7 +152,7 @@ export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: 'Could not share it',
+        title: i18n.t('ui.sharing.ProjectDataPanel.couldNotShareIt'),
         message: (error as Error).message,
       });
     } finally {
@@ -159,7 +173,7 @@ export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
     } catch (error) {
       notifications.show({
         color: 'red',
-        title: `Could not stop sharing “${item.name}”`,
+        title: i18n.t('ui.sharing.ProjectDataPanel.couldNotStopSharing', { name: item.name }),
         message: (error as Error).message,
       });
     } finally {
@@ -185,8 +199,7 @@ export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
   return (
     <>
       <Text size="sm" c="dimmed" mb="sm">
-        Everyone in this network can train on the datasets shared here and open the preparations in
-        their Data tab; editors can also change the preparations.
+        {i18n.t('ui.sharing.ProjectDataPanel.everyoneInThisNetworkCan')}
       </Text>
 
       {canAdd && (
@@ -199,25 +212,25 @@ export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
         >
           <Select
             className={classes.inviteUser}
-            aria-label="Dataset or preparation to share"
+            aria-label={i18n.t('ui.sharing.ProjectDataPanel.datasetOrPreparationToShare')}
             placeholder={
               own === null
-                ? 'Loading your data …'
+                ? i18n.t('ui.sharing.ProjectDataPanel.loadingYourData')
                 : options.length === 0
-                  ? 'Nothing else of yours to share'
-                  : 'Choose one of your datasets or preparations'
+                  ? i18n.t('ui.sharing.ProjectDataPanel.nothingElseOfYoursTo')
+                  : i18n.t('ui.sharing.ProjectDataPanel.chooseOneOfYourDatasets')
             }
             data={options}
             value={choice}
             onChange={setChoice}
             disabled={options.length === 0}
             searchable
-            nothingFoundMessage="Nothing found"
+            nothingFoundMessage={i18n.t('ui.sharing.ProjectDataPanel.nothingFound')}
             comboboxProps={{ withinPortal: true }}
           />
           <div className={classes.inviteControls}>
             <Button type="submit" loading={adding} disabled={!choice}>
-              Share
+              {i18n.t('ui.sharing.ProjectDataPanel.share')}
             </Button>
           </div>
         </form>
@@ -225,8 +238,8 @@ export function ProjectDataPanel({ project }: ProjectDataPanelProps) {
 
       {empty && (
         <Text size="sm" c="dimmed" mt="md">
-          Nothing is shared here yet.
-          {!canAdd && ' The owner and the editors of the network can share their data here.'}
+          {i18n.t('ui.sharing.ProjectDataPanel.nothingIsSharedHereYet')}
+          {!canAdd && i18n.t('ui.sharing.ProjectDataPanel.theOwnerAndTheEditors')}
         </Text>
       )}
       {(['dataset', 'prep'] as const).map((kind) => {
@@ -271,6 +284,7 @@ function DataItemRow({
   onRemove?: () => void;
   removing: boolean;
 }) {
+  useTranslation();
   const inRouter = useInRouterContext();
   const meta = [
     you ? 'by you' : `by ${item.owner}`,
@@ -316,13 +330,13 @@ function DataItemRow({
       </div>
       {onRemove && (
         <div className={classes.personActions}>
-          <Tooltip label="Stop sharing it here">
+          <Tooltip label={i18n.t('ui.sharing.ProjectDataPanel.stopSharingItHere')}>
             <ActionIcon
               variant="subtle"
               color="gray"
               onClick={onRemove}
               loading={removing}
-              aria-label={`Stop sharing ${item.name}`}
+              aria-label={i18n.t('ui.sharing.ProjectDataPanel.stopSharing', { name: item.name })}
             >
               <IconX size={16} />
             </ActionIcon>

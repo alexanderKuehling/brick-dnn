@@ -1,11 +1,12 @@
 /** What plans include and cost, in words. */
 import type { Plan } from '@/api';
+import { currentLocale, longDateLocale } from '@/i18n';
 
 /** 14, "EUR" → "€14", 4.5 → "€4.50". */
 export function formatPrice(amount: number, currency: string | null): string {
   const digits = Number.isInteger(amount) ? 0 : 2;
   try {
-    return amount.toLocaleString('en-US', {
+    return amount.toLocaleString(currentLocale(), {
       style: 'currency',
       currency: currency ?? 'EUR',
       minimumFractionDigits: digits,
@@ -17,7 +18,7 @@ export function formatPrice(amount: number, currency: string | null): string {
 }
 
 function count(value: number): string {
-  return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return value.toLocaleString(currentLocale(), { maximumFractionDigits: 2 });
 }
 
 /** "9 December 2026": a day a subscription renews or ends. */
@@ -25,7 +26,7 @@ export function formatDay(iso: string | null | undefined): string {
   if (!iso) {
     return '–';
   }
-  return new Date(iso).toLocaleDateString('en-GB', {
+  return new Date(iso).toLocaleDateString(longDateLocale(), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

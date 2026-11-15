@@ -10,6 +10,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.db.models import Prefetch, Q, RestrictedError
 from django.http import FileResponse, HttpResponse
+from django.utils import translation
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
@@ -19,6 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
+from . import catalog
 from . import data_service as data
 from . import training_service as training
 from .models import DataPrep, Dataset, DataSource
@@ -80,7 +82,7 @@ def data_status(request: Request) -> Response:
 def data_steps(request: Request) -> Response:
     """All step types with their settings, for the step menu and forms (public)."""
     _check_available()
-    return Response(data.step_catalog())
+    return Response(catalog.steps(translation.get_language() or "en"))
 
 
 class DataViewSet(viewsets.GenericViewSet):

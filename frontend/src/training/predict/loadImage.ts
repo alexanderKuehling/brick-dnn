@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n';
+
 /**
  * Reading an image file in the browser: decoded and resized to the size the network takes
  * (smooth resampling, like the bilinear resize of the training).
@@ -14,7 +16,8 @@ export async function imagePixels(
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const element = new Image();
       element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('This file cannot be read as an image.'));
+      element.onerror = () =>
+        reject(new Error(i18n.t('ui.training.loadImage.thisFileCannotBeRead')));
       element.src = url;
     });
     const canvas = document.createElement('canvas');
@@ -22,7 +25,7 @@ export async function imagePixels(
     canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) {
-      throw new Error('This browser cannot read images.');
+      throw new Error(i18n.t('ui.training.loadImage.thisBrowserCannotReadImages'));
     }
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';

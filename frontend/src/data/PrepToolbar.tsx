@@ -26,6 +26,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { DataSource, PrepDownloadFormat, ProjectRef, ProjectRole } from '@/api';
+import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { UNTITLED, type SaveStatus } from './useDataPrep';
 import classes from './DataPage.module.css';
 
@@ -60,7 +61,9 @@ export interface SharedPrep {
 /** "“Churn” and “Fraud”" */
 function projectNames(projects: ProjectRef[]): string {
   const names = projects.map((project) => `“${project.name}”`);
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join('');
+  return names.length > 1
+    ? i18n.t('ui.data.PrepToolbar.and', { slice: names.slice(0, -1).join(', '), at: names.at(-1) })
+    : names.join('');
 }
 
 const DOWNLOADS: {
@@ -71,20 +74,32 @@ const DOWNLOADS: {
 }[] = [
   {
     format: 'csv',
-    label: 'Prepared data (.csv)',
-    description: 'All rows after the steps, with a split column',
+    get label() {
+      return i18n.t('ui.data.PrepToolbar.preparedDataCsv');
+    },
+    get description() {
+      return i18n.t('ui.data.PrepToolbar.allRowsAfterTheSteps');
+    },
     icon: <IconFileSpreadsheet size={16} />,
   },
   {
     format: 'recipe',
-    label: 'Recipe (.json)',
-    description: 'Tables, steps, settings and the learned values',
+    get label() {
+      return i18n.t('ui.data.PrepToolbar.recipeJson');
+    },
+    get description() {
+      return i18n.t('ui.data.PrepToolbar.tablesStepsSettingsAndThe');
+    },
     icon: <IconFileCode size={16} />,
   },
   {
     format: 'python',
-    label: 'Python script (.py)',
-    description: 'pandas code that prepares new data the same way',
+    get label() {
+      return i18n.t('ui.data.PrepToolbar.pythonScriptPy');
+    },
+    get description() {
+      return i18n.t('ui.data.PrepToolbar.pandasCodeThatPreparesNew');
+    },
     icon: <IconBrandPython size={16} />,
   },
 ];
@@ -98,9 +113,16 @@ function SaveState({
   error: string | null;
   onRetry: () => void;
 }) {
+  useTranslation();
   if (status === 'error') {
     return (
-      <Tooltip label={`${error ?? 'Saving failed.'} Click to try again.`} multiline w={260}>
+      <Tooltip
+        label={i18n.t('ui.data.PrepToolbar.clickToTryAgain', {
+          value: error ?? i18n.t('ui.data.PrepToolbar.savingFailed'),
+        })}
+        multiline
+        w={260}
+      >
         <Button
           size="compact-xs"
           variant="light"
@@ -109,13 +131,13 @@ function SaveState({
           onClick={onRetry}
           style={{ flexShrink: 0 }}
         >
-          Not saved
+          {i18n.t('ui.data.PrepToolbar.notSaved')}
         </Button>
       </Tooltip>
     );
   }
   const saving = status !== 'saved';
-  const label = saving ? 'Saving…' : 'Saved';
+  const label = saving ? i18n.t('ui.data.PrepToolbar.saving') : i18n.t('ui.data.PrepToolbar.saved');
   // Below `sm` only the icon is shown: it carries the label for screen readers.
   return (
     <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }} role="img" aria-label={label}>
@@ -133,6 +155,7 @@ function SaveState({
 
 /** Name, main table, save state, downloads and the export actions of a preparation. */
 export function PrepToolbar(props: PrepToolbarProps) {
+  useTranslation();
   const { name, source, busy, shared = null } = props;
   const downloading = busy === 'csv' || busy === 'recipe' || busy === 'python';
   const readOnly = shared?.role === 'viewer';
@@ -149,19 +172,19 @@ export function PrepToolbar(props: PrepToolbarProps) {
       >
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
           {props.onOpenSidebar && (
-            <Tooltip label="Preparations and tables">
+            <Tooltip label={i18n.t('ui.data.PrepToolbar.preparationsAndTables')}>
               <ActionIcon
                 variant="default"
                 size="lg"
                 onClick={props.onOpenSidebar}
-                aria-label="Show preparations and tables"
+                aria-label={i18n.t('ui.data.PrepToolbar.showPreparationsAndTables')}
               >
                 <IconLayoutSidebar size={18} />
               </ActionIcon>
             </Tooltip>
           )}
           <TextInput
-            aria-label="Preparation name"
+            aria-label={i18n.t('ui.data.PrepToolbar.preparationName')}
             value={name}
             readOnly={readOnly}
             variant={readOnly ? 'filled' : 'default'}
@@ -178,8 +201,12 @@ export function PrepToolbar(props: PrepToolbarProps) {
           <Tooltip
             label={
               source
-                ? `Main table: ${source.filename}, ${source.n_rows.toLocaleString('en-US')} rows × ${source.n_columns.toLocaleString('en-US')} columns`
-                : 'Main table'
+                ? i18n.t('ui.data.PrepToolbar.mainTableRowsColumns', {
+                    filename: source.filename,
+                    n_rows: source.n_rows.toLocaleString(currentLocale()),
+                    n_columns: source.n_columns.toLocaleString(currentLocale()),
+                  })
+                : i18n.t('ui.data.PrepToolbar.mainTable')
             }
           >
             <Badge
@@ -195,7 +222,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
             >
               {props.sourceName}
               {source &&
-                ` · ${source.n_rows.toLocaleString('en-US')} × ${source.n_columns.toLocaleString('en-US')}`}
+                ` · ${source.n_rows.toLocaleString(currentLocale())} × ${source.n_columns.toLocaleString(currentLocale())}`}
             </Badge>
           </Tooltip>
           {readOnly ? (
@@ -206,7 +233,9 @@ export function PrepToolbar(props: PrepToolbarProps) {
               leftSection={<IconEye size={12} />}
               style={{ flexShrink: 0 }}
             >
-              <span className={classes.viewOnlyLabel}>View only</span>
+              <span className={classes.viewOnlyLabel}>
+                {i18n.t('ui.data.PrepToolbar.viewOnly')}
+              </span>
             </Badge>
           ) : (
             <SaveState
@@ -226,11 +255,11 @@ export function PrepToolbar(props: PrepToolbarProps) {
                 rightSection={<IconChevronDown size={14} />}
                 loading={downloading}
                 disabled={busy !== null && !downloading}
-                aria-label="Download"
+                aria-label={i18n.t('ui.data.PrepToolbar.download')}
                 px={{ base: 'xs', sm: 'md' }}
               >
                 <Box component="span" visibleFrom="sm">
-                  Download
+                  {i18n.t('ui.data.PrepToolbar.download')}
                 </Box>
               </Button>
             </Menu.Target>
@@ -255,9 +284,9 @@ export function PrepToolbar(props: PrepToolbarProps) {
                     leftSection={<IconDatabaseExport size={16} />}
                     onClick={props.onExport}
                   >
-                    <Text size="sm">Create training dataset</Text>
+                    <Text size="sm">{i18n.t('ui.data.PrepToolbar.createTrainingDataset')}</Text>
                     <Text size="xs" c="dimmed">
-                      Listed under “Your data” in the training panel
+                      {i18n.t('ui.data.PrepToolbar.listedUnderYourDataIn')}
                     </Text>
                   </Menu.Item>
                 </>
@@ -266,7 +295,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
           </Menu>
           {!readOnly && (
             <>
-              <Tooltip label="Save the prepared data as a training dataset. It is listed under “Your data” in the training panel.">
+              <Tooltip label={i18n.t('ui.data.PrepToolbar.saveThePreparedDataAs')}>
                 <Button
                   variant="default"
                   leftSection={<IconDatabaseExport size={16} />}
@@ -275,10 +304,10 @@ export function PrepToolbar(props: PrepToolbarProps) {
                   disabled={busy !== null && busy !== 'export'}
                   visibleFrom="md"
                 >
-                  Create training dataset
+                  {i18n.t('ui.data.PrepToolbar.createTrainingDataset')}
                 </Button>
               </Tooltip>
-              <Tooltip label="Create the training dataset and open the training panel with it">
+              <Tooltip label={i18n.t('ui.data.PrepToolbar.createTheTrainingDatasetAnd')}>
                 <Button
                   leftSection={<IconPlayerPlay size={16} />}
                   onClick={props.onTrain}
@@ -287,9 +316,9 @@ export function PrepToolbar(props: PrepToolbarProps) {
                 >
                   {/* One inline span: the button label is a flex box, which would drop the space. */}
                   <span>
-                    Train{' '}
+                    {i18n.t('ui.data.PrepToolbar.train')}{' '}
                     <Box component="span" visibleFrom="sm">
-                      with this data
+                      {i18n.t('ui.data.PrepToolbar.withThisData')}
                     </Box>
                   </span>
                 </Button>
@@ -314,11 +343,17 @@ export function PrepToolbar(props: PrepToolbarProps) {
             aria-hidden
           />
           <Text size="xs" c="dimmed">
-            Shared by <b>{shared.owner}</b>
-            {shared.projects.length > 0 && <> in {projectNames(shared.projects)}</>}.{' '}
+            {i18n.t('ui.data.PrepToolbar.sharedBy')} <b>{shared.owner}</b>
+            {shared.projects.length > 0 && (
+              <>
+                {' '}
+                {i18n.t('ui.data.PrepToolbar.in', { projectNames: projectNames(shared.projects) })}
+              </>
+            )}
+            .{' '}
             {readOnly
-              ? 'You can look at the data, its analysis and download it; editors of the network can change it.'
-              : 'You can change the steps and settings; your changes are saved for everyone in the network.'}
+              ? i18n.t('ui.data.PrepToolbar.youCanLookAtThe')
+              : i18n.t('ui.data.PrepToolbar.youCanChangeTheSteps')}
           </Text>
         </Group>
       )}

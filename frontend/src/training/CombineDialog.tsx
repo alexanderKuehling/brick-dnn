@@ -13,6 +13,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { api, type EnsembleMethod, type RunDetail, type RunSummary } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { defaultEnsembleName, METHOD_LABELS, methodText, shares } from './ensemble';
 import { formatPercent } from './format';
 
@@ -31,6 +32,7 @@ interface CombineDialogProps {
  * average, a weight per run. The server checks that the runs fit together and says why not.
  */
 export function CombineDialog({ opened, runs, project, onClose, onCreated }: CombineDialogProps) {
+  useTranslation();
   const [name, setName] = useState('');
   const [method, setMethod] = useState<EnsembleMethod>('average');
   const [weights, setWeights] = useState<number[]>([]);
@@ -78,29 +80,28 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
       title={
         <Group gap="xs">
           <IconStack2 size={18} />
-          <Text fw={600}>Combine into an ensemble</Text>
+          <Text fw={600}>{i18n.t('ui.training.CombineDialog.combineIntoAnEnsemble')}</Text>
         </Group>
       }
       size="lg"
     >
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
-          The ensemble predicts with all {runs.length} runs and combines what they predict. It is
-          measured on the validation and test rows of their dataset, next to each run on its own.
+          {i18n.t('ui.training.CombineDialog.theEnsemblePredictsWithAll', { length: runs.length })}
         </Text>
         <TextInput
-          label="Name"
+          label={i18n.t('ui.training.CombineDialog.name')}
           value={name}
           maxLength={120}
           onChange={(event) => setName(event.currentTarget.value)}
         />
         <div>
           <Text size="sm" fw={500} mb={4}>
-            Method
+            {i18n.t('ui.training.CombineDialog.method')}
           </Text>
           <SegmentedControl
             fullWidth
-            aria-label="Method"
+            aria-label={i18n.t('ui.training.CombineDialog.method')}
             value={method}
             onChange={(value) => setMethod(value as EnsembleMethod)}
             data={[
@@ -111,15 +112,19 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
           <Text size="xs" c="dimmed" mt={4}>
             {methodText(method, task)}
             {method === 'stacking' &&
-              ' It needs validation rows; without test rows its metrics are optimistic.'}
+              i18n.t('ui.training.CombineDialog.itNeedsValidationRowsWithout')}
           </Text>
         </div>
-        <Table fz="sm" aria-label="Members">
+        <Table fz="sm" aria-label={i18n.t('ui.training.CombineDialog.members')}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Run</Table.Th>
-              {method === 'average' && <Table.Th w={120}>Weight</Table.Th>}
-              {method === 'average' && <Table.Th w={70}>Share</Table.Th>}
+              <Table.Th>{i18n.t('ui.training.CombineDialog.run')}</Table.Th>
+              {method === 'average' && (
+                <Table.Th w={120}>{i18n.t('ui.training.CombineDialog.weight')}</Table.Th>
+              )}
+              {method === 'average' && (
+                <Table.Th w={70}>{i18n.t('ui.training.CombineDialog.share')}</Table.Th>
+              )}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -149,7 +154,7 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
                       min={0}
                       step={0.5}
                       decimalScale={3}
-                      aria-label={`Weight of ${run.name}`}
+                      aria-label={i18n.t('ui.training.CombineDialog.weightOf', { name: run.name })}
                       value={weights[index] ?? 1}
                       onChange={(value) =>
                         setWeights((current) =>
@@ -172,17 +177,21 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
         </Table>
         {noWeight && (
           <Text size="xs" c="red">
-            At least one weight must be above 0.
+            {i18n.t('ui.training.CombineDialog.atLeastOneWeightMust')}
           </Text>
         )}
         {error && (
-          <Alert color="red" variant="light" title="Cannot combine these runs">
+          <Alert
+            color="red"
+            variant="light"
+            title={i18n.t('ui.training.CombineDialog.cannotCombineTheseRuns')}
+          >
             <Text size="sm">{error}</Text>
           </Alert>
         )}
         <Group justify="flex-end" gap="xs">
           <Button variant="default" onClick={onClose}>
-            Cancel
+            {i18n.t('ui.training.CombineDialog.cancel')}
           </Button>
           <Button
             leftSection={<IconStack2 size={16} />}
@@ -190,7 +199,7 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
             disabled={noWeight}
             onClick={() => void create()}
           >
-            Create ensemble
+            {i18n.t('ui.training.CombineDialog.createEnsemble')}
           </Button>
         </Group>
       </Stack>

@@ -4,6 +4,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Anchor, Button, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { ApiError } from '@/api';
 import { useAuth, useLoginWithCode } from '@/auth/AuthContext';
+import { Trans, useTranslation } from '@/i18n';
 import { AuthLayout } from './AuthLayout';
 
 /** Where to go after logging in, and the router state to pass on to that page. */
@@ -22,6 +23,7 @@ function CodeStep({
   onDone: () => void;
   onRestart: () => void;
 }) {
+  const { t } = useTranslation();
   const loginWithCode = useLoginWithCode();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ function CodeStep({
         onRestart();
         return;
       }
-      setError(err instanceof Error ? err.message : 'The code was not accepted.');
+      setError(err instanceof Error ? err.message : t('auth.login.codeRejected'));
       setCode('');
     } finally {
       setBusy(false);
@@ -54,9 +56,7 @@ function CodeStep({
     <form onSubmit={onSubmit}>
       <Stack>
         <Text size="sm">
-          {recovery
-            ? 'Enter one of your recovery codes. Each code works once.'
-            : 'Enter the 6-digit code from your authenticator app.'}
+          {recovery ? t('auth.login.enterRecovery') : t('auth.login.enterCode')}
         </Text>
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -64,7 +64,7 @@ function CodeStep({
           </Alert>
         )}
         <TextInput
-          label={recovery ? 'Recovery code' : 'Code'}
+          label={recovery ? t('auth.login.recoveryCode') : t('auth.login.code')}
           autoComplete="one-time-code"
           inputMode={recovery ? 'text' : 'numeric'}
           autoCapitalize="none"
@@ -78,7 +78,7 @@ function CodeStep({
           maxLength={recovery ? 40 : 6}
         />
         <Button type="submit" loading={busy} fullWidth mt="sm" disabled={!code.trim()}>
-          Verify
+          {t('auth.login.verify')}
         </Button>
         <Group justify="space-between" gap="xs">
           <Anchor
@@ -91,10 +91,10 @@ function CodeStep({
               setError(null);
             }}
           >
-            {recovery ? 'Use the authenticator app' : 'Use a recovery code'}
+            {recovery ? t('auth.login.useApp') : t('auth.login.useRecovery')}
           </Anchor>
           <Anchor component="button" type="button" size="sm" c="dimmed" onClick={onRestart}>
-            Back
+            {t('common.back')}
           </Anchor>
         </Group>
       </Stack>
@@ -103,6 +103,7 @@ function CodeStep({
 }
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -131,7 +132,7 @@ export function LoginPage() {
         setChallenge(step.challenge);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed.');
+      setError(err instanceof Error ? err.message : t('auth.login.failed'));
     } finally {
       setBusy(false);
     }
@@ -139,14 +140,17 @@ export function LoginPage() {
 
   if (challenge) {
     return (
-      <AuthLayout title="Two-factor authentication" subtitle={`Logging in as ${username.trim()}`}>
+      <AuthLayout
+        title={t('auth.login.twoFactorTitle')}
+        subtitle={t('auth.login.loggingInAs', { username: username.trim() })}
+      >
         <CodeStep
           challenge={challenge}
           onDone={done}
           onRestart={() => {
             setChallenge(null);
             setPassword('');
-            setError('The login has expired or was cancelled. Enter your password again.');
+            setError(t('auth.login.expired'));
           }}
         />
       </AuthLayout>
@@ -155,14 +159,16 @@ export function LoginPage() {
 
   return (
     <AuthLayout
-      title="Welcome back"
+      title={t('auth.login.title')}
       subtitle={
-        <>
-          No account yet?{' '}
-          <Anchor component={Link} to="/register" state={{ from, returnState }} size="sm">
-            Create one
-          </Anchor>
-        </>
+        <Trans
+          i18nKey="auth.login.noAccount"
+          components={{
+            anchor: (
+              <Anchor component={Link} to="/register" state={{ from, returnState }} size="sm" />
+            ),
+          }}
+        />
       }
     >
       <form onSubmit={onSubmit}>
@@ -173,24 +179,24 @@ export function LoginPage() {
             </Alert>
           )}
           <TextInput
-            label="Username"
+            label={t('auth.username')}
             autoComplete="username"
             required
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
           />
           <PasswordInput
-            label="Password"
+            label={t('auth.password')}
             autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
           />
           <Anchor component={Link} to="/forgot-password" size="sm" ta="right" mt={-8}>
-            Forgot password?
+            {t('auth.login.forgot')}
           </Anchor>
           <Button type="submit" loading={busy} fullWidth mt="xs">
-            Log in
+            {t('auth.logIn')}
           </Button>
         </Stack>
       </form>

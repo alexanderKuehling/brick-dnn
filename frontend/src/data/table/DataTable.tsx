@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { Button, Group, Select, Text } from '@mantine/core';
 import type { ColumnKind, DataProfile, DataSample, NewStep } from '@/api/types';
+import { i18n, useTranslation } from '@/i18n';
 import { ColumnDialog, type ColumnDialogState } from './ColumnDialog';
 import { ColumnHeader, type SortDirection } from './ColumnHeader';
 import { formatCell, sampleCaption } from './format';
@@ -40,7 +41,17 @@ const FALLBACK = { width: 1280, height: 720 };
 
 const SPLIT_CELL_STYLE = { left: INDEX_WIDTH };
 const SPLIT_LABELS = { train: 'train', val: 'val', test: 'test' } as const;
-const SPLIT_TITLES = { train: 'Training row', val: 'Validation row', test: 'Test row' } as const;
+const SPLIT_TITLES = {
+  get train() {
+    return i18n.t('ui.data.DataTable.trainingRow');
+  },
+  get val() {
+    return i18n.t('ui.data.DataTable.validationRow');
+  },
+  get test() {
+    return i18n.t('ui.data.DataTable.testRow');
+  },
+} as const;
 
 interface Viewport {
   top: number;
@@ -58,6 +69,7 @@ export function DataTable({
   onSetTarget,
   onShowColumn,
 }: DataTableProps) {
+  useTranslation();
   const captionId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Viewport>({ top: 0, left: 0, width: 0, height: 0 });
@@ -175,7 +187,9 @@ export function DataTable({
       <Group justify="space-between" gap="xs" wrap="wrap" className={classes.toolbar}>
         <Text size="xs" c="dimmed" id={captionId}>
           {sampleCaption(sample.rows, sample.n_total)} · {columns.length}{' '}
-          {columns.length === 1 ? 'column' : 'columns'}
+          {columns.length === 1
+            ? i18n.t('ui.data.DataTable.column')
+            : i18n.t('ui.data.DataTable.columns')}
         </Text>
         <Group gap="xs" wrap="wrap" miw={0} maw="100%">
           {activeSort && (
@@ -185,21 +199,24 @@ export function DataTable({
               variant="light"
               rightSection={<IconX size={12} />}
               onClick={() => setSort(null)}
-              aria-label={`Sorted by ${activeSort.column} (${activeSort.direction}). Clear sorting`}
+              aria-label={i18n.t('ui.data.DataTable.sortedByClearSorting', {
+                column: activeSort.column,
+                direction: activeSort.direction,
+              })}
             >
-              Sorted by {activeSort.column}
+              {i18n.t('ui.data.DataTable.sortedBy', { column: activeSort.column })}
             </Button>
           )}
           {columns.length > 6 && (
             <Select
               size="xs"
               w={180}
-              aria-label="Go to column"
-              placeholder="Go to column"
+              aria-label={i18n.t('ui.data.DataTable.goToColumn')}
+              placeholder={i18n.t('ui.data.DataTable.goToColumn')}
               data={names}
               value={null}
               searchable
-              nothingFoundMessage="No matching column"
+              nothingFoundMessage={i18n.t('ui.data.DataTable.noMatchingColumn')}
               comboboxProps={{ withinPortal: true, shadow: 'md' }}
               onChange={jumpTo}
             />
@@ -222,7 +239,7 @@ export function DataTable({
           style={{ width: fixedWidth + totalWidth }}
           aria-rowcount={sample.rows + 1}
           aria-colcount={columns.length + fixedCount}
-          aria-label="Data sample"
+          aria-label={i18n.t('ui.data.DataTable.dataSample')}
         >
           <thead>
             <tr aria-rowindex={1} style={{ height: HEADER_HEIGHT }}>
@@ -232,7 +249,7 @@ export function DataTable({
                 className={`${classes.corner} ${classes.indexHead}`}
                 style={{ width: INDEX_WIDTH }}
               >
-                Row
+                {i18n.t('ui.data.DataTable.row')}
               </th>
               {hasSplit && (
                 <th
@@ -241,7 +258,7 @@ export function DataTable({
                   className={`${classes.corner} ${classes.splitHead}`}
                   style={{ width: SPLIT_WIDTH, left: INDEX_WIDTH }}
                 >
-                  Split
+                  {i18n.t('ui.data.DataTable.split')}
                 </th>
               )}
               {leftSpacer > 0 && (
@@ -326,7 +343,9 @@ export function DataTable({
                         }
                       >
                         {cell.missing ? (
-                          <span className={classes.missing}>missing</span>
+                          <span className={classes.missing}>
+                            {i18n.t('ui.data.DataTable.missing')}
+                          </span>
                         ) : (
                           cell.text
                         )}
@@ -345,7 +364,7 @@ export function DataTable({
             {sample.rows === 0 && (
               <tr>
                 <td colSpan={spanAll} className={classes.empty}>
-                  No rows left. A filter or another step removed all rows.
+                  {i18n.t('ui.data.DataTable.noRowsLeftAFilter')}
                 </td>
               </tr>
             )}

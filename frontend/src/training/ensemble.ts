@@ -5,19 +5,30 @@ import type {
   RunSummary,
   TrainingTask,
 } from '@/api';
+import { i18n } from '@/i18n';
 
 /** The most runs one ensemble combines (as on the server). */
 export const MAX_MEMBERS = 10;
 
 export const METHOD_LABELS: Record<EnsembleMethod, string> = {
-  average: 'Weighted average',
-  stacking: 'Stacking',
+  get average() {
+    return i18n.t('ui.training.ensemble.weightedAverage');
+  },
+  get stacking() {
+    return i18n.t('ui.training.ensemble.stacking');
+  },
 };
 
 export const SPLIT_LABELS: Record<EnsembleSplit, string> = {
-  val: 'Validation',
-  test: 'Test',
-  training: 'Training',
+  get val() {
+    return i18n.t('ui.training.ensemble.validation');
+  },
+  get test() {
+    return i18n.t('ui.training.ensemble.test');
+  },
+  get training() {
+    return i18n.t('ui.training.ensemble.training');
+  },
 };
 
 export function isEnsemble(run: Pick<RunSummary, 'kind' | 'family'>): boolean {
@@ -41,16 +52,16 @@ export function canBeMember(run: RunSummary): boolean {
  */
 export function combineProblem(runs: RunSummary[]): string | null {
   if (runs.length < 2) {
-    return 'Select at least 2 finished runs.';
+    return i18n.t('ui.training.ensemble.selectAtLeast2Finished');
   }
   if (runs.length > MAX_MEMBERS) {
-    return `An ensemble combines at most ${MAX_MEMBERS} runs.`;
+    return i18n.t('ui.training.ensemble.anEnsembleCombinesAtMost', { MAX_MEMBERS });
   }
   if (new Set(runs.map((run) => String(run.dataset.id))).size > 1) {
-    return 'The runs were trained on different datasets. An ensemble needs runs of one dataset, so that their validation and test rows line up.';
+    return i18n.t('ui.training.ensemble.theRunsWereTrainedOn');
   }
   if (new Set(runs.map((run) => run.task)).size > 1) {
-    return 'The runs solve different tasks (classification and regression).';
+    return i18n.t('ui.training.ensemble.theRunsSolveDifferentTasks');
   }
   return null;
 }
@@ -62,8 +73,16 @@ export function defaultEnsembleName(runs: RunSummary[]): string {
     names.length <= 2
       ? names.join(' and ')
       : names.length === 3
-        ? `${names[0]}, ${names[1]} and ${names[2]}`
-        : `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+        ? i18n.t('ui.training.ensemble.and', {
+            value: names[0],
+            value2: names[1],
+            value3: names[2],
+          })
+        : i18n.t('ui.training.ensemble.andMore', {
+            value: names[0],
+            value2: names[1],
+            value3: names.length - 2,
+          });
   return `Ensemble of ${text}`.slice(0, 120);
 }
 
@@ -72,12 +91,12 @@ export function methodText(method: EnsembleMethod, task: TrainingTask | null | u
   const regression = task === 'regression';
   if (method === 'average') {
     return regression
-      ? 'The weighted average of the values the members predict.'
-      : 'The weighted average of the class probabilities the members predict.';
+      ? i18n.t('ui.training.ensemble.theWeightedAverageOfThe')
+      : i18n.t('ui.training.ensemble.theWeightedAverageOfThe2');
   }
   return regression
-    ? 'A ridge regression learns from the validation rows how to combine the members’ predicted values; it is measured on the test rows.'
-    : 'A logistic regression learns from the validation rows how to combine the members’ probabilities; it is measured on the test rows.';
+    ? i18n.t('ui.training.ensemble.aRidgeRegressionLearnsFrom')
+    : i18n.t('ui.training.ensemble.aLogisticRegressionLearnsFrom');
 }
 
 /** The weights as shares that add up to 1 (all equal if they add up to 0). */
@@ -110,12 +129,32 @@ export function comparisonColumns(
     ];
   }
   return [
-    { key: 'accuracy', label: 'Accuracy', higher: true, format: 'percent' },
-    { key: 'balanced_accuracy', label: 'Balanced acc.', higher: true, format: 'percent' },
-    { key: 'macro_f1', label: 'Macro F1', higher: true, format: 'score' },
+    {
+      key: 'accuracy',
+      label: i18n.t('ui.training.ensemble.accuracy'),
+      higher: true,
+      format: 'percent',
+    },
+    {
+      key: 'balanced_accuracy',
+      label: i18n.t('ui.training.ensemble.balancedAcc'),
+      higher: true,
+      format: 'percent',
+    },
+    {
+      key: 'macro_f1',
+      label: i18n.t('ui.training.ensemble.macroF1'),
+      higher: true,
+      format: 'score',
+    },
     ...(binary
       ? [{ key: 'roc_auc' as const, label: 'ROC AUC', higher: true, format: 'score' as const }]
       : []),
-    { key: 'log_loss', label: 'Log loss', higher: false, format: 'score' },
+    {
+      key: 'log_loss',
+      label: i18n.t('ui.training.ensemble.logLoss'),
+      higher: false,
+      format: 'score',
+    },
   ];
 }

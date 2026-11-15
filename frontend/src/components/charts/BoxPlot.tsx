@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { linearScale } from '@/components/chartScale';
+import { i18n, useTranslation } from '@/i18n';
 import { innerTicks, timeTicks } from './axes';
 import { ChartEmpty, ChartFrame, ChartTooltip, TooltipRow } from './ChartFrame';
 import { seriesColor } from './colors';
@@ -51,6 +52,7 @@ export function BoxPlot({
   formatValue,
   width: fixedWidth,
 }: BoxPlotProps) {
+  useTranslation();
   const { ref, width: measured } = useElementSize();
   const width = fixedWidth ?? measured;
   const cursor = useChartCursor(groups.length, { orientation: 'vertical' });
@@ -308,7 +310,7 @@ export function BoxPlot({
             role="slider"
             tabIndex={0}
             aria-orientation="vertical"
-            aria-label={`${title}: use the arrow keys to read the groups`}
+            aria-label={i18n.t('ui.components.BoxPlot.useTheArrowKeysTo', { title })}
             aria-valuemin={1}
             aria-valuemax={groups.length}
             aria-valuenow={(active ?? 0) + 1}

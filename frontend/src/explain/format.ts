@@ -1,3 +1,5 @@
+import { currentLocale } from '@/i18n';
+
 /** Numbers in explanations: a few significant digits, no exponent for everyday sizes. */
 export function formatValue(value: number | null | undefined, digits = 3): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -10,7 +12,9 @@ export function formatValue(value: number | null | undefined, digits = 3): strin
   if (size >= 1e6 || size < 1e-4) {
     return value.toExponential(Math.max(0, digits - 1));
   }
-  return Number(value.toPrecision(digits)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+  return Number(value.toPrecision(digits)).toLocaleString(currentLocale(), {
+    maximumFractionDigits: 6,
+  });
 }
 
 export function formatSigned(value: number | null | undefined, digits = 3): string {

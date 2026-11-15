@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n';
+
 /** Turning drawings and image files into the pixel arrays an image network takes. */
 
 export interface ImageFormat {
@@ -78,7 +80,7 @@ export function loadImage(file: Blob): Promise<HTMLImageElement> {
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('This file is not an image the browser can read.'));
+      reject(new Error(i18n.t('ui.explain.pixels.thisFileIsNotAn')));
     };
     image.src = url;
   });

@@ -1,3 +1,4 @@
+import { currentLanguage, type Language } from '@/i18n';
 import { request, requestFile, type UploadOptions } from './client';
 import type {
   Account,
@@ -145,7 +146,14 @@ const serverApi = {
   register: (username: string, email: string, password: string, acceptTerms = false) =>
     request<Tokens & { user: User }>('/api/auth/register/', {
       method: 'POST',
-      body: { username, email, password, ...(acceptTerms ? { accept_terms: true } : {}) },
+      body: {
+        username,
+        email,
+        password,
+        ...(acceptTerms ? { accept_terms: true } : {}),
+        // The account starts in the app's language (also that of its e-mails).
+        language: currentLanguage(),
+      },
     }),
   logout: (refresh: string) =>
     request<void>('/api/auth/logout/', { method: 'POST', body: { refresh } }),
@@ -154,6 +162,13 @@ const serverApi = {
   /** The own account (website login only, not API tokens). */
   account: {
     get: () => request<Account>('/api/auth/account/', { auth: true }),
+    /** The language of the app and of e-mails, saved on the account (docs/translations.md). */
+    setLanguage: (language: Language) =>
+      request<{ language: string }>('/api/auth/account/language/', {
+        method: 'PATCH',
+        body: { language },
+        auth: true,
+      }),
     changeEmail: (email: string) =>
       request<Account>('/api/auth/account/', { method: 'PATCH', body: { email }, auth: true }),
     /** Ends all other logins; the answer holds new tokens for this one. */

@@ -23,6 +23,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { DataPrep, DataSource } from '@/api';
+import { i18n, useTranslation } from '@/i18n';
 import { ROLE_LABELS } from '@/sharing/roles';
 import { prepRole } from './prepAccess';
 import { SourcesPanel } from './SourcesPanel';
@@ -52,11 +53,12 @@ interface PrepSidebarProps {
 }
 
 function stepCount(count: number): string {
-  return count === 0 ? 'no steps' : count === 1 ? '1 step' : `${count} steps`;
+  return count === 0 ? i18n.t('data.steps.none') : i18n.t('data.steps.count', { count });
 }
 
 /** Preparations and imported tables of the user, and preparations shared with them. */
 export function PrepSidebar(props: PrepSidebarProps) {
+  useTranslation();
   const { preps, sources, error } = props;
   const own = preps?.filter((prep) => prepRole(prep) === 'owner') ?? null;
   const shared = preps?.filter((prep) => prepRole(prep) !== 'owner') ?? [];
@@ -66,14 +68,14 @@ export function PrepSidebar(props: PrepSidebarProps) {
     <>
       <Group p="sm" pb={4} wrap="nowrap">
         <Button fullWidth leftSection={<IconFileImport size={16} />} onClick={props.onImport}>
-          Import data
+          {i18n.t('ui.data.PrepSidebar.importData')}
         </Button>
       </Group>
       <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
-        <nav aria-label="Preparations">
+        <nav aria-label={i18n.t('ui.data.PrepSidebar.preparations')}>
           <Group justify="space-between" wrap="nowrap" className={classes.sectionTitle}>
             <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-              Preparations
+              {i18n.t('ui.data.PrepSidebar.preparations')}
             </Text>
             <NewPrepMenu sources={sources} onNewPrep={props.onNewPrep} onImport={props.onImport} />
           </Group>
@@ -81,14 +83,14 @@ export function PrepSidebar(props: PrepSidebarProps) {
             <Alert color="red" mx="sm" p="xs">
               <Text size="xs">{error}</Text>
               <Button size="compact-xs" variant="light" color="red" mt={6} onClick={props.onRetry}>
-                Try again
+                {i18n.t('ui.data.PrepSidebar.tryAgain')}
               </Button>
             </Alert>
           )}
           {preps === null && !error && <Loader size="sm" mx="sm" my="xs" />}
           {own?.length === 0 && (
             <Text size="xs" c="dimmed" px="sm" py={4}>
-              No preparations yet.
+              {i18n.t('ui.data.PrepSidebar.noPreparationsYet')}
             </Text>
           )}
           {own && own.length > 0 && <PrepList {...props} preps={own} />}
@@ -102,16 +104,16 @@ export function PrepSidebar(props: PrepSidebarProps) {
                 className={classes.sectionTitle}
                 id={sharedHeading}
               >
-                Shared with you
+                {i18n.t('ui.data.PrepSidebar.sharedWithYou')}
               </Text>
               <PrepList {...props} preps={shared} labelledBy={sharedHeading} />
             </>
           )}
         </nav>
 
-        <section aria-label="Imported tables">
+        <section aria-label={i18n.t('ui.data.PrepSidebar.importedTables')}>
           <Text size="xs" fw={700} c="dimmed" tt="uppercase" className={classes.sectionTitle}>
-            Imported tables
+            {i18n.t('ui.data.PrepSidebar.importedTables')}
           </Text>
           <SourcesPanel
             sources={sources}
@@ -134,6 +136,7 @@ function PrepList({
   labelledBy,
   ...props
 }: PrepSidebarProps & { preps: DataPrep[]; labelledBy?: string }) {
+  useTranslation();
   return (
     <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-labelledby={labelledBy}>
       {preps.map((prep) => {
@@ -155,19 +158,24 @@ function PrepList({
                 {role === 'owner' ? (
                   <>
                     {prep.source_name} · {stepCount(prep.steps.length)}
-                    {prep.datasets.length > 0 && ' · exported'}
-                    {prep.shared_in.length > 0 && ' · shared'}
+                    {prep.datasets.length > 0 && i18n.t('ui.data.PrepSidebar.exported')}
+                    {prep.shared_in.length > 0 && i18n.t('ui.data.PrepSidebar.shared')}
                   </>
                 ) : (
                   <>
-                    by {prep.owner} · {ROLE_LABELS[role].toLowerCase()} ·{' '}
-                    {stepCount(prep.steps.length)}
+                    {i18n.t('ui.data.PrepSidebar.by', {
+                      owner: prep.owner,
+                      value: ROLE_LABELS[role].toLowerCase(),
+                      stepCount: stepCount(prep.steps.length),
+                    })}
                   </>
                 )}
               </Text>
             </Link>
             {role === 'viewer' ? (
-              <Tooltip label={`Shared by ${prep.owner}: you can view it`}>
+              <Tooltip
+                label={i18n.t('ui.data.PrepSidebar.sharedByYouCanView', { owner: prep.owner })}
+              >
                 <span className={classes.rowIcon}>
                   <IconEye size={14} color="var(--mantine-color-dimmed)" aria-hidden />
                 </span>
@@ -180,7 +188,7 @@ function PrepList({
                     color="gray"
                     size="sm"
                     mr={4}
-                    aria-label={`Actions for ${name}`}
+                    aria-label={i18n.t('ui.data.PrepSidebar.actionsFor', { name })}
                   >
                     <IconDots size={14} />
                   </ActionIcon>
@@ -190,7 +198,7 @@ function PrepList({
                     leftSection={<IconPencil size={14} />}
                     onClick={() => props.onRenamePrep(prep)}
                   >
-                    Rename
+                    {i18n.t('ui.data.PrepSidebar.rename')}
                   </Menu.Item>
                   {role === 'owner' && (
                     <>
@@ -198,14 +206,14 @@ function PrepList({
                         leftSection={<IconCopy size={14} />}
                         onClick={() => props.onDuplicatePrep(prep)}
                       >
-                        Duplicate
+                        {i18n.t('ui.data.PrepSidebar.duplicate')}
                       </Menu.Item>
                       {props.onSharePrep && (
                         <Menu.Item
                           leftSection={<IconUsersPlus size={14} />}
                           onClick={() => props.onSharePrep?.(prep)}
                         >
-                          Share in network…
+                          {i18n.t('ui.data.PrepSidebar.shareInNetwork')}
                         </Menu.Item>
                       )}
                       <Menu.Item
@@ -213,7 +221,7 @@ function PrepList({
                         leftSection={<IconTrash size={14} />}
                         onClick={() => props.onDeletePrep(prep)}
                       >
-                        Delete
+                        {i18n.t('ui.data.PrepSidebar.delete')}
                       </Menu.Item>
                     </>
                   )}
@@ -233,15 +241,16 @@ function NewPrepMenu({
   onNewPrep,
   onImport,
 }: Pick<PrepSidebarProps, 'sources' | 'onNewPrep' | 'onImport'>) {
+  useTranslation();
   if (!sources || sources.length === 0) {
     return (
-      <Tooltip label="New preparation">
+      <Tooltip label={i18n.t('ui.data.PrepSidebar.newPreparation')}>
         <ActionIcon
           variant="subtle"
           color="gray"
           size="sm"
           onClick={onImport}
-          aria-label="New preparation"
+          aria-label={i18n.t('ui.data.PrepSidebar.newPreparation')}
           disabled={sources === null}
         >
           <IconPlus size={14} />
@@ -251,15 +260,20 @@ function NewPrepMenu({
   }
   return (
     <Menu position="bottom-end" withinPortal>
-      <Tooltip label="New preparation">
+      <Tooltip label={i18n.t('ui.data.PrepSidebar.newPreparation')}>
         <Menu.Target>
-          <ActionIcon variant="subtle" color="gray" size="sm" aria-label="New preparation">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label={i18n.t('ui.data.PrepSidebar.newPreparation')}
+          >
             <IconPlus size={14} />
           </ActionIcon>
         </Menu.Target>
       </Tooltip>
       <Menu.Dropdown maw={280}>
-        <Menu.Label>New preparation from</Menu.Label>
+        <Menu.Label>{i18n.t('ui.data.PrepSidebar.newPreparationFrom')}</Menu.Label>
         {sources.map((source) => (
           <Menu.Item
             key={source.id}
@@ -273,7 +287,7 @@ function NewPrepMenu({
         ))}
         <Menu.Divider />
         <Menu.Item leftSection={<IconFileImport size={14} />} onClick={onImport}>
-          A new file or link…
+          {i18n.t('ui.data.PrepSidebar.aNewFileOrLink')}
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>
