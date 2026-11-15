@@ -1,10 +1,10 @@
 # Nutzungsbedingungen
 
-Stand: 12. November 2026
+Stand: 15. November 2026
 
 ## 1. Anbieter und Geltungsbereich
 
-Brick DNN unter https://brickdnn.com wird von Alexander Kühling betrieben (Einzelunternehmer, Kleinunternehmer im Sinne von § 19 UStG; Anschrift im [Impressum](/imprint), E-Mail: alexander.kuehling@gmx.net). Diese Bedingungen gelten für die Nutzung mit einem Konto, kostenlos oder mit einem kostenpflichtigen Tarif.
+Brick DNN unter https://brickdnn.com wird von Alexander Kühling betrieben (Einzelunternehmer, Kleinunternehmer im Sinne von § 19 UStG; Anschrift im [Impressum](/imprint), E-Mail: alexander.kuehling@brickdnn.com). Diese Bedingungen gelten für die Nutzung mit einem Konto, kostenlos oder mit einem kostenpflichtigen Tarif.
 
 ## 2. Leistungen
 
