@@ -318,6 +318,11 @@
   the charts and metrics.
 
 ### Changed
+- **brickdnn.com: smaller storage quotas, fewer local backups.** The plans now include 0.5 GB
+  (Free), 3 GB (Starter), 10 GB (Plus) and 50 GB (Pro) instead of 1 / 5 / 20 / 100 GB, so that
+  the storage the plans promise fits the server's disk; compute and prices are unchanged. The
+  server keeps 3 daily and 2 weekly backups instead of 7 and 4, as they are copied offsite to
+  Swiss Backup every six hours. The landing pages and docs/training.md show the new quotas.
 - **Contrast and focus for WCAG AA.** Dimmed text, coloured text, outline buttons, light
   badges and red buttons use darker shades in the light theme (and dimmed text and links
   lighter ones in the dark theme) so that they reach 4.5:1; filled badges choose black or

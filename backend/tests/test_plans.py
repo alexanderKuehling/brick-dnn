@@ -69,21 +69,21 @@ def test_the_plans_of_brickdnn_com(site):
     plans = budgets.plans()
     assert list(plans) == ["free", "starter", "plus", "pro"]
     free, starter, plus, pro = plans.values()
-    assert (free.price, free.cpu_hours_per_month, free.storage_gb) == (0, 0.5, 1)
+    assert (free.price, free.cpu_hours_per_month, free.storage_gb) == (0, 0.5, 0.5)
     assert (free.cpu_minutes_per_run, free.concurrent_trainings, free.priority) == (15, 1, 0)
     assert free.overage_price_per_cpu_hour is None
-    assert (starter.price, starter.cpu_hours_per_month, starter.storage_gb) == (5, 10, 5)
+    assert (starter.price, starter.cpu_hours_per_month, starter.storage_gb) == (5, 10, 3)
     assert (starter.cpu_minutes_per_run, starter.priority) == (60, 1)
     assert (plus.price, plus.cpu_hours_per_month, plus.storage_gb, plus.cpu_minutes_per_run) == (
         14,
         30,
-        20,
+        10,
         180,
     )
     assert (pro.price, pro.cpu_hours_per_month, pro.storage_gb, pro.cpu_minutes_per_run) == (
         45,
         120,
-        100,
+        50,
         480,
     )
     assert pro.concurrent_trainings == 2
@@ -123,7 +123,7 @@ def test_plan_limits_apply(web, ada, site, controlled):
     limits = budgets.limits_for(ada)
     assert limits.plan.key == "free" and not limits.unlimited
     assert (limits.monthly_seconds, limits.run_seconds) == (1800, 900)
-    assert limits.storage_bytes == 1024**3 and limits.concurrent_trainings == 1
+    assert limits.storage_bytes == 1024**3 // 2 and limits.concurrent_trainings == 1
 
     first = started(web)
     job = read_job(run_dir(controlled, first))["limits"]
@@ -215,7 +215,7 @@ def test_set_plan_command(ada, site):
     out = StringIO()
     call_command("set_plan", "--list", stdout=out)
     lines = out.getvalue().splitlines()
-    assert lines[0].startswith("free: Free, 0 per month; 0.5 CPU hours/month, 1 GB")
+    assert lines[0].startswith("free: Free, 0 per month; 0.5 CPU hours/month, 0.5 GB")
     assert lines[0].endswith("(default)") and "overage 0.4 per CPU hour" in lines[1]
 
     out = StringIO()

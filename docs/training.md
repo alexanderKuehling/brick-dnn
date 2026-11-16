@@ -1396,10 +1396,10 @@ in [`deploy/sites/brickdnn.com/settings.env`](../deploy/sites/brickdnn.com/setti
 
 | Plan | Price (EUR/month incl. VAT) | Compute | Storage | Per training | At a time | Priority |
 | ---- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Free | 0 | 0.5 CPU hours | 1 GB | 15 CPU min | 1 | 0 |
-| Starter | 5 | 10 CPU hours | 5 GB | 60 CPU min | 1 | 1 |
-| Plus | 14 | 30 CPU hours | 20 GB | 3 CPU hours | 1 | 2 |
-| Pro | 45 | 120 CPU hours | 100 GB | 8 CPU hours | 2 | 3 |
+| Free | 0 | 0.5 CPU hours | 0.5 GB | 15 CPU min | 1 | 0 |
+| Starter | 5 | 10 CPU hours | 3 GB | 60 CPU min | 1 | 1 |
+| Plus | 14 | 30 CPU hours | 10 GB | 3 CPU hours | 1 | 2 |
+| Pro | 45 | 120 CPU hours | 50 GB | 8 CPU hours | 2 | 3 |
 
 The paid plans offer compute beyond the allowance at 0.40 EUR per CPU hour (*overage*). It is
 off for every account until its user switches it on on the account page (optionally with a cap
