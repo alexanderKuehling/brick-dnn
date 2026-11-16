@@ -3,6 +3,22 @@
 ## Unreleased
 
 ### Added
+- **A second built-in segmentation dataset, Cells.** 400 training and 100 test images of
+  96×96 pixels, generated on the server like Shapes (nothing to upload or download), that
+  look like fluorescence microscopy: two to seven pink to magenta cells, each with a blue to
+  violet nucleus a little off its centre, on a dark tinted background with noise, vignetting
+  and a light blur; some cells touch each other or the border, and brightness, contrast and
+  colours vary from image to image. Classes *background*, *cell* and *nucleus*; the nucleus
+  covers only 3 % of the pixels, which shows what *Cross-entropy + Dice* and the weighted
+  cross-entropy are for (the U-Net example reaches about 88 % test mean IoU in ten CPU
+  epochs with the cross-entropy, 91 % with the Dice term; nucleus 75 % and 84 %). Pure NumPy
+  (`brickdnn/training/cells.py`, all 500 images in about a second), every image from its own
+  seed. Generated datasets are now picked by id from `brickdnn/training/generators.py`. The
+  U-Net example (four channels for Shapes) gets the fix *Output channels of the last layer
+  4 → 3*, applied when Cells is chosen in the training panel; the warning about surplus
+  channels now says how many the last layer should output. In the training options of the
+  REST API and MCP (`get_training_options`), the MCP instructions, and on the command line
+  (`brickdnn train --example unet --data cells`). See docs/training.md.
 - **Example, guide and German pricing pages on brickdnn.com.** The landing page generator
   (`frontend/landing/`) makes static pages in English and German: an example gallery
   (`/examples/`, `/de/beispiele/`) with one page per built-in example (what it does, when to

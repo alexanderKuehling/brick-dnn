@@ -320,8 +320,15 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
     }
     assert data["losses"]["params"]["label_smoothing"]["max"] == 0.3
     builtin = data["builtin_datasets"]
-    assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes"]
+    assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes", "cells"]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]
+    cells = builtin[-1]
+    assert (cells["name"], cells["task"], cells["sample_shape"]) == (
+        "Cells",
+        "segmentation",
+        [3, 96, 96],
+    )
+    assert cells["class_names"] == ["background", "cell", "nucleus"]
 
 
 def test_capabilities_with_torch_are_cached(client, training_dir, monkeypatch):

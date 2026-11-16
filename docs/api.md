@@ -449,7 +449,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | POST   | `/api/training/runs/<id>/explain/`     | Explain the trained model `{method, sample? \| input?, input_scale?, target?, layer?, node?}` |
 
 `dataset` is one of `{"kind": "random"}` (demo data), `{"kind": "builtin", "id": "mnist"}`
-(`mnist`, `fashion_mnist`, `cifar10`, or `shapes` for segmentation) or
+(`mnist`, `fashion_mnist`, `cifar10`, or `shapes` and `cells` for segmentation) or
 `{"kind": "upload", "id": 3}`. `config` may contain
 `epochs`, `batch_size`, `learning_rate`, `optimizer` (`adam`, `adamw`, `sgd`), `weight_decay`,
 `val_split` (0–0.5; 0 = no validation data: the last epoch is kept, and `patience` and `tuning`

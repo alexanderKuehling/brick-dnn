@@ -919,7 +919,7 @@ export interface BuiltinDataset {
   name: string;
   description: string;
   /**
-   * `segmentation`: a class for every pixel (Shapes, generated on the server); otherwise one
+   * `segmentation`: a class for every pixel (Shapes, Cells: generated on the server); otherwise one
    * label per image. Missing on older servers.
    */
   task?: 'classification' | 'segmentation';

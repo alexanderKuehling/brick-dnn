@@ -170,8 +170,9 @@ takes 1 KB. The REST API and the web app keep their full answers.
 
 **Segmentation.** Networks that give every pixel a class
 ([training.md](training.md#image-segmentation)) use the same tools. The instructions explain
-what such a network and dataset look like; `get_training_options` lists the generated dataset
-`shapes` (`task` `segmentation`, nothing to upload) and the limits under `segmentation`;
+what such a network and dataset look like; `get_training_options` lists the generated datasets
+`shapes` and `cells` (`task` `segmentation`, nothing to upload) and the limits under
+`segmentation`;
 `create_upload_link {purpose: "training_dataset", filename: "scans.zip", kind:
 "segmentation"}` takes a ZIP file with the folders `images` and `masks`; `get_dataset` shows
 how the masks are read and the share of the pixels of every class; `check_training` explains
@@ -180,12 +181,15 @@ needs too much memory, with the batch size that fits) and suggests `fixes` for t
 the output channels of the last convolution; `get_training_run` reports `val_iou`,
 `val_dice`, `val_pixel_accuracy` (and the test values) in `metrics` and the IoU per class by
 name in `segmentation`; `predict {run_id, image}` returns the class map. The example graph is
-`list_examples {id: "unet"}`: it fits `shapes` as it is.
+`list_examples {id: "unet"}`: it fits `shapes` (4 classes) as it is; for `cells` (3 classes:
+background, cell, nucleus) `check_training` warns that the last layer has a channel too many
+and its fix sets it to 3 output channels.
 
 ```text
 check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "shapes"}, config: {batch_size: 8}} → ok
 start_training {…, config: {epochs: 10, batch_size: 8}} · get_training_run {id} → val_iou 0.77, test_iou 0.81
 predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_png
+check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "cells"}} → ok, a warning, fixes [{node: "mask", params: {out_channels: 3}}]
 ```
 
 **Classical models.** The same tools work for Gaussian processes, support vector machines and

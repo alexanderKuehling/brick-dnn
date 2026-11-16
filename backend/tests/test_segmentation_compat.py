@@ -26,6 +26,7 @@ from .helpers import chain
 from .segmentation_helpers import flat_net, tiny_unet
 
 SHAPES = builtin_info("shapes")
+CELLS = builtin_info("cells")
 UNET = EXAMPLES["unet"]["graph"]
 
 
@@ -129,11 +130,48 @@ def test_surplus_channels_are_a_warning_with_a_fix():
     assert result.ok
     assert result.warnings == [
         "The network outputs 6 channels, but Shapes has only 4 classes. The extra channels "
-        "are never the right answer."
+        "are never the right answer. The last layer should output 4 channels (e.g. Conv2d "
+        "with 4 output channels and kernel size 1)."
     ]
     assert result.plan.class_names[4:] == ["class 4", "class 5"]
     assert result.plan.targets[0]["num_classes"] == 6
     assert [fix["params"] for fix in result.fixes] == [{"out_channels": 4}]
+
+
+def test_unet_example_on_cells_gets_three_output_channels_suggested():
+    """The U-Net example is made for Shapes (4 classes); Cells has 3. It trains anyway (the
+    fourth channel is never right), and the check says how to fit it: one click on the
+    fix sets the last layer to 3 channels."""
+    result = check_compatibility(UNET, CELLS)
+    assert result.ok, result.errors
+    assert result.warnings == [
+        "The network outputs 4 channels, but Cells has only 3 classes. The extra channels are "
+        "never the right answer. The last layer should output 3 channels (e.g. Conv2d with 3 "
+        "output channels and kernel size 1).",
+        "Cells images (96×96) are resized to 64×64; masks are resized with nearest neighbour.",
+    ]
+    assert result.fixes == [
+        {
+            "node": "mask",
+            "type": "Conv2d",
+            "params": {"out_channels": 3},
+            "previous": {"out_channels": 4},
+            "summary": "Output channels of the last layer 4 → 3",
+        }
+    ]
+    fixed = with_params(UNET, mask={"out_channels": 3})
+    result = check_compatibility(fixed, CELLS)
+    assert result.ok and result.fixes == []
+    assert result.plan.summary == (
+        "Segmentation into 3 classes at 64×64 pixels (Cells, 400 training and 100 test images)."
+    )
+    assert result.plan.class_names == ["background", "cell", "nucleus"]
+    assert any("Cells is generated on the server" in note for note in result.plan.notes)
+    # At the size of the images, nothing is resized.
+    native = with_params(fixed, input={"shape": [3, 96, 96]})
+    result = check_compatibility(native, CELLS)
+    assert result.ok and result.warnings == [] and result.fixes == []
+    assert result.plan.image == {"channels": 3, "height": 96, "width": 96, "layout": "chw"}
 
 
 # --------------------------------------------------------------------------- #
@@ -303,7 +341,7 @@ def test_segmentation_network_on_other_data(tmp_path):
     assert not result.ok and result.fixes == []
     assert result.errors[0].endswith(
         "A network with one output per pixel is trained on a segmentation dataset (images "
-        "with masks), e.g. the built-in Shapes."
+        "with masks), e.g. the built-in Shapes or Cells."
     )
     path = tmp_path / "data.csv"
     path.write_text("a,b,y\n" + "".join(f"{i},{i * 2},{i % 2}\n" for i in range(8)))

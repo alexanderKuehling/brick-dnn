@@ -86,7 +86,9 @@ export function isImageSource(source: EffectiveSource): boolean {
   );
 }
 
-/** True if `source` has a class for every pixel: Shapes or an upload of images with masks. */
+/**
+ * True if `source` has a class for every pixel: Shapes, Cells or an upload of images with masks.
+ */
 export function isSegmentationSource(source: EffectiveSource | null): boolean {
   if (source?.ref?.kind === 'builtin') {
     return source.builtin?.task === 'segmentation';

@@ -31,6 +31,7 @@ from .data import (
     split_indices,
 )
 from .datasets import BUILTIN_DATASETS, DatasetInfo
+from .generators import generator_for
 from .reporting import Reporter, StopTraining, TrainingError
 from .segmentation import IGNORE_INDEX, MaskDecoder, Pair, find_pairs
 from .tabular import val_size_for
@@ -144,33 +145,34 @@ def segmentation_data(
     reporter: Reporter,
     generator: torch.Generator,
 ) -> PreparedData:
-    """The data of a segmentation plan: the built-in Shapes or a folder of images and masks."""
+    """The data of a segmentation plan: a generated built-in dataset (Shapes, Cells) or a
+    folder of images and masks."""
     if plan.image is None:
         raise TrainingError("The network does not take images.")
     if info.kind == "builtin":
-        return shapes_data(plan, info, config, reporter, generator)
+        return generated_data(plan, info, config, reporter, generator)
     if path is None:
         raise TrainingError("The dataset has no files. Upload it again.")
     return folder_data(plan, info, Path(path), config, reporter, generator)
 
 
-def shapes_data(
+def generated_data(
     plan: TrainingPlan,
     info: DatasetInfo,
     config: TrainingConfig,
     reporter: Reporter,
     generator: torch.Generator,
 ) -> PreparedData:
-    """Shapes: generated here. Validation data comes from its training images; its test
-    images are the test set (like the official test split of the other built-in datasets)."""
+    """A generated built-in dataset (Shapes, Cells), made here by its generator (see
+    generators.py). Validation data comes from its training images; its test images are the
+    test set (like the official test split of the other built-in datasets)."""
     spec = BUILTIN_DATASETS.get(info.builtin or "")
-    if spec is None or not spec.generated or plan.image is None:
+    make = generator_for(spec.id) if spec is not None and spec.generated else None
+    if spec is None or make is None or plan.image is None:
         raise TrainingError(f"Unknown built-in dataset '{info.builtin}'.")
     reporter.status("preparing", f"Generating {spec.name} …")
     try:
-        from .shapes import shapes_arrays
-
-        pictures, classes = shapes_arrays(0, spec.train_size + spec.test_size, spec.shape[1])
+        pictures, classes = make.arrays(0, spec.train_size + spec.test_size, spec.shape[1])
     except ImportError as exc:
         raise TrainingError(f"{spec.name} needs NumPy. Install it with: pip install numpy") from exc
     images, masks = torch.from_numpy(pictures), torch.from_numpy(classes)

@@ -1151,9 +1151,9 @@ msgstr ""
 
 #: catalog
 msgid ""
-"An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one score per class for every pixel: it trains on the built-in Shapes dataset (background, square, circle, triangle) as it is, or on your own images with masks."
+"An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one score per class for every pixel: it trains on the built-in Shapes dataset (background, square, circle, triangle) as it is, on Cells (background, cell, nucleus) with 3 output channels in the last layer, or on your own images with masks."
 msgstr ""
-"Ein Encoder, der das Bild dreimal halbiert, ein Decoder, der es mit ConvTranspose2d wieder vergrößert, und Skip-Verbindungen (Concat), die die Details hinüberreichen. Die Ausgabe ist ein Score pro Klasse für jedes Pixel: Es trainiert unverändert auf dem eingebauten Datensatz Shapes (Hintergrund, Quadrat, Kreis, Dreieck) oder auf Ihren eigenen Bildern mit Masken."
+"Ein Encoder, der das Bild dreimal halbiert, ein Decoder, der es mit ConvTranspose2d wieder vergrößert, und Skip-Verbindungen (Concat), die die Details hinüberreichen. Die Ausgabe ist ein Score pro Klasse für jedes Pixel: Es trainiert unverändert auf dem eingebauten Datensatz Shapes (Hintergrund, Quadrat, Kreis, Dreieck), mit 3 Ausgabekanälen in der letzten Schicht auf Cells (Hintergrund, Zelle, Zellkern) oder auf Ihren eigenen Bildern mit Masken."
 
 #: catalog
 msgid ""
@@ -2912,6 +2912,12 @@ msgstr ""
 "Segmentierung: Quadrate, Kreise und Dreiecke auf verrauschtem Hintergrund, mit einer Klasse für jedes Pixel. Generiert, RGB 64×64."
 
 #: catalog
+msgid ""
+"Segmentation: cells with their nuclei, like fluorescence microscopy images, with a class for every pixel (the nuclei cover only 3 % of the pixels). Generated, RGB 96×96."
+msgstr ""
+"Segmentierung: Zellen mit ihren Zellkernen wie in Fluoreszenzmikroskopie-Bildern, mit einer Klasse für jedes Pixel (die Zellkerne bedecken nur 3 % der Pixel). Generiert, RGB 96×96."
+
+#: catalog
 msgid "loss"
 msgstr "Verlust"
 
@@ -3342,9 +3348,9 @@ msgstr "Die Grenzen von {0} müssen positiv sein, die untere unter der oberen."
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
-"A network with one output per pixel is trained on a segmentation dataset (images with masks), e.g. the built-in Shapes."
+"A network with one output per pixel is trained on a segmentation dataset (images with masks), e.g. the built-in Shapes or Cells."
 msgstr ""
-"Ein Netz mit einer Ausgabe pro Pixel wird auf einem Segmentierungsdatensatz (Bilder mit Masken) trainiert, z. B. dem eingebauten Shapes."
+"Ein Netz mit einer Ausgabe pro Pixel wird auf einem Segmentierungsdatensatz (Bilder mit Masken) trainiert, z. B. den eingebauten Shapes oder Cells."
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -3835,9 +3841,9 @@ msgstr "Jedes Bild wird zu {0} Werten flach gemacht ({1})."
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
-"The network outputs {0} channels, but {1} has only {2} classes. The extra channels are never the right answer."
+"The network outputs {0} channels, but {1} has only {2} classes. The extra channels are never the right answer. The last layer should output {3} channels (e.g. Conv2d with {4} output channels and kernel size 1)."
 msgstr ""
-"Das Netz gibt {0} Kanäle aus, aber {1} hat nur {2} Klassen. Die zusätzlichen Kanäle sind nie die richtige Antwort."
+"Das Netz gibt {0} Kanäle aus, aber {1} hat nur {2} Klassen. Die zusätzlichen Kanäle sind nie die richtige Antwort. Die letzte Schicht sollte {3} Kanäle ausgeben (z. B. Conv2d mit {4} Ausgabekanälen und Kernelgröße 1)."
 
 #: brickdnn
 msgctxt "brickdnn"

@@ -61,7 +61,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   [docs/training.md](docs/training.md).
 - **Image segmentation**: train a U-Net (or any network that keeps the image size) on images
   with one mask each, a ZIP file with the folders `images` and `masks`, or on the built-in
-  generated dataset *Shapes* without uploading anything. The run reports mean IoU, Dice and
+  generated datasets *Shapes* (squares, circles and triangles) and *Cells* (cells and their
+  nuclei, like fluorescence microscopy) without uploading anything. The run reports mean IoU, Dice and
   pixel accuracy per epoch and the IoU of every class, and shows what the network predicts
   for a few validation images next to their true masks. See
   [docs/training.md](docs/training.md#image-segmentation).

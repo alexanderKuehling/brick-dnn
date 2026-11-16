@@ -1,6 +1,7 @@
 """Segmentation in the web API and the MCP server: uploads (web, upload link), datasets,
-checks, real trainings with the built-in Shapes and an uploaded dataset, the preview images
-and who may see them, predictions, storage, the training queue and compact MCP answers."""
+checks, real trainings with the built-in Shapes and Cells and an uploaded dataset, the preview
+images and who may see them, predictions, storage, the training queue and compact MCP
+answers."""
 
 # ruff: noqa: F811 (fixtures are imported from other test modules)
 
@@ -24,6 +25,7 @@ from brick_dnn_core.models import Dataset, Project, ProjectMember, TrainingRun  
 from brick_dnn_core.training_worker import Worker  # noqa: E402
 from brickdnn import EXAMPLES  # noqa: E402
 from brickdnn.training import torch_installed  # noqa: E402
+from brickdnn.training.cells import cells_sample  # noqa: E402
 from brickdnn.training.shapes import shapes_sample  # noqa: E402
 
 from .segmentation_helpers import (  # noqa: E402
@@ -47,6 +49,7 @@ pytestmark = pytest.mark.django_db
 
 needs_torch = pytest.mark.skipif(not torch_installed(), reason="PyTorch is not installed")
 SHAPES = {"kind": "builtin", "id": "shapes"}
+CELLS = {"kind": "builtin", "id": "cells"}
 NET = tiny_unet(classes=4, size=32, width=16)
 QUICK = {
     "epochs": 3,
@@ -125,6 +128,10 @@ def shape_file(index: int) -> str:
     return base64.b64encode(png(shapes_sample(index)[0])).decode()
 
 
+def cell_file(index: int) -> str:
+    return base64.b64encode(png(cells_sample(index)[0])).decode()
+
+
 # --------------------------------------------------------------------------- #
 # Uploads and datasets
 # --------------------------------------------------------------------------- #
@@ -134,11 +141,19 @@ def test_capabilities_list_shapes_and_the_limits(web, training_dir, monkeypatch)
     monkeypatch.setattr(training_service, "torchvision_installed", lambda: False)
     monkeypatch.setattr(training_service, "run_probe", lambda: {"torchvision": False})
     data = web.get("/api/training/").data
-    shapes = data["builtin_datasets"][-1]
+    builtin = {d["id"]: d for d in data["builtin_datasets"]}
+    shapes, cells = builtin["shapes"], builtin["cells"]
     assert shapes["id"] == "shapes" and shapes["task"] == "segmentation"
     assert shapes["available"] is True  # generated: no torchvision needed
     assert (shapes["train_size"], shapes["test_size"], shapes["download_mb"]) == (400, 100, 0)
     assert shapes["class_names"] == ["background", "square", "circle", "triangle"]
+    assert (cells["task"], cells["available"], cells["sample_shape"]) == (
+        "segmentation",
+        True,
+        [3, 96, 96],
+    )
+    assert (cells["train_size"], cells["test_size"], cells["download_mb"]) == (400, 100, 0)
+    assert cells["class_names"] == ["background", "cell", "nucleus"]
     assert data["builtin_datasets"][0]["available"] is False
     assert data["builtin_datasets"][0]["task"] == "classification"
     assert data["segmentation"] == {
@@ -148,8 +163,11 @@ def test_capabilities_list_shapes_and_the_limits(web, training_dir, monkeypatch)
         "batch_memory_mb": 900,
         "losses": ["cross_entropy", "cross_entropy_dice", "weighted_cross_entropy"],
     }
-    # Without torchvision, Shapes still passes the check; MNIST does not.
+    # Without torchvision, Shapes and Cells still pass the check; MNIST does not.
     check = web.post("/api/training/check/", {"graph": NET, "dataset": SHAPES}, format="json")
+    assert check.data["ok"] is True
+    cells_net = tiny_unet(classes=3, size=32, width=16)
+    check = web.post("/api/training/check/", {"graph": cells_net, "dataset": CELLS}, format="json")
     assert check.data["ok"] is True
     mnist = EXAMPLES["cnn_mnist"]["graph"]
     check = web.post(
@@ -294,16 +312,18 @@ def test_datasets_over_mcp_are_compact(mcp, web, user, training_dir):
     del files["masks/011.png"]
     dataset_id = upload(web, "squares.zip", zip_bytes(files), name="Squares").data["id"]
     options, size = answer(mcp, "get_training_options")
-    # With the hyperparameter search options (about 1,800 bytes) and the losses per task
-    # with their settings (about 560 bytes).
-    assert size < 7100
+    # With the hyperparameter search options (about 1,800 bytes), the losses per task with
+    # their settings (about 560 bytes) and five built-in datasets (Cells adds about 500).
+    assert size < 7700
     assert options["segmentation"]["max_classes"] == 32
     assert options["config_defaults"]["loss"] == "auto"  # cross_entropy for a segmentation
     assert options["losses"]["segmentation"] == (
         "cross_entropy*, cross_entropy_dice, weighted_cross_entropy"
     )
-    shapes = options["builtin_datasets"][-1]
+    shapes, cells = options["builtin_datasets"][-2:]
     assert (shapes["id"], shapes["task"], shapes["available"]) == ("shapes", "segmentation", True)
+    assert (cells["id"], cells["task"], cells["available"]) == ("cells", "segmentation", True)
+    assert cells["class_names"] == ["background", "cell", "nucleus"]
     assert options["your_datasets"] == [
         {
             "id": dataset_id,
@@ -561,6 +581,42 @@ def test_predict_a_segmentation(web, mcp, real_runner):
     assert "classes = output.argmax(dim=1)[0].to(torch.uint8)" in info["how_to_use"]
     assert info["class_names"] == ["background", "square", "circle", "triangle"]
     assert "one of 4 classes for each of the 32×32 pixels" in info["inputs"]
+
+
+@needs_torch
+def test_train_and_predict_on_cells(web, mcp, real_runner):
+    graph = tiny_unet(classes=3, size=32, width=16)
+    run = train(web, real_runner, graph=graph, dataset=CELLS, name="Cells net")
+    assert run["task"] == "segmentation"
+    assert run["metrics"]["val_iou"] > 0.35  # all background: 0.27
+    state = run["state"]
+    assert len(state["segmentation"]["validation"]["class_iou"]) == 3
+
+    url = f"/api/training/runs/{run['id']}/predict/"
+    picture, mask = cells_sample(480)
+    response = web.post(url, {"image": cell_file(480)}, format="json")
+    assert response.status_code == 200, response.data
+    data = response.data
+    assert data["class_names"] == ["background", "cell", "nucleus"]
+    assert len(data["colors"]) == 3
+    (prediction,) = data["predictions"]
+    assert (prediction["width"], prediction["height"]) == (32, 32)
+    shares = {c["class"]: c["share"] for c in prediction["classes"]}
+    assert set(shares) <= {"background", "cell", "nucleus"}
+    assert shares["background"] > 0.5  # most of an image is background
+    predicted = Image.open(io.BytesIO(base64.b64decode(prediction["mask_png"].split(",")[1])))
+    assert set(np.unique(np.asarray(predicted))) <= {0, 1, 2}
+    # Most pixels get the class of the (resized) mask.
+    truth = np.asarray(Image.fromarray(mask).resize((32, 32), Image.NEAREST))
+    assert (np.asarray(predicted) == truth).mean() > 0.8
+
+    result, size = answer(mcp, "predict", run_id=run["id"], image=cell_file(481), mask="none")
+    assert size < 1200
+    assert {c["class"] for c in result["predictions"][0]["classes"]} <= {
+        "background",
+        "cell",
+        "nucleus",
+    }
 
 
 @needs_torch
