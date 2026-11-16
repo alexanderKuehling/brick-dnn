@@ -1,13 +1,15 @@
 /**
- * Vite plugin for the static landing pages: `/` (English) and `/de/` (German) are plain HTML
- * made at build time, without the React app; the editor and every other page of the app are
- * served from app.html.
+ * Vite plugin for the static pages: the landing pages `/` (English) and `/de/` (German) and the
+ * content pages (pages.ts: examples, guides, the German pricing page) are plain HTML made at
+ * build time, without the React app; the editor and every other page of the app are served
+ * from app.html.
  *
- * - Build: index.html (the app's page) is written as app.html; the landing pages, their
+ * - Build: index.html (the app's page) is written as app.html; the static pages, their
  *   stylesheet and images (hashed, under assets/), robots.txt, sitemap.xml and llms.txt are
- *   added, and the result is checked (check.ts): a broken landing page fails the build.
+ *   added, and the result is checked (check.ts): a broken page fails the build.
  * - `vite` (development) and `vite preview` serve the same addresses as nginx.conf does in
- *   production: the landing pages at / and /de/, /?… redirected to /app?…, the app everywhere else.
+ *   production: the static pages at their paths (a path without its trailing slash redirected
+ *   to the one with it), /?… redirected to /app?…, the app everywhere else.
  */
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -15,6 +17,7 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { checkDist } from './check.ts';
 import { IMAGE_DIR, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
+import { allPages, contentShotIds, renderContentPage, type PageMeta } from './pages.ts';
 import {
   CONTENT,
   renderLlms,
@@ -48,7 +51,7 @@ function assets(lang: Lang, url: (name: string, data: Buffer | string) => string
   const logo = readImage(LOGO);
   const css = readFileSync(CSS_FILE, 'utf8');
   const images: Assets['images'] = {};
-  for (const id of shotIds(CONTENT[lang])) {
+  for (const id of new Set([...shotIds(CONTENT[lang]), ...contentShotIds(lang)])) {
     images[id] = {
       sources: shotFiles(id, lang).map((file) => ({
         src: url(file.name, readImage(file.name).data),
@@ -92,14 +95,24 @@ function redirect(res: ServerResponse, status: number, location: string): void {
   res.end();
 }
 
-/** Which landing page a path is, if any. */
-function landingPage(path: string): Lang | null {
-  return path === '/' ? 'en' : path === '/de/' ? 'de' : null;
+const PAGES = new Map(allPages().map((page) => [page.path, page]));
+
+/** The static page at a path, if any. */
+export function staticPage(path: string): PageMeta | null {
+  return PAGES.get(path) ?? null;
+}
+
+/** The HTML of a static page. */
+export function renderStatic(page: PageMeta, pageAssets: Assets): string {
+  return page.kind === 'home'
+    ? renderPage(page.lang, pageAssets)
+    : renderContentPage(page, pageAssets);
 }
 
 /**
- * The redirects of nginx.conf: `/?…` → `/app?…` (old links into the editor), `/de` → `/de/`.
- * Returns whether it answered.
+ * The redirects of nginx.conf: `/?…` → `/app?…` (old links into the editor), a static page's
+ * path without its trailing slash → with it (`/de` → `/de/`, `/examples/unet` →
+ * `/examples/unet/`, keeping the query). Returns whether it answered.
  */
 function redirects(req: IncomingMessage, res: ServerResponse): boolean {
   const [path, query] = (req.url ?? '/').split(/\?(.*)/s);
@@ -107,8 +120,8 @@ function redirects(req: IncomingMessage, res: ServerResponse): boolean {
     redirect(res, 302, `${EDITOR_PATH}?${query}`);
     return true;
   }
-  if (path === '/de') {
-    redirect(res, 301, '/de/');
+  if (!path.endsWith('/') && PAGES.has(`${path}/`)) {
+    redirect(res, 301, `${path}/${query ? `?${query}` : ''}`);
     return true;
   }
   return false;
@@ -146,14 +159,14 @@ export function landingPages(): Plugin {
         if (redirects(req, res)) {
           return;
         }
-        const lang = landingPage(path);
-        if (lang) {
+        const page = staticPage(path);
+        if (page) {
           send(
             res,
             'text/html',
-            renderPage(
-              lang,
-              assets(lang, (name) => `${DEV_PREFIX}${name}`)
+            renderStatic(
+              page,
+              assets(page.lang, (name) => `${DEV_PREFIX}${name}`)
             )
           );
           return;
@@ -174,7 +187,11 @@ export function landingPages(): Plugin {
         if (redirects(req, res)) {
           return;
         }
-        if (!landingPage(path) && isPageRequest(req, path)) {
+        const page = staticPage(path);
+        if (page) {
+          // The file of the page, as nginx serves it (try_files …/index.html).
+          req.url = `/${page.file}${query ? `?${query}` : ''}`;
+        } else if (isPageRequest(req, path)) {
           req.url = `/app.html${query ? `?${query}` : ''}`;
         }
         next();
@@ -201,11 +218,11 @@ export function landingPages(): Plugin {
           }
           return emitted.get(name)!;
         };
-        for (const lang of ['en', 'de'] as const) {
+        for (const page of allPages()) {
           this.emitFile({
             type: 'asset',
-            fileName: lang === 'en' ? 'index.html' : 'de/index.html',
-            source: renderPage(lang, assets(lang, url)),
+            fileName: page.file,
+            source: renderStatic(page, assets(page.lang, url)),
           });
         }
         for (const [fileName, text] of Object.entries(TEXT_FILES)) {

@@ -371,6 +371,31 @@ Visitors who are logged in see the landing page too, with *Open the editor* in i
 screenshots are taken again with Playwright from a local Brick DNN with real trainings, see
 [frontend/landing/screenshots/README.md](frontend/landing/screenshots/README.md).
 
+The same generator (`frontend/landing/pages.ts`) makes static content pages in English and
+German, with canonical and hreflang links, JSON-LD, breadcrumbs and no script at all:
+
+- **Examples** (`/examples/`, `/de/beispiele/`): one page per built-in example, e.g.
+  `/examples/unet/`, with what the network does and when to use it, a diagram (an SVG made at
+  build time from the example's graph), every layer with its settings, output shape and
+  parameter count, the generated PyTorch or scikit-learn code (highlighted at build time) and
+  *Open in the editor*, which links to `/app?example=<id>` (the editor loads that example,
+  asking first if another network is on the canvas). The facts and the code come from
+  `frontend/landing/examples/examples.json`, which the backend writes from the real examples,
+  shape inference and generator: run `python -m brickdnn.examples.export` in `backend/` after
+  changing an example, a layer or the generator. The frontend is built without the backend, so
+  the file is committed; `backend/tests/test_examples_export.py` and `landing.test.ts` fail
+  when it is out of date.
+- **Guides** (`/guides/<slug>/`, `/de/anleitungen/<slug>/`): building a network without code,
+  gradient boosting vs. MLP for tables, U-Net segmentation and imbalanced classes.
+- **German pricing page** (`/de/preise/`) with the plans of `site.ts`; plans are bought on the
+  app's `/pricing`, which has no static English counterpart.
+
+Every address of these pages ends with a slash; nginx redirects the one without it, and serves
+the folders with the landing pages' strict Content-Security-Policy (without any script). The
+build check (`frontend/landing/check.ts`) refuses a build in which a page lacks its title,
+description, canonical link, hreflang pair, valid JSON-LD, an image, or its entry in
+`sitemap.xml`.
+
 The layer catalogue in `backend/brickdnn/layers.py` is the single source of truth: the UI has
 no hard-coded knowledge of layers or their parameters.
 
@@ -384,7 +409,7 @@ brick-dnn/
 │   ├── brick_dnn_site/      Django settings and URLs
 │   └── tests/               pytest suite (runs generated models in PyTorch if installed)
 ├── frontend/
-│   ├── landing/             static landing pages (/ and /de/), built into plain HTML
+│   ├── landing/             static pages (landing, examples, guides, /de/preise/), plain HTML
 │   └── src/
 │       ├── builder/         canvas, palette, inspector, code preview
 │       ├── sharing/         share dialog, networks shared by link
