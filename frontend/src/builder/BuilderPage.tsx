@@ -391,6 +391,35 @@ function Builder() {
     [loadDocument]
   );
 
+  // A link to /app?example=<id> (from the example pages of the website) opens that example,
+  // after asking if another network is on the canvas. The parameter is then dropped from the
+  // address, so that reloading keeps the changes made since.
+  const requestedExample = useRef(new URLSearchParams(location.search).get('example'));
+  useEffect(() => {
+    const id = requestedExample.current;
+    if (id === null || examples.length === 0) {
+      return;
+    }
+    requestedExample.current = null;
+    const params = new URLSearchParams(location.search);
+    params.delete('example');
+    const search = params.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : '', hash: location.hash },
+      { replace: true, state: location.state }
+    );
+    const example = examples.find((candidate) => candidate.id === id);
+    if (!example) {
+      return;
+    }
+    if (seeded.current) {
+      confirmReplace(() => loadDocument(example.graph, example.name, null));
+    } else {
+      seeded.current = true;
+      loadDocument(example.graph, example.name, null);
+    }
+  }, [examples]);
+
   // First visit: show an example so there is something to play with.
   useEffect(() => {
     if (!seeded.current && examples.length > 0) {

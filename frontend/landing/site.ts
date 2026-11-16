@@ -20,6 +20,41 @@ export type Lang = 'en' | 'de';
 /** The path of each language's page. */
 export const PAGE_PATHS: Record<Lang, string> = { en: '/', de: '/de/' };
 
+/**
+ * The static content pages (pages.ts), made by the same generator: the example gallery, the
+ * guides and the German pricing page. Every path ends with a slash; nginx.conf serves these
+ * folders with the landing pages' strict Content-Security-Policy and redirects a path without
+ * the slash to the one with it.
+ */
+export const EXAMPLES_PATHS: Record<Lang, string> = { en: '/examples/', de: '/de/beispiele/' };
+export const GUIDES_PATHS: Record<Lang, string> = { en: '/guides/', de: '/de/anleitungen/' };
+/**
+ * The German pricing page. English has none of its own: /pricing is the app's page (where
+ * plans are bought), so the English landing page links there.
+ */
+export const PRICING_DE_PATH = '/de/preise/';
+/** The folders of the content pages (nginx.conf has a location for exactly these). */
+export const CONTENT_FOLDERS = [
+  EXAMPLES_PATHS.en,
+  GUIDES_PATHS.en,
+  EXAMPLES_PATHS.de,
+  GUIDES_PATHS.de,
+  PRICING_DE_PATH,
+] as const;
+
+/** Where each language's visitors find the prices. */
+export function pricingPath(lang: Lang): string {
+  return lang === 'de' ? PRICING_DE_PATH : '/pricing';
+}
+
+/** The author of the guides and example pages (JSON-LD). */
+export const AUTHOR = { name: 'Alexander Kühling', url: 'https://github.com/alexanderKuehling' };
+
+/** The editor with a built-in example loaded (the app reads ?example=, BuilderPage.tsx). */
+export function editorExampleUrl(id: string): string {
+  return `${EDITOR_PATH}?example=${encodeURIComponent(id)}`;
+}
+
 /** Pages of the React app that the landing pages link to and the sitemap lists. */
 export const APP_PAGES = [
   '/pricing',

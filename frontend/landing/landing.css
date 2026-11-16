@@ -19,8 +19,9 @@
   --on-accent: #fff;
   --shadow: 0 1px 2px rgb(16, 24, 40, 0.04), 0 16px 40px -20px rgb(16, 24, 40, 0.28);
   --shadow-soft: 0 1px 2px rgb(16, 24, 40, 0.05), 0 10px 28px -18px rgb(16, 24, 40, 0.3);
-  --font: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, sans-serif;
+  --font:
+    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   --mono: ui-monospace, 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
@@ -231,15 +232,30 @@ ol {
   white-space: nowrap;
 }
 
+/*
+ * The navigation: the site's pages (examples, guides, pricing) always, on narrow screens in a
+ * row of their own under the brand; the landing page's sections (.local) on wide screens only.
+ */
 .sections {
+  order: 3;
+  width: 100%;
+  margin: 0 -0.65rem;
+}
+
+.sections .local {
   display: none;
-  margin-right: auto;
 }
 
 .sections ul,
 .lang ul {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
+}
+
+.sections a[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .sections a {
@@ -291,7 +307,15 @@ ol {
   }
 
   .sections {
-    display: block;
+    order: 0;
+    width: auto;
+    margin: 0 auto 0 0;
+  }
+}
+
+@media (min-width: 72rem) {
+  .sections .local {
+    display: list-item;
   }
 }
 
@@ -690,4 +714,477 @@ tbody th {
       background-color 120ms ease,
       color 120ms ease;
   }
+}
+
+.site-footer .links .lang {
+  margin-top: 1rem;
+}
+
+/*
+ * The content pages (pages.ts): examples, guides and the German pricing page. Text runs in a
+ * column of readable width; diagrams, tables and code use the full width.
+ */
+
+:root {
+  --code-bg: #f8f9fa;
+  --code-text: #212529;
+  --code-keyword: #6d28d9;
+  --code-string: #0f766e;
+  --code-comment: #5c636a;
+  --code-number: #9a4a00;
+  --code-title: #1d4ed8;
+  --code-builtin: #9d174d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --code-bg: #1c1c1c;
+    --code-text: #e9ecef;
+    --code-keyword: #c4b5fd;
+    --code-string: #5eead4;
+    --code-comment: #a6a6a6;
+    --code-number: #fcd34d;
+    --code-title: #93c5fd;
+    --code-builtin: #f9a8d4;
+  }
+}
+
+.page {
+  padding: 1.5rem 0 4rem;
+}
+
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.crumbs li + li::before {
+  margin-right: 0.5rem;
+  content: '›';
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.crumbs a[aria-current='page'] {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.page-head {
+  padding: 2rem 0 2.5rem;
+}
+
+.page-head h1 {
+  max-width: 30ch;
+  font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem);
+}
+
+.kicker {
+  margin-bottom: 0.75rem;
+  color: var(--accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.byline {
+  margin-top: 1.25rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.facts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2.5rem;
+  margin: 2rem 0 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.facts-list dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.facts-list dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.page section {
+  padding: 2.5rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.page section h2 {
+  margin-bottom: 1rem;
+}
+
+.prose {
+  max-width: 46rem;
+}
+
+.prose p + p,
+.prose p + ul,
+.prose ul + p,
+.prose p + .table,
+.prose .table + p,
+.prose p + pre,
+.prose pre + p {
+  margin-top: 1rem;
+}
+
+.checks.prose,
+.prose .checks {
+  display: grid;
+  gap: 0.6rem;
+}
+
+ol.numbered {
+  max-width: 46rem;
+  padding-left: 1.5rem;
+  list-style: decimal;
+}
+
+ol.numbered li + li {
+  margin-top: 0.5rem;
+}
+
+.page .intro {
+  margin-bottom: 1.5rem;
+}
+
+.page .note,
+.muted {
+  color: var(--muted);
+}
+
+.page > .wrap > .note {
+  max-width: 46rem;
+  margin-top: 2rem;
+  font-size: 0.9375rem;
+}
+
+.page .table {
+  margin-top: 1.5rem;
+}
+
+.page .prose .table table {
+  min-width: 36rem;
+}
+
+.page .frame {
+  max-width: 46rem;
+  margin-top: 1.75rem;
+}
+
+.page .frame figcaption,
+.diagram figcaption {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* The steps of a guide. */
+
+.howto {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 46rem;
+  margin-top: 1.5rem;
+  counter-reset: howto;
+}
+
+.howto li {
+  position: relative;
+  padding-left: 2.75rem;
+  counter-increment: howto;
+}
+
+.howto li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tint);
+  color: var(--accent-text);
+  font-weight: 700;
+  content: counter(howto);
+}
+
+.howto p {
+  color: var(--muted);
+}
+
+.toc {
+  max-width: 46rem;
+  margin-bottom: 0.5rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.toc h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+.toc ol {
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.toc li + li {
+  margin-top: 0.25rem;
+}
+
+/* Cards of examples and guides. */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+}
+
+.cards li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.cards h3 {
+  margin: 0;
+}
+
+.cards h3 a {
+  color: var(--text);
+  text-decoration-color: var(--line-strong);
+}
+
+.cards h3 a:hover {
+  color: var(--accent-text);
+}
+
+.cards p {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.cards .meta {
+  margin-top: auto;
+  padding-top: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+/* The diagram of an example: real size, scrolled sideways when it is wider than the page. */
+
+.diagram {
+  margin: 0.5rem 0 0;
+}
+
+.diagram .scroll {
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.network {
+  display: block;
+  max-width: none;
+  font-family: var(--font);
+}
+
+.network .box {
+  fill: var(--bg);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.network .title {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.network .shape {
+  fill: var(--text);
+  font-family: var(--mono);
+}
+
+.network .meta {
+  fill: var(--muted);
+}
+
+.network .edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+}
+
+.network .edge.kernel {
+  stroke-dasharray: 9 6;
+}
+
+.network .edge.estimator {
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+}
+
+.network .arrow {
+  fill: var(--muted);
+}
+
+/* The colours of the layer categories, as in the editor's palette (src/theme.ts). */
+.network .stripe {
+  fill: #868e96;
+}
+
+.network .cat-input .stripe {
+  fill: #12b886;
+}
+
+.network .cat-basic .stripe {
+  fill: #3d36db;
+}
+
+.network .cat-convolution .stripe {
+  fill: #7950f2;
+}
+
+.network .cat-normalization .stripe {
+  fill: #15aabf;
+}
+
+.network .cat-sequence .stripe {
+  fill: #40c057;
+}
+
+.network .cat-merge .stripe {
+  fill: #fd7e14;
+}
+
+.network .cat-kernels .stripe {
+  fill: #e64980;
+}
+
+.network .cat-classical-models .stripe {
+  fill: #be4bdb;
+}
+
+.network .cat-ensembles .stripe {
+  fill: #4c6ef5;
+}
+
+/* The table of layers. */
+
+table.layers {
+  min-width: 46rem;
+}
+
+table.layers code {
+  font-size: 0.8125rem;
+}
+
+table.layers th code {
+  padding: 0;
+  background: none;
+}
+
+table.layers .settings code {
+  display: inline-block;
+  margin: 0 0.25rem 0.25rem 0;
+}
+
+table.layers td.shape {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+th.num,
+td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+tfoot th,
+tfoot td {
+  border-top: 1px solid var(--line-strong);
+  border-bottom: 0;
+  font-weight: 600;
+}
+
+/* Code: highlighted at build time (highlight.ts), coloured here. */
+
+pre.code,
+pre.snippet {
+  overflow: auto;
+  margin: 1.25rem 0 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  tab-size: 4;
+}
+
+pre.code {
+  max-height: 40rem;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.hljs-keyword,
+.hljs-literal,
+.hljs-operator {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-subst,
+.hljs-doctag {
+  color: var(--code-string);
+}
+
+.hljs-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-number,
+.hljs-meta {
+  color: var(--code-number);
+}
+
+.hljs-title {
+  color: var(--code-title);
+}
+
+.hljs-built_in,
+.hljs-variable {
+  color: var(--code-builtin);
 }
