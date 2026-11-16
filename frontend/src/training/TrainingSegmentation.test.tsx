@@ -1,12 +1,13 @@
 /**
- * Segmentation in the training panel: the data picker (Shapes, uploads of images with masks,
+ * Segmentation in the training panel: the data picker (Shapes, Cells, uploads of images with masks,
  * how to pack the ZIP), the settings (batch size, loss), the run view (IoU, Dice and pixel
  * accuracy, per class, the gallery of predictions) and the run list.
  */
 import { useState } from 'react';
 import { render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
-import { api, ApiError, type CompatibilityFix, type RunDetail } from '@/api';
+import { api, ApiError, type CompatibilityFix, type RunDetail, type TrainingStatus } from '@/api';
+import { i18n } from '@/i18n';
 import { NO_SCOPE } from './access';
 import { DataSourcePicker } from './DataSourcePicker';
 import {
@@ -93,13 +94,15 @@ const card = (label: string) => screen.getAllByText(label)[0].closest('.mantine-
 function Picker({
   choice,
   datasets,
+  status = SEGMENTATION_STATUS,
 }: {
   choice: SourceChoice;
   datasets: ReturnType<typeof dataset>[];
+  status?: TrainingStatus;
 }) {
   return (
     <DataSourcePicker
-      status={SEGMENTATION_STATUS}
+      status={status}
       choice={choice}
       onChange={vi.fn()}
       datasets={datasets}
@@ -127,6 +130,46 @@ describe('The data picker', () => {
     );
     expect(screen.getByRole('radio', { name: /MNIST/ })).toHaveTextContent(
       '60,000 training and 10,000 test images · 10 classes · 12 MB download'
+    );
+  });
+
+  it('offers Cells next to Shapes, with what it shows and its three classes', () => {
+    render(<Picker choice={{ tab: 'builtin', builtin: 'cells', upload: null }} datasets={[]} />);
+    const cells = screen.getByRole('radio', { name: /Cells/ });
+    expect(cells).toBeChecked();
+    expect(cells).toHaveTextContent('cells with their nuclei, like fluorescence microscopy');
+    expect(cells).toHaveTextContent(
+      '400 training and 100 test images with masks · 3 classes (background, cell, nucleus) · ' +
+        'no download'
+    );
+    const names = screen.getAllByRole('radio').map((radio) => radio.textContent ?? '');
+    expect(names.findIndex((name) => name.startsWith('Cells'))).toBe(
+      names.findIndex((name) => name.startsWith('Shapes')) + 1
+    );
+  });
+
+  it('describes Cells in German (the description comes translated from the server)', async () => {
+    await i18n.changeLanguage('de');
+    const german =
+      'Segmentierung: Zellen mit ihren Zellkernen wie in Fluoreszenzmikroskopie-Bildern';
+    const status = {
+      ...SEGMENTATION_STATUS,
+      builtin_datasets: SEGMENTATION_STATUS.builtin_datasets.map((d) =>
+        d.id === 'cells' ? { ...d, description: `${german}, mit einer Klasse für jedes Pixel.` } : d
+      ),
+    };
+    render(
+      <Picker
+        choice={{ tab: 'builtin', builtin: 'cells', upload: null }}
+        datasets={[]}
+        status={status}
+      />
+    );
+    const cells = screen.getByRole('radio', { name: /Cells/ });
+    expect(cells).toHaveTextContent(german);
+    expect(cells).toHaveTextContent(
+      '400 Trainings- und 100 Testbilder mit Masken · 3 Klassen (background, cell, nucleus) · ' +
+        'kein Download'
     );
   });
 
@@ -500,6 +543,16 @@ describe('Fitting a network to segmentation data', () => {
     expect(upload.nodes[0].params).toEqual({ shape: [3, 64, 64] });
     expect(upload.nodes[5].params).toEqual({ out_channels: 3, kernel_size: [1, 1] });
     expect(starterNetwork(shapes, { Input: spec('Input') })).toBeNull();
+    // Cells: its own size and three classes.
+    const generated = effectiveSource(
+      SEGMENTATION_STATUS,
+      { tab: 'builtin', builtin: 'cells', upload: null },
+      []
+    );
+    expect(isSegmentationSource(generated)).toBe(true);
+    const forCells = starterNetwork(generated, specs)!;
+    expect(forCells.nodes[0].params).toEqual({ shape: [3, 96, 96] });
+    expect(forCells.nodes[5].params).toEqual({ out_channels: 3, kernel_size: [1, 1] });
   });
 });
 

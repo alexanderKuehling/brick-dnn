@@ -4,7 +4,8 @@ Five kinds of data can be used for training:
 
 ``random``   demo data generated to fit the network, with a hidden rule it can learn
 ``builtin``  MNIST, Fashion-MNIST or CIFAR-10 (downloaded on first use, needs torchvision),
-             or Shapes (generated images with a class for every pixel, see shapes.py)
+             or Shapes and Cells (generated images with a class for every pixel, see
+             shapes.py, cells.py and generators.py)
 ``csv``      a CSV file: every column but the last is a feature, the last one is the target
 ``images``   a folder (or ZIP file) with one sub-folder of images per class
 ``segmentation``  a folder (or ZIP file) with images and one mask per image, see
@@ -52,6 +53,10 @@ class DatasetError(ValueError):
 SHAPES_MEAN = (0.5556, 0.5575, 0.5419)
 SHAPES_STD = (0.1903, 0.192, 0.2007)
 SHAPES_PIXEL_SHARE = (0.8577, 0.0446, 0.0609, 0.0367)
+# Cells (cells.py): the same for its 400 training images.
+CELLS_MEAN = (0.1401, 0.0978, 0.136)
+CELLS_STD = (0.1616, 0.0809, 0.1618)
+CELLS_PIXEL_SHARE = (0.8079, 0.16, 0.032)
 
 
 @dataclass(frozen=True)
@@ -184,6 +189,23 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
             task="segmentation",
             generated=True,
             class_pixel_share=SHAPES_PIXEL_SHARE,
+        ),
+        BuiltinDataset(
+            id="cells",
+            name="Cells",
+            description="Segmentation: cells with their nuclei, like fluorescence microscopy "
+            "images, with a class for every pixel (the nuclei cover only 3 % of the pixels). "
+            "Generated, RGB 96×96.",
+            shape=(3, 96, 96),
+            class_names=("background", "cell", "nucleus"),
+            train_size=400,
+            test_size=100,
+            download_mb=0,
+            mean=CELLS_MEAN,
+            std=CELLS_STD,
+            task="segmentation",
+            generated=True,
+            class_pixel_share=CELLS_PIXEL_SHARE,
         ),
     )
 }

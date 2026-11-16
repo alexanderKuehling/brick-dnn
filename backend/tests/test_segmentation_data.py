@@ -1,5 +1,6 @@
 """Segmentation datasets: the layouts and mask formats that are read, what is refused, the
-ZIP extraction and the built-in Shapes dataset (needs Pillow and NumPy, not PyTorch)."""
+ZIP extraction and the built-in Shapes and Cells datasets (needs Pillow and NumPy, not
+PyTorch)."""
 
 from __future__ import annotations
 
@@ -21,7 +22,16 @@ from brickdnn.training import (  # noqa: E402
     inspect_segmentation_folder,
     is_segmentation_folder,
 )
-from brickdnn.training.datasets import SHAPES_MEAN, SHAPES_PIXEL_SHARE, SHAPES_STD  # noqa: E402
+from brickdnn.training.cells import CELL_CLASSES, cells_arrays, cells_sample  # noqa: E402
+from brickdnn.training.datasets import (  # noqa: E402
+    CELLS_MEAN,
+    CELLS_PIXEL_SHARE,
+    CELLS_STD,
+    SHAPES_MEAN,
+    SHAPES_PIXEL_SHARE,
+    SHAPES_STD,
+)
+from brickdnn.training.generators import GENERATORS, generator_for  # noqa: E402
 from brickdnn.training.segmentation import (  # noqa: E402
     CLASS_COLORS,
     IGNORE_INDEX,
@@ -529,6 +539,96 @@ def test_shapes_start_and_size():
     assert (images[0].transpose(1, 2, 0) == shapes_sample(398)[0]).all()
     small, small_mask = shapes_sample(3, size=32)
     assert small.shape == (32, 32, 3) and small_mask.shape == (32, 32)
+
+
+# --------------------------------------------------------------------------- #
+# The built-in Cells dataset
+# --------------------------------------------------------------------------- #
+
+
+def test_cells_is_a_built_in_segmentation_dataset():
+    spec = BUILTIN_DATASETS["cells"]
+    assert (spec.name, spec.task, spec.generated, spec.download_mb) == (
+        "Cells",
+        "segmentation",
+        True,
+        0,
+    )
+    assert spec.class_names == CELL_CLASSES == ("background", "cell", "nucleus")
+    info = builtin_info("cells")
+    assert (info.kind, info.task, info.builtin) == ("builtin", "segmentation", "cells")
+    assert info.sample_shape == [3, 96, 96]
+    assert (info.train_size, info.test_size, info.num_samples) == (400, 100, 500)
+    assert info.segmentation["class_pixel_share"] == list(CELLS_PIXEL_SHARE)
+    assert "96×96" in spec.description
+
+
+def test_every_generated_dataset_has_a_generator():
+    generated = {d.id for d in BUILTIN_DATASETS.values() if d.generated}
+    assert generated == set(GENERATORS) == {"shapes", "cells"}
+    assert generator_for("cells").arrays is cells_arrays
+    assert generator_for("shapes").sample is shapes_sample
+    assert generator_for("mnist") is None
+
+
+def test_cells_images_are_deterministic_and_look_like_described():
+    picture, mask = cells_sample(7)
+    again, mask_again = cells_sample(7)
+    assert (picture == again).all() and (mask == mask_again).all()
+    assert picture.shape == (96, 96, 3) and picture.dtype == np.uint8
+    assert mask.shape == (96, 96) and mask.dtype == np.uint8
+    other, other_mask = cells_sample(8)
+    assert (picture != other).any() and (mask != other_mask).any()
+
+    images, masks = cells_arrays(0, 400)
+    assert images.shape == (400, 3, 96, 96) and masks.shape == (400, 96, 96)
+    assert (images[7].transpose(1, 2, 0) == picture).all() and (masks[7] == mask).all()
+    assert set(np.unique(masks)) == {0, 1, 2}
+    flat = masks.reshape(400, -1)
+    # Every image shows cells with nuclei, and every nucleus lies inside a cell: a nucleus
+    # pixel has no background pixel next to it.
+    assert ((flat == 1).any(axis=1) & (flat == 2).any(axis=1)).all()
+    padded = np.pad(masks, ((0, 0), (1, 1), (1, 1)), constant_values=1)
+    nucleus = masks == 2
+    for dy, dx in ((0, 1), (2, 1), (1, 0), (1, 2)):
+        neighbour = padded[:, dy : dy + 96, dx : dx + 96]
+        assert not (nucleus & (neighbour == 0)).any()
+    # Some cells are cut by the border of the image, most images have none or a few.
+    border = np.concatenate([masks[:, 0], masks[:, -1], masks[:, :, 0], masks[:, :, -1]], 1)
+    assert 0.3 < (border > 0).any(axis=1).mean() < 0.9
+    # The background is dark: nearly all of it below half the brightness.
+    background = images.transpose(0, 2, 3, 1)[masks == 0].max(axis=1)
+    assert np.percentile(background, 99) < 128
+    # The cytoplasm is pinker, the nuclei bluer (red minus blue, on average).
+    pixels = images.transpose(0, 2, 3, 1).astype(float)
+    tint = pixels[..., 0] - pixels[..., 2]
+    assert tint[masks == 1].mean() > tint[masks == 2].mean() + 10
+    # Brightness and contrast vary from image to image.
+    brightness = images.reshape(400, -1).mean(axis=1)
+    assert brightness.max() > 2 * brightness.min()
+    # The statistics the training normalises with, and the shares shown to the user: the
+    # nucleus is a small class.
+    scaled = images / 255.0
+    assert scaled.mean(axis=(0, 2, 3)) == pytest.approx(CELLS_MEAN, abs=2e-4)
+    assert scaled.std(axis=(0, 2, 3)) == pytest.approx(CELLS_STD, abs=2e-4)
+    shares = [float((masks == label).mean()) for label in range(3)]
+    assert shares == pytest.approx(CELLS_PIXEL_SHARE, abs=2e-4)
+    assert 0.02 < shares[2] < 0.05
+
+
+def test_cells_start_size_and_speed():
+    images, masks = cells_arrays(398, 4)
+    assert (images[0].transpose(1, 2, 0) == cells_sample(398)[0]).all()
+    assert (masks[3] == cells_sample(401)[1]).all()
+    small, small_mask = cells_sample(3, size=48)
+    assert small.shape == (48, 48, 3) and small_mask.shape == (48, 48)
+    assert set(np.unique(small_mask)) <= {0, 1, 2}
+    # Every image is drawn from its own seed (generated on demand while training starts).
+    import time
+
+    started = time.perf_counter()
+    cells_arrays(0, 50)
+    assert time.perf_counter() - started < 2.0  # about 0.1 s
 
 
 def test_class_colours():

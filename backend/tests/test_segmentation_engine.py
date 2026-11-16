@@ -55,6 +55,7 @@ from .segmentation_helpers import (  # noqa: E402
 )
 
 SHAPES = builtin_info("shapes")
+CELLS = builtin_info("cells")
 # Shapes at half its size and a small U-Net: learns most of it in about a second.
 QUICK = {
     "epochs": 4,
@@ -347,6 +348,29 @@ def test_shapes_resized_and_capped():
     assert set(targets[0].unique().tolist()) <= {0, 1, 2, 3}
 
 
+def test_cells_data_split_and_batches():
+    job = TrainingJob(graph=tiny_unet(3, 96), dataset=CELLS, config=TrainingConfig())
+    data = prepare(job)
+    assert (len(data.train), len(data.val), len(data.test)) == (320, 80, 100)
+    inputs, targets = data.train.batch(torch.arange(5))
+    assert inputs[0].shape == (5, 3, 96, 96) and inputs[0].dtype == torch.float32
+    assert targets[0].shape == (5, 96, 96) and targets[0].dtype == torch.long
+    assert set(targets[0].unique().tolist()) <= {0, 1, 2}
+    # Normalised with the statistics of Cells: about mean 0 and deviation 1 per channel.
+    everything, _ = data.train.batch(torch.arange(100))
+    assert everything[0].mean(dim=(0, 2, 3)).abs().max() < 0.2
+    assert (everything[0].std(dim=(0, 2, 3)) - 1).abs().max() < 0.2
+    pre = data.preprocessing
+    assert pre["task"] == "segmentation" and pre["dataset"] == "cells"
+    assert pre["class_names"] == ["background", "cell", "nucleus"]
+    assert torch.equal(data.test.indices, torch.arange(400, 500))
+    # The masks are the generated ones.
+    from brickdnn.training.cells import cells_sample
+
+    _, test_targets = data.test.batch(torch.arange(1))
+    assert (test_targets[0][0].numpy() == cells_sample(400)[1]).all()
+
+
 def test_masks_are_resized_with_nearest_neighbour():
     masks = torch.tensor([[[0, 3], [1, 2]]], dtype=torch.uint8)
     resized = segdata.resize_masks(masks, 4, 4)
@@ -468,6 +492,38 @@ def test_training_on_shapes_beats_chance_clearly(tmp_path):
     # The same seed gives the same run.
     again = train(shapes_job(), Recorder())
     assert [e["val_iou"] for e in again.history] == [e["val_iou"] for e in history]
+
+
+def test_the_unet_example_learns_cells(tmp_path):
+    """The U-Net example with the fix of the check (3 output channels) and a smaller Input:
+    the loss falls and the cells are found after a few epochs on the CPU."""
+    from brickdnn import EXAMPLES
+
+    graph = json.loads(json.dumps(EXAMPLES["unet"]["graph"]))
+    for fix in check_compatibility(graph, CELLS).fixes:
+        node = next(n for n in graph["nodes"] if n["id"] == fix["node"])
+        node["params"].update(fix["params"])
+    node = next(n for n in graph["nodes"] if n["id"] == "input")
+    node["params"]["shape"] = [3, 48, 48]
+    settings = {"epochs": 4, "batch_size": 8, "learning_rate": 0.002, "max_samples": 96}
+    job = TrainingJob(
+        graph=graph,
+        dataset=CELLS,
+        config=TrainingConfig.from_dict({**settings, "seed": 2, "device": "cpu"}),
+    )
+    reporter = Recorder()
+    result = train(job, reporter, tmp_path / "weights.pt")
+    assert result.status == "completed", result.message
+    assert reporter.info["class_names"] == ["background", "cell", "nucleus"]
+    history = result.history
+    assert history[-1]["train_loss"] < 0.6 * history[0]["train_loss"], history
+    assert min(e["val_loss"] for e in history) < history[0]["val_loss"]
+    # All background would be 81 % of the pixels and a mean IoU of 0.27.
+    kept = next(e for e in history if e["epoch"] == result.weights_epoch)
+    assert kept["val_iou"] > 0.45 and kept["val_pixel_accuracy"] > 0.85, history
+    test = reporter.segmentation["test"]
+    assert len(test["class_iou"]) == 3
+    assert test["class_iou"][0] > 0.85 and test["class_iou"][1] > 0.3, test
 
 
 def test_previews_are_written_bounded_and_true(tmp_path):
@@ -996,6 +1052,41 @@ def test_cli_trains_on_shapes_and_prints_the_metrics(tmp_path, capsys):
     assert [row.split()[0] for row in table[2:6]] == ["background", "square", "circle", "triangle"]
     assert f"Saved 8 preview images (image, mask, prediction, overlay) to {tmp_path / 'out'}" in out
     assert (tmp_path / "net.pt").is_file() and (tmp_path / "out" / "index.json").is_file()
+
+
+def test_cli_trains_the_unet_example_on_cells(tmp_path, capsys):
+    """brickdnn train --example unet --data cells: the example has a channel too many for the
+    three classes of Cells; it trains anyway and the warning says what to change."""
+    code = brickdnn_main(
+        [
+            "train",
+            "--example",
+            "unet",
+            "--data",
+            "cells",
+            "--epochs",
+            "1",
+            "--max-samples",
+            "16",
+            "--batch-size",
+            "8",
+            "--device",
+            "cpu",
+            "--save",
+            str(tmp_path / "unet.pt"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert (
+        "warning: The network outputs 4 channels, but Cells has only 3 classes. The extra "
+        "channels are never the right answer. The last layer should output 3 channels"
+    ) in out
+    assert "warning: Cells images (96×96) are resized to 64×64" in out
+    assert "Segmentation into 3 classes at 64×64 pixels (Cells, 400 training and 100 test" in out
+    table = out[out.index("IoU per class") :].splitlines()
+    assert [row.split()[0] for row in table[2:5]] == ["background", "cell", "nucleus"]
+    assert (tmp_path / "unet.pt").is_file()
 
 
 def test_cli_reads_segmentation_folders_and_zips(tmp_path, capsys):

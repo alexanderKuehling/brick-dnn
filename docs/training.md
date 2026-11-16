@@ -77,6 +77,7 @@ by default (`BRICKDNN_TRAINING_MAX_RUNS`), and refuses a start while it is busy.
 | **CSV file** | Upload a `.csv`: every column but the last is a numeric feature, the last column is the target. | Input = number of feature columns; 1 output (regression) or one output per class |
 | **Image folder** | Upload a `.zip` with one folder per class, e.g. `cats/001.jpg`, `dogs/001.jpg`. | Input `1, H, W` or `3, H, W` (or flat: `3·S·S` or `S·S` values for S×S images); one output per class |
 | **Shapes** | 500 generated 64×64 images of squares, circles and triangles with a class for every pixel (4 classes). Nothing is downloaded. See [Image segmentation](#image-segmentation). | Input `3, H, W` or `1, H, W`; output `4, H, W` |
+| **Cells** | 500 generated 96×96 images like fluorescence microscopy: cells and their nuclei, with a class for every pixel (3 classes: background, cell, nucleus). Nothing is downloaded. See [Image segmentation](#image-segmentation). | Input `3, H, W` or `1, H, W`; output `3, H, W` |
 | **Images with masks** | Upload a `.zip` with the folders `images` and `masks` (same file names), see [Image segmentation](#image-segmentation). | Input `1, H, W` or `3, H, W`; output one channel per class at the same height and width |
 
 Details:
@@ -165,7 +166,7 @@ check finds it) instead:
 | Regression | Mean absolute error | `mae` | | Outliers in the target: every error counts by its size |
 | Regression | Huber loss | `huber` | `huber_delta` (default 1) | Squared for small errors, linear beyond `huber_delta`: a compromise of both |
 | Segmentation | Cross-entropy | `cross_entropy` (default) | | The usual choice |
-| Segmentation | Cross-entropy + Dice | `cross_entropy_dice` | | Classes that cover only a few pixels |
+| Segmentation | Cross-entropy + Dice | `cross_entropy_dice` | | Classes that cover only a few pixels (the nuclei of the built-in Cells) |
 | Segmentation | Weighted cross-entropy | `weighted_cross_entropy` | `class_weights` (default `"balanced"`, from the pixel counts) | Pixels of rare classes count more |
 
 - **Class weights** (`class_weights`): `"balanced"` weighs every class by
@@ -257,7 +258,7 @@ whose split has no validation rows, trains on everything that is not test data. 
 - A segmentation shows its preview images from the test images (without them: the training
   images); explanations and the *Use a sample* rows of the prediction form take test rows
   (without them: training rows) instead of validation rows.
-| Shapes | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
+| Shapes, Cells | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
 | Images with masks | `val_split` of the data, or the folder `val` | `test_split` of the data, or the folder `test` (none without it) |
 | Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |
 
@@ -694,6 +695,9 @@ A segmentation network gives every pixel of an image a class instead of one answ
 whole image: its output is as high and wide as its Input. Load the example **U-Net (image
 segmentation)**, press **Train**, choose **Built-in → Shapes** and start: it fits as it is
 (Input `3, 64, 64`, four classes) and reaches about 80 % mean IoU in ten epochs on a CPU.
+**Built-in → Cells** has three classes: choosing it sets the last layer of the example
+(`mask`) to 3 output channels (see [Adapting the network](#adapting-the-network-to-the-data);
+the check warns about the fourth channel and offers the fix if it was not applied).
 
 ![A finished U-Net run on Shapes: the IoU of every class and, for validation images, the true and the predicted masks](images/training-segmentation.png)
 
@@ -705,6 +709,23 @@ on a noisy background, and for every pixel its class (*background*, *square*, *c
 *triangle*). The colour of a shape hints at its class (squares are bluish, circles reddish,
 triangles greenish), but the hues overlap, so a network needs the outlines for the rest. That
 makes it quick to learn; it shows that a network trains, not how good it is on photos.
+
+**Cells** is built in and generated on the server as well: 400 training and 100 test images
+of 96×96 pixels that look like fluorescence microscopy. Two to seven cells lie on a dark,
+slightly tinted background with sensor noise and vignetting; a cell is an ellipse of random
+size, aspect and rotation, stained pink to magenta, with its nucleus, a smaller blue to violet
+ellipse, a little off its centre. Most cells lie apart, some touch each other or the border of
+the image. Images differ in brightness and contrast and the stains in colour, so the outlines
+matter, not only the colour. The classes are *background* (81 % of the pixels), *cell* (the
+cytoplasm, 16 %) and *nucleus* (3 %): the nucleus is a small class, which shows what the
+[losses](#losses) for small classes do. The U-Net example with 3 output channels and the
+Input at the size of the images (`3, 96, 96`) reaches after ten epochs on a CPU about 88 %
+test mean IoU with the cross-entropy (nucleus 75 %) and about 91 % with *Cross-entropy +
+Dice* (nucleus 84 %); at the example's own Input `3, 64, 64` about 86 % (nucleus 70 %).
+On the command line, `brickdnn train --example unet --data cells` trains the example as it
+is, at 64×64 and with four channels (a warning says that the fourth is never right). For three
+channels, save the example as a JSON file, set `out_channels` of the layer `mask` to 3 and
+train that file.
 
 **Your own data** is a `.zip` file with the images in a folder `images` and one mask per
 image in a folder `masks`. An image and its mask have the same file name; the ending may
@@ -786,8 +807,9 @@ file, both with the reason; classical models do not segment.
   them when one class has more than 97 % of the pixels.
 - **Time.** CPU time grows with the number of pixels. On an otherwise idle CPU, the U-Net
   example needs about 0.05 CPU seconds per training image and epoch at 64×64 (about four
-  times that at 128×128): ten epochs on Shapes take about 3 CPU minutes, on a busy machine
-  up to three times as much. The estimate before the start is cautious for this network
+  times that at 128×128): ten epochs on Shapes take about 3 CPU minutes, on Cells at its 96×96
+  about 5, on a busy machine up to three times as much. (Cells is 96×96 rather than 128×128
+  for that reason: a nucleus is still about 5 to 15 pixels across.) The estimate before the start is cautious for this network
   (about 9 CPU minutes for ten epochs). Use a smaller Input, *Max. samples* or fewer epochs
   for a first try.
 - Datasets up to 256 MB (at the size of the Input, one byte per pixel and channel plus the
@@ -1145,6 +1167,7 @@ brickdnn train --example tabular_regression --data houses.csv   # CSV file
 brickdnn train my_cnn.json --data ./pets/ --epochs 20           # image folder (or a .zip)
 brickdnn train --example lstm_sentiment --data demo             # demo data
 brickdnn train --example unet --data shapes --batch-size 16     # segmentation: a class per pixel
+brickdnn train --example unet --data cells --loss cross_entropy_dice   # cells and nuclei
 brickdnn train my_unet.json --data scans.zip --previews out/    # images/ and masks/ (or a folder)
 brickdnn train my_cnn.json --data houses.csv --test-split 0.2   # hold out 20 % as a test set
 brickdnn train --example gp_regression --data houses.csv        # a classical model: houses.joblib

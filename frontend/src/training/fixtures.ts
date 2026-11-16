@@ -1,6 +1,7 @@
 /** Test data for the training panel (only imported by tests). */
 import type {
   Analysis,
+  BuiltinDataset,
   ClassificationEvaluation,
   Dataset,
   GraphDocument,
@@ -762,7 +763,26 @@ export function votingDetail(overrides: Partial<RunDetail> = {}): RunDetail {
 const SHAPE_CLASSES = ['background', 'square', 'circle', 'triangle'];
 const SHAPE_COLORS = ['#1a1a19', '#3987e5', '#d95926', '#199e70'];
 
-/** A server with segmentation: the generated dataset Shapes and the limits. */
+const CELL_CLASSES = ['background', 'cell', 'nucleus'];
+
+/** The generated dataset Cells as the server describes it (`description` in English). */
+export const CELLS_DATASET: BuiltinDataset = {
+  id: 'cells',
+  name: 'Cells',
+  description:
+    'Segmentation: cells with their nuclei, like fluorescence microscopy images, with a ' +
+    'class for every pixel (the nuclei cover only 3 % of the pixels). Generated, RGB 96×96.',
+  task: 'segmentation',
+  sample_shape: [3, 96, 96],
+  num_classes: 3,
+  class_names: CELL_CLASSES,
+  train_size: 400,
+  test_size: 100,
+  download_mb: 0,
+  available: true,
+};
+
+/** A server with segmentation: the generated datasets Shapes and Cells and the limits. */
 export const SEGMENTATION_STATUS: TrainingStatus = {
   ...STATUS,
   builtin_datasets: [
@@ -782,6 +802,7 @@ export const SEGMENTATION_STATUS: TrainingStatus = {
       download_mb: 0,
       available: true,
     },
+    CELLS_DATASET,
   ],
   segmentation: {
     max_classes: 32,

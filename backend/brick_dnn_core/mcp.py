@@ -126,9 +126,11 @@ Saved networks also appear in the user's Brick DNN web app.
 
 Segmentation (a class for every pixel): a network whose output is as high and wide as its
 Input, e.g. the example unet, with one output channel per class (or one channel for two
-classes). It trains on the built-in dataset shapes (generated, nothing to upload) or on a ZIP
-file with the folders images/ and masks/ (same file names; masks are PNG files with the
-class index of every pixel, or black and white), uploaded with create_upload_link. The
+classes). It trains on the built-in datasets shapes (4 classes) and cells (3 classes:
+background, cell, nucleus; give the example's last layer 3 output channels, as the fix of
+check_training does), both generated, nothing to upload, or on a ZIP file with the folders
+images/ and masks/ (same file names; masks are PNG files with the class index of every
+pixel, or black and white), uploaded with create_upload_link. The
 metrics are mean IoU, Dice and pixel accuracy; use a batch size of 4 to 16 (8 for the example); predict takes an
 image file as base64 (image) and returns the class map as a small PNG.
 
@@ -184,8 +186,8 @@ GRAPH_SCHEMA: dict[str, Any] = {
 DATASET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
-        'Which data to train on: {"kind": "builtin", "id": "mnist"} (or "shapes" for '
-        'segmentation), {"kind": "upload", "id": 3} (one of the user\'s datasets) or '
+        'Which data to train on: {"kind": "builtin", "id": "mnist"} (or "shapes" or "cells" '
+        'for segmentation), {"kind": "upload", "id": 3} (one of the user\'s datasets) or '
         '{"kind": "random"}. See get_training_options.'
     ),
     "properties": {

@@ -441,7 +441,7 @@ def capabilities(user=None) -> dict[str, Any]:
         "devices": info.get("devices", []) if available else [],
         "default_device": info.get("default_device") if available else None,
         "builtin_datasets": [
-            # Generated datasets (Shapes) need no torchvision.
+            # Generated datasets (Shapes, Cells) need no torchvision.
             {**dataset.to_dict(), "available": has_torchvision or dataset.generated}
             for dataset in BUILTIN_DATASETS.values()
         ],

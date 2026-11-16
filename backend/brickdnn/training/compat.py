@@ -53,7 +53,7 @@ _BYTES_PER_VALUE = 4 * 1.6
 _BYTES_PER_PARAM = 4 * 4
 SEGMENTATION_HINT = (
     "A network with one output per pixel is trained on a segmentation dataset (images with "
-    "masks), e.g. the built-in Shapes."
+    "masks), e.g. the built-in Shapes or Cells."
 )
 
 
@@ -297,7 +297,7 @@ def _check(
 
 def is_segmentation(dataset: DatasetInfo) -> bool:
     """True for data with a class for every pixel: segmentation folders and the built-in
-    Shapes."""
+    Shapes and Cells."""
     return dataset.kind == "segmentation" or dataset.task == "segmentation"
 
 
@@ -743,9 +743,12 @@ def _check_segmentation(
                 f"The network outputs {k} channels, but {name} has {n} classes. {channels_hint}"
             )
         elif k > n:
+            # The hint is written out (not {channels_hint}) so that the API translates the
+            # whole warning as one message.
             result.warnings.append(
                 f"The network outputs {k} channels, but {name} has only {n} classes. The extra "
-                "channels are never the right answer."
+                f"channels are never the right answer. The last layer should output {n} "
+                f"channels (e.g. Conv2d with {n} output channels and kernel size 1)."
             )
     if result.errors or image is None or k is None:
         return

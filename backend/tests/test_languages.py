@@ -146,6 +146,12 @@ def test_step_catalogue_and_training_options_in_german(settings):
     assert options.status_code == 200
     text = json.dumps(options.data, ensure_ascii=False)
     assert "Handgeschriebene Ziffern" in text
+    # The generated datasets: the description in German, the class names as they are (they
+    # name the classes in masks, metrics and predictions).
+    cells = next(d for d in options.data["builtin_datasets"] if d["id"] == "cells")
+    assert cells["name"] == "Cells"
+    assert cells["description"].startswith("Segmentierung: Zellen mit ihren Zellkernen")
+    assert cells["class_names"] == ["background", "cell", "nucleus"]
 
 
 def test_validation_errors_in_german(ada):  # noqa: F811

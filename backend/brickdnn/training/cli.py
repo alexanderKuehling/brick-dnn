@@ -5,6 +5,7 @@ brickdnn train graph.json --data random                # demo data with a hidden
 brickdnn train graph.json --data houses.csv --save houses.pt
 brickdnn train graph.json --data photos.zip            # or a folder with one folder per class
 brickdnn train --example unet --data shapes            # segmentation: a class per pixel
+brickdnn train --example unet --data cells             # cells and nuclei (3 classes)
 brickdnn train unet.json --data scans.zip --previews out/   # images/ and masks/ in the ZIP
 brickdnn train graph.json --data houses.csv --test-split 0.2       # hold out a test set
 brickdnn train graph.json --data mnist --epochs 50 --patience 5    # early stopping
