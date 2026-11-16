@@ -1,0 +1,4844 @@
+{
+ "note": "Made by `python -m brickdnn.examples.export` (backend/brickdnn/examples/export.py) from the examples and the code generator. Do not edit by hand.",
+ "examples": [
+  {
+   "id": "mlp_mnist",
+   "name": "MLP classifier (MNIST)",
+   "description": "A classic multi-layer perceptron for 28×28 digits flattened to 784 features.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 235146,
+   "neural_params": null,
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "fc3"
+   ],
+   "nodes": [
+    {
+     "id": "input",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       784
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      784
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc1",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 256
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      256
+     ],
+     "output_kind": "tensor",
+     "num_params": 200960,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      256
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "drop1",
+     "type": "Dropout",
+     "category": "Basic",
+     "params": {
+      "p": 0.2
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      256
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc2",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 128
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 32896,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 280,
+      "y": 230
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc3",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 10
+     },
+     "position": {
+      "x": 560,
+      "y": 230
+     },
+     "output_shape": [
+      10
+     ],
+     "output_kind": "tensor",
+     "num_params": 1290,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "input",
+     "target": "fc1",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc1",
+     "target": "relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu1",
+     "target": "drop1",
+     "kind": "tensor"
+    },
+    {
+     "source": "drop1",
+     "target": "fc2",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc2",
+     "target": "relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu2",
+     "target": "fc3",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 784)\nOutput: (batch, 10)\nTrainable parameters: 235,146\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\nTrain it on a CSV file (every column but the last is a feature,\nthe last column is the target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv --epochs 20\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\n\nimport torch\nimport torch.nn as nn\nfrom torch.utils.data import DataLoader, TensorDataset\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.linear_1 = nn.Linear(784, 256)\n        self.relu_1 = nn.ReLU()\n        self.dropout_1 = nn.Dropout(p=0.2)\n        self.linear_2 = nn.Linear(256, 128)\n        self.relu_2 = nn.ReLU()\n        self.linear_3 = nn.Linear(128, 10)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.linear_1(x)\n        x = self.relu_1(x)\n        x = self.dropout_1(x)\n        x = self.linear_2(x)\n        x = self.relu_2(x)\n        x = self.linear_3(x)\n        return x\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\n# --------------------------------------------------------------------------- #\n# Training on a CSV file, and predictions for new rows\n# --------------------------------------------------------------------------- #\n\nNUM_FEATURES = 784\nNUM_CLASSES = 10  # classification: the target column holds the class index 0..9\n\n\ndef read_csv(path: str) -> tuple[list[str], torch.Tensor]:\n    \"\"\"Read a CSV file of numbers: the column names of its header line (an empty list if it\n    has none) and the values.\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        try:\n            [float(value) for value in rows[0]]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    values = [[float(value) for value in row] for row in rows]\n    return header, torch.tensor(values, dtype=torch.float32)\n\n\ndef load_csv(path: str) -> tuple[list[str], torch.Tensor, torch.Tensor]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, data = read_csv(path)\n    features, target = data[:, :-1], data[:, -1]\n    if features.shape[1] != NUM_FEATURES:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns, found {features.shape[1]}.\")\n    if target.min() < 0 or target.max() >= NUM_CLASSES:\n        raise SystemExit(f\"Targets must be class indices 0..{NUM_CLASSES - 1}.\")\n    return header, features, target.long()\n\n\ndef train(\n    model: nn.Module,\n    features: torch.Tensor,\n    target: torch.Tensor,\n    epochs: int,\n    batch_size: int,\n    lr: float,\n    seed: int,\n) -> tuple[torch.Tensor, torch.Tensor]:\n    \"\"\"Train on a random 80 % of the rows and validate on the rest (the split depends only\n    on ``seed``).\n\n    Returns the mean and standard deviation that standardise the features. They come from\n    the training rows only, and new data has to be standardised with them as well.\n    \"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    generator = torch.Generator().manual_seed(seed)\n    order = torch.randperm(len(features), generator=generator)\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n\n    mean = features[train_rows].mean(dim=0)\n    std = features[train_rows].std(dim=0)\n    std[std < 1e-8] = 1.0  # constant columns are left as they are\n    features = (features - mean) / std\n\n    train_set = TensorDataset(features[train_rows], target[train_rows])\n    val_set = TensorDataset(features[val_rows], target[val_rows])\n    train_loader = DataLoader(\n        train_set,\n        batch_size=batch_size,\n        shuffle=True,\n        drop_last=len(train_set) > batch_size,\n        generator=generator,\n    )\n    val_loader = DataLoader(val_set, batch_size=batch_size)\n\n    if torch.cuda.is_available():\n        device = \"cuda\"\n    elif torch.backends.mps.is_available():\n        device = \"mps\"\n    else:\n        device = \"cpu\"\n    print(f\"Training on {device}: {len(train_set)} rows, {len(val_set)} for validation\")\n    model.to(device)\n\n    loss_fn = nn.CrossEntropyLoss()\n    optimizer = torch.optim.Adam(model.parameters(), lr=lr)\n\n    for epoch in range(1, epochs + 1):\n        model.train()\n        train_loss, seen = 0.0, 0\n        for inputs, targets in train_loader:\n            inputs, targets = inputs.to(device), targets.to(device)\n            optimizer.zero_grad()\n            loss = loss_fn(model(inputs), targets)\n            loss.backward()\n            optimizer.step()\n            train_loss += loss.item() * len(inputs)\n            seen += len(inputs)\n\n        model.eval()\n        val_loss, correct = 0.0, 0\n        with torch.no_grad():\n            for inputs, targets in val_loader:\n                inputs, targets = inputs.to(device), targets.to(device)\n                outputs = model(inputs)\n                val_loss += loss_fn(outputs, targets).item() * len(inputs)\n                correct += (outputs.argmax(dim=1) == targets).sum().item()\n        print(\n            f\"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}\"\n            f\"  val loss {val_loss / len(val_set):.4f}  val acc {correct / len(val_set):.1%}\"\n        )\n    model.cpu()\n    return mean, std\n\n\ndef save_model(\n    model: nn.Module, path: str, header: list[str], mean: torch.Tensor, std: torch.Tensor\n) -> None:\n    \"\"\"Save the weights together with what predict() needs to prepare new rows.\"\"\"\n    preprocessing = {\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"mean\": mean.tolist(),  # every feature is standardised: (value - mean) / std\n        \"std\": std.tolist(),\n        \"task\": \"classification\",\n        \"num_classes\": NUM_CLASSES,\n    }\n    torch.save({\"state_dict\": model.state_dict(), \"preprocessing\": preprocessing}, path)\n    print(f\"Saved the weights and the preprocessing to {path}\")\n\n\ndef predict(model: nn.Module, path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file, prepared like the training data.\n\n    If both files have a header line, the feature columns are found by their names;\n    otherwise they have to come first. Other columns (such as the target) are ignored.\n    \"\"\"\n    checkpoint = torch.load(path, map_location=\"cpu\", weights_only=True)\n    model.load_state_dict(checkpoint[\"state_dict\"])\n    model.eval()\n    preprocessing = checkpoint[\"preprocessing\"]\n    columns = preprocessing[\"columns\"]\n    header, data = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        features = data[:, [header.index(name) for name in columns]]\n    elif data.shape[1] >= NUM_FEATURES:\n        features = data[:, :NUM_FEATURES]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns, found {data.shape[1]}.\")\n    mean = torch.tensor(preprocessing[\"mean\"])\n    std = torch.tensor(preprocessing[\"std\"])\n    with torch.no_grad():\n        outputs = model((features - mean) / std)\n    print(preprocessing[\"target\"])\n    for value in outputs.argmax(dim=1).tolist():\n        print(value)\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(description=\"NeuralNetwork generated with Brick DNN\")\n    parser.add_argument(\"--csv\", help=\"train on this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--epochs\", type=int, default=10)\n    parser.add_argument(\"--batch-size\", type=int, default=32)\n    parser.add_argument(\"--lr\", type=float, default=1e-3, help=\"learning rate\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable run\")\n    parser.add_argument(\n        \"--save\", default=\"model.pt\", help=\"the trained model (--csv writes it, --predict reads it)\"\n    )\n    args = parser.parse_args()\n    torch.manual_seed(args.seed)  # the same initial weights for the same seed\n\n    model = NeuralNetwork()\n    if args.predict:\n        predict(model, args.save, args.predict)\n        return\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        mean, std = train(\n            model, features, target, args.epochs, args.batch_size, args.lr, args.seed\n        )\n        save_model(model, args.save, header, mean, std)\n        return\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 784)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 10)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "cnn_mnist",
+   "name": "Small CNN (MNIST)",
+   "description": "Two convolution blocks followed by a classifier head: about 99% test accuracy on MNIST.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 421642,
+   "neural_params": null,
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "fc2"
+   ],
+   "nodes": [
+    {
+     "id": "input",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       1,
+       28,
+       28
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      1,
+      28,
+      28
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32,
+      "kernel_size": [
+       3,
+       3
+      ]
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      28,
+      28
+     ],
+     "output_kind": "tensor",
+     "num_params": 320,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      28,
+      28
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool1",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {
+      "kernel_size": [
+       2,
+       2
+      ]
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      14,
+      14
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64,
+      "kernel_size": [
+       3,
+       3
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      14,
+      14
+     ],
+     "output_kind": "tensor",
+     "num_params": 18496,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 280,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      14,
+      14
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool2",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {
+      "kernel_size": [
+       2,
+       2
+      ]
+     },
+     "position": {
+      "x": 560,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      7,
+      7
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "flatten",
+     "type": "Flatten",
+     "category": "Basic",
+     "params": {},
+     "position": {
+      "x": 840,
+      "y": 230
+     },
+     "output_shape": [
+      3136
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc1",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 128
+     },
+     "position": {
+      "x": 0,
+      "y": 460
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 401536,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu3",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 280,
+      "y": 460
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "drop",
+     "type": "Dropout",
+     "category": "Basic",
+     "params": {
+      "p": 0.25
+     },
+     "position": {
+      "x": 560,
+      "y": 460
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc2",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 10
+     },
+     "position": {
+      "x": 840,
+      "y": 460
+     },
+     "output_shape": [
+      10
+     ],
+     "output_kind": "tensor",
+     "num_params": 1290,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "input",
+     "target": "conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "conv1",
+     "target": "relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu1",
+     "target": "pool1",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool1",
+     "target": "conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "conv2",
+     "target": "relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu2",
+     "target": "pool2",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool2",
+     "target": "flatten",
+     "kind": "tensor"
+    },
+    {
+     "source": "flatten",
+     "target": "fc1",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc1",
+     "target": "relu3",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu3",
+     "target": "drop",
+     "kind": "tensor"
+    },
+    {
+     "source": "drop",
+     "target": "fc2",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 1, 28, 28)\nOutput: (batch, 10)\nTrainable parameters: 421,642\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.conv2d_1 = nn.Conv2d(1, 32, kernel_size=3, padding='same')\n        self.relu_1 = nn.ReLU()\n        self.maxpool2d_1 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_2 = nn.Conv2d(32, 64, kernel_size=3, padding='same')\n        self.relu_2 = nn.ReLU()\n        self.maxpool2d_2 = nn.MaxPool2d(kernel_size=2)\n        self.flatten_1 = nn.Flatten()\n        self.linear_1 = nn.Linear(3136, 128)\n        self.relu_3 = nn.ReLU()\n        self.dropout_1 = nn.Dropout(p=0.25)\n        self.linear_2 = nn.Linear(128, 10)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.conv2d_1(x)\n        x = self.relu_1(x)\n        x = self.maxpool2d_1(x)\n        x = self.conv2d_2(x)\n        x = self.relu_2(x)\n        x = self.maxpool2d_2(x)\n        x = self.flatten_1(x)\n        x = self.linear_1(x)\n        x = self.relu_3(x)\n        x = self.dropout_1(x)\n        x = self.linear_2(x)\n        return x\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 1, 28, 28)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 10)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "resnet_block",
+   "name": "Residual CNN (CIFAR-10)",
+   "description": "A ResNet-style block with a skip connection merged by Add, then global average pooling.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 76490,
+   "neural_params": null,
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "fc"
+   ],
+   "nodes": [
+    {
+     "id": "input",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       3,
+       32,
+       32
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      3,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "stem",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64,
+      "bias": false
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 1728,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "stem_bn",
+     "type": "BatchNorm2d",
+     "category": "Normalization",
+     "params": {},
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 128,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "stem_relu",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "conv_a",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64,
+      "bias": false
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 36864,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bn_a",
+     "type": "BatchNorm2d",
+     "category": "Normalization",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 128,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu_a",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "conv_b",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64,
+      "bias": false
+     },
+     "position": {
+      "x": 840,
+      "y": 230
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 36864,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bn_b",
+     "type": "BatchNorm2d",
+     "category": "Normalization",
+     "params": {},
+     "position": {
+      "x": 0,
+      "y": 460
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 128,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "add",
+     "type": "Add",
+     "category": "Merge",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 460
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu_out",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 460
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "gap",
+     "type": "AdaptiveAvgPool2d",
+     "category": "Convolution",
+     "params": {
+      "output_size": [
+       1,
+       1
+      ]
+     },
+     "position": {
+      "x": 840,
+      "y": 460
+     },
+     "output_shape": [
+      64,
+      1,
+      1
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "flatten",
+     "type": "Flatten",
+     "category": "Basic",
+     "params": {},
+     "position": {
+      "x": 0,
+      "y": 690
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 10
+     },
+     "position": {
+      "x": 280,
+      "y": 690
+     },
+     "output_shape": [
+      10
+     ],
+     "output_kind": "tensor",
+     "num_params": 650,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "input",
+     "target": "stem",
+     "kind": "tensor"
+    },
+    {
+     "source": "stem",
+     "target": "stem_bn",
+     "kind": "tensor"
+    },
+    {
+     "source": "stem_bn",
+     "target": "stem_relu",
+     "kind": "tensor"
+    },
+    {
+     "source": "stem_relu",
+     "target": "conv_a",
+     "kind": "tensor"
+    },
+    {
+     "source": "conv_a",
+     "target": "bn_a",
+     "kind": "tensor"
+    },
+    {
+     "source": "bn_a",
+     "target": "relu_a",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu_a",
+     "target": "conv_b",
+     "kind": "tensor"
+    },
+    {
+     "source": "conv_b",
+     "target": "bn_b",
+     "kind": "tensor"
+    },
+    {
+     "source": "bn_b",
+     "target": "add",
+     "kind": "tensor"
+    },
+    {
+     "source": "stem_relu",
+     "target": "add",
+     "kind": "tensor"
+    },
+    {
+     "source": "add",
+     "target": "relu_out",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu_out",
+     "target": "gap",
+     "kind": "tensor"
+    },
+    {
+     "source": "gap",
+     "target": "flatten",
+     "kind": "tensor"
+    },
+    {
+     "source": "flatten",
+     "target": "fc",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 3, 32, 32)\nOutput: (batch, 10)\nTrainable parameters: 76,490\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.conv2d_1 = nn.Conv2d(3, 64, kernel_size=3, padding='same', bias=False)\n        self.batchnorm2d_1 = nn.BatchNorm2d(64)\n        self.relu_1 = nn.ReLU()\n        self.conv2d_2 = nn.Conv2d(64, 64, kernel_size=3, padding='same', bias=False)\n        self.batchnorm2d_2 = nn.BatchNorm2d(64)\n        self.relu_2 = nn.ReLU()\n        self.conv2d_3 = nn.Conv2d(64, 64, kernel_size=3, padding='same', bias=False)\n        self.batchnorm2d_3 = nn.BatchNorm2d(64)\n        self.relu_3 = nn.ReLU()\n        self.avgpool_1 = nn.AdaptiveAvgPool2d(1)\n        self.flatten_1 = nn.Flatten()\n        self.linear_1 = nn.Linear(64, 10)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        conv2d_1 = self.conv2d_1(x)\n        batchnorm2d_1 = self.batchnorm2d_1(conv2d_1)\n        relu_1 = self.relu_1(batchnorm2d_1)\n        conv2d_2 = self.conv2d_2(relu_1)\n        batchnorm2d_2 = self.batchnorm2d_2(conv2d_2)\n        relu_2 = self.relu_2(batchnorm2d_2)\n        conv2d_3 = self.conv2d_3(relu_2)\n        batchnorm2d_3 = self.batchnorm2d_3(conv2d_3)\n        added_1 = batchnorm2d_3 + relu_1\n        relu_3 = self.relu_3(added_1)\n        avgpool_1 = self.avgpool_1(relu_3)\n        flatten_1 = self.flatten_1(avgpool_1)\n        linear_1 = self.linear_1(flatten_1)\n        return linear_1\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 3, 32, 32)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 10)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "unet",
+   "name": "U-Net (image segmentation)",
+   "description": "An encoder that halves the image three times, a decoder that upsamples it again with ConvTranspose2d, and skip connections (Concat) that pass the details across. The output is one score per class for every pixel: it trains on the built-in Shapes dataset (background, square, circle, triangle) as it is, or on your own images with masks.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 1925700,
+   "neural_params": null,
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "mask"
+   ],
+   "nodes": [
+    {
+     "id": "input",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       3,
+       64,
+       64
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      3,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 896,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 9248,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1120,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool1",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1400,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 420,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 18496,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 700,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 980,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 36928,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1260,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool2",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1540,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 560,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 73856,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 840,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 1120,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 147584,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1400,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool3",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1680,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 256
+     },
+     "position": {
+      "x": 700,
+      "y": 510
+     },
+     "output_shape": [
+      256,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 295168,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 980,
+      "y": 510
+     },
+     "output_shape": [
+      256,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 256
+     },
+     "position": {
+      "x": 1260,
+      "y": 510
+     },
+     "output_shape": [
+      256,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 590080,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1540,
+      "y": 510
+     },
+     "output_shape": [
+      256,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up3",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 1960,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 131200,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip3",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2240,
+      "y": 340
+     },
+     "output_shape": [
+      256,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 2520,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 295040,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 2800,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 3080,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 147584,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3360,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up2",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 2100,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 32832,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip2",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2380,
+      "y": 170
+     },
+     "output_shape": [
+      128,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 2660,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 73792,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 2940,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 3220,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 36928,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3500,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up1",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 2240,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 8224,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip1",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2520,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 2800,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 18464,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3080,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 3360,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 9248,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3640,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "mask",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 4,
+      "kernel_size": [
+       1,
+       1
+      ]
+     },
+     "position": {
+      "x": 3920,
+      "y": 0
+     },
+     "output_shape": [
+      4,
+      64,
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 132,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "input",
+     "target": "enc1_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_conv1",
+     "target": "enc1_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu1",
+     "target": "enc1_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_conv2",
+     "target": "enc1_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu2",
+     "target": "pool1",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool1",
+     "target": "enc2_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_conv1",
+     "target": "enc2_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu1",
+     "target": "enc2_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_conv2",
+     "target": "enc2_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu2",
+     "target": "pool2",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool2",
+     "target": "enc3_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_conv1",
+     "target": "enc3_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu1",
+     "target": "enc3_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_conv2",
+     "target": "enc3_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu2",
+     "target": "pool3",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool3",
+     "target": "bottleneck_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_conv1",
+     "target": "bottleneck_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_relu1",
+     "target": "bottleneck_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_conv2",
+     "target": "bottleneck_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_relu2",
+     "target": "up3",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu2",
+     "target": "skip3",
+     "kind": "tensor"
+    },
+    {
+     "source": "up3",
+     "target": "skip3",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip3",
+     "target": "dec3_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_conv1",
+     "target": "dec3_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_relu1",
+     "target": "dec3_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_conv2",
+     "target": "dec3_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_relu2",
+     "target": "up2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu2",
+     "target": "skip2",
+     "kind": "tensor"
+    },
+    {
+     "source": "up2",
+     "target": "skip2",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip2",
+     "target": "dec2_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_conv1",
+     "target": "dec2_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_relu1",
+     "target": "dec2_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_conv2",
+     "target": "dec2_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_relu2",
+     "target": "up1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu2",
+     "target": "skip1",
+     "kind": "tensor"
+    },
+    {
+     "source": "up1",
+     "target": "skip1",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip1",
+     "target": "dec1_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_conv1",
+     "target": "dec1_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_relu1",
+     "target": "dec1_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_conv2",
+     "target": "dec1_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_relu2",
+     "target": "mask",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 3, 64, 64)\nOutput: (batch, 4, 64, 64)\nTrainable parameters: 1,925,700\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.conv2d_1 = nn.Conv2d(3, 32, kernel_size=3, padding='same')\n        self.relu_1 = nn.ReLU()\n        self.conv2d_2 = nn.Conv2d(32, 32, kernel_size=3, padding='same')\n        self.relu_2 = nn.ReLU()\n        self.maxpool2d_1 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_3 = nn.Conv2d(32, 64, kernel_size=3, padding='same')\n        self.relu_3 = nn.ReLU()\n        self.conv2d_4 = nn.Conv2d(64, 64, kernel_size=3, padding='same')\n        self.relu_4 = nn.ReLU()\n        self.maxpool2d_2 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_5 = nn.Conv2d(64, 128, kernel_size=3, padding='same')\n        self.relu_5 = nn.ReLU()\n        self.conv2d_6 = nn.Conv2d(128, 128, kernel_size=3, padding='same')\n        self.relu_6 = nn.ReLU()\n        self.maxpool2d_3 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_7 = nn.Conv2d(128, 256, kernel_size=3, padding='same')\n        self.relu_7 = nn.ReLU()\n        self.conv2d_8 = nn.Conv2d(256, 256, kernel_size=3, padding='same')\n        self.relu_8 = nn.ReLU()\n        self.upconv_1 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)\n        self.conv2d_9 = nn.Conv2d(256, 128, kernel_size=3, padding='same')\n        self.relu_9 = nn.ReLU()\n        self.conv2d_10 = nn.Conv2d(128, 128, kernel_size=3, padding='same')\n        self.relu_10 = nn.ReLU()\n        self.upconv_2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)\n        self.conv2d_11 = nn.Conv2d(128, 64, kernel_size=3, padding='same')\n        self.relu_11 = nn.ReLU()\n        self.conv2d_12 = nn.Conv2d(64, 64, kernel_size=3, padding='same')\n        self.relu_12 = nn.ReLU()\n        self.upconv_3 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)\n        self.conv2d_13 = nn.Conv2d(64, 32, kernel_size=3, padding='same')\n        self.relu_13 = nn.ReLU()\n        self.conv2d_14 = nn.Conv2d(32, 32, kernel_size=3, padding='same')\n        self.relu_14 = nn.ReLU()\n        self.conv2d_15 = nn.Conv2d(32, 4, kernel_size=1, padding='same')\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        conv2d_1 = self.conv2d_1(x)\n        relu_1 = self.relu_1(conv2d_1)\n        conv2d_2 = self.conv2d_2(relu_1)\n        relu_2 = self.relu_2(conv2d_2)\n        maxpool2d_1 = self.maxpool2d_1(relu_2)\n        conv2d_3 = self.conv2d_3(maxpool2d_1)\n        relu_3 = self.relu_3(conv2d_3)\n        conv2d_4 = self.conv2d_4(relu_3)\n        relu_4 = self.relu_4(conv2d_4)\n        maxpool2d_2 = self.maxpool2d_2(relu_4)\n        conv2d_5 = self.conv2d_5(maxpool2d_2)\n        relu_5 = self.relu_5(conv2d_5)\n        conv2d_6 = self.conv2d_6(relu_5)\n        relu_6 = self.relu_6(conv2d_6)\n        maxpool2d_3 = self.maxpool2d_3(relu_6)\n        conv2d_7 = self.conv2d_7(maxpool2d_3)\n        relu_7 = self.relu_7(conv2d_7)\n        conv2d_8 = self.conv2d_8(relu_7)\n        relu_8 = self.relu_8(conv2d_8)\n        upconv_1 = self.upconv_1(relu_8)\n        concat_1 = torch.cat([relu_6, upconv_1], dim=1)\n        conv2d_9 = self.conv2d_9(concat_1)\n        relu_9 = self.relu_9(conv2d_9)\n        conv2d_10 = self.conv2d_10(relu_9)\n        relu_10 = self.relu_10(conv2d_10)\n        upconv_2 = self.upconv_2(relu_10)\n        concat_2 = torch.cat([relu_4, upconv_2], dim=1)\n        conv2d_11 = self.conv2d_11(concat_2)\n        relu_11 = self.relu_11(conv2d_11)\n        conv2d_12 = self.conv2d_12(relu_11)\n        relu_12 = self.relu_12(conv2d_12)\n        upconv_3 = self.upconv_3(relu_12)\n        concat_3 = torch.cat([relu_2, upconv_3], dim=1)\n        conv2d_13 = self.conv2d_13(concat_3)\n        relu_13 = self.relu_13(conv2d_13)\n        conv2d_14 = self.conv2d_14(relu_13)\n        relu_14 = self.relu_14(conv2d_14)\n        conv2d_15 = self.conv2d_15(relu_14)\n        return conv2d_15\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 3, 64, 64)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 4, 64, 64)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "unet_classifier",
+   "name": "U-Net classifier (Fashion-MNIST)",
+   "description": "Classification with a U-Net: the encoder, decoder and skip connections of the U-Net example, then AdaptiveAvgPool2d, Flatten and Linear give 10 class scores. Fashion-MNIST's 28×28 images are resized to 32×32 so that three halvings fit (32 → 16 → 8 → 4), and the filters are halved (16/32/64, bottleneck 128) so that it trains on a CPU server. For this task a plain CNN such as the Small CNN example is smaller and faster; this one shows how a segmentation network becomes a classifier.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 481898,
+   "neural_params": null,
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "classifier"
+   ],
+   "nodes": [
+    {
+     "id": "input",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       1,
+       32,
+       32
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      1,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 16
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 160,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 16
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 2320,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc1_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1120,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool1",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1400,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 420,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 4640,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 700,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 980,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 9248,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc2_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1260,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool2",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1540,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 560,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 18496,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 840,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 1120,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 36928,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "enc3_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1400,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool3",
+     "type": "MaxPool2d",
+     "category": "Convolution",
+     "params": {},
+     "position": {
+      "x": 1680,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      4,
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 700,
+      "y": 510
+     },
+     "output_shape": [
+      128,
+      4,
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 73856,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 980,
+      "y": 510
+     },
+     "output_shape": [
+      128,
+      4,
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 128
+     },
+     "position": {
+      "x": 1260,
+      "y": 510
+     },
+     "output_shape": [
+      128,
+      4,
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 147584,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bottleneck_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 1540,
+      "y": 510
+     },
+     "output_shape": [
+      128,
+      4,
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up3",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 1960,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 32832,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip3",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2240,
+      "y": 340
+     },
+     "output_shape": [
+      128,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 2520,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 73792,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 2800,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 64
+     },
+     "position": {
+      "x": 3080,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 36928,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec3_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3360,
+      "y": 340
+     },
+     "output_shape": [
+      64,
+      8,
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up2",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 2100,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 8224,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip2",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2380,
+      "y": 170
+     },
+     "output_shape": [
+      64,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 2660,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 18464,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 2940,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 32
+     },
+     "position": {
+      "x": 3220,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 9248,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec2_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3500,
+      "y": 170
+     },
+     "output_shape": [
+      32,
+      16,
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "up1",
+     "type": "ConvTranspose2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 16
+     },
+     "position": {
+      "x": 2240,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 2064,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "skip1",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": 0
+     },
+     "position": {
+      "x": 2520,
+      "y": 0
+     },
+     "output_shape": [
+      32,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_conv1",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 16
+     },
+     "position": {
+      "x": 2800,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 4624,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3080,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_conv2",
+     "type": "Conv2d",
+     "category": "Convolution",
+     "params": {
+      "out_channels": 16
+     },
+     "position": {
+      "x": 3360,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 2320,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "dec1_relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 3640,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      32,
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool",
+     "type": "AdaptiveAvgPool2d",
+     "category": "Convolution",
+     "params": {
+      "output_size": [
+       1,
+       1
+      ]
+     },
+     "position": {
+      "x": 3920,
+      "y": 0
+     },
+     "output_shape": [
+      16,
+      1,
+      1
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "flatten",
+     "type": "Flatten",
+     "category": "Basic",
+     "params": {},
+     "position": {
+      "x": 4060,
+      "y": 0
+     },
+     "output_shape": [
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "classifier",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 10
+     },
+     "position": {
+      "x": 4200,
+      "y": 0
+     },
+     "output_shape": [
+      10
+     ],
+     "output_kind": "tensor",
+     "num_params": 170,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "input",
+     "target": "enc1_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_conv1",
+     "target": "enc1_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu1",
+     "target": "enc1_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_conv2",
+     "target": "enc1_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu2",
+     "target": "pool1",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool1",
+     "target": "enc2_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_conv1",
+     "target": "enc2_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu1",
+     "target": "enc2_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_conv2",
+     "target": "enc2_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu2",
+     "target": "pool2",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool2",
+     "target": "enc3_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_conv1",
+     "target": "enc3_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu1",
+     "target": "enc3_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_conv2",
+     "target": "enc3_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu2",
+     "target": "pool3",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool3",
+     "target": "bottleneck_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_conv1",
+     "target": "bottleneck_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_relu1",
+     "target": "bottleneck_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_conv2",
+     "target": "bottleneck_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "bottleneck_relu2",
+     "target": "up3",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc3_relu2",
+     "target": "skip3",
+     "kind": "tensor"
+    },
+    {
+     "source": "up3",
+     "target": "skip3",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip3",
+     "target": "dec3_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_conv1",
+     "target": "dec3_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_relu1",
+     "target": "dec3_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_conv2",
+     "target": "dec3_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec3_relu2",
+     "target": "up2",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc2_relu2",
+     "target": "skip2",
+     "kind": "tensor"
+    },
+    {
+     "source": "up2",
+     "target": "skip2",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip2",
+     "target": "dec2_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_conv1",
+     "target": "dec2_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_relu1",
+     "target": "dec2_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_conv2",
+     "target": "dec2_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec2_relu2",
+     "target": "up1",
+     "kind": "tensor"
+    },
+    {
+     "source": "enc1_relu2",
+     "target": "skip1",
+     "kind": "tensor"
+    },
+    {
+     "source": "up1",
+     "target": "skip1",
+     "kind": "tensor"
+    },
+    {
+     "source": "skip1",
+     "target": "dec1_conv1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_conv1",
+     "target": "dec1_relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_relu1",
+     "target": "dec1_conv2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_conv2",
+     "target": "dec1_relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "dec1_relu2",
+     "target": "pool",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool",
+     "target": "flatten",
+     "kind": "tensor"
+    },
+    {
+     "source": "flatten",
+     "target": "classifier",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 1, 32, 32)\nOutput: (batch, 10)\nTrainable parameters: 481,898\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.conv2d_1 = nn.Conv2d(1, 16, kernel_size=3, padding='same')\n        self.relu_1 = nn.ReLU()\n        self.conv2d_2 = nn.Conv2d(16, 16, kernel_size=3, padding='same')\n        self.relu_2 = nn.ReLU()\n        self.maxpool2d_1 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_3 = nn.Conv2d(16, 32, kernel_size=3, padding='same')\n        self.relu_3 = nn.ReLU()\n        self.conv2d_4 = nn.Conv2d(32, 32, kernel_size=3, padding='same')\n        self.relu_4 = nn.ReLU()\n        self.maxpool2d_2 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_5 = nn.Conv2d(32, 64, kernel_size=3, padding='same')\n        self.relu_5 = nn.ReLU()\n        self.conv2d_6 = nn.Conv2d(64, 64, kernel_size=3, padding='same')\n        self.relu_6 = nn.ReLU()\n        self.maxpool2d_3 = nn.MaxPool2d(kernel_size=2)\n        self.conv2d_7 = nn.Conv2d(64, 128, kernel_size=3, padding='same')\n        self.relu_7 = nn.ReLU()\n        self.conv2d_8 = nn.Conv2d(128, 128, kernel_size=3, padding='same')\n        self.relu_8 = nn.ReLU()\n        self.upconv_1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)\n        self.conv2d_9 = nn.Conv2d(128, 64, kernel_size=3, padding='same')\n        self.relu_9 = nn.ReLU()\n        self.conv2d_10 = nn.Conv2d(64, 64, kernel_size=3, padding='same')\n        self.relu_10 = nn.ReLU()\n        self.upconv_2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)\n        self.conv2d_11 = nn.Conv2d(64, 32, kernel_size=3, padding='same')\n        self.relu_11 = nn.ReLU()\n        self.conv2d_12 = nn.Conv2d(32, 32, kernel_size=3, padding='same')\n        self.relu_12 = nn.ReLU()\n        self.upconv_3 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)\n        self.conv2d_13 = nn.Conv2d(32, 16, kernel_size=3, padding='same')\n        self.relu_13 = nn.ReLU()\n        self.conv2d_14 = nn.Conv2d(16, 16, kernel_size=3, padding='same')\n        self.relu_14 = nn.ReLU()\n        self.avgpool_1 = nn.AdaptiveAvgPool2d(1)\n        self.flatten_1 = nn.Flatten()\n        self.linear_1 = nn.Linear(16, 10)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        conv2d_1 = self.conv2d_1(x)\n        relu_1 = self.relu_1(conv2d_1)\n        conv2d_2 = self.conv2d_2(relu_1)\n        relu_2 = self.relu_2(conv2d_2)\n        maxpool2d_1 = self.maxpool2d_1(relu_2)\n        conv2d_3 = self.conv2d_3(maxpool2d_1)\n        relu_3 = self.relu_3(conv2d_3)\n        conv2d_4 = self.conv2d_4(relu_3)\n        relu_4 = self.relu_4(conv2d_4)\n        maxpool2d_2 = self.maxpool2d_2(relu_4)\n        conv2d_5 = self.conv2d_5(maxpool2d_2)\n        relu_5 = self.relu_5(conv2d_5)\n        conv2d_6 = self.conv2d_6(relu_5)\n        relu_6 = self.relu_6(conv2d_6)\n        maxpool2d_3 = self.maxpool2d_3(relu_6)\n        conv2d_7 = self.conv2d_7(maxpool2d_3)\n        relu_7 = self.relu_7(conv2d_7)\n        conv2d_8 = self.conv2d_8(relu_7)\n        relu_8 = self.relu_8(conv2d_8)\n        upconv_1 = self.upconv_1(relu_8)\n        concat_1 = torch.cat([relu_6, upconv_1], dim=1)\n        conv2d_9 = self.conv2d_9(concat_1)\n        relu_9 = self.relu_9(conv2d_9)\n        conv2d_10 = self.conv2d_10(relu_9)\n        relu_10 = self.relu_10(conv2d_10)\n        upconv_2 = self.upconv_2(relu_10)\n        concat_2 = torch.cat([relu_4, upconv_2], dim=1)\n        conv2d_11 = self.conv2d_11(concat_2)\n        relu_11 = self.relu_11(conv2d_11)\n        conv2d_12 = self.conv2d_12(relu_11)\n        relu_12 = self.relu_12(conv2d_12)\n        upconv_3 = self.upconv_3(relu_12)\n        concat_3 = torch.cat([relu_2, upconv_3], dim=1)\n        conv2d_13 = self.conv2d_13(concat_3)\n        relu_13 = self.relu_13(conv2d_13)\n        conv2d_14 = self.conv2d_14(relu_13)\n        relu_14 = self.relu_14(conv2d_14)\n        avgpool_1 = self.avgpool_1(relu_14)\n        flatten_1 = self.flatten_1(avgpool_1)\n        linear_1 = self.linear_1(flatten_1)\n        return linear_1\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 1, 32, 32)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 10)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "lstm_sentiment",
+   "name": "LSTM text classifier",
+   "description": "Token ids → embeddings → bidirectional LSTM → positive/negative sentiment.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 2824706,
+   "neural_params": null,
+   "inputs": [
+    "tokens"
+   ],
+   "outputs": [
+    "fc"
+   ],
+   "nodes": [
+    {
+     "id": "tokens",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       128
+      ],
+      "dtype": "long"
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "embed",
+     "type": "Embedding",
+     "category": "Sequence",
+     "params": {
+      "num_embeddings": 20000,
+      "embedding_dim": 128
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      128,
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 2560000,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "lstm",
+     "type": "LSTM",
+     "category": "Sequence",
+     "params": {
+      "hidden_size": 128,
+      "bidirectional": true
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      256
+     ],
+     "output_kind": "tensor",
+     "num_params": 264192,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "drop",
+     "type": "Dropout",
+     "category": "Basic",
+     "params": {
+      "p": 0.3
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      256
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 2
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      2
+     ],
+     "output_kind": "tensor",
+     "num_params": 514,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "tokens",
+     "target": "embed",
+     "kind": "tensor"
+    },
+    {
+     "source": "embed",
+     "target": "lstm",
+     "kind": "tensor"
+    },
+    {
+     "source": "lstm",
+     "target": "drop",
+     "kind": "tensor"
+    },
+    {
+     "source": "drop",
+     "target": "fc",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 128)  (integer token ids)\nOutput: (batch, 2)\nTrainable parameters: 2,824,706\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.embedding_1 = nn.Embedding(20000, 128)\n        self.lstm_1 = nn.LSTM(128, 128, batch_first=True, bidirectional=True)\n        self.dropout_1 = nn.Dropout(p=0.3)\n        self.linear_1 = nn.Linear(256, 2)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.embedding_1(x)\n        _, (hidden, _) = self.lstm_1(x)\n        x = torch.cat([hidden[-2], hidden[-1]], dim=-1)\n        x = self.dropout_1(x)\n        x = self.linear_1(x)\n        return x\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randint(0, 20000, (2, 128,))\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 2)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "transformer_classifier",
+   "name": "Transformer text classifier",
+   "description": "A small Transformer encoder with learned positional embeddings and mean pooling.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 1611268,
+   "neural_params": null,
+   "inputs": [
+    "tokens"
+   ],
+   "outputs": [
+    "fc"
+   ],
+   "nodes": [
+    {
+     "id": "tokens",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       64
+      ],
+      "dtype": "long"
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "embed",
+     "type": "Embedding",
+     "category": "Sequence",
+     "params": {
+      "num_embeddings": 10000,
+      "embedding_dim": 128
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 1280000,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pos",
+     "type": "PositionalEmbedding",
+     "category": "Sequence",
+     "params": {
+      "max_len": 512
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 65536,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "encoder",
+     "type": "TransformerEncoder",
+     "category": "Sequence",
+     "params": {
+      "nhead": 4,
+      "dim_feedforward": 256,
+      "num_layers": 2
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      64,
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 264960,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "pool",
+     "type": "SequencePool",
+     "category": "Sequence",
+     "params": {
+      "mode": "mean"
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "norm",
+     "type": "LayerNorm",
+     "category": "Normalization",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 230
+     },
+     "output_shape": [
+      128
+     ],
+     "output_kind": "tensor",
+     "num_params": 256,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 4
+     },
+     "position": {
+      "x": 560,
+      "y": 230
+     },
+     "output_shape": [
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 516,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "tokens",
+     "target": "embed",
+     "kind": "tensor"
+    },
+    {
+     "source": "embed",
+     "target": "pos",
+     "kind": "tensor"
+    },
+    {
+     "source": "pos",
+     "target": "encoder",
+     "kind": "tensor"
+    },
+    {
+     "source": "encoder",
+     "target": "pool",
+     "kind": "tensor"
+    },
+    {
+     "source": "pool",
+     "target": "norm",
+     "kind": "tensor"
+    },
+    {
+     "source": "norm",
+     "target": "fc",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 64)  (integer token ids)\nOutput: (batch, 4)\nTrainable parameters: 1,611,268\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.embedding_1 = nn.Embedding(10000, 128)\n        self.pos_embedding_1 = nn.Embedding(512, 128)\n        self.encoder_1 = nn.TransformerEncoder(\n            nn.TransformerEncoderLayer(\n                d_model=128, nhead=4, dim_feedforward=256,\n                dropout=0.1, batch_first=True,\n            ),\n            num_layers=2,\n        )\n        self.layernorm_1 = nn.LayerNorm(128)\n        self.linear_1 = nn.Linear(128, 4)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.embedding_1(x)\n        x = x + self.pos_embedding_1(torch.arange(x.size(1), device=x.device))\n        x = self.encoder_1(x)\n        x = x.mean(dim=1)\n        x = self.layernorm_1(x)\n        x = self.linear_1(x)\n        return x\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randint(0, 10000, (2, 64,))\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 4)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "tabular_regression",
+   "name": "Tabular regression (CSV)",
+   "description": "Predicts one number from 8 numeric features. The generated script can train on a CSV file.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 2817,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "out"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       8
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc1",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 64
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 576,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "bn",
+     "type": "BatchNorm1d",
+     "category": "Normalization",
+     "params": {},
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 128,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc2",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 32
+     },
+     "position": {
+      "x": 0,
+      "y": 230
+     },
+     "output_shape": [
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 2080,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu2",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 280,
+      "y": 230
+     },
+     "output_shape": [
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "out",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 1
+     },
+     "position": {
+      "x": 560,
+      "y": 230
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "tensor",
+     "num_params": 33,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "fc1",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc1",
+     "target": "relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu1",
+     "target": "bn",
+     "kind": "tensor"
+    },
+    {
+     "source": "bn",
+     "target": "fc2",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc2",
+     "target": "relu2",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu2",
+     "target": "out",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput: (batch, 8)\nOutput: (batch, 1)\nTrainable parameters: 2,817\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\nTrain it on a CSV file (every column but the last is a feature,\nthe last column is the target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv --epochs 20\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\n\nimport torch\nimport torch.nn as nn\nfrom torch.utils.data import DataLoader, TensorDataset\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.linear_1 = nn.Linear(8, 64)\n        self.relu_1 = nn.ReLU()\n        self.batchnorm1d_1 = nn.BatchNorm1d(64)\n        self.linear_2 = nn.Linear(64, 32)\n        self.relu_2 = nn.ReLU()\n        self.linear_3 = nn.Linear(32, 1)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.linear_1(x)\n        x = self.relu_1(x)\n        x = self.batchnorm1d_1(x)\n        x = self.linear_2(x)\n        x = self.relu_2(x)\n        x = self.linear_3(x)\n        return x\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\n# --------------------------------------------------------------------------- #\n# Training on a CSV file, and predictions for new rows\n# --------------------------------------------------------------------------- #\n\nNUM_FEATURES = 8\n# regression: the model has a single output, the target column is a number\n\n\ndef read_csv(path: str) -> tuple[list[str], torch.Tensor]:\n    \"\"\"Read a CSV file of numbers: the column names of its header line (an empty list if it\n    has none) and the values.\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        try:\n            [float(value) for value in rows[0]]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    values = [[float(value) for value in row] for row in rows]\n    return header, torch.tensor(values, dtype=torch.float32)\n\n\ndef load_csv(path: str) -> tuple[list[str], torch.Tensor, torch.Tensor]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, data = read_csv(path)\n    features, target = data[:, :-1], data[:, -1]\n    if features.shape[1] != NUM_FEATURES:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns, found {features.shape[1]}.\")\n    return header, features, target.unsqueeze(1)\n\n\ndef train(\n    model: nn.Module,\n    features: torch.Tensor,\n    target: torch.Tensor,\n    epochs: int,\n    batch_size: int,\n    lr: float,\n    seed: int,\n) -> tuple[torch.Tensor, torch.Tensor]:\n    \"\"\"Train on a random 80 % of the rows and validate on the rest (the split depends only\n    on ``seed``).\n\n    Returns the mean and standard deviation that standardise the features. They come from\n    the training rows only, and new data has to be standardised with them as well.\n    \"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    generator = torch.Generator().manual_seed(seed)\n    order = torch.randperm(len(features), generator=generator)\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n\n    mean = features[train_rows].mean(dim=0)\n    std = features[train_rows].std(dim=0)\n    std[std < 1e-8] = 1.0  # constant columns are left as they are\n    features = (features - mean) / std\n\n    train_set = TensorDataset(features[train_rows], target[train_rows])\n    val_set = TensorDataset(features[val_rows], target[val_rows])\n    train_loader = DataLoader(\n        train_set,\n        batch_size=batch_size,\n        shuffle=True,\n        drop_last=len(train_set) > batch_size,\n        generator=generator,\n    )\n    val_loader = DataLoader(val_set, batch_size=batch_size)\n\n    if torch.cuda.is_available():\n        device = \"cuda\"\n    elif torch.backends.mps.is_available():\n        device = \"mps\"\n    else:\n        device = \"cpu\"\n    print(f\"Training on {device}: {len(train_set)} rows, {len(val_set)} for validation\")\n    model.to(device)\n\n    loss_fn = nn.MSELoss()\n    optimizer = torch.optim.Adam(model.parameters(), lr=lr)\n\n    for epoch in range(1, epochs + 1):\n        model.train()\n        train_loss, seen = 0.0, 0\n        for inputs, targets in train_loader:\n            inputs, targets = inputs.to(device), targets.to(device)\n            optimizer.zero_grad()\n            loss = loss_fn(model(inputs), targets)\n            loss.backward()\n            optimizer.step()\n            train_loss += loss.item() * len(inputs)\n            seen += len(inputs)\n\n        model.eval()\n        val_loss = 0.0\n        with torch.no_grad():\n            for inputs, targets in val_loader:\n                inputs, targets = inputs.to(device), targets.to(device)\n                outputs = model(inputs)\n                val_loss += loss_fn(outputs, targets).item() * len(inputs)\n        print(\n            f\"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}\"\n            f\"  val loss {val_loss / len(val_set):.4f}\"\n        )\n    model.cpu()\n    return mean, std\n\n\ndef save_model(\n    model: nn.Module, path: str, header: list[str], mean: torch.Tensor, std: torch.Tensor\n) -> None:\n    \"\"\"Save the weights together with what predict() needs to prepare new rows.\"\"\"\n    preprocessing = {\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"mean\": mean.tolist(),  # every feature is standardised: (value - mean) / std\n        \"std\": std.tolist(),\n        \"task\": \"regression\",\n    }\n    torch.save({\"state_dict\": model.state_dict(), \"preprocessing\": preprocessing}, path)\n    print(f\"Saved the weights and the preprocessing to {path}\")\n\n\ndef predict(model: nn.Module, path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file, prepared like the training data.\n\n    If both files have a header line, the feature columns are found by their names;\n    otherwise they have to come first. Other columns (such as the target) are ignored.\n    \"\"\"\n    checkpoint = torch.load(path, map_location=\"cpu\", weights_only=True)\n    model.load_state_dict(checkpoint[\"state_dict\"])\n    model.eval()\n    preprocessing = checkpoint[\"preprocessing\"]\n    columns = preprocessing[\"columns\"]\n    header, data = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        features = data[:, [header.index(name) for name in columns]]\n    elif data.shape[1] >= NUM_FEATURES:\n        features = data[:, :NUM_FEATURES]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns, found {data.shape[1]}.\")\n    mean = torch.tensor(preprocessing[\"mean\"])\n    std = torch.tensor(preprocessing[\"std\"])\n    with torch.no_grad():\n        outputs = model((features - mean) / std)\n    print(preprocessing[\"target\"])\n    for value in outputs[:, 0].tolist():\n        print(value)\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(description=\"NeuralNetwork generated with Brick DNN\")\n    parser.add_argument(\"--csv\", help=\"train on this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--epochs\", type=int, default=10)\n    parser.add_argument(\"--batch-size\", type=int, default=32)\n    parser.add_argument(\"--lr\", type=float, default=1e-3, help=\"learning rate\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable run\")\n    parser.add_argument(\n        \"--save\", default=\"model.pt\", help=\"the trained model (--csv writes it, --predict reads it)\"\n    )\n    args = parser.parse_args()\n    torch.manual_seed(args.seed)  # the same initial weights for the same seed\n\n    model = NeuralNetwork()\n    if args.predict:\n        predict(model, args.save, args.predict)\n        return\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        mean, std = train(\n            model, features, target, args.epochs, args.batch_size, args.lr, args.seed\n        )\n        save_model(model, args.save, header, mean, std)\n        return\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x = torch.randn(2, 8)\n    with torch.no_grad():\n        out = model(x)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 1)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "multi_input",
+   "name": "Multi-input model",
+   "description": "Combines an image and a vector of metadata with Concat, e.g. for price prediction from a photo and attributes.",
+   "family": "neural",
+   "framework": "pytorch",
+   "task": null,
+   "estimator": null,
+   "total_params": 50497,
+   "neural_params": null,
+   "inputs": [
+    "image",
+    "meta"
+   ],
+   "outputs": [
+    "head"
+   ],
+   "nodes": [
+    {
+     "id": "image",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       1,
+       28,
+       28
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      1,
+      28,
+      28
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "flatten",
+     "type": "Flatten",
+     "category": "Basic",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      784
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "img_fc",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 64
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 50240,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "img_relu",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "meta",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       10
+      ]
+     },
+     "position": {
+      "x": 280,
+      "y": 190
+     },
+     "output_shape": [
+      10
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "meta_fc",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 16
+     },
+     "position": {
+      "x": 560,
+      "y": 190
+     },
+     "output_shape": [
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 176,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "meta_relu",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 840,
+      "y": 190
+     },
+     "output_shape": [
+      16
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "concat",
+     "type": "Concat",
+     "category": "Merge",
+     "params": {
+      "dim": -1
+     },
+     "position": {
+      "x": 0,
+      "y": 420
+     },
+     "output_shape": [
+      80
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "head",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 1
+     },
+     "position": {
+      "x": 280,
+      "y": 420
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "tensor",
+     "num_params": 81,
+     "task": null,
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "image",
+     "target": "flatten",
+     "kind": "tensor"
+    },
+    {
+     "source": "flatten",
+     "target": "img_fc",
+     "kind": "tensor"
+    },
+    {
+     "source": "img_fc",
+     "target": "img_relu",
+     "kind": "tensor"
+    },
+    {
+     "source": "meta",
+     "target": "meta_fc",
+     "kind": "tensor"
+    },
+    {
+     "source": "meta_fc",
+     "target": "meta_relu",
+     "kind": "tensor"
+    },
+    {
+     "source": "img_relu",
+     "target": "concat",
+     "kind": "tensor"
+    },
+    {
+     "source": "meta_relu",
+     "target": "concat",
+     "kind": "tensor"
+    },
+    {
+     "source": "concat",
+     "target": "head",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"NeuralNetwork: generated with Brick DNN.\n\nInput x_1: (batch, 1, 28, 28)\nInput x_2: (batch, 10)\nOutput: (batch, 1)\nTrainable parameters: 50,497\n\nPrint the model and run it on a random batch:\n\n    python this_file.py\n\"\"\"\n\nimport torch\nimport torch.nn as nn\n\n\nclass NeuralNetwork(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.flatten_1 = nn.Flatten()\n        self.linear_1 = nn.Linear(784, 64)\n        self.relu_1 = nn.ReLU()\n        self.linear_2 = nn.Linear(10, 16)\n        self.relu_2 = nn.ReLU()\n        self.linear_3 = nn.Linear(80, 1)\n\n    def forward(self, x_1: torch.Tensor, x_2: torch.Tensor) -> torch.Tensor:\n        flatten_1 = self.flatten_1(x_1)\n        linear_1 = self.linear_1(flatten_1)\n        relu_1 = self.relu_1(linear_1)\n        linear_2 = self.linear_2(x_2)\n        relu_2 = self.relu_2(linear_2)\n        concat_1 = torch.cat([relu_1, relu_2], dim=-1)\n        linear_3 = self.linear_3(concat_1)\n        return linear_3\n\n\ndef count_parameters(model: nn.Module) -> int:\n    return sum(p.numel() for p in model.parameters() if p.requires_grad)\n\n\ndef main() -> None:\n    model = NeuralNetwork()\n    print(model)\n    print(f\"Trainable parameters: {count_parameters(model):,}\")\n\n    # Check the model with a random batch of 2 samples.\n    model.eval()\n    x_1 = torch.randn(2, 1, 28, 28)\n    x_2 = torch.randn(2, 10)\n    with torch.no_grad():\n        out = model(x_1, x_2)\n    print(\"Output shape:\", tuple(out.shape))  # expected (2, 1)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "gp_regression",
+   "name": "Gaussian process regression (RBF + noise)",
+   "description": "A classical model (scikit-learn): predicts one number from 8 features with its uncertainty. The kernel is a scaled RBF plus white noise, whose hyperparameters are fitted to the data. Train it on a small CSV file (up to a few thousand rows).",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "regression",
+   "estimator": "GaussianProcessRegressor",
+   "total_params": 3,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "gp"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       8
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "constant",
+     "type": "ConstantKernel",
+     "category": "Kernels",
+     "params": {
+      "constant_value": 1.0
+     },
+     "position": {
+      "x": 0,
+      "y": 160
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "ConstantKernel(constant_value=1.0)"
+    },
+    {
+     "id": "rbf",
+     "type": "RBF",
+     "category": "Kernels",
+     "params": {
+      "length_scale": 1.0
+     },
+     "position": {
+      "x": 0,
+      "y": 320
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "RBF(length_scale=1.0)"
+    },
+    {
+     "id": "scaled",
+     "type": "KernelProduct",
+     "category": "Kernels",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 240
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 0,
+     "task": null,
+     "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)"
+    },
+    {
+     "id": "noise",
+     "type": "WhiteKernel",
+     "category": "Kernels",
+     "params": {
+      "noise_level": 0.1
+     },
+     "position": {
+      "x": 280,
+      "y": 400
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "kernel",
+     "type": "KernelSum",
+     "category": "Kernels",
+     "params": {},
+     "position": {
+      "x": 560,
+      "y": 320
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 0,
+     "task": null,
+     "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "gp",
+     "type": "GaussianProcessRegressor",
+     "category": "Classical models",
+     "params": {
+      "alpha": 1e-10,
+      "normalize_y": true,
+      "n_restarts_optimizer": 0
+     },
+     "position": {
+      "x": 840,
+      "y": 80
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": 0,
+     "task": "regression",
+     "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)"
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "gp",
+     "kind": "tensor"
+    },
+    {
+     "source": "constant",
+     "target": "scaled",
+     "kind": "kernel"
+    },
+    {
+     "source": "rbf",
+     "target": "scaled",
+     "kind": "kernel"
+    },
+    {
+     "source": "scaled",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "noise",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "kernel",
+     "target": "gp",
+     "kind": "kernel"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Gaussian process regression: generated with Brick DNN.\n\nA scikit-learn model for 8 numeric features: they are standardised, then\nGaussianProcessRegressor predicts one number per row.\n\nKernel (the starting point; fitting optimises its hyperparameters):\n    ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)\n    + WhiteKernel(noise_level=0.1)\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.gaussian_process import GaussianProcessRegressor\nfrom sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\n\nNUM_FEATURES = 8\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit GaussianProcessRegressor.\"\"\"\n    constant = ConstantKernel(constant_value=1.0)\n    rbf = RBF(length_scale=1.0)\n    white = WhiteKernel(noise_level=0.1)\n    kernel = constant * rbf + white\n    model = GaussianProcessRegressor(kernel=kernel, alpha=1e-10, normalize_y=True)\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = numbers([row[-1:] for row in rows], path)[:, 0]\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    errors = model.predict(features[val_rows]) - target[val_rows]\n    rmse = float(np.sqrt(np.mean(errors**2)))\n    spread = float(np.sum((target[val_rows] - target[val_rows].mean()) ** 2))\n    r2 = 1 - float(np.sum(errors**2)) / spread if spread > 0 else float(\"nan\")\n    print(f\"Validation RMSE {rmse:.4g}, R² {r2:.3f}\")\n    gp = model.named_steps[\"model\"]\n    print(f\"Learned kernel: {gp.kernel_}\")\n    print(f\"Log marginal likelihood: {gp.log_marginal_likelihood_value_:.4g}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"regression\",\n        \"class_names\": None,\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    # The Gaussian process also says how uncertain it is: one standard deviation.\n    mean, std = model.predict(features, return_std=True)\n    print(f\"{bundle['target']},std\")\n    for value, spread in zip(mean, std):\n        print(f\"{value:.6g},{spread:.6g}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = features[:, 0] + np.sin(2 * features[:, -1])\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Gaussian process regression, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "svm_classifier",
+   "name": "SVM classifier",
+   "description": "A classical model (scikit-learn): a support vector machine with an RBF kernel classifies rows of 4 numeric features (e.g. the iris flowers) and gives class probabilities. The classes come from the target column of the data.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "classification",
+   "estimator": "SVC",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "svc"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       4
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "svc",
+     "type": "SVC",
+     "category": "Classical models",
+     "params": {
+      "kernel": "rbf",
+      "C": 1.0,
+      "gamma": "scale",
+      "class_weight": "none"
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "svc",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Support vector classification: generated with Brick DNN.\n\nA scikit-learn model for 4 numeric features: they are standardised, then SVC predicts the\nclass of each row. Platt scaling (5-fold cross-validation) turns the SVM's scores into class\nprobabilities.\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.calibration import CalibratedClassifierCV\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.svm import SVC\n\nNUM_FEATURES = 4\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit SVC.\"\"\"\n    svc = SVC(kernel=\"rbf\", C=1.0, gamma=\"scale\")\n    # Platt scaling: 5-fold cross-validation turns the scores into probabilities.\n    model = CalibratedClassifierCV(svc, ensemble=False)\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    svc = model.named_steps[\"model\"].calibrated_classifiers_[0].estimator\n    print(f\"Support vectors: {int(svc.n_support_.sum())}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = np.where(features[:, 0] + features[:, -1] > 0, \"yes\", \"no\")\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Support vector classification, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "periodic_gp",
+   "name": "Periodic Gaussian process",
+   "description": "A classical model (scikit-learn) for seasonal data, e.g. a value over time: a slowly changing periodic pattern (RBF × ExpSineSquared) plus a smooth trend (RBF) and noise. Set the periodicity to the season length in standardised units of the time feature.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "regression",
+   "estimator": "GaussianProcessRegressor",
+   "total_params": 5,
+   "neural_params": null,
+   "inputs": [
+    "time"
+   ],
+   "outputs": [
+    "gp"
+   ],
+   "nodes": [
+    {
+     "id": "time",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       1
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "decay",
+     "type": "RBF",
+     "category": "Kernels",
+     "params": {
+      "length_scale": 10.0
+     },
+     "position": {
+      "x": 0,
+      "y": 160
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "RBF(length_scale=10.0)"
+    },
+    {
+     "id": "season",
+     "type": "ExpSineSquared",
+     "category": "Kernels",
+     "params": {
+      "length_scale": 1.0,
+      "periodicity": 1.0
+     },
+     "position": {
+      "x": 0,
+      "y": 320
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 2,
+     "task": null,
+     "kernel": "ExpSineSquared(length_scale=1.0, periodicity=1.0)"
+    },
+    {
+     "id": "seasonal",
+     "type": "KernelProduct",
+     "category": "Kernels",
+     "params": {},
+     "position": {
+      "x": 280,
+      "y": 240
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 0,
+     "task": null,
+     "kernel": "RBF(length_scale=10.0) * ExpSineSquared(length_scale=1.0, periodicity=1.0)"
+    },
+    {
+     "id": "trend",
+     "type": "RBF",
+     "category": "Kernels",
+     "params": {
+      "length_scale": 5.0
+     },
+     "position": {
+      "x": 280,
+      "y": 400
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "RBF(length_scale=5.0)"
+    },
+    {
+     "id": "noise",
+     "type": "WhiteKernel",
+     "category": "Kernels",
+     "params": {
+      "noise_level": 0.1
+     },
+     "position": {
+      "x": 280,
+      "y": 560
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "kernel",
+     "type": "KernelSum",
+     "category": "Kernels",
+     "params": {},
+     "position": {
+      "x": 560,
+      "y": 400
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 0,
+     "task": null,
+     "kernel": "RBF(length_scale=10.0) * ExpSineSquared(length_scale=1.0, periodicity=1.0) + RBF(length_scale=5.0) + WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "gp",
+     "type": "GaussianProcessRegressor",
+     "category": "Classical models",
+     "params": {
+      "normalize_y": true
+     },
+     "position": {
+      "x": 840,
+      "y": 80
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": 0,
+     "task": "regression",
+     "kernel": "RBF(length_scale=10.0) * ExpSineSquared(length_scale=1.0, periodicity=1.0) + RBF(length_scale=5.0) + WhiteKernel(noise_level=0.1)"
+    }
+   ],
+   "edges": [
+    {
+     "source": "time",
+     "target": "gp",
+     "kind": "tensor"
+    },
+    {
+     "source": "decay",
+     "target": "seasonal",
+     "kind": "kernel"
+    },
+    {
+     "source": "season",
+     "target": "seasonal",
+     "kind": "kernel"
+    },
+    {
+     "source": "seasonal",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "trend",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "noise",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "kernel",
+     "target": "gp",
+     "kind": "kernel"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Gaussian process regression: generated with Brick DNN.\n\nA scikit-learn model for 1 numeric feature: they are standardised, then\nGaussianProcessRegressor predicts one number per row.\n\nKernel (the starting point; fitting optimises its hyperparameters):\n    RBF(length_scale=10.0) * ExpSineSquared(length_scale=1.0, periodicity=1.0)\n    + RBF(length_scale=5.0)\n    + WhiteKernel(noise_level=0.1)\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.gaussian_process import GaussianProcessRegressor\nfrom sklearn.gaussian_process.kernels import RBF, ExpSineSquared, WhiteKernel\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\n\nNUM_FEATURES = 1\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit GaussianProcessRegressor.\"\"\"\n    rbf_1 = RBF(length_scale=10.0)\n    periodic = ExpSineSquared(length_scale=1.0, periodicity=1.0)\n    rbf_2 = RBF(length_scale=5.0)\n    white = WhiteKernel(noise_level=0.1)\n    kernel = rbf_1 * periodic + rbf_2 + white\n    model = GaussianProcessRegressor(kernel=kernel, alpha=1e-10, normalize_y=True)\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = numbers([row[-1:] for row in rows], path)[:, 0]\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    errors = model.predict(features[val_rows]) - target[val_rows]\n    rmse = float(np.sqrt(np.mean(errors**2)))\n    spread = float(np.sum((target[val_rows] - target[val_rows].mean()) ** 2))\n    r2 = 1 - float(np.sum(errors**2)) / spread if spread > 0 else float(\"nan\")\n    print(f\"Validation RMSE {rmse:.4g}, R² {r2:.3f}\")\n    gp = model.named_steps[\"model\"]\n    print(f\"Learned kernel: {gp.kernel_}\")\n    print(f\"Log marginal likelihood: {gp.log_marginal_likelihood_value_:.4g}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"regression\",\n        \"class_names\": None,\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    # The Gaussian process also says how uncertain it is: one standard deviation.\n    mean, std = model.predict(features, return_std=True)\n    print(f\"{bundle['target']},std\")\n    for value, spread in zip(mean, std):\n        print(f\"{value:.6g},{spread:.6g}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = features[:, 0] + np.sin(2 * features[:, -1])\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Gaussian process regression, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "gradient_boosting_classifier",
+   "name": "Gradient boosting classifier",
+   "description": "A classical model (scikit-learn): gradient-boosted decision trees classify rows of 30 numeric features and give class probabilities. A strong baseline for large tables; balanced class weights help with rare classes (e.g. a few percent of fraud cases). The classes come from the target column of the data.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "classification",
+   "estimator": "HistGradientBoostingClassifier",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "boosting"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       30
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      30
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "boosting",
+     "type": "HistGradientBoostingClassifier",
+     "category": "Classical models",
+     "params": {
+      "learning_rate": 0.1,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "l2_regularization": 0.0,
+      "early_stopping": "auto",
+      "class_weight": "balanced",
+      "random_state": 0
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "boosting",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Gradient boosting classification: generated with Brick DNN.\n\nA scikit-learn model for 30 numeric features: they are standardised, then\nHistGradientBoostingClassifier predicts the class of each row. The trees do not need\nstandardised features (their splits stay the same); the scaler keeps the saved model in the\nformat of the other classical models.\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.ensemble import HistGradientBoostingClassifier\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\n\nNUM_FEATURES = 30\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit HistGradientBoostingClassifier.\"\"\"\n    model = HistGradientBoostingClassifier(\n        learning_rate=0.1,\n        max_iter=200,\n        max_leaf_nodes=31,\n        max_depth=None,\n        min_samples_leaf=20,\n        l2_regularization=0.0,\n        early_stopping=\"auto\",\n        class_weight=\"balanced\",\n        random_state=0,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    boosting = model.named_steps[\"model\"]\n    # Early stopping may end before max_iter.\n    print(f\"Boosting iterations: {boosting.n_iter_} of at most {boosting.max_iter}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = np.where(features[:, 0] + features[:, -1] > 0, \"yes\", \"no\")\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Gradient boosting classification, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "voting_ensemble_classifier",
+   "name": "Voting ensemble classifier",
+   "description": "An ensemble of classical models (scikit-learn): gradient boosting, a support vector machine and a Gaussian process classify rows of 4 numeric features (e.g. the iris flowers), and soft voting averages their class probabilities. Every model takes the features from the Input; the dotted connections into the voting brick carry the models themselves. The classes come from the target column of the data.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "classification",
+   "estimator": "VotingClassifier",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "vote"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       4
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 190
+     },
+     "output_shape": [
+      4
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "boosting",
+     "type": "HistGradientBoostingClassifier",
+     "category": "Classical models",
+     "params": {
+      "learning_rate": 0.1,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "l2_regularization": 0.0,
+      "early_stopping": "auto",
+      "class_weight": "none",
+      "random_state": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    },
+    {
+     "id": "svc",
+     "type": "SVC",
+     "category": "Classical models",
+     "params": {
+      "kernel": "rbf",
+      "C": 1.0,
+      "gamma": "scale",
+      "class_weight": "none"
+     },
+     "position": {
+      "x": 300,
+      "y": 190
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    },
+    {
+     "id": "gp",
+     "type": "GaussianProcessClassifier",
+     "category": "Classical models",
+     "params": {
+      "n_restarts_optimizer": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 380
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": 2,
+     "task": "classification",
+     "kernel": "ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)"
+    },
+    {
+     "id": "vote",
+     "type": "VotingClassifier",
+     "category": "Ensembles",
+     "params": {
+      "voting": "soft",
+      "weights": null
+     },
+     "position": {
+      "x": 600,
+      "y": 190
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "boosting",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "svc",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "gp",
+     "kind": "tensor"
+    },
+    {
+     "source": "boosting",
+     "target": "vote",
+     "kind": "estimator"
+    },
+    {
+     "source": "svc",
+     "target": "vote",
+     "kind": "estimator"
+    },
+    {
+     "source": "gp",
+     "target": "vote",
+     "kind": "estimator"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Voting classifier: generated with Brick DNN.\n\nA scikit-learn ensemble for 4 numeric features: they are standardised, then VotingClassifier\ncombines 3 models (boosting: HistGradientBoostingClassifier, svc: SVC, gp:\nGaussianProcessClassifier) and predicts the class of each row. Soft voting averages their\nclass probabilities. Platt scaling (5-fold cross-validation) turns the SVM's scores into\nclass probabilities.\n\nKernel of gp (the starting point; fitting optimises it):\n    ConstantKernel(constant_value=1.0)\n    * RBF(length_scale=1.0)\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.calibration import CalibratedClassifierCV\nfrom sklearn.ensemble import HistGradientBoostingClassifier, VotingClassifier\nfrom sklearn.gaussian_process import GaussianProcessClassifier\nfrom sklearn.gaussian_process.kernels import RBF, ConstantKernel\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.svm import SVC\n\nNUM_FEATURES = 4\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit VotingClassifier with its 3 models.\"\"\"\n    boosting = HistGradientBoostingClassifier(\n        learning_rate=0.1,\n        max_iter=200,\n        max_leaf_nodes=31,\n        max_depth=None,\n        min_samples_leaf=20,\n        l2_regularization=0.0,\n        early_stopping=\"auto\",\n        random_state=0,\n    )\n    svc_svm = SVC(kernel=\"rbf\", C=1.0, gamma=\"scale\")\n    # Platt scaling: 5-fold cross-validation turns the scores into probabilities.\n    svc = CalibratedClassifierCV(svc_svm, ensemble=False)\n    gp_kernel = ConstantKernel(constant_value=1.0) * RBF(length_scale=1.0)\n    gp = GaussianProcessClassifier(kernel=gp_kernel)\n    model = VotingClassifier(\n        estimators=[(\"boosting\", boosting), (\"svc\", svc), (\"gp\", gp)],\n        voting=\"soft\",\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    ensemble = model.named_steps[\"model\"]\n    print(f\"Models: {', '.join(ensemble.named_estimators_)}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = np.where(features[:, 0] + features[:, -1] > 0, \"yes\", \"no\")\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(description=\"Voting classifier, generated with Brick DNN\")\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "stacking_ensemble_regression",
+   "name": "Stacking ensemble regression",
+   "description": "An ensemble of classical models (scikit-learn) that predicts a number from 8 numeric features (e.g. house prices): gradient boosting, a support vector machine and a Gaussian process with an RBF + noise kernel, combined by stacking. A ridge regression learns from their predictions for rows they were not fitted on (5-fold cross-validation) how to weigh them. The dotted connections into the stacking brick carry the models themselves.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "regression",
+   "estimator": "StackingRegressor",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "stack"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       8
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 190
+     },
+     "output_shape": [
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "boosting",
+     "type": "HistGradientBoostingRegressor",
+     "category": "Classical models",
+     "params": {
+      "learning_rate": 0.1,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "l2_regularization": 0.0,
+      "early_stopping": "auto",
+      "random_state": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 0
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "regression",
+     "kernel": null
+    },
+    {
+     "id": "svr",
+     "type": "SVR",
+     "category": "Classical models",
+     "params": {
+      "kernel": "rbf",
+      "C": 1.0,
+      "gamma": "scale",
+      "epsilon": 0.1
+     },
+     "position": {
+      "x": 300,
+      "y": 190
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "regression",
+     "kernel": null
+    },
+    {
+     "id": "rbf",
+     "type": "RBF",
+     "category": "Kernels",
+     "params": {
+      "length_scale": 1.0,
+      "hyperparameters": "optimize"
+     },
+     "position": {
+      "x": 0,
+      "y": 420
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "RBF(length_scale=1.0)"
+    },
+    {
+     "id": "noise",
+     "type": "WhiteKernel",
+     "category": "Kernels",
+     "params": {
+      "noise_level": 0.1,
+      "hyperparameters": "optimize"
+     },
+     "position": {
+      "x": 0,
+      "y": 560
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 1,
+     "task": null,
+     "kernel": "WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "kernel",
+     "type": "KernelSum",
+     "category": "Kernels",
+     "params": {},
+     "position": {
+      "x": 300,
+      "y": 500
+     },
+     "output_shape": null,
+     "output_kind": "kernel",
+     "num_params": 0,
+     "task": null,
+     "kernel": "RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "gp",
+     "type": "GaussianProcessRegressor",
+     "category": "Classical models",
+     "params": {
+      "alpha": 1e-10,
+      "normalize_y": true,
+      "n_restarts_optimizer": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 340
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": 0,
+     "task": "regression",
+     "kernel": "RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)"
+    },
+    {
+     "id": "stack",
+     "type": "StackingRegressor",
+     "category": "Ensembles",
+     "params": {
+      "cv": 5,
+      "passthrough": false
+     },
+     "position": {
+      "x": 600,
+      "y": 190
+     },
+     "output_shape": [
+      1
+     ],
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "regression",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "boosting",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "svr",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "gp",
+     "kind": "tensor"
+    },
+    {
+     "source": "rbf",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "noise",
+     "target": "kernel",
+     "kind": "kernel"
+    },
+    {
+     "source": "kernel",
+     "target": "gp",
+     "kind": "kernel"
+    },
+    {
+     "source": "boosting",
+     "target": "stack",
+     "kind": "estimator"
+    },
+    {
+     "source": "svr",
+     "target": "stack",
+     "kind": "estimator"
+    },
+    {
+     "source": "gp",
+     "target": "stack",
+     "kind": "estimator"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Stacking regression: generated with Brick DNN.\n\nA scikit-learn ensemble for 8 numeric features: they are standardised, then\nStackingRegressor combines 3 models (boosting: HistGradientBoostingRegressor, svr: SVR, gp:\nGaussianProcessRegressor) and predicts one number per row. RidgeCV learns from their\npredictions for rows they were not fitted on (5-fold cross-validation) how to combine them.\n\nKernel of gp (the starting point; fitting optimises it):\n    RBF(length_scale=1.0)\n    + WhiteKernel(noise_level=0.1)\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom sklearn.ensemble import HistGradientBoostingRegressor, StackingRegressor\nfrom sklearn.gaussian_process import GaussianProcessRegressor\nfrom sklearn.gaussian_process.kernels import RBF, WhiteKernel\nfrom sklearn.linear_model import RidgeCV\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.svm import SVR\n\nNUM_FEATURES = 8\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit StackingRegressor with its 3 models.\"\"\"\n    boosting = HistGradientBoostingRegressor(\n        learning_rate=0.1,\n        max_iter=200,\n        max_leaf_nodes=31,\n        max_depth=None,\n        min_samples_leaf=20,\n        l2_regularization=0.0,\n        early_stopping=\"auto\",\n        random_state=0,\n    )\n    svr = SVR(kernel=\"rbf\", C=1.0, gamma=\"scale\", epsilon=0.1)\n    gp_kernel = RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)\n    gp = GaussianProcessRegressor(kernel=gp_kernel, alpha=1e-10, normalize_y=True)\n    model = StackingRegressor(\n        estimators=[(\"boosting\", boosting), (\"svr\", svr), (\"gp\", gp)],\n        final_estimator=RidgeCV(),\n        cv=5,\n        passthrough=False,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = numbers([row[-1:] for row in rows], path)[:, 0]\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    errors = model.predict(features[val_rows]) - target[val_rows]\n    rmse = float(np.sqrt(np.mean(errors**2)))\n    spread = float(np.sum((target[val_rows] - target[val_rows].mean()) ** 2))\n    r2 = 1 - float(np.sum(errors**2)) / spread if spread > 0 else float(\"nan\")\n    print(f\"Validation RMSE {rmse:.4g}, R² {r2:.3f}\")\n    ensemble = model.named_steps[\"model\"]\n    print(f\"Models: {', '.join(ensemble.named_estimators_)}\")\n    print(f\"Final estimator: {ensemble.final_estimator_}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"regression\",\n        \"class_names\": None,\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    print(bundle[\"target\"])\n    for value in model.predict(features):\n        print(f\"{value:.6g}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = features[:, 0] + np.sin(2 * features[:, -1])\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(description=\"Stacking regression, generated with Brick DNN\")\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "hybrid_mlp_gradient_boosting",
+   "name": "MLP features for gradient boosting (hybrid)",
+   "description": "A hybrid network for tables of 8 numeric features: an MLP learns 32 features (first with a temporary linear head on the target), then gradient-boosted trees are fitted on them and predict the class. Set the Input to the number of feature columns of your data.",
+   "family": "hybrid",
+   "framework": "pytorch+scikit-learn",
+   "task": "classification",
+   "estimator": "HistGradientBoostingClassifier",
+   "total_params": null,
+   "neural_params": 2656,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "boosting"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       8
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      8
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc1",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 64
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 576,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "relu1",
+     "type": "Activation",
+     "category": "Basic",
+     "params": {
+      "function": "relu"
+     },
+     "position": {
+      "x": 560,
+      "y": 0
+     },
+     "output_shape": [
+      64
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "fc2",
+     "type": "Linear",
+     "category": "Basic",
+     "params": {
+      "out_features": 32
+     },
+     "position": {
+      "x": 840,
+      "y": 0
+     },
+     "output_shape": [
+      32
+     ],
+     "output_kind": "tensor",
+     "num_params": 2080,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "boosting",
+     "type": "HistGradientBoostingClassifier",
+     "category": "Classical models",
+     "params": {
+      "learning_rate": 0.1,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "l2_regularization": 0.0,
+      "early_stopping": "auto",
+      "class_weight": "none",
+      "random_state": 0
+     },
+     "position": {
+      "x": 1120,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "fc1",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc1",
+     "target": "relu1",
+     "kind": "tensor"
+    },
+    {
+     "source": "relu1",
+     "target": "fc2",
+     "kind": "tensor"
+    },
+    {
+     "source": "fc2",
+     "target": "boosting",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Gradient boosting classification on learned features: generated with Brick DNN.\n\nNeural layers (FeatureExtractor) turn 8 numeric features into 32 learned features;\nHistGradientBoostingClassifier is fitted on them and predicts the class of each row. The\ntraining has two phases: first the neural layers learn with a temporary linear head on the\ntarget (with --frozen they keep their random initial weights), then the head is dropped and\nthe classical model is fitted on the features of the training rows.\n\nPrint the models and fit them to random data:\n\n    python this_file.py\n\nTrain on a CSV file (every column but the last is a feature, the last column is\nthe target); this writes features.pt (the neural layers) and model.joblib (the\nclassical model). Then predict new rows with both:\n\n    python this_file.py --csv data.csv --epochs 20\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nimport torch\nimport torch.nn as nn\nfrom sklearn.ensemble import HistGradientBoostingClassifier\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom torch.utils.data import DataLoader, TensorDataset\n\nNUM_FEATURES = 8  # input columns of the CSV file\nNUM_LEARNED = 32  # features the neural layers learn\n\n\nclass FeatureExtractor(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.linear_1 = nn.Linear(8, 64)\n        self.relu_1 = nn.ReLU()\n        self.learned_features = nn.Linear(64, 32)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.linear_1(x)\n        x = self.relu_1(x)\n        x = self.learned_features(x)\n        return x\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit HistGradientBoostingClassifier.\"\"\"\n    model = HistGradientBoostingClassifier(\n        learning_rate=0.1,\n        max_iter=200,\n        max_leaf_nodes=31,\n        max_depth=None,\n        min_samples_leaf=20,\n        l2_regularization=0.0,\n        early_stopping=\"auto\",\n        random_state=0,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# The two phases: learning the features, then fitting the classical model\n# --------------------------------------------------------------------------- #\n\n\ndef extract(extractor: nn.Module, inputs: np.ndarray) -> np.ndarray:\n    \"\"\"The learned features of every row (or sample): the output of the neural layers,\n    computed in batches without gradients.\"\"\"\n    extractor.eval()\n    x = torch.as_tensor(inputs, dtype=torch.float32)\n    with torch.no_grad():\n        parts = [extractor(x[i : i + 1024]) for i in range(0, len(x), 1024)]\n    if not parts:\n        return np.empty((0, NUM_LEARNED))\n    return torch.cat(parts).double().numpy()\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef split_rows(n: int, seed: int) -> tuple[np.ndarray, np.ndarray]:\n    \"\"\"A random 80 % of the rows for training, the rest for validation (fixed by ``seed``).\n    Both phases use the same split.\"\"\"\n    if n < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(n)\n    n_val = max(1, n // 5)\n    return order[n_val:], order[:n_val]\n\n\ndef standardise(features: np.ndarray, train_rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:\n    \"\"\"The mean and standard deviation of the training rows. New rows are standardised with\n    them as well, before the neural layers.\"\"\"\n    mean = features[train_rows].mean(axis=0)\n    std = features[train_rows].std(axis=0)\n    std[std < 1e-8] = 1.0  # constant columns are left as they are\n    return mean, std\n\n\ndef learn_features(\n    extractor: FeatureExtractor,\n    features: np.ndarray,\n    target: np.ndarray,\n    train_rows: np.ndarray,\n    val_rows: np.ndarray,\n    epochs: int,\n    batch_size: int,\n    lr: float,\n    seed: int,\n) -> None:\n    \"\"\"Phase 1: train the neural layers with a temporary linear head on the target, then\n    drop the head. ``features`` are standardised.\"\"\"\n    # Classification: one output per class and the cross-entropy loss.\n    classes, labels = np.unique(target, return_inverse=True)\n    y = torch.as_tensor(labels, dtype=torch.long)\n    head = nn.Linear(NUM_LEARNED, len(classes))\n    loss_fn = nn.CrossEntropyLoss()\n    x = torch.as_tensor(features, dtype=torch.float32)\n    train, val = torch.as_tensor(train_rows), torch.as_tensor(val_rows)\n    network = nn.Sequential(extractor, head)\n    loader = DataLoader(\n        TensorDataset(x[train], y[train]),\n        batch_size=batch_size,\n        shuffle=True,\n        drop_last=len(train) > batch_size,\n        generator=torch.Generator().manual_seed(seed),\n    )\n    optimizer = torch.optim.Adam(network.parameters(), lr=lr)\n    print(f\"Learning the features on {len(train)} rows, {len(val)} for validation\")\n    for epoch in range(1, epochs + 1):\n        network.train()\n        total, seen = 0.0, 0\n        for inputs, targets in loader:\n            optimizer.zero_grad()\n            loss = loss_fn(network(inputs), targets)\n            loss.backward()\n            optimizer.step()\n            total += loss.item() * len(inputs)\n            seen += len(inputs)\n        network.eval()\n        with torch.no_grad():\n            val_loss = loss_fn(network(x[val]), y[val]).item()\n        print(\n            f\"Epoch {epoch:3d}/{epochs}  train loss {total / max(seen, 1):.4f}\"\n            f\"  val loss {val_loss:.4f}\"\n        )\n\n\ndef fit(\n    model: Pipeline,\n    features: np.ndarray,\n    target: np.ndarray,\n    train_rows: np.ndarray,\n    val_rows: np.ndarray,\n) -> None:\n    \"\"\"Phase 2: fit the classical model on the learned features of the training rows and\n    validate it on the other rows. Its StandardScaler learns from the training rows only.\"\"\"\n    print(f\"Fitting on the {features.shape[1]} learned features of {len(train_rows)} rows\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    boosting = model.named_steps[\"model\"]\n    # Early stopping may end before max_iter.\n    print(f\"Boosting iterations: {boosting.n_iter_} of at most {boosting.max_iter}\")\n\n\ndef save_model(\n    extractor: FeatureExtractor,\n    model: Pipeline,\n    weights_path: str,\n    model_path: str,\n    header: list[str],\n    mean: np.ndarray,\n    std: np.ndarray,\n) -> None:\n    \"\"\"Save the neural layers with the preprocessing of the input columns (PyTorch) and the\n    fitted classical model (joblib, a pickle: only load files you trust).\"\"\"\n    preprocessing = {\n        \"columns\": header[:-1],  # the input columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"mean\": mean.tolist(),  # every input column is standardised: (value - mean) / std\n        \"std\": std.tolist(),\n    }\n    torch.save({\"state_dict\": extractor.state_dict(), \"preprocessing\": preprocessing}, weights_path)\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": [f\"feature_{i + 1}\" for i in range(NUM_LEARNED)],  # the learned features\n        \"target\": preprocessing[\"target\"],\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n        \"hybrid\": {\"features\": NUM_LEARNED, \"input_columns\": preprocessing[\"columns\"]},\n    }\n    joblib.dump(bundle, model_path)\n    print(f\"Saved the neural layers to {weights_path} and the classical model to {model_path}\")\n\n\ndef predict(weights_path: str, model_path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file: standardise the input columns like\n    the training rows, compute the learned features, then let the classical model predict.\n\n    If both the saved preprocessing and the file have a header line, the input columns are\n    found by their names; otherwise they have to come first. Other columns are ignored.\n    \"\"\"\n    checkpoint = torch.load(weights_path, map_location=\"cpu\", weights_only=True)\n    extractor = FeatureExtractor()\n    extractor.load_state_dict(checkpoint[\"state_dict\"])\n    preprocessing = checkpoint[\"preprocessing\"]\n    bundle = joblib.load(model_path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], preprocessing[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} input columns.\")\n    inputs = numbers(rows, csv_path)\n    mean, std = np.asarray(preprocessing[\"mean\"]), np.asarray(preprocessing[\"std\"])\n    features = extract(extractor, (inputs - mean) / std)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(extractor: FeatureExtractor, model: Pipeline) -> None:\n    \"\"\"Compute the features of 40 random samples with the untrained neural layers, fit the\n    model on them and predict two (shows that both parts work together).\"\"\"\n    rng = np.random.default_rng(0)\n    learned = extract(extractor, rng.normal(size=(40, NUM_FEATURES)))\n    target = np.where(learned[:, 0] + learned[:, -1] > 0, \"yes\", \"no\")\n    model.fit(learned, target)\n    print(\"Predictions for 2 random samples:\", model.predict(learned[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Gradient boosting classification on learned features, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"train on this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--epochs\", type=int, default=10)\n    parser.add_argument(\"--batch-size\", type=int, default=32)\n    parser.add_argument(\"--lr\", type=float, default=1e-3, help=\"learning rate\")\n    parser.add_argument(\n        \"--frozen\",\n        action=\"store_true\",\n        help=\"keep the random initial weights of the neural layers (no training)\",\n    )\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable run\")\n    parser.add_argument(\n        \"--weights\", default=\"features.pt\", help=\"the neural layers (--csv writes it)\"\n    )\n    parser.add_argument(\n        \"--save\", default=\"model.joblib\", help=\"the classical model (--csv writes it)\"\n    )\n    args = parser.parse_args()\n    torch.manual_seed(args.seed)  # the same initial weights for the same seed\n\n    if args.predict:\n        predict(args.weights, args.save, args.predict)\n        return\n    extractor = FeatureExtractor()\n    model = make_model()\n    print(extractor)\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        train_rows, val_rows = split_rows(len(features), args.seed)\n        mean, std = standardise(features, train_rows)\n        features = (features - mean) / std\n        if args.frozen:\n            print(\"Frozen random features: the neural layers are not trained.\")\n        else:\n            learn_features(\n                extractor,\n                features,\n                target,\n                train_rows,\n                val_rows,\n                args.epochs,\n                args.batch_size,\n                args.lr,\n                args.seed,\n            )\n        learned = extract(extractor, features)\n        fit(model, learned, target, train_rows, val_rows)\n        save_model(extractor, model, args.weights, args.save, header, mean, std)\n        return\n    demo(extractor, model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  }
+ ]
+}

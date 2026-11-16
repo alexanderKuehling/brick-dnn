@@ -1,9 +1,20 @@
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { checkDist, checkLandingHtml, jsonLdTypes } from './check.ts';
+import { checkDist, checkLandingHtml, checkPageHtml, hreflangs, jsonLdTypes } from './check.ts';
+import { EXAMPLES, EXAMPLES_FILE, type ExampleData } from './examples/data.ts';
+import { titleLines } from './examples/diagram.ts';
 import { IMAGE_DIR, imageSize, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
-import { minifyCss } from './plugin.ts';
+import {
+  allPages,
+  contentPages,
+  contentShotIds,
+  EXAMPLE_COPY,
+  examplePath,
+  GUIDE_COPY,
+} from './pages.ts';
+import { minifyCss, renderStatic, staticPage } from './plugin.ts';
 import {
   CONTENT,
   plainText,
@@ -16,23 +27,37 @@ import {
 } from './render.ts';
 import {
   APP_PAGES,
+  CONTENT_FOLDERS,
   EDITOR_PATH,
+  EXAMPLES_PATHS,
+  GUIDES_PATHS,
   INLINE_SCRIPT,
   inlineScriptHash,
   OVERAGE_PRICE,
   PLANS,
+  pricingPath,
   SECTION_IDS,
 } from './site.ts';
 
 const FRONTEND = join(import.meta.dirname, '..');
 const REPO = join(FRONTEND, '..');
 
+/** Every screenshot a page of either language shows. */
+const ALL_SHOT_IDS = [
+  ...new Set([
+    ...shotIds(CONTENT.en),
+    ...shotIds(CONTENT.de),
+    ...contentShotIds('en'),
+    ...contentShotIds('de'),
+  ]),
+];
+
 const ASSETS: Assets = {
   css: '/assets/landing-abc.css',
   favicon: '/favicon.svg',
   logo: { src: '/assets/logo-512-abc.png', width: 512, height: 512 },
   images: Object.fromEntries(
-    [...new Set([...shotIds(CONTENT.en), ...shotIds(CONTENT.de)])].map((id) => [
+    ALL_SHOT_IDS.map((id) => [
       id,
       {
         sources: [480, 1056, 2112].map((width) => ({
@@ -180,9 +205,13 @@ describe.each(LANGS)('landing page %s', (lang) => {
 
   test('links to the editor, pricing, the legal pages and the other language', () => {
     const hrefs = [...doc.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-    for (const path of [EDITOR_PATH, ...APP_PAGES, '/', '/de/']) {
+    // The German page leads to its own pricing page (/de/preise/), which links to /pricing.
+    const app = APP_PAGES.filter((path) => lang === 'en' || path !== '/pricing');
+    for (const path of [EDITOR_PATH, ...app, '/', '/de/', pricingPath(lang)]) {
       expect(hrefs).toContain(path);
     }
+    expect(hrefs).toContain(EXAMPLES_PATHS[lang]);
+    expect(hrefs).toContain(GUIDES_PATHS[lang]);
     expect(html).toContain('mailto:alexander.kuehling@brickdnn.com');
     const other = doc.querySelector(`.lang a[hreflang="${lang === 'en' ? 'de' : 'en'}"]`)!;
     expect(other.getAttribute('lang')).toBe(lang === 'en' ? 'de' : 'en');
@@ -288,8 +317,9 @@ describe('the build check', () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'landing-'));
-    write('index.html', renderPage('en', ASSETS));
-    write('de/index.html', renderPage('de', ASSETS));
+    for (const page of allPages()) {
+      write(page.file, renderStatic(page, ASSETS));
+    }
     write('app.html', '<!doctype html><div id="root"></div>');
     write('robots.txt', renderRobots());
     write('sitemap.xml', renderSitemap());
@@ -316,14 +346,34 @@ describe('the build check', () => {
   test('finds a missing page, hreflang, JSON-LD or asset', () => {
     rmSync(join(dir, 'de/index.html'));
     write('index.html', renderPage('en', ASSETS).replace('hreflang="de"', 'hreflang="fr"'));
-    rmSync(join(dir, ASSETS.css.slice(1)));
     rmSync(join(dir, 'app.html'));
+    // A screenshot of a guide, a German example page and an English hreflang link of a guide.
+    const image = ASSETS.images.segmentation.sources[0].src;
+    rmSync(join(dir, image.slice(1)));
+    rmSync(join(dir, 'de/beispiele/unet/index.html'));
+    const guide = staticPage('/guides/imbalanced-classes/')!;
+    write(
+      guide.file,
+      renderStatic(guide, ASSETS).replace(
+        'hreflang="de" href="https://brickdnn.com/de/anleitungen/unausgewogene-klassen/"',
+        'hreflang="de" href="https://brickdnn.com/de/anleitungen/"'
+      )
+    );
     expect(checkDist(dir)).toEqual([
       'en: hreflang de',
-      `en: ${ASSETS.css} is missing`,
+      `/: ${image} is missing`,
       'de/index.html is missing',
+      `/guides/image-segmentation-u-net/: ${image} is missing`,
+      '/guides/imbalanced-classes/: hreflang de',
+      'de/beispiele/unet/index.html is missing',
+      `/de/anleitungen/bildsegmentierung-u-net/: ${image} is missing`,
+      '/guides/imbalanced-classes/: /de/anleitungen/ has no hreflang link back to it',
+      '/de/anleitungen/unausgewogene-klassen/: /guides/imbalanced-classes/ has no hreflang link back to it',
       'app.html is missing',
     ]);
+    // A page the sitemap does not list.
+    write('sitemap.xml', renderSitemap().replace('<loc>https://brickdnn.com/de/preise/</loc>', ''));
+    expect(checkDist(dir)).toContain('sitemap.xml lacks /de/preise/');
     write(
       'index.html',
       renderPage('en', ASSETS).replace(/<script type="application\/ld\+json">/, '<script>')
@@ -337,10 +387,11 @@ test('robots.txt, sitemap.xml and llms.txt', () => {
   const sitemap = parse(renderSitemap());
   const locs = [...sitemap.querySelectorAll('loc')].map((loc) => loc.textContent);
   expect(locs).toEqual([
-    'https://brickdnn.com/',
-    'https://brickdnn.com/de/',
+    ...allPages().map((page) => `https://brickdnn.com${page.path}`),
     ...APP_PAGES.map((path) => `https://brickdnn.com${path}`),
   ]);
+  expect(locs).toContain('https://brickdnn.com/examples/unet/');
+  expect(locs).toContain('https://brickdnn.com/de/preise/');
   expect(renderSitemap()).toContain(
     '<xhtml:link rel="alternate" hreflang="de" href="https://brickdnn.com/de/"/>'
   );
@@ -368,9 +419,9 @@ test('minifyCss keeps selectors and media queries intact', () => {
 });
 
 test('every screenshot exists in several widths of the same proportions, and no others', () => {
-  const ids = [...new Set([...shotIds(CONTENT.en), ...shotIds(CONTENT.de)])];
+  const ids = ALL_SHOT_IDS;
   for (const lang of LANGS) {
-    for (const id of shotIds(CONTENT[lang])) {
+    for (const id of new Set([...shotIds(CONTENT[lang]), ...contentShotIds(lang)])) {
       const files = shotFiles(id, lang);
       expect(files.length, id).toBeGreaterThanOrEqual(2);
       // At least twice the width the page shows it at (1x and 2x screens).
@@ -398,4 +449,273 @@ test('the Open Graph image and the logo', () => {
   expect(readImage(OG_IMAGE).size).toEqual({ width: 1200, height: 630 });
   expect(readImage(LOGO).size).toEqual({ width: 512, height: 512 });
   expect(() => imageSize(new Uint8Array(32))).toThrow();
+});
+
+// ------------------------------------------------------------------------- content pages
+
+const PAGES = contentPages();
+const RENDERED = new Map(PAGES.map((page) => [page.path, renderStatic(page, ASSETS)]));
+const KNOWN_PATHS = new Set([...allPages().map((page) => page.path), EDITOR_PATH, ...APP_PAGES]);
+
+describe.each(PAGES.map((page) => [page.path, page] as const))('content page %s', (_, page) => {
+  const html = RENDERED.get(page.path)!;
+  const doc = parse(html);
+
+  test('passes the build check: title, description, canonical, hreflang, JSON-LD, one h1', () => {
+    expect(checkPageHtml(page, html)).toEqual([]);
+    expect(doc.title).toBe(page.title);
+    expect(page.title.length).toBeLessThanOrEqual(75);
+    expect(page.description.length).toBeGreaterThan(80);
+    expect(page.description.length).toBeLessThanOrEqual(170);
+  });
+
+  test('its language versions point at each other', () => {
+    const links = hreflangs(html);
+    if (!page.alternates.en) {
+      expect(links).toEqual({});
+      return;
+    }
+    expect(links[page.lang]).toBe(page.path);
+    for (const lang of LANGS) {
+      const other = RENDERED.get(links[lang])!;
+      expect(parse(other).documentElement.lang).toBe(lang);
+      expect(hreflangs(other)).toEqual(links);
+      // The language switch leads there too.
+      expect(doc.querySelector(`header .lang a[hreflang="${lang}"]`)!.getAttribute('href')).toBe(
+        links[lang]
+      );
+    }
+  });
+
+  test('the JSON-LD is valid and its breadcrumbs are the visible ones', () => {
+    const graph = ldJson(doc)['@graph'];
+    const crumbs = graph.find((node) => node['@type'] === 'BreadcrumbList')!;
+    const visible = [...doc.querySelectorAll('.crumbs a')];
+    expect(crumbs.itemListElement.map((item: any) => [item.name, item.item])).toEqual(
+      visible.map((a) => [a.textContent, `https://brickdnn.com${a.getAttribute('href')}`])
+    );
+    expect(crumbs.itemListElement.at(-1).item).toBe(`https://brickdnn.com${page.path}`);
+    for (const node of graph) {
+      if (['TechArticle', 'Article', 'HowTo'].includes(node['@type'])) {
+        expect(node.author).toEqual({
+          '@type': 'Person',
+          name: 'Alexander Kühling',
+          url: 'https://github.com/alexanderKuehling',
+        });
+        expect(node.inLanguage).toBe(page.lang);
+        expect(node.datePublished).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(node.dateModified).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
+    }
+  });
+
+  test('every link leads somewhere that exists', () => {
+    for (const a of doc.querySelectorAll('a[href]')) {
+      const href = a.getAttribute('href')!;
+      if (href.startsWith('#')) {
+        expect(doc.getElementById(href.slice(1)), href).not.toBeNull();
+      } else if (href.startsWith('/')) {
+        const [path, query] = href.split('#')[0].split('?');
+        expect(KNOWN_PATHS.has(path), href).toBe(true);
+        if (query) {
+          expect(path).toBe(EDITOR_PATH);
+          const id = new URLSearchParams(query).get('example');
+          expect(EXAMPLES.map((example) => example.id)).toContain(id);
+        }
+      } else {
+        expect(href, href).toMatch(/^(https:\/\/github\.com\/alexanderKuehling\/|mailto:)/);
+      }
+    }
+  });
+
+  test('accessible: lang, headings in order, alt texts, labelled regions, no script', () => {
+    expect(doc.documentElement.lang).toBe(page.lang);
+    const levels = [...doc.querySelectorAll('main h1, main h2, main h3')].map((h) =>
+      Number(h.tagName[1])
+    );
+    expect(levels[0]).toBe(1);
+    for (const [index, level] of levels.entries()) {
+      expect(level - (levels[index - 1] ?? 0)).toBeLessThanOrEqual(1);
+    }
+    for (const img of doc.querySelectorAll('main img')) {
+      expect(img.getAttribute('alt')!.length).toBeGreaterThan(40);
+      expect(img.getAttribute('loading')).toBe('lazy');
+    }
+    for (const region of doc.querySelectorAll('[tabindex="0"]')) {
+      const name = region.getAttribute('aria-label') ?? region.getAttribute('aria-labelledby');
+      expect(name, region.outerHTML.slice(0, 80)).toBeTruthy();
+    }
+    for (const section of doc.querySelectorAll('section')) {
+      expect(doc.getElementById(section.getAttribute('aria-labelledby')!)?.tagName).toBe('H2');
+    }
+    expect([...doc.querySelectorAll('script')].map((script) => script.type)).toEqual([
+      'application/ld+json',
+    ]);
+    expect(doc.querySelectorAll('[style], style')).toHaveLength(0);
+    for (const element of doc.querySelectorAll('[src], link[href]')) {
+      const url = element.getAttribute('src') ?? element.getAttribute('href')!;
+      expect(url.startsWith('/') || url.startsWith('https://brickdnn.com/'), url).toBe(true);
+    }
+  });
+});
+
+test('the content pages: every example and guide in both languages, unique titles', () => {
+  const ids = EXAMPLES.map((example) => example.id);
+  for (const lang of LANGS) {
+    const copy = EXAMPLE_COPY[lang];
+    expect(copy.examples.map((example) => example.id).sort()).toEqual([...ids].sort());
+    // The gallery lists every example once.
+    expect(copy.gallery.groups.flatMap((group) => group.ids).sort()).toEqual([...ids].sort());
+    for (const example of copy.examples) {
+      expect(example.related.length).toBeGreaterThanOrEqual(2);
+      expect(example.related).not.toContain(example.id);
+      for (const id of example.related) {
+        expect(ids).toContain(id);
+      }
+    }
+    for (const guide of GUIDE_COPY[lang].guides) {
+      for (const id of guide.examples) {
+        expect(ids).toContain(id);
+      }
+    }
+  }
+  expect(GUIDE_COPY.en.guides.map((guide) => guide.id)).toEqual(
+    GUIDE_COPY.de.guides.map((guide) => guide.id)
+  );
+  expect(GUIDE_COPY.en.guides.length).toBeGreaterThanOrEqual(3);
+  const titles = allPages().map((page) => page.title);
+  expect(new Set(titles).size).toBe(titles.length);
+  const descriptions = allPages().map((page) => page.description);
+  expect(new Set(descriptions).size).toBe(descriptions.length);
+  for (const page of PAGES) {
+    expect(
+      CONTENT_FOLDERS.some((folder) => page.path.startsWith(folder)),
+      page.path
+    ).toBe(true);
+  }
+});
+
+/** Numbers that a page may state about an example: its parameters, shapes and settings. */
+function facts(example: ExampleData): Set<number> {
+  const found = new Set<number>();
+  const add = (value: unknown) => {
+    if (typeof value === 'number') {
+      found.add(value);
+    }
+  };
+  add(example.total_params);
+  add(example.neural_params);
+  // The parameters of all layers of a type, e.g. of all convolutions.
+  const byType = new Map<string, number>();
+  for (const node of example.nodes) {
+    byType.set(node.type, (byType.get(node.type) ?? 0) + (node.num_params ?? 0));
+  }
+  byType.forEach(add);
+  for (const node of example.nodes) {
+    add(node.num_params);
+    add(node.output_shape?.reduce((a, b) => a * b, 1));
+    const numbers = Object.values(node.params)
+      .flat()
+      .filter((value): value is number => typeof value === 'number');
+    numbers.forEach(add);
+    for (const a of numbers) {
+      for (const b of numbers) {
+        add(a * b);
+      }
+    }
+  }
+  return found;
+}
+
+/** Facts about the data and the server's limits, not about an example itself. */
+const DATA_FACTS = new Set([2_000, 5_000, 10_000, 50_000, 60_000, 70_000, 1_000_000]);
+
+describe.each(EXAMPLES.map((example) => [example.id, example] as const))(
+  'example %s',
+  (id, example) => {
+    test.each(LANGS)('the numbers in the %s text are those of the example', (lang) => {
+      const copy = EXAMPLE_COPY[lang].examples.find((candidate) => candidate.id === id)!;
+      const text = plainText(
+        [copy.description, copy.lead, ...copy.what, ...copy.when, copy.train].join(' ')
+      );
+      const separator = lang === 'de' ? '.' : ',';
+      const allowed = facts(example);
+      for (const [number] of text.matchAll(new RegExp(`\\d{1,3}(?:\\${separator}\\d{3})+`, 'g'))) {
+        const value = Number(number.split(separator).join(''));
+        expect(allowed.has(value) || DATA_FACTS.has(value), `${number} (${lang})`).toBe(true);
+      }
+    });
+
+    test.each(LANGS)('the %s page shows the layers, the diagram and the code', (lang) => {
+      const doc = parse(RENDERED.get(examplePath(lang, id))!);
+      const rows = [...doc.querySelectorAll('table.layers tbody tr')];
+      expect(rows.map((row) => row.querySelector('th')!.textContent)).toEqual(
+        example.nodes.map((node) => node.id)
+      );
+      expect(doc.querySelectorAll('svg.network .node')).toHaveLength(example.nodes.length);
+      expect(doc.querySelectorAll('svg.network path.edge')).toHaveLength(example.edges.length);
+      expect(doc.querySelector('svg.network title')!.textContent).toBeTruthy();
+      // The code on the page is exactly the generator's (examples.json).
+      expect(doc.querySelector('pre.code code')!.textContent).toBe(example.code);
+      expect(doc.querySelector('.page-head a.button')!.getAttribute('href')).toBe(
+        `/app?example=${id}`
+      );
+    });
+  }
+);
+
+test('examples.json: parameter counts add up, every script is PyTorch or scikit-learn', () => {
+  for (const example of EXAMPLES) {
+    if (example.family === 'neural') {
+      expect(example.total_params).toBe(
+        example.nodes.reduce((sum, node) => sum + (node.num_params ?? 0), 0)
+      );
+    }
+    expect(example.code).toMatch(/^# Built with Brick DNN/);
+    expect(example.code).toMatch(
+      example.framework === 'pytorch' ? /^import torch$/m : /^from sklearn\./m
+    );
+  }
+});
+
+// The backend makes examples.json (python -m brickdnn.examples.export), and its tests check
+// that the file is current. This test does the same when Python is there (as in CI): the
+// code generator needs nothing but Python. It writes nothing.
+const python = spawnSync('python3', ['--version']).status === 0;
+test.skipIf(!python)('examples.json is what the backend’s generator makes now', () => {
+  const result = spawnSync('python3', ['-m', 'brickdnn.examples.export', '--stdout'], {
+    cwd: join(REPO, 'backend'),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  expect(result.stderr).toBe('');
+  expect(result.stdout === readFileSync(EXAMPLES_FILE, 'utf8')).toBe(true);
+});
+
+test('nginx.conf serves the content pages with the strict CSP and redirects to the slash', () => {
+  const nginx = readFileSync(join(FRONTEND, 'nginx.conf'), 'utf8');
+  const folders = CONTENT_FOLDERS.map((folder) => folder.slice(1, -1)).join('|');
+  expect(nginx).toContain(
+    `location ~ ^/(${folders})(/[a-z0-9-]+)?$ {\n        return 301 /$1$2/$is_args$args;`
+  );
+  const block = nginx.split(`location ~ ^/(${folders})/([a-z0-9-]+/)?$ {`)[1].split('\n    }')[0];
+  expect(block).toContain(
+    `Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"`
+  );
+  expect(block).toContain(`try_files \${uri}index.html /app.html;`);
+  // Every page's address is one that location serves.
+  const pattern = new RegExp(`^/(${folders})/([a-z0-9-]+/)?$`);
+  for (const page of PAGES) {
+    expect(page.path).toMatch(pattern);
+  }
+});
+
+test('long type names in the diagram wrap at their capitals', () => {
+  expect(titleLines('Conv2d')).toEqual(['Conv2d']);
+  expect(titleLines('HistGradientBoostingClassifier')).toEqual([
+    'HistGradient',
+    'Boosting',
+    'Classifier',
+  ]);
+  expect(titleLines('AdaptiveAvgPool2d')).toEqual(['AdaptiveAvg', 'Pool2d']);
 });

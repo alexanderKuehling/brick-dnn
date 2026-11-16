@@ -3,6 +3,24 @@
 ## Unreleased
 
 ### Added
+- **Example, guide and German pricing pages on brickdnn.com.** The landing page generator
+  (`frontend/landing/`) makes static pages in English and German: an example gallery
+  (`/examples/`, `/de/beispiele/`) with one page per built-in example (what it does, when to
+  use it, a diagram drawn at build time, every layer with settings, output shape and parameter
+  count, the generated PyTorch or scikit-learn code, related examples), four guides
+  (`/guides/`, `/de/anleitungen/`: a network without code, gradient boosting vs. MLP, U-Net
+  segmentation, imbalanced classes) and `/de/preise/` with the plans, limits and billing FAQ.
+  All have canonical and hreflang links, JSON-LD (`TechArticle`, `Article`/`HowTo`,
+  `BreadcrumbList`, `FAQPage`), breadcrumbs, no script and no external requests; they are in
+  `sitemap.xml` and `llms.txt`, and the header and footer of every page link to them. The
+  example data and code come from the backend: `python -m brickdnn.examples.export` writes
+  `frontend/landing/examples/examples.json` from the examples, the shape inference and the
+  code generator, and tests in both backend and frontend fail when the committed file is out
+  of date. nginx serves the new folders with the landing pages' strict Content-Security-Policy
+  and redirects their addresses without a trailing slash. The build check now covers every
+  static page (title, description, canonical, reciprocal hreflang, JSON-LD, images, sitemap).
+- **`/app?example=<id>` opens a built-in example in the editor** (after asking if another
+  network is on the canvas); the parameter is then removed from the address.
 - **Accessibility (WCAG 2.2 AA as the aim) and an accessibility statement.** Networks can be
   built with the keyboard alone: the palette is one Tab stop with arrow keys (Enter adds a
   layer, Enter in the search the first match); layers and connections on the canvas have

@@ -5,39 +5,29 @@
 import { de } from './content/de.ts';
 import { en } from './content/en.ts';
 import type { Item, LandingContent } from './content/types.ts';
+import { escapeHtml, picture, plainText, scriptJson, type Assets } from './html.ts';
+import { offers, organization, ORGANIZATION_ID, SOFTWARE_ID, WEBSITE_ID } from './jsonld.ts';
+import { alternateLinks, siteFooter, siteHeader, type Chrome } from './layout.ts';
+import { allPages, llmsSections } from './pages.ts';
 import {
   absolute,
   APP_PAGES,
   CONTACT_EMAIL,
-  CURRENCY,
   DOCS_URL,
   EDITOR_PATH,
   INLINE_SCRIPT,
   LICENSE_URL,
   PAGE_PATHS,
   PLANS,
+  pricingPath,
   REPOSITORY_URL,
   SITE_URL,
   type Lang,
 } from './site.ts';
 
+export { escapeHtml, picture, plainText, type Assets, type ImageAsset } from './html.ts';
+
 export const CONTENT: Record<Lang, LandingContent> = { en, de };
-
-/** The addresses of the files a page refers to (all on this site). */
-export interface Assets {
-  css: string;
-  favicon: string;
-  /** The PNG logo for the Organization in the JSON-LD. */
-  logo: { src: string; width: number; height: number };
-  /** The screenshots by id (see Shot), each in several widths. */
-  images: Record<string, ImageAsset>;
-  ogImage: { src: string; width: number; height: number };
-}
-
-export interface ImageAsset {
-  /** Narrowest first. */
-  sources: { src: string; width: number; height: number }[];
-}
 
 /** The screenshot ids a page shows: the hero's and those of the sections' items. */
 export function shotIds(c: LandingContent): string[] {
@@ -50,99 +40,23 @@ export function shotIds(c: LandingContent): string[] {
   return [...new Set(ids)];
 }
 
-/** Where an image is shown, for `sizes`: the width it takes on the page. */
-const SIZES = {
-  hero: '(min-width: 72rem) 68rem, calc(100vw - 2.5rem)',
-  row: '(min-width: 72rem) 37rem, (min-width: 60rem) 55vw, calc(100vw - 2.5rem)',
-  tile: '(min-width: 72rem) 33rem, (min-width: 52rem) 45vw, calc(100vw - 2.5rem)',
-  step: '(min-width: 60rem) 21rem, calc(100vw - 2.5rem)',
-};
-
-/**
- * An <img> of a screenshot with all its widths. The width and height attributes are those of
- * the file closest to `display` (they give the proportions, CSS sets the size). Below the fold
- * it loads lazily.
- */
-export function picture(
-  asset: ImageAsset,
-  alt: string,
-  sizes: keyof typeof SIZES,
-  display: number,
-  eager = false
-): string {
-  const srcset = asset.sources.map((s) => `${s.src} ${s.width}w`).join(', ');
-  const base =
-    asset.sources.find((s) => s.width >= display) ?? asset.sources[asset.sources.length - 1];
-  const loading = eager ? 'fetchpriority="high"' : 'loading="lazy"';
-  return `<img src="${base.src}" srcset="${srcset}" sizes="${SIZES[sizes]}" width="${base.width}" height="${base.height}" alt="${escapeHtml(alt)}" ${loading} decoding="async">`;
-}
-
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** The plain text of an HTML snippet (for meta data and the JSON-LD). */
-export function plainText(html: string): string {
-  return html
-    .replace(/<q>/g, '“')
-    .replace(/<\/q>/g, '”')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 const other = (lang: Lang): Lang => (lang === 'en' ? 'de' : 'en');
-
-function alternates(): string {
-  return [
-    `<link rel="alternate" hreflang="en" href="${absolute(PAGE_PATHS.en)}">`,
-    `<link rel="alternate" hreflang="de" href="${absolute(PAGE_PATHS.de)}">`,
-    `<link rel="alternate" hreflang="x-default" href="${absolute(PAGE_PATHS.en)}">`,
-  ].join('\n');
-}
-
-/** JSON for a <script> element: `<` escaped, so the text can never end the element. */
-function scriptJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c');
-}
 
 export function structuredData(c: LandingContent, assets: Assets): object {
   const page = absolute(PAGE_PATHS[c.lang]);
-  const organization = `${SITE_URL}/#organization`;
-  const website = `${SITE_URL}/#website`;
-  const software = `${SITE_URL}/#software`;
+  const website = WEBSITE_ID;
+  const software = SOFTWARE_ID;
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Organization',
-        '@id': organization,
-        name: 'Brick DNN',
-        url: `${SITE_URL}/`,
-        logo: {
-          '@type': 'ImageObject',
-          url: absolute(assets.logo.src),
-          width: assets.logo.width,
-          height: assets.logo.height,
-        },
-        email: CONTACT_EMAIL,
-        sameAs: [REPOSITORY_URL],
-      },
+      organization(assets),
       {
         '@type': 'WebSite',
         '@id': website,
         url: `${SITE_URL}/`,
         name: 'Brick DNN',
         inLanguage: ['en', 'de'],
-        publisher: { '@id': organization },
+        publisher: { '@id': ORGANIZATION_ID },
       },
       {
         '@type': 'SoftwareApplication',
@@ -159,22 +73,8 @@ export function structuredData(c: LandingContent, assets: Assets): object {
         codeRepository: REPOSITORY_URL,
         screenshot: shotIds(c).map((id) => absolute(assets.images[id].sources.at(-1)!.src)),
         featureList: c.featureList,
-        publisher: { '@id': organization },
-        offers: PLANS.map((plan) => ({
-          '@type': 'Offer',
-          name: plan.name,
-          price: String(plan.price),
-          priceCurrency: CURRENCY,
-          url: absolute('/pricing'),
-          priceSpecification: {
-            '@type': 'UnitPriceSpecification',
-            price: String(plan.price),
-            priceCurrency: CURRENCY,
-            billingDuration: 'P1M',
-            unitText: 'month',
-            valueAddedTaxIncluded: true,
-          },
-        })),
+        publisher: { '@id': ORGANIZATION_ID },
+        offers: offers(),
       },
       {
         '@type': 'FAQPage',
@@ -206,7 +106,7 @@ function head(c: LandingContent, assets: Assets): string {
 <title>${escapeHtml(c.title)}</title>
 <meta name="description" content="${escapeHtml(c.description)}">
 <link rel="canonical" href="${page}">
-${alternates()}
+${alternateLinks(PAGE_PATHS)}
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="${assets.favicon}">
 <link rel="stylesheet" href="${assets.css}">
@@ -229,19 +129,6 @@ ${alternates()}
 <meta name="twitter:image:alt" content="${escapeHtml(c.ogImageAlt)}">
 <script type="application/ld+json">${scriptJson(structuredData(c, assets))}</script>
 </head>`;
-}
-
-function brand(c: LandingContent, assets: Assets): string {
-  return `<a class="brand" href="${PAGE_PATHS[c.lang]}"><img src="${assets.favicon}" width="28" height="28" alt=""><span>Brick DNN</span></a>`;
-}
-
-function languageSwitch(c: LandingContent, label: string): string {
-  const links = (['en', 'de'] as const).map((lang) => {
-    const name = CONTENT[lang].languageName;
-    const current = lang === c.lang ? ' aria-current="page"' : '';
-    return `<li><a href="${PAGE_PATHS[lang]}" hreflang="${lang}" lang="${lang}"${current}><span aria-hidden="true">${lang.toUpperCase()}</span><span class="sr-only">${name}</span></a></li>`;
-  });
-  return `<nav class="lang" aria-label="${escapeHtml(label)}"><ul>${links.join('')}</ul></nav>`;
 }
 
 function section(id: string, title: string, body: string, extraClass = ''): string {
@@ -288,29 +175,27 @@ function body(c: LandingContent, assets: Assets): string {
       .map((cell) => `<td>${escapeHtml(cell)}</td>`)
       .join('')}</tr>`;
   }).join('\n');
-  const legal = c.footer.legal;
+  const chrome: Chrome = {
+    lang: c.lang,
+    alternates: PAGE_PATHS,
+    area: 'home',
+    favicon: assets.favicon,
+  };
 
   return `<body>
 <a class="skip" href="#main">${escapeHtml(c.skipLink)}</a>
-<header class="site-header"><div class="wrap bar">
-${brand(c, assets)}
-<nav class="sections" aria-label="${escapeHtml(c.nav.label)}"><ul>
-<li><a href="#use-cases">${escapeHtml(c.nav.useCases)}</a></li>
-<li><a href="#features">${escapeHtml(c.nav.features)}</a></li>
-<li><a href="#pricing">${escapeHtml(c.nav.pricing)}</a></li>
-<li><a href="#faq">${escapeHtml(c.nav.faq)}</a></li>
-</ul></nav>
-<div class="actions">
-${languageSwitch(c, c.footer.language)}
-<a class="button small" href="${EDITOR_PATH}">${escapeHtml(c.nav.editor)}</a>
-</div>
-</div></header>
+${siteHeader(chrome, [
+  { href: '#use-cases', label: c.nav.useCases },
+  { href: '#features', label: c.nav.features },
+  { href: '#pricing', label: c.nav.pricing },
+  { href: '#faq', label: c.nav.faq },
+])}
 
 <main id="main" tabindex="-1">
 <section class="hero" aria-labelledby="hero-title"><div class="wrap">
 <h1 id="hero-title">${escapeHtml(c.hero.title)}</h1>
 <p class="lead">${escapeHtml(c.hero.lead)}</p>
-<p class="cta"><a class="button" href="${EDITOR_PATH}">${escapeHtml(c.hero.primary)}</a> <a class="button secondary" href="/pricing">${escapeHtml(c.hero.secondary)}</a></p>
+<p class="cta"><a class="button" href="${EDITOR_PATH}">${escapeHtml(c.hero.primary)}</a> <a class="button secondary" href="${pricingPath(c.lang)}">${escapeHtml(c.hero.secondary)}</a></p>
 <ul class="facts">${c.hero.facts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>
 <figure class="shot">
 ${picture(assets.images[c.hero.image.id], c.hero.image.alt, 'hero', 1280, true)}
@@ -373,7 +258,7 @@ ${pricingRows}
 </table>
 </div>
 <ul class="notes">${c.pricing.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('\n')}</ul>
-<p class="more"><a class="button secondary" href="/pricing">${escapeHtml(c.pricing.more)}</a></p>`
+<p class="more"><a class="button secondary" href="${pricingPath(c.lang)}">${escapeHtml(c.pricing.more)}</a></p>`
 )}
 
 ${section(
@@ -385,21 +270,7 @@ ${section(
 )}
 </main>
 
-<footer class="site-footer"><div class="wrap">
-<div class="about">${brand(c, assets)}<p>${escapeHtml(c.footer.tagline)}</p></div>
-<nav aria-label="${escapeHtml(c.footer.legalLabel)}"><ul>
-<li><a href="/imprint">${escapeHtml(legal.imprint)}</a></li>
-<li><a href="/privacy">${escapeHtml(legal.privacy)}</a></li>
-<li><a href="/terms">${escapeHtml(legal.terms)}</a></li>
-<li><a href="/refund">${escapeHtml(legal.refund)}</a></li>
-<li><a href="/accessibility">${escapeHtml(legal.accessibility)}</a></li>
-</ul>${c.footer.legalNote ? `<p class="note">${escapeHtml(c.footer.legalNote)}</p>` : ''}</nav>
-<ul class="links">
-<li><a href="${REPOSITORY_URL}">${escapeHtml(c.footer.source)}</a></li>
-<li><a href="mailto:${CONTACT_EMAIL}">${escapeHtml(c.footer.contact)}: ${CONTACT_EMAIL}</a></li>
-</ul>
-${languageSwitch(c, c.footer.language)}
-</div></footer>
+${siteFooter(chrome)}
 </body>`;
 }
 
@@ -430,16 +301,18 @@ Sitemap: ${absolute('/sitemap.xml')}
 `;
 }
 
+/** Every page of the site, each with its other language where there is one, and the app's. */
 export function renderSitemap(): string {
-  const links = alternates().replace(/<link rel="alternate"/g, '<xhtml:link rel="alternate"');
-  const landing = (['en', 'de'] as const).map(
-    (lang) =>
-      `<url><loc>${absolute(PAGE_PATHS[lang])}</loc>\n${links.replace(/">/g, '"/>')}\n</url>`
-  );
-  const pages = APP_PAGES.map((path) => `<url><loc>${absolute(path)}</loc></url>`);
+  const pages = allPages().map((page) => {
+    const links = alternateLinks(page.alternates)
+      .replace(/<link rel="alternate"/g, '<xhtml:link rel="alternate"')
+      .replace(/">/g, '"/>');
+    return `<url><loc>${absolute(page.path)}</loc>${links ? `\n${links}\n` : ''}</url>`;
+  });
+  const app = APP_PAGES.map((path) => `<url><loc>${absolute(path)}</loc></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
-${[...landing, ...pages].join('\n')}
+${[...pages, ...app].join('\n')}
 </urlset>
 `;
 }
@@ -493,11 +366,14 @@ ${c.teaching.items.map((item) => `- ${item}`).join('\n')}
 
 ${c.faq.items.map((item) => `### ${item.question}\n\n${plainText(item.html)}`).join('\n\n')}
 
+${llmsSections()}
+
 ## Links
 
 - [Editor](${absolute(EDITOR_PATH)}): the web app
 - [Pricing](${absolute('/pricing')})
 - [Landing page in German](${absolute(PAGE_PATHS.de)})
+- [Pricing in German](${absolute(pricingPath('de'))})
 - [Documentation](${DOCS_URL}): training, data preparation, MCP server, REST API
 - [MCP server](${REPOSITORY_URL}/blob/main/docs/mcp.md): connecting AI assistants
 - [Source code](${REPOSITORY_URL}) (Apache 2.0)
