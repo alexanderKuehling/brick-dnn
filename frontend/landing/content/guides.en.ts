@@ -382,7 +382,7 @@ const guides: Guide[] = [
         title: 'Where brickdnn.com keeps what',
         html: `<p>When you train on brickdnn.com, your data is stored and processed here. The <a href="/privacy">privacy policy</a> (in German) has the full list with purposes and retention periods.</p><div class="table" role="region" aria-labelledby="where-caption" tabindex="0"><table><caption id="where-caption">Where brickdnn.com stores and processes data</caption><thead><tr><th scope="col">Data</th><th scope="col">Where</th><th scope="col">Provider</th></tr></thead><tbody>
 <tr><th scope="row">Uploaded files, prepared datasets, trained weights, training results</th><td>Server in Geneva, Switzerland; the trainings run there too</td><td>Infomaniak</td></tr>
-<tr><th scope="row">Accounts, networks, comments, the details of data and trainings (not the files)</th><td>Database in London, United Kingdom</td><td>Supabase</td></tr>
+<tr><th scope="row">Accounts, networks, comments, the details of data and trainings (not the files)</th><td>Database on the same server in Geneva, Switzerland</td><td>Infomaniak</td></tr>
 <tr><th scope="row">Technical error reports, without user name, e-mail address, account ID or uploaded files</th><td>EU region in Frankfurt, Germany</td><td>Sentry</td></tr>
 <tr><th scope="row">E-mails about your account</th><td>EU</td><td>Brevo</td></tr>
 <tr><th scope="row">Payment, only if you buy a plan</th><td>United Kingdom</td><td>Paddle</td></tr>
