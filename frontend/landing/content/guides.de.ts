@@ -5,16 +5,18 @@
  */
 import type { Guide, GuideIndex } from './types.ts';
 
-const DOCS = 'https://github.com/alexanderKuehling/brick-dnn/blob/main/docs';
+const REPOSITORY = 'https://github.com/alexanderKuehling/brick-dnn';
+const DOCS = `${REPOSITORY}/blob/main/docs`;
 const DATE = '2026-11-16';
+const GDPR_DATE = '2026-11-17';
 
 const index: GuideIndex = {
-  title: 'Anleitungen: neuronale Netze, Tabellendaten, Segmentierung – Brick DNN',
+  title: 'Anleitungen: Deep Learning, Tabellendaten, Segmentierung, DSGVO – Brick DNN',
   description:
-    'Praxisnahe Anleitungen: neuronales Netz ohne Code bauen und als PyTorch exportieren, Gradient Boosting oder MLP, U-Net-Segmentierung, unausgewogene Klassen.',
+    'Praxisnahe Anleitungen zu Deep Learning: Netz ohne Code bauen und als PyTorch exportieren, Gradient Boosting oder MLP, U-Net, seltene Klassen und DSGVO.',
   h1: 'Anleitungen',
   intro:
-    'Schritt-für-Schritt-Anleitungen zum Bauen, Trainieren und Bewerten von Modellen mit Brick DNN, und zu den Entscheidungen unterwegs: welches Modell für eine Tabelle, wie man Bilder segmentiert, was zu tun ist, wenn eine Klasse selten ist.',
+    'Schritt-für-Schritt-Anleitungen zum Bauen, Trainieren und Bewerten von Deep-Learning-Modellen mit Brick DNN, und zu den Entscheidungen unterwegs: welches Modell für eine Tabelle, wie man Bilder segmentiert, was zu tun ist, wenn eine Klasse selten ist, und wie Sie mit Daten trainieren, für die die DSGVO gilt.',
 };
 
 const guides: Guide[] = [
@@ -23,7 +25,7 @@ const guides: Guide[] = [
     slug: 'neuronales-netz-ohne-code',
     title: 'Neuronales Netz ohne Code bauen und als PyTorch-Code exportieren',
     description:
-      'Ein neuronales Netz im Browser aus Schichten zusammensetzen, jede Tensorform prüfen lassen und sauberen PyTorch-Code herunterladen, der ohne Brick DNN läuft.',
+      'Deep Learning ohne Code: ein neuronales Netz im Browser aus Schichten bauen, jede Tensorform prüfen lassen und sauberen PyTorch-Code herunterladen.',
     h1: 'Neuronales Netz ohne Code bauen und als PyTorch-Code exportieren',
     summary:
       'Schichten auf einer Arbeitsfläche verbinden, jede Form von Brick DNN prüfen lassen und ein PyTorch-Skript herunterladen, das für sich läuft.',
@@ -216,7 +218,7 @@ const guides: Guide[] = [
     slug: 'bildsegmentierung-u-net',
     title: 'Bildsegmentierung mit U-Net: von den Masken zum trainierten Modell',
     description:
-      'Ein U-Net zur Bildsegmentierung trainieren: Bilder und Masken vorbereiten, das Netz prüfen, Batchgröße und Verlust wählen, mittlere IoU und Dice lesen.',
+      'Deep Learning zur Bildsegmentierung: ein U-Net trainieren, Bilder und Masken vorbereiten, Batchgröße und Verlust wählen, mittlere IoU und Dice lesen.',
     h1: 'Bildsegmentierung mit U-Net: von den Masken zum trainierten Modell',
     summary:
       'Von einer ZIP-Datei mit Bildern und Masken zum trainierten U-Net, mit mittlerer IoU, Dice und den vorhergesagten Masken.',
@@ -350,6 +352,63 @@ const guides: Guide[] = [
       },
     ],
     examples: ['gradient_boosting_classifier', 'svm_classifier', 'voting_ensemble_classifier'],
+  },
+  {
+    id: 'gdpr',
+    slug: 'deep-learning-dsgvo-konform',
+    title: 'Deep Learning DSGVO-konform: neuronale Netze in Europa trainieren',
+    description:
+      'KI-Training DSGVO-konform: personenbezogene oder anonyme Daten, wo Brick DNN in der Schweiz speichert und trainiert, Export, Löschung und eigener Server.',
+    h1: 'Deep Learning DSGVO-konform: neuronale Netze mit Daten in Europa trainieren',
+    summary:
+      'Welche Daten die DSGVO betrifft, wo brickdnn.com in der Schweiz speichert und trainiert und was mit Daten geschieht, die personenbezogen bleiben müssen.',
+    lead: 'Die DSGVO verbietet nicht, neuronale Netze zu trainieren. Sie fragt, um welche Daten es geht, wohin sie gehen und wer sie verarbeitet. Diese Anleitung beantwortet die Fragen für Brick DNN: welche Daten Sorgfalt brauchen, wo brickdnn.com Daten speichert und in der Schweiz trainiert und wie Sie mit Daten arbeiten, die Ihre Einrichtung nicht verlassen dürfen.',
+    published: GDPR_DATE,
+    modified: GDPR_DATE,
+    type: 'Article',
+    sections: [
+      {
+        id: 'frage',
+        title: 'Die erste Frage: Sind es personenbezogene Daten?',
+        html: '<p>Die DSGVO gilt für personenbezogene Daten: Angaben über eine Person, die identifiziert ist oder sich identifizieren lässt, direkt oder zusammen mit anderen Angaben. Viel Deep Learning kommt ohne sie aus. Messwerte von Maschinen und Sensoren, Bilder von Werkstoffen, Pflanzen oder Produkten, Simulationsergebnisse, Feldversuche und öffentliche Benchmarks wie MNIST oder CIFAR-10 sagen über niemanden etwas aus. Für solche Daten regelt die DSGVO das Training nicht; offen bleibt nur, welchem Anbieter Sie sie anvertrauen.</p><p>Personenbezogen sind Daten, sobald sich Zeilen oder Bilder Menschen zuordnen lassen: Patientenakten, Umfrageantworten mit Geburtsdatum und Postleitzahl, Fotos mit Gesichtern, Texte mit Namen, Sprachaufnahmen, Logdateien mit Benutzerkennungen. Dann brauchen Sie eine Rechtsgrundlage und einen festgelegten Zweck (Art. 5 und 6 DSGVO), beschränken sich auf das, was der Zweck erfordert, und mit jedem Dienstleister, der die Daten in Ihrem Auftrag verarbeitet, einen Vertrag nach Art. 28. Gesundheits-, genetische und biometrische Daten sind besondere Kategorien mit strengeren Regeln (Art. 9).</p>',
+      },
+      {
+        id: 'anonymisieren',
+        title: 'Anonymisiert, pseudonymisiert oder personenbezogen',
+        html: `<div class="table" role="region" aria-labelledby="zustaende-caption" tabindex="0"><table><caption id="zustaende-caption">Drei Zustände eines Datensatzes nach der DSGVO</caption><thead><tr><th scope="col">Zustand</th><th scope="col">Was es bedeutet</th><th scope="col">DSGVO</th></tr></thead><tbody>
+<tr><th scope="row">Personenbezogen</th><td>Namen, E-Mail-Adressen, Kennungen oder Angaben, die auf eine Person deuten</td><td>Gilt vollständig</td></tr>
+<tr><th scope="row">Pseudonymisiert</th><td>Kennungen durch Codes ersetzt; der Schlüssel existiert noch, vielleicht an anderer Stelle</td><td>Weiterhin personenbezogen, gilt vollständig (Erwägungsgrund 26)</td></tr>
+<tr><th scope="row">Anonymisiert</th><td>Niemand, auch Sie nicht, kann eine Zeile mit vertretbarem Aufwand einer Person zuordnen</td><td>Gilt nicht (Erwägungsgrund 26)</td></tr>
+</tbody></table></div><p>Eine Tabelle zu anonymisieren heißt mehr, als die Namensspalte zu löschen:</p><ul class="checks"><li>Entfernen Sie direkte Kennungen: Namen, Anschriften, E-Mail-Adressen, Telefonnummern, Ausweis- und Aktennummern.</li><li>Vergröbern Sie, was Menschen in Kombination erkennbar macht: das Jahr statt des Geburtsdatums, die Region statt der Postleitzahl, Altersgruppen statt des genauen Alters.</li><li>Lassen Sie Freitextspalten weg; sie enthalten oft Namen.</li><li>Suchen Sie nach seltenen Kombinationen: Eine einzige Zeile mit einem ungewöhnlichen Wert kann genügen, um jemanden zu erkennen.</li><li>Achten Sie bei Bildern auf Gesichter, Namensschilder, eingebrannten Text und Metadaten wie GPS-Positionen in den EXIF-Daten.</li></ul><p>Tun Sie das auf Ihrem eigenen Rechner, bevor Sie etwas hochladen. Sind Sie nicht sicher, ob das Ergebnis anonym ist, behandeln Sie es als personenbezogen und fragen Sie Ihre Datenschutzbeauftragte oder Ihren Datenschutzbeauftragten.</p>`,
+      },
+      {
+        id: 'brickdnn',
+        title: 'Was brickdnn.com wo speichert',
+        html: `<p>Wenn Sie auf brickdnn.com trainieren, werden Ihre Daten hier gespeichert und verarbeitet. Die <a href="/privacy">Datenschutzerklärung</a> nennt alles mit Zwecken und Speicherfristen.</p><div class="table" role="region" aria-labelledby="wo-caption" tabindex="0"><table><caption id="wo-caption">Wo brickdnn.com Daten speichert und verarbeitet</caption><thead><tr><th scope="col">Daten</th><th scope="col">Wo</th><th scope="col">Anbieter</th></tr></thead><tbody>
+<tr><th scope="row">Hochgeladene Dateien, aufbereitete Datensätze, trainierte Gewichte, Trainingsergebnisse</th><td>Server in Genf, Schweiz; dort laufen auch die Trainings</td><td>Infomaniak</td></tr>
+<tr><th scope="row">Konten, Netze, Kommentare, die Angaben zu Daten und Trainings (nicht die Dateien)</th><td>Datenbank in London, Vereinigtes Königreich</td><td>Supabase</td></tr>
+<tr><th scope="row">Technische Fehlerberichte, ohne Benutzername, E-Mail-Adresse, Kontokennung oder hochgeladene Dateien</th><td>EU-Region in Frankfurt am Main</td><td>Sentry</td></tr>
+<tr><th scope="row">E-Mails zu Ihrem Konto</th><td>EU</td><td>Brevo</td></tr>
+<tr><th scope="row">Zahlung, nur wenn Sie einen Tarif buchen</th><td>Vereinigtes Königreich</td><td>Paddle</td></tr>
+</tbody></table></div><p>Für die Schweiz und das Vereinigte Königreich hat die EU-Kommission ein angemessenes Datenschutzniveau festgestellt (Art. 45 DSGVO); Daten dürfen dorthin ohne weitere Garantien übermittelt werden. Für Hosting, Datenbank, E-Mail und Fehlerberichte bestehen Verträge zur Auftragsverarbeitung. Die App setzt keine Cookies, hat keine Analyse und kein Tracking, und Ihre Daten werden nicht verkauft.</p><p>Eine Grenze ist für diese Anleitung wichtig: Nach den Nutzungsbedingungen gehören personenbezogene Daten Dritter und vertrauliche Daten nicht auf brickdnn.com, und die App weist beim Hochladen darauf hin. Der gehostete Dienst ist für Daten ohne Personenbezug und für anonymisierte Daten gedacht. Für alles andere lesen Sie weiter.</p>`,
+      },
+      {
+        id: 'personenbezogen',
+        title: 'Wenn die Daten personenbezogen bleiben müssen',
+        html: `<p>Brick DNN hilft auch dann, wenn die Daten selbst Ihre Einrichtung nicht verlassen dürfen. Drei Wege, vom geringsten Aufwand zum größten:</p><ol class="numbered"><li><strong>Hier entwerfen, zu Hause trainieren.</strong> Bauen und prüfen Sie das Netz auf brickdnn.com, ohne etwas hochzuladen; dafür brauchen Sie kein Konto. Exportieren Sie das PyTorch-Skript und trainieren Sie es auf den Rechnern Ihrer Einrichtung mit Ihrem eigenen Data Loader; das Skript importiert nichts aus Brick DNN. Für ein Netz mit einem flachen Eingang und einem flachen Ausgang enthält es schon eine Trainingsschleife für CSV-Dateien (<code>python model.py --csv daten.csv</code>).</li><li><strong>Mit einem Stellvertreter arbeiten.</strong> Laden Sie einen anonymisierten Auszug oder synthetische Daten mit denselben Spalten hoch, bereiten Sie sie im Bereich <strong>Daten</strong> auf und trainieren Sie auf dem Server, bis Modell und Einstellungen stimmen. Die Aufbereitung lässt sich als pandas-Skript exportieren, das Sie dann dort auf die echten Daten anwenden, wo sie liegen.</li><li><strong>Brick DNN selbst betreiben.</strong> Brick DNN ist Open Source unter der Apache-Lizenz 2.0. <code>docker compose up -d</code> startet es auf einem Server Ihrer Einrichtung, mit einer lokalen SQLite-Datenbank, solange Sie keine andere einrichten, und ohne Fehlerberichte, solange Sie sie nicht einschalten; für neuronale Netze bauen Sie das Image mit PyTorch (<code>BRICKDNN_INSTALL_TORCH=true</code>). Daten, Trainings und Konten bleiben dann dort, wo dieser Server steht. Die Einrichtung beschreibt der <a href="${REPOSITORY}#quick-start">Quick Start</a> (Englisch).</li></ol>`,
+      },
+      {
+        id: 'kontrolle',
+        title: 'Exportieren und löschen',
+        html: '<p>Was Sie hochladen, können Sie selbst wieder herausholen und entfernen:</p><ul class="checks"><li><strong>Meine Daten herunterladen</strong> unter <em>Konto</em> liefert eine ZIP-Datei mit Ihren Netzen samt Verlauf, Datenquellen und Aufbereitungen, Datensätzen, Trainings mit Einstellungen und Kennzahlen und den hochgeladenen Dateien selbst (bis 200 MB insgesamt; größere werden aufgelistet). Trainierte Gewichte laden Sie bei jedem abgeschlossenen Training herunter, zusammen mit dem passenden Skript.</li><li>Uploads, Datensätze und Trainings lassen sich jederzeit einzeln löschen. Wenn Sie das Konto löschen, wird alles gelöscht, was dazu gehört, auch die Dateien.</li><li>Uploads, Datensätze und abgeschlossene Trainings, die 180 Tage niemand genutzt hat, werden automatisch gelöscht, Konten nach zwei Jahren ohne Nutzung, mit Erinnerungen per E-Mail vorher.</li><li>Gelöschte Daten können noch eine Weile in Sicherungen liegen, höchstens 5 Wochen, bis sie turnusmäßig gelöscht werden.</li></ul>',
+      },
+      {
+        id: 'checkliste',
+        title: 'Eine Checkliste',
+        html: '<ol class="numbered"><li>Klären Sie, ob die Daten personenbezogen sind. Wenn nicht, trainieren Sie auf brickdnn.com; die Dateien bleiben auf dem Server in der Schweiz.</li><li>Wenn ja, versuchen Sie, sie vor dem Hochladen auf Ihrem eigenen Rechner zu anonymisieren, und prüfen Sie seltene Kombinationen und Bild-Metadaten.</li><li>Müssen sie personenbezogen bleiben, entwerfen Sie das Modell hier und trainieren den exportierten Code oder Ihre eigene Brick-DNN-Instanz dort, wo die Daten liegen.</li><li>Halten Sie Zweck und Rechtsgrundlage im Verzeichnis der Verarbeitungstätigkeiten Ihrer Einrichtung fest und beziehen Sie den Datenschutz früh ein.</li><li>Laden Sie herunter, was Sie behalten möchten, und löschen Sie Datensätze und Trainings, die Sie nicht mehr brauchen.</li></ol><p>Diese Anleitung beschreibt, wie Brick DNN arbeitet und was die DSGVO allgemein verlangt. Sie ist keine Rechtsberatung für Ihr Vorhaben.</p>',
+      },
+    ],
+    examples: ['tabular_regression', 'cnn_mnist', 'gradient_boosting_classifier'],
   },
 ];
 

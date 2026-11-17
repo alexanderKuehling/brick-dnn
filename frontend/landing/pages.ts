@@ -39,10 +39,10 @@ import { escapeHtml, picture, plainText, scriptJson, type Assets } from './html.
 import {
   author,
   breadcrumbList,
-  offers,
   organization,
   ORGANIZATION_ID,
   SOFTWARE_ID,
+  softwareApplication,
   WEBSITE_ID,
 } from './jsonld.ts';
 import {
@@ -740,15 +740,7 @@ ${section(
         acceptedAnswer: { '@type': 'Answer', text: plainText(item.html) },
       })),
     }),
-    {
-      '@type': 'SoftwareApplication',
-      '@id': SOFTWARE_ID,
-      name: 'Brick DNN',
-      url: absolute(EDITOR_PATH),
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'Web browser',
-      offers: offers(),
-    },
+    softwareApplication(),
     breadcrumbList(crumbs),
   ];
   return shell(page, assets, 'pricing', main, graph, 'website', { en: '/#pricing' });
