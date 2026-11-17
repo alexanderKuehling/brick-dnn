@@ -59,6 +59,7 @@ export const a11y: Messages<typeof en> = {
     format: '{{page}} · Brick DNN',
     authorize: 'App verbinden',
     shared: 'Geteiltes Netz',
+    comparison: 'Geteilter Vergleich',
   },
   charts: {
     noValue: 'kein Wert',

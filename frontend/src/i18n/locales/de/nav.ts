@@ -6,6 +6,7 @@ export const nav: Messages<typeof en> = {
   builder: 'Editor',
   data: 'Daten',
   myNetworks: 'Meine Netze',
+  runs: 'Läufe',
   pricing: 'Preise',
   sourceCode: 'Quellcode auf GitHub',
   githubRepository: 'GitHub-Repository',

@@ -309,6 +309,7 @@ def snapshot(now: datetime | None = None, extra: Entry | None = None) -> Snapsho
     workers = alive_workers(now)
     active = list(
         TrainingRun.objects.filter(status__in=(QUEUED, *RUNNING_STATUSES))
+        .exclude(kind="external")  # logged from elsewhere: not trained here
         .select_related("owner", "worker")
         .defer(*_DEFERRED)
         .order_by("created_at", "pk")
@@ -518,9 +519,11 @@ def _take(run_id: Any, worker: TrainingWorker) -> tuple[TrainingRun, budgets.Run
             if not mine:
                 return None  # another worker decides about this account right now
             account = account_of(run.owner)
-            running = TrainingRun.objects.filter(
-                owner_id=run.owner_id, status__in=RUNNING_STATUSES
-            ).count()
+            running = (
+                TrainingRun.objects.filter(owner_id=run.owner_id, status__in=RUNNING_STATUSES)
+                .exclude(kind="external")
+                .count()
+            )
             if account.concurrent is not None and running >= account.concurrent:
                 return None  # keeps its place until one of the account's trainings ends
             # What its budgets allow now: it may be less than when the run was queued (or
@@ -685,10 +688,14 @@ def lost_runs(now: datetime | None = None):
     """Runs that train according to the database, but on no living worker: their worker
     stopped or sends no heartbeat any more, or (after the queue was switched on) they were
     started by the web server itself before."""
-    return TrainingRun.objects.filter(status__in=RUNNING_STATUSES).filter(
-        Q(worker__isnull=True)
-        | Q(worker__stopped_at__isnull=False)
-        | Q(worker__heartbeat_at__lt=_cutoff(now))
+    return (
+        TrainingRun.objects.filter(status__in=RUNNING_STATUSES)
+        .exclude(kind="external")
+        .filter(
+            Q(worker__isnull=True)
+            | Q(worker__stopped_at__isnull=False)
+            | Q(worker__heartbeat_at__lt=_cutoff(now))
+        )
     )
 
 

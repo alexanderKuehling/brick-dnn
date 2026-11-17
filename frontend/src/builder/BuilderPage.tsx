@@ -1119,7 +1119,11 @@ function Builder() {
 
   const exportPython = async () => {
     try {
-      const result = await api.generate(doc, { ...codeOptions, filename });
+      const result = await api.generate(doc, {
+        ...codeOptions,
+        filename,
+        tracking_project: projectId ?? undefined,
+      });
       downloadText(result.filename, result.code, 'text/x-python');
     } catch (error) {
       if (
@@ -1430,8 +1434,8 @@ function Builder() {
             onClose={code.close}
             doc={doc}
             filename={filename}
-            options={codeOptions}
-            onOptionsChange={setCodeOptions}
+            options={{ ...codeOptions, tracking_project: projectId ?? undefined }}
+            onOptionsChange={({ tracking_project: _project, ...rest }) => setCodeOptions(rest)}
             family={networkFamily(analysis)}
           />
         </Suspense>

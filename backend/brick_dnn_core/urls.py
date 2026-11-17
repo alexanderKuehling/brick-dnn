@@ -8,12 +8,14 @@ from . import (
     approvals,
     billing_views,
     data_views,
+    experiments_views,
     explain_views,
     legal,
     mcp,
     oauth,
     projects,
     recovery,
+    tracking,
     two_factor,
     upload_links,
     views,
@@ -174,7 +176,34 @@ urlpatterns = [
         name="training-run-preview-file",
     ),
     path("training/check/", views.training_check, name="training-check"),
+    # Runs trained elsewhere that a script logs with an API token (tracking.py).
+    path("tracking/runs/", tracking.TrackingRunsView.as_view(), name="tracking-runs"),
+    path("tracking/runs/<uuid:pk>/", tracking.TrackingRunView.as_view(), name="tracking-run"),
+    path(
+        "tracking/runs/<uuid:pk>/log/", tracking.TrackingLogView.as_view(), name="tracking-run-log"
+    ),
+    path(
+        "tracking/runs/<uuid:pk>/finish/",
+        tracking.TrackingFinishView.as_view(),
+        name="tracking-run-finish",
+    ),
     path("training/ensembles/", views.EnsembleView.as_view(), name="training-ensembles"),
+    # Runs compared side by side and shared with a read-only link (experiments.py).
+    path(
+        "training/comparisons/",
+        experiments_views.ComparisonListView.as_view(),
+        name="training-comparisons",
+    ),
+    path(
+        "training/comparisons/<int:pk>/",
+        experiments_views.ComparisonDetailView.as_view(),
+        name="training-comparison",
+    ),
+    path(
+        "shared/runs/<str:token>/",
+        experiments_views.SharedComparisonView.as_view(),
+        name="shared-comparison",
+    ),
     path("data/", data_views.data_status, name="data"),
     path("data/steps/", data_views.data_steps, name="data-steps"),
     # Explanations of a trained model (explain_views.py).

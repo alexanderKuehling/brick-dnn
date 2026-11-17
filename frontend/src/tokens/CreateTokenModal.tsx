@@ -17,6 +17,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type ApiToken, type ApiTokenExpiry, type NewApiToken } from '@/api';
 import { currentLocale, i18n, useTranslation } from '@/i18n';
+import { LoggingSetup } from './LoggingSetup';
 import { McpSetup } from './McpSetup';
 import classes from './Tokens.module.css';
 
@@ -37,7 +38,7 @@ const EXPIRY_OPTIONS: { value: string; label: string }[] = [
 
 const DEFAULT_EXPIRY = '90';
 
-type Access = 'full' | 'read';
+type Access = 'full' | 'read' | 'log';
 type Field = 'name' | 'read_only' | 'expires_in_days';
 type FieldErrors = Partial<Record<Field, string>>;
 
@@ -112,6 +113,7 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
       const result = await api.apiTokens.create({
         name: trimmed,
         read_only: access === 'read',
+        ...(access === 'log' ? { scope: 'runs:log' as const } : {}),
         expires_in_days: expiryDays(expiry),
       });
       const { token: _secret, ...token } = result;
@@ -176,8 +178,19 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
             </CopyButton>
           </div>
           <Divider />
-          <Title order={4}>{i18n.t('ui.tokens.CreateTokenModal.connectAnAiAssistantWith')}</Title>
-          <McpSetup token={created.token} />
+          {created.scope === 'runs:log' ? (
+            <>
+              <Title order={4}>{i18n.t('experiments.logging.title')}</Title>
+              <LoggingSetup token={created.token} />
+            </>
+          ) : (
+            <>
+              <Title order={4}>
+                {i18n.t('ui.tokens.CreateTokenModal.connectAnAiAssistantWith')}
+              </Title>
+              <McpSetup token={created.token} />
+            </>
+          )}
           <Group justify="flex-end">
             <Button variant="default" onClick={onClose}>
               {i18n.t('ui.tokens.CreateTokenModal.done')}
@@ -221,6 +234,12 @@ export function CreateTokenModal({ opened, onClose, onCreated }: CreateTokenModa
                   value="read"
                   label={i18n.t('ui.tokens.CreateTokenModal.readOnly')}
                   description={i18n.t('ui.tokens.CreateTokenModal.readYourNetworksAndTraining')}
+                  disabled={busy}
+                />
+                <Radio
+                  value="log"
+                  label={i18n.t('experiments.logging.scopeLabel')}
+                  description={i18n.t('experiments.logging.scopeHelp')}
                   disabled={busy}
                 />
               </Stack>

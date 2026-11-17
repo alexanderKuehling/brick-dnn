@@ -908,11 +908,17 @@ REST_AS_TOOL: dict[tuple[str, str], tuple[str, Callable[[Mapping, Mapping], dict
 ROUTE_KINDS = {
     "training-dataset": "dataset",
     "training-run": "run",
+    "tracking-run": "run",
     "data-source": "data_source",
     "data-prep": "data_prep",
     "project": "project",
 }
 REST_PHRASES: dict[tuple[str, str], str] = {
+    ("tracking-runs", "POST"): "log a run from elsewhere",
+    ("tracking-run", "GET"): "look at {object}",
+    ("tracking-run", "PATCH"): "update {object}",
+    ("tracking-run-log", "POST"): "log points of {object}",
+    ("tracking-run-finish", "POST"): "finish {object}",
     ("training-dataset-list", "GET"): "list the datasets",
     ("training-dataset-list", "POST"): "upload {object}",
     ("training-dataset-detail", "GET"): "open {object}",
@@ -1217,6 +1223,8 @@ def _record_request(request, response, started: float) -> None:
     match = request.resolver_match
     route = (match.url_name if match is not None else None) or ""
     status_code = response.status_code
+    if route == "tracking-run-log" and status_code < 400:
+        return  # a script logging its curves: a batch per epoch would flood the log
     data = getattr(response, "data", None)  # answers of DRF views
     if route in MCP_URL_NAMES:
         # Tool calls are logged one by one; only a request that never got to them is logged

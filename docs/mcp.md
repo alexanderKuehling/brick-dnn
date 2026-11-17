@@ -54,6 +54,8 @@ Log in, open the account menu → **API tokens** and create a token:
   prepare data and start, stop or delete trainings. **Read only** can look at everything
   (layers, examples, your networks, data and training runs), analyse networks, generate code,
   predict with trained networks and download their weights, but change nothing.
+  **Only log training runs** may do nothing but log trainings that run on your own machine
+  into Brick DNN ([experiments.md](experiments.md#runs-that-ran-elsewhere)): not for MCP.
 - Choose an expiry (7, 30, 90 days, 1 year or never). You can revoke a token at any time;
   apps using it stop working immediately.
 - The token (`bdnn_…`) is shown **once**. Treat it like a password.
@@ -121,8 +123,8 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `check_training`        | read   |             | Does a network fit a dataset (optionally with the settings)? With `fixes` for the Input and last layer, the estimated CPU time, whether the budgets allow it and how long the run would wait in the queue |
 | `get_usage`             | read   |             | This month's usage, the plan and its limits, what is left (also of your token's or app's budget), when it resets |
 | `start_training`        | full   |             | Train in the background (on a server with a training queue the run is `queued` first) |
-| `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R², queued ones with their position (`limit`, `status`, `project_id`) |
-| `get_training_run`      | read   |             | One run as a summary (`include`: history, graph, plan, log, trials, preprocessing) |
+| `list_training_runs`    | read   |             | Your training runs, one line each with status and metrics, for regressions RMSE and R², queued ones with their position (`limit`, `status`, `project_id`); runs logged from elsewhere say `ran_elsewhere` |
+| `get_training_run`      | read   |             | One run as a summary (`include`: history, graph, plan, log, trials, preprocessing); a run logged from elsewhere adds `ran_elsewhere` and `reported` (the numbers its script sent) |
 | `stop_training`         | full   |             | Stop a run after the current batch, or cancel a queued one (starter, project editors) |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
@@ -667,7 +669,7 @@ was done), *failed* or *denied*.
 **REST API.** It cannot ask: a request with a personal API token whose rule covers it is
 refused with `403` and a message that points to MCP or the web app. Covered are the trainings
 above the limit (`POST /api/training/runs/`), publishing (`POST /api/projects/<id>/link/`,
-`…/members/`, `…/data/`) and deleting (`DELETE` of networks, runs, datasets, data files and
+`…/members/`, `…/data/`, and sharing runs with `POST /api/training/comparisons/`) and deleting (`DELETE` of networks, runs, datasets, data files and
 preparations).
 
 Requests keep the validated arguments of the call (e.g. the graph and settings of a

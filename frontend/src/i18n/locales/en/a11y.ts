@@ -64,6 +64,7 @@ export const a11y = {
     format: '{{page}} · Brick DNN',
     authorize: 'Connect an app',
     shared: 'Shared network',
+    comparison: 'Shared comparison',
   },
   charts: {
     noValue: 'no value',

@@ -3,6 +3,52 @@
 ## Unreleased
 
 ### Added
+- **Runs that ran elsewhere: logging from the exported script back into Brick DNN.** A
+  training of the exported PyTorch script on the user's own machine or GPU logs its curves
+  into a run of the new kind `external` (badge *ran elsewhere* in the runs table, the
+  history, the run view and comparisons; filter *Ran elsewhere*; live-updating while it
+  runs). API `/api/tracking/runs/` (create, `log/` points in batches, `PATCH` config and
+  summary, `finish/` as completed, failed or stopped) for personal API tokens, including the
+  new token scope `runs:log` (*Only log training runs* on the tokens page: such a token can do
+  nothing else); strict validation, limits per account (500 runs, 10 logging at a time), per
+  run (20,000 points) and per request (1,000 points, 512 KB), rate limit
+  `BRICKDNN_TRACKING_RATE`; the points count toward the storage quota, never toward CPU time,
+  and the runs are never in the training queue. A run that reports nothing for a day ends
+  as failed; *Stop* in the app refuses further reports. New stdlib-only client
+  `brickdnn/tracking.py` (`BrickDNNRun`): off without `BRICKDNN_TOKEN`, batches points, warns
+  once on an error, keeps up to 1,000 points, retries and gives up quietly, never raises. The
+  code generator embeds it (option `log_to_brickdnn`, default on, *Log to Brick DNN* in the
+  code view; `tracking_url` and `tracking_project` from the server and the saved network):
+  the CSV loop logs loss and accuracy or RMSE per epoch, the settings and the test results
+  of the new `--test-split`; without the variable the script runs offline with identical
+  results, and the token is never written into it. The script's README section says how.
+  The tokens page explains it with copyable commands. MCP `list_training_runs` and
+  `get_training_run` show `ran_elsewhere` and the reported numbers. The data export has every
+  logged point; the privacy pages say what is stored (a dated sentence in the policy of
+  brickdnn.com). Migration 0023. See docs/experiments.md.
+- **An experiment tracker: the runs page.** `/runs` (*Runs* in the header, *Compare runs* in
+  the training panel's history) lists every run the user can see (own runs and those of
+  shared networks) in one table: status, start, duration, dataset, model, the main settings
+  and the headline results per split (loss, accuracy, balanced accuracy, F1, ROC and PR AUC,
+  RMSE, MAE, R², IoU, Dice …), filtered by network, dataset, type, status, tag, star and text,
+  sorted and paged on the server (`GET /api/training/runs/table/`). The results of finished
+  runs are read from their state once and kept in the new `TrainingRun.summary`. The columns
+  are chosen per user and kept on the account (`UserProfile.preferences`,
+  `/api/training/runs/preferences/`); a search's row expands to its trials. Up to ten runs
+  are compared below the table: their loss and a metric in one chart each (`OverlayChart`:
+  a colour per run, dashed after the eighth, legend, smoothing, epochs or time on the x axis,
+  hover and arrow keys, a table view; `GET /api/training/runs/curves/`) with a warning when
+  their losses differ in kind or their tasks differ, a scatter plot of any setting against
+  any result (log axis for the learning rate) and parallel coordinates (`ParallelCoordinates`,
+  plain SVG). Runs get **tags, a note and a star** (`PATCH
+  /api/training/runs/<id>/annotations/`, who started the run and the network's owner and
+  editors), shown in the table and filterable. **Shared comparisons**: a read-only link
+  `/compare/<token>` with the chosen runs' table, curves and scatter plot, without who started
+  them, their networks or (unless chosen) their tags and notes; only own runs and runs of own
+  networks; revoked by deleting it (`/api/training/comparisons/`, public
+  `/api/shared/runs/<token>/`, model `RunComparison`). The data export has the tags, notes and
+  stars and `run_comparisons.json`. Migration 0022. English and German. See
+  docs/experiments.md.
 - **A second built-in segmentation dataset, Cells.** 400 training and 100 test images of
   96×96 pixels, generated on the server like Shapes (nothing to upload or download), that
   look like fluorescence microscopy: two to seven pink to magenta cells, each with a blue to

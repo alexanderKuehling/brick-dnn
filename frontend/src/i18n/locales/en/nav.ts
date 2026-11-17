@@ -4,6 +4,7 @@ export const nav = {
   builder: 'Builder',
   data: 'Data',
   myNetworks: 'My networks',
+  runs: 'Runs',
   pricing: 'Pricing',
   sourceCode: 'Source code on GitHub',
   githubRepository: 'GitHub repository',

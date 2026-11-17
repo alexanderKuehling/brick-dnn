@@ -176,6 +176,10 @@ export interface GenerateOptions {
   include_main?: boolean;
   include_training?: boolean;
   filename?: string;
+  /** The CSV loop logs to Brick DNN while BRICKDNN_TOKEN is set (default on). */
+  log_to_brickdnn?: boolean;
+  /** The saved network the logged runs belong to. */
+  tracking_project?: number;
 }
 
 export interface GenerateResult {
@@ -309,6 +313,8 @@ export interface ApiToken {
   /** The start of the token (e.g. "bdnn_Ab3dEf9h"), to recognise it. */
   prefix: string;
   read_only: boolean;
+  /** "runs:log": the token may only log runs trained elsewhere; "": what read_only allows. */
+  scope?: ApiTokenScope;
   created_at: string;
   last_used_at: string | null;
   expires_at: string | null;
@@ -318,9 +324,12 @@ export interface ApiToken {
   used_cpu_minutes?: number;
 }
 
+export type ApiTokenScope = '' | 'runs:log';
+
 export interface ApiTokenInput {
   name: string;
   read_only?: boolean;
+  scope?: ApiTokenScope;
   expires_in_days?: ApiTokenExpiry | null;
 }
 
@@ -1555,9 +1564,25 @@ export interface RunSummary {
   kind?: RunKind;
   /** An ensemble's method and members; null for other runs. */
   ensemble?: EnsembleInfo | null;
+  /** The experiment tracker: labels, a note and a star (missing on older servers). */
+  tags?: string[];
+  note?: string;
+  starred?: boolean;
+  /** Logged from elsewhere (`kind` "external"); null for runs trained here. */
+  external?: ExternalRunInfo | null;
 }
 
-export type RunKind = 'training' | 'ensemble';
+export type RunKind = 'training' | 'ensemble' | 'external';
+
+/** A run trained elsewhere whose script logs its curves here (backend tracking.py). */
+export interface ExternalRunInfo {
+  /** What logged it, e.g. "brickdnn-tracking/1". */
+  client: string | null;
+  /** Points of the curves logged so far. */
+  points: number;
+  /** When the script last reported (ISO). */
+  reported_at: string | null;
+}
 
 export type RunFamily = 'neural' | 'classical' | 'hybrid' | 'ensemble';
 
@@ -2926,3 +2951,187 @@ export interface SimilarRows {
 }
 
 export type SimilarRowsRequest = RowAnalysisRequest & { row: number; other?: number | null };
+
+// --------------------------------------------------------------------------
+// The experiment tracker: the runs table, curves of several runs, shared comparisons
+// (backend/brick_dnn_core/experiments.py)
+// --------------------------------------------------------------------------
+
+/** Settings of a run shown as columns (`config` and the search). */
+export type RunRowSettings = Partial<
+  Record<
+    | 'optimizer'
+    | 'learning_rate'
+    | 'batch_size'
+    | 'epochs'
+    | 'weight_decay'
+    | 'loss'
+    | 'val_split'
+    | 'test_split'
+    | 'patience'
+    | 'seed'
+    | 'max_samples'
+    | 'label_smoothing'
+    | 'focal_gamma'
+    | 'huber_delta'
+    | 'feature_training'
+    | 'method'
+    | 'search'
+    | 'trials'
+    | 'search_metric',
+    number | string
+  >
+>;
+
+/** One row of the runs table. */
+export interface RunRow {
+  id: string;
+  name: string;
+  status: RunStatus;
+  kind: RunKind;
+  family: RunFamily;
+  task: TrainingTask | null;
+  /** "Neural network", the classical model, "… on learned features" or "Ensemble". */
+  model: string;
+  dataset: { key: string; kind: string | null; name: string | null };
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_seconds: number | null;
+  epochs: number | null;
+  epochs_done: number;
+  trials_done: number;
+  /** A hyperparameter search (its trials are in the run). */
+  search: boolean;
+  total_params: number | null;
+  /** The loss it trained with (`auto` resolved); null if unknown. */
+  loss: string | null;
+  settings: RunRowSettings;
+  /** Headline numbers: val_loss, test_accuracy, val_macro_f1, test_pr_auc, best_epoch … */
+  metrics: Record<string, number>;
+  starred: boolean;
+  /** Logged from elsewhere by a script; null for runs trained here. */
+  external?: ExternalRunInfo | null;
+  /** Missing in a shared comparison unless its owner chose to show them. */
+  tags?: string[];
+  note?: string;
+  /** Missing in a shared comparison. */
+  project?: number | null;
+  project_name?: string | null;
+  started_by?: string;
+  mine?: boolean;
+  /** Who started it and the owner and editors of its network change tags, note and star. */
+  can_annotate?: boolean;
+}
+
+export interface RunTableQuery {
+  project?: number | null;
+  dataset?: string | null;
+  status?: RunStatus | null;
+  family?: RunFamily | 'external' | null;
+  tag?: string | null;
+  starred?: boolean;
+  mine?: boolean;
+  q?: string;
+  ids?: string;
+  /** name, status, created_at, duration, dataset, model, kind, setting:<key>, metric:<key>. */
+  sort?: string;
+  order?: 'asc' | 'desc';
+  page?: number;
+  page_size?: number;
+}
+
+export interface RunTable {
+  count: number;
+  page: number;
+  pages: number;
+  page_size: number;
+  sort: string;
+  order: 'asc' | 'desc';
+  results: RunRow[];
+  facets: {
+    tags: { name: string; count: number }[];
+    datasets: { key: string; name: string }[];
+    projects: { id: number; name: string }[];
+    families: Record<string, number>;
+  };
+  /** More runs than the table looks at (the newest 5000). */
+  truncated: boolean;
+  limits: { compare: number; tags: number; note: number };
+}
+
+/** One point of a run's curves: an epoch (or a logged step) with its metrics. */
+export interface CurvePoint {
+  x: number;
+  epoch: number | null;
+  step?: number | null;
+  /** Seconds since the training started; null if unknown. */
+  time: number | null;
+  [metric: string]: number | null | undefined;
+}
+
+export interface RunCurve {
+  id: string;
+  name: string;
+  status: RunStatus;
+  kind: RunKind;
+  family: RunFamily;
+  task: TrainingTask | null;
+  loss: string | null;
+  loss_label: string | null;
+  /** What `x` counts: epochs, or the steps a script logged. */
+  x_unit: 'epoch' | 'step';
+  points: CurvePoint[];
+}
+
+export interface RunCurves {
+  runs: RunCurve[];
+  /** Ids that are not (or no longer) visible. */
+  missing: string[];
+}
+
+export interface RunAnnotations {
+  id: string;
+  tags: string[];
+  note: string;
+  starred: boolean;
+}
+
+export interface ComparisonOptions {
+  metric?: string;
+  x_axis?: 'epoch' | 'time';
+  smoothing?: number;
+  scatter_x?: string;
+  scatter_y?: string;
+}
+
+/** A comparison shared with a read-only link (`/compare/<token>`). */
+export interface RunComparison {
+  id: number;
+  name: string;
+  token: string;
+  runs: string[];
+  columns: string[];
+  options: ComparisonOptions;
+  include_notes: boolean;
+  created_at: string;
+}
+
+export interface RunComparisonInput {
+  name?: string;
+  runs: string[];
+  columns?: string[];
+  options?: ComparisonOptions;
+  include_notes?: boolean;
+}
+
+/** What a shared comparison shows, without who started the runs and their networks. */
+export interface SharedComparison {
+  name: string;
+  created_at: string;
+  columns: string[];
+  options: ComparisonOptions;
+  include_notes: boolean;
+  runs: RunRow[];
+  curves: RunCurve[];
+}

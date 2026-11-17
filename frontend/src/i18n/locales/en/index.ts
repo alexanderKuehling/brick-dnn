@@ -7,6 +7,7 @@ import { auth, legal } from './auth';
 import { builder } from './builder';
 import { common } from './common';
 import { data } from './data';
+import { experiments } from './experiments';
 import { nav } from './nav';
 import { projects } from './projects';
 import { training } from './training';
@@ -22,5 +23,6 @@ export const en = {
   projects,
   ui,
   data,
+  experiments,
   a11y,
 };
