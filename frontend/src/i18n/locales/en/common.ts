@@ -6,6 +6,7 @@ export const common = {
   saving: 'Saving…',
   saved: 'Saved',
   close: 'Close',
+  moreAbout: 'More about “{{topic}}”',
   delete: 'Delete',
   remove: 'Remove',
   rename: 'Rename',

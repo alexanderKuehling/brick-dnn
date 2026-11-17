@@ -149,7 +149,10 @@ describe('Setting up a hybrid network', () => {
     renderDrawer();
 
     expect(await screen.findByText(/neural layers learn 3 features/)).toBeInTheDocument();
-    expect(screen.getByText(/temporary linear head on the target/)).toBeInTheDocument();
+    // The two phases are explained next to the heading of the network settings.
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Model and optimizer”' }));
+    expect(await screen.findByText(/temporary linear head on the target/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
     for (const label of ['Epochs', 'Batch size', 'Learning rate']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
@@ -191,12 +194,13 @@ describe('Setting up a hybrid network', () => {
     }
     expect(screen.getByRole('combobox', { name: 'Optimizer' })).toBeDisabled();
     expect(screen.getByLabelText(/Keep the weights of the best/)).toBeDisabled();
-    expect(screen.getByText(/keep their random initial weights: nothing is trained/)).toBeVisible();
+    expect(screen.getByText(/Nothing is trained: the training settings below/)).toBeVisible();
     expect(screen.getAllByText('Not used: frozen features are not trained').length).toBeGreaterThan(
       3
     );
     // The device and the seed still apply: the features are computed with the random weights.
-    expect(screen.getByRole('combobox', { name: 'Device' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
+    expect(await screen.findByRole('combobox', { name: 'Device' })).toBeEnabled();
     const start = screen.getByRole('button', { name: 'Start training' });
     await waitFor(() => expect(start).toBeEnabled());
     await userEvent.click(start);

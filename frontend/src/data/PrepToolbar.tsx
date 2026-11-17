@@ -4,7 +4,6 @@ import {
   IconCloudCheck,
   IconCloudX,
   IconDatabaseExport,
-  IconDownload,
   IconEye,
   IconFileCode,
   IconFileSpreadsheet,
@@ -162,15 +161,8 @@ export function PrepToolbar(props: PrepToolbarProps) {
 
   return (
     <>
-      <Group
-        justify="space-between"
-        wrap="wrap"
-        px="sm"
-        py={6}
-        gap="xs"
-        style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
-      >
-        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '1 1 auto' }}>
+      <div className={classes.toolbar}>
+        <Group gap="sm" wrap="nowrap" className={classes.toolbarStart}>
           {props.onOpenSidebar && (
             <Tooltip label={i18n.t('ui.data.PrepToolbar.preparationsAndTables')}>
               <ActionIcon
@@ -195,7 +187,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
               }
             }}
             maxLength={120}
-            w={{ base: 140, sm: 220 }}
+            className={classes.nameInput}
             styles={{ input: { fontWeight: 600 } }}
           />
           <Tooltip
@@ -209,21 +201,14 @@ export function PrepToolbar(props: PrepToolbarProps) {
                 : i18n.t('ui.data.PrepToolbar.mainTable')
             }
           >
-            <Badge
-              variant="light"
-              color="gray"
-              tt="none"
-              size="lg"
-              radius="sm"
-              fw={500}
-              leftSection={<IconTable size={14} />}
-              visibleFrom="md"
-              style={{ flexShrink: 1, minWidth: 0 }}
-            >
-              {props.sourceName}
-              {source &&
-                ` · ${source.n_rows.toLocaleString(currentLocale())} × ${source.n_columns.toLocaleString(currentLocale())}`}
-            </Badge>
+            <Text size="sm" c="dimmed" visibleFrom="md" truncate className={classes.sourceName}>
+              <IconTable size={14} aria-hidden />
+              <span>
+                {props.sourceName}
+                {source &&
+                  ` · ${source.n_rows.toLocaleString(currentLocale())} × ${source.n_columns.toLocaleString(currentLocale())}`}
+              </span>
+            </Text>
           </Tooltip>
           {readOnly ? (
             <Badge
@@ -246,24 +231,40 @@ export function PrepToolbar(props: PrepToolbarProps) {
           )}
         </Group>
 
-        <Group gap="xs" wrap="nowrap" ml="auto">
+        <Group gap="xs" wrap="nowrap" className={classes.toolbarEnd}>
+          {/* Everything that is not training right away: the dataset and the files. */}
           <Menu position="bottom-end" withinPortal>
             <Menu.Target>
               <Button
                 variant="default"
-                leftSection={<IconDownload size={16} />}
+                leftSection={<IconDatabaseExport size={16} />}
                 rightSection={<IconChevronDown size={14} />}
-                loading={downloading}
-                disabled={busy !== null && !downloading}
-                aria-label={i18n.t('ui.data.PrepToolbar.download')}
+                loading={downloading || busy === 'export'}
+                disabled={busy !== null && !downloading && busy !== 'export'}
+                aria-label={i18n.t('ui.data.PrepToolbar.export')}
                 px={{ base: 'xs', sm: 'md' }}
               >
                 <Box component="span" visibleFrom="sm">
-                  {i18n.t('ui.data.PrepToolbar.download')}
+                  {i18n.t('ui.data.PrepToolbar.export')}
                 </Box>
               </Button>
             </Menu.Target>
-            <Menu.Dropdown maw={320}>
+            <Menu.Dropdown maw={340}>
+              {!readOnly && (
+                <>
+                  <Menu.Item
+                    leftSection={<IconDatabaseExport size={16} />}
+                    onClick={props.onExport}
+                  >
+                    <Text size="sm">{i18n.t('ui.data.PrepToolbar.createTrainingDataset')}</Text>
+                    <Text size="xs" c="dimmed">
+                      {i18n.t('ui.data.PrepToolbar.listedUnderYourDataIn')}
+                    </Text>
+                  </Menu.Item>
+                  <Menu.Divider />
+                </>
+              )}
+              <Menu.Label>{i18n.t('ui.data.PrepToolbar.download')}</Menu.Label>
               {DOWNLOADS.map((item) => (
                 <Menu.Item
                   key={item.format}
@@ -276,66 +277,30 @@ export function PrepToolbar(props: PrepToolbarProps) {
                   </Text>
                 </Menu.Item>
               ))}
-              {!readOnly && (
-                <>
-                  <Menu.Divider hiddenFrom="md" />
-                  <Menu.Item
-                    hiddenFrom="md"
-                    leftSection={<IconDatabaseExport size={16} />}
-                    onClick={props.onExport}
-                  >
-                    <Text size="sm">{i18n.t('ui.data.PrepToolbar.createTrainingDataset')}</Text>
-                    <Text size="xs" c="dimmed">
-                      {i18n.t('ui.data.PrepToolbar.listedUnderYourDataIn')}
-                    </Text>
-                  </Menu.Item>
-                </>
-              )}
             </Menu.Dropdown>
           </Menu>
           {!readOnly && (
-            <>
-              <Tooltip label={i18n.t('ui.data.PrepToolbar.saveThePreparedDataAs')}>
-                <Button
-                  variant="default"
-                  leftSection={<IconDatabaseExport size={16} />}
-                  onClick={props.onExport}
-                  loading={busy === 'export'}
-                  disabled={busy !== null && busy !== 'export'}
-                  visibleFrom="md"
-                >
-                  {i18n.t('ui.data.PrepToolbar.createTrainingDataset')}
-                </Button>
-              </Tooltip>
-              <Tooltip label={i18n.t('ui.data.PrepToolbar.createTheTrainingDatasetAnd')}>
-                <Button
-                  leftSection={<IconPlayerPlay size={16} />}
-                  onClick={props.onTrain}
-                  loading={busy === 'train'}
-                  disabled={busy !== null && busy !== 'train'}
-                >
-                  {/* One inline span: the button label is a flex box, which would drop the space. */}
-                  <span>
-                    {i18n.t('ui.data.PrepToolbar.train')}{' '}
-                    <Box component="span" visibleFrom="sm">
-                      {i18n.t('ui.data.PrepToolbar.withThisData')}
-                    </Box>
-                  </span>
-                </Button>
-              </Tooltip>
-            </>
+            <Tooltip label={i18n.t('ui.data.PrepToolbar.createTheTrainingDatasetAnd')}>
+              <Button
+                leftSection={<IconPlayerPlay size={16} />}
+                onClick={props.onTrain}
+                loading={busy === 'train'}
+                disabled={busy !== null && busy !== 'train'}
+              >
+                {/* One inline span: the button label is a flex box, which would drop the space. */}
+                <span>
+                  {i18n.t('ui.data.PrepToolbar.train')}{' '}
+                  <Box component="span" visibleFrom="sm">
+                    {i18n.t('ui.data.PrepToolbar.withThisData')}
+                  </Box>
+                </span>
+              </Button>
+            </Tooltip>
           )}
         </Group>
-      </Group>
+      </div>
       {shared && (
-        <Group
-          gap={6}
-          wrap="nowrap"
-          align="flex-start"
-          px="sm"
-          py={4}
-          style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
-        >
+        <Group gap={6} wrap="nowrap" align="flex-start" className={classes.sharedNote}>
           <IconUsers
             size={14}
             color="var(--mantine-color-dimmed)"

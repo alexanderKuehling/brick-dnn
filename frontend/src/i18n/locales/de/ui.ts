@@ -724,7 +724,7 @@ export const ui: Messages<typeof en> = {
       fixTheProblemListedUnder: 'Beheben Sie zuerst das Problem unter „Bereitschaft“.',
       fixTheProblemsListedUnder: 'Beheben Sie zuerst die {{errors}} Probleme unter „Bereitschaft“.',
       importACsvExcelJson:
-        'Importieren Sie eine CSV-, Excel-, JSON- oder Parquet-Datei (bis {{maxUploadMb}} MB), legen Sie sie hier ab oder importieren Sie sie über einen Link. Trennzeichen, Dezimalkommas, Datumswerte und fehlende Werte werden erkannt. Dann bereinigen und kombinieren Sie die Daten Schritt für Schritt, sehen, was darin steckt, und machen daraus einen Trainingsdatensatz.',
+        'Importieren Sie eine CSV-, Excel-, JSON- oder Parquet-Datei (bis {{maxUploadMb}} MB), legen Sie sie hier ab oder importieren Sie sie über einen Link.',
       importCsvExcelOrJson:
         'Importieren Sie CSV-, Excel- oder JSON-Dateien, bereinigen und kombinieren Sie sie Schritt für Schritt, sehen Sie, was darin steckt, und machen Sie daraus Trainingsdaten. Ihre Dateien werden auf dem Brick-DNN-Server gespeichert, daher brauchen Sie wie zum Speichern und Trainieren ein kostenloses Konto.',
       importData: 'Daten importieren',
@@ -998,7 +998,7 @@ export const ui: Messages<typeof en> = {
     },
     PipelineEditor: {
       addStepsToCleanAnd:
-        'Fügen Sie Schritte hinzu, um die Daten zu bereinigen und zu transformieren, z. B. fehlende Werte auffüllen, Ausreißer begrenzen oder Kategorien kodieren. Auch die Spaltenmenüs der Datentabelle und der Tab „Bereitschaft“ schlagen Schritte vor.',
+        'Auch die Spaltenmenüs der Tabelle und der Tab „Bereitschaft“ schlagen Schritte vor.',
       deleted: '„{{value}}“ gelöscht.',
       laterStepsDoNotRun: '; spätere Schritte laufen nicht.',
       noStepsYet: 'Noch keine Schritte',
@@ -1036,6 +1036,7 @@ export const ui: Messages<typeof en> = {
         'Den Trainingsdatensatz erstellen und das Trainingspanel damit öffnen',
       createTrainingDataset: 'Trainingsdatensatz erstellen',
       download: 'Herunterladen',
+      export: 'Exportieren',
       in: 'in {{projectNames}}',
       listedUnderYourDataIn: 'Steht im Trainingspanel unter „Ihre Daten“',
       mainTable: 'Haupttabelle',
@@ -1047,8 +1048,6 @@ export const ui: Messages<typeof en> = {
       preparedDataCsv: 'Aufbereitete Daten (.csv)',
       pythonScriptPy: 'Python-Skript (.py)',
       recipeJson: 'Rezept (.json)',
-      saveThePreparedDataAs:
-        'Speichern Sie die aufbereiteten Daten als Trainingsdatensatz. Er steht im Trainingspanel unter „Ihre Daten“.',
       saved: 'Gespeichert',
       saving: 'Wird gespeichert …',
       savingFailed: 'Speichern fehlgeschlagen.',
@@ -1126,7 +1125,7 @@ export const ui: Messages<typeof en> = {
       regression: 'Regression',
       rows: 'Zeilen',
       savesThePreparedDataWith:
-        'Speichert die aufbereiteten Daten mit ihrer Aufteilung; sie erscheinen im Trainingspanel unter „Ihre Daten“.',
+        'Erscheint mit seiner Aufteilung im Trainingspanel unter „Ihre Daten“.',
       scales: 'Skalen',
       showFewer: 'Weniger anzeigen',
       showMore: '{{hidden}} weitere anzeigen',
@@ -1140,13 +1139,11 @@ export const ui: Messages<typeof en> = {
       targetLeakage: 'Target Leakage',
       task: 'Aufgabe',
       text1ProblemMustBeFixed: '1 Problem muss zuerst behoben werden.',
-      theDataCanBeUsed:
-        'Die Daten lassen sich für das Training verwenden. Sehen Sie sich die {{notes}} unten an.',
-      theDataCanBeUsed2: 'Die Daten lassen sich für das Training verwenden.',
       theDataCannotBeUsed: 'Die Daten lassen sich noch nicht für das Training verwenden.',
       trainTestOverlap: 'Überschneidung Training/Test',
       trainValidationTest: 'Training / Validierung / Test',
       worthALook: 'Einen Blick wert',
+      lookAtTheNotesBelow: 'Sehen Sie sich die {{notes}} unten an.',
     },
     RelationshipsView: {
       aClearGapBetweenTwo:
@@ -1455,14 +1452,9 @@ export const ui: Messages<typeof en> = {
       noTaskTheTargetColumn: 'Keine Aufgabe: Die Zielspalte fehlt.',
       none: '{{label}}: keine',
       offRowsAreSplitOne: 'Aus: Zeilen werden einzeln aufgeteilt',
-      predictsAClassForEvery: 'Sagt für jede Zeile eine Klasse vorher.',
-      predictsANumberForEvery: 'Sagt für jede Zeile eine Zahl vorher.',
       regression: 'Regression',
       rows: ' · {{prefix}}{{value}} Zeilen',
-      rowsWithTheSameValue:
-        'Zeilen mit demselben Wert (z. B. einer Personen-ID oder der Spalte von „Gruppen fast gleicher Zeilen finden“) kommen alle in denselben Teil, sodass Validierungs- und Testzeilen keinen Zwilling im Training haben. Die Spalte muss vor der Aufteilung existieren: in den Daten, aus einem Kombinationsschritt oder aus einem Schritt, der vor der Aufteilung läuft.',
       sameClassSharesInEvery: 'Gleiche Klassenanteile in jedem Teil',
-      sameSeedSameSplit: 'Gleicher Seed, gleiche Aufteilung',
       seed: 'Seed',
       stratify: 'Stratifizieren',
       stratifyingNeedsAClassificationTarget:
@@ -1477,6 +1469,12 @@ export const ui: Messages<typeof en> = {
       validation: 'Validierung',
       withSeveralRowsTheLargest:
         '{{count}} {{value}} ({{multi}} mit mehreren Zeilen, die größte {{largest}} Zeilen); {{value2}}. Training / Validierung / Test enthalten {{map}} Gruppen.',
+      groupsSummary: 'Gruppen nach {{column}}',
+      moreSplitOptions: 'Seed, Stratifizieren und Gruppen',
+      noTargetYet: 'Noch keine Zielspalte',
+      splitSummary: 'Aufteilung {{train}} / {{val}} / {{test}} %',
+      groupHint:
+        'Zeilen mit demselben Wert (z. B. einer Personen-ID) kommen in denselben Teil, sodass Validierungs- und Testzeilen keinen Zwilling im Training haben.',
     },
     TargetView: {
       aLowValueDoesNot:
@@ -1637,8 +1635,6 @@ export const ui: Messages<typeof en> = {
     },
     ExplainButton: {
       explainTheModel: 'Das Modell erklären',
-      whyItDecidesAsIt:
-        'Warum es so entscheidet: was zählt, wohin es schaut, was im Inneren passiert.',
     },
     ExplainModal: {
       aRandomInputTheRun:
@@ -2335,7 +2331,7 @@ export const ui: Messages<typeof en> = {
       rowsInTheUnitsOf: '{{value}} Zeilen, in den Einheiten der Zielspalte',
       rowsOfTheMatrixAnd: 'Zeilen der Matrix und der Tabelle',
       rowsTrueClassColumnsPredicted:
-        'Zeilen: wahre Klasse · Spalten: vorhergesagte Klasse · die Diagonale ist richtig. Zeigen Sie auf eine Zelle für beide Zahlen.',
+        'Zeilen: wahre Klasse · Spalten: vorhergesagte Klasse · die Diagonale ist richtig.',
       rowsTrueClassColumnsPredicted2:
         '{{title}}: Zeilen wahre Klasse, Spalten vorhergesagte Klasse',
       support: 'Support',
@@ -2607,6 +2603,8 @@ export const ui: Messages<typeof en> = {
       validationRmse: 'Validierungs-RMSE',
       valuesPerEpoch: 'Werte pro Epoche',
       weightsPt: 'Gewichte (.pt)',
+      modelAndFiles: 'Modell und Dateien',
+      trainingCurves: 'Trainingskurven',
     },
     SegmentationResults: {
       cannotLoadThePredictions: 'Die Vorhersagen können nicht geladen werden',

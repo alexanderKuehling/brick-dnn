@@ -46,33 +46,98 @@ function Harness({
 
 const card = (name: RegExp | string) => screen.getByRole('listitem', { name });
 
+/** Target & split is folded to its summary once a target is chosen. */
+async function openTargetSplit() {
+  await userEvent.click(screen.getByRole('button', { name: /Target & split/ }));
+  await screen.findByRole('combobox', { name: 'Target column' });
+}
+
+/** Seed, stratification and groups are folded inside it. */
+async function openSplitOptions() {
+  await userEvent.click(screen.getByRole('button', { name: 'Seed, stratify and groups' }));
+  await screen.findByRole('switch', { name: /Stratify/ });
+}
+
 async function stepAction(index: number, action: string) {
   await userEvent.click(screen.getByRole('button', { name: `Actions for step ${index}` }));
   await userEvent.click(screen.getByRole('menuitem', { name: new RegExp(`^${action}`) }));
 }
 
 describe('PipelineEditor', () => {
+  it('folds Target & split to a summary once a target is chosen', async () => {
+    render(<Harness />);
+    const toggle = screen.getByRole('button', { name: /Target & split/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('target-summary')).toHaveTextContent(
+      'churn · Classification · split 70 / 15 / 15 %'
+    );
+    expect(screen.queryByRole('combobox', { name: 'Target column' })).not.toBeInTheDocument();
+
+    // The heading is a button: Enter and Space open and close the settings.
+    toggle.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('combobox', { name: 'Target column' })).toBeVisible();
+    expect(screen.queryByTestId('target-summary')).not.toBeInTheDocument();
+    // Seed, stratification and groups stay folded inside.
+    const more = screen.getByRole('button', { name: 'Seed, stratify and groups' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    more.focus();
+    await userEvent.keyboard(' ');
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('switch', { name: /Stratify/ })).toBeChecked();
+
+    toggle.focus();
+    await userEvent.keyboard(' ');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('target-summary')).toBeInTheDocument();
+  });
+
+  it('opens Target & split while there is no target', () => {
+    render(<Harness initialSettings={{ ...PREP.settings, target: null }} task={null} />);
+    expect(screen.getByRole('button', { name: /Target & split/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('combobox', { name: 'Target column' })).toBeVisible();
+  });
+
+  it('explains the target on demand', async () => {
+    render(<Harness />);
+    await openTargetSplit();
+    expect(screen.queryByText(/all other columns are features/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Target column”' }));
+    expect(await screen.findByText(/all other columns are features/)).toBeVisible();
+  });
+
   it('offers a join step when the target is in another table', async () => {
     render(<Harness initialSteps={[]} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a join step' }));
+    await openTargetSplit();
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Target column”' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a join step' }));
     expect(steps.map((step) => step.type)).toEqual(['join']);
     // The only other table is chosen, with the column both tables share as the key.
     expect(steps[0].params.source).toBe(OTHER_SOURCE.id);
     expect(steps[0].params.left_on).toEqual(['city']);
   });
 
-  it('says to import the other table first when there is none', () => {
+  it('says to import the other table first when there is none', async () => {
     render(<Harness sources={[SOURCE]} />);
+    await openTargetSplit();
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Target column”' }));
+    await screen.findByText(/Import that table as well/);
     expect(screen.queryByRole('button', { name: 'Add a join step' })).not.toBeInTheDocument();
     expect(screen.getByText(/Import that table as well/)).toBeInTheDocument();
   });
 
-  it('shows the target and split settings', () => {
+  it('shows the target and split settings', async () => {
     render(<Harness />);
+    await openTargetSplit();
     expect(screen.getByRole('combobox', { name: 'Target column' })).toHaveValue('churn');
     expect(screen.getByText('Detected: classification.')).toBeInTheDocument();
     expect(screen.getByText(/Train 70 % · 840 rows/)).toBeInTheDocument();
     expect(screen.getByText(/Validation 15 % · 180 rows/)).toBeInTheDocument();
+    await openSplitOptions();
     expect(screen.getByRole('switch', { name: /Stratify/ })).toBeChecked();
   });
 
@@ -89,6 +154,8 @@ describe('PipelineEditor', () => {
         splitInfo={info}
       />
     );
+    // Rows kept together by a group: the options are open with the card.
+    await openTargetSplit();
     const field = screen.getByRole('combobox', { name: 'Keep rows of a group together' });
     expect(field).toHaveValue('city');
     expect(screen.getByTestId('group-split-summary')).toHaveTextContent(
@@ -115,7 +182,7 @@ describe('PipelineEditor', () => {
     expect(screen.getByText('There is no column gone.')).toBeInTheDocument();
   });
 
-  it('shows every step with its report', () => {
+  it('shows every step with its report', async () => {
     render(<Harness />);
     expect(screen.getAllByRole('listitem', { name: /^Step/ })).toHaveLength(3);
 
@@ -124,11 +191,15 @@ describe('PipelineEditor', () => {
     expect(
       within(impute).getByText('Filled 180 missing values in 2 columns with the median.')
     ).toBeInTheDocument();
-    expect(within(impute).getByText(/median 38,400/)).toBeInTheDocument();
-    expect(within(impute).getByText(/Learns from training rows/)).toBeInTheDocument();
     expect(
       within(impute).getByText('All columns with missing values · Median')
     ).toBeInTheDocument();
+    // The values per column and the hints are details of an open step.
+    expect(within(impute).queryByText(/median 38,400/)).not.toBeInTheDocument();
+    expect(within(impute).queryByText(/Learns from training rows/)).not.toBeInTheDocument();
+    await userEvent.click(within(impute).getByRole('button', { name: /Fill missing values/ }));
+    expect(within(impute).getByText(/median 38,400/)).toBeInTheDocument();
+    expect(within(impute).getByText(/Learns from training rows/)).toBeInTheDocument();
 
     const clip = card('Step 2: Clip values');
     expect(within(clip).getByText('Error')).toBeInTheDocument();
@@ -452,14 +523,17 @@ describe('PipelineEditor', () => {
 
   it('changes the target and the task', async () => {
     render(<Harness />);
+    await openTargetSplit();
     await userEvent.click(screen.getByRole('combobox', { name: 'Target column' }));
     await userEvent.click(screen.getByRole('option', { name: /income/ }));
     expect(settings.target).toBe('income');
 
     await userEvent.click(screen.getByRole('radio', { name: 'Regression' }));
     expect(settings.task).toBe('regression');
+    await openSplitOptions();
     expect(screen.getByRole('switch', { name: /Stratify/ })).toBeDisabled();
-    expect(screen.getByText('Predicts a number for every row.')).toBeInTheDocument();
+    // A chosen task needs no words; only a detected one is named.
+    expect(screen.queryByText(/^Detected:/)).not.toBeInTheDocument();
   });
 
   it('flags a target that the steps removed', () => {
@@ -471,6 +545,7 @@ describe('PipelineEditor', () => {
 
   it('validates the split shares and updates the row counts', async () => {
     render(<Harness />);
+    await openTargetSplit();
     const val = screen.getByLabelText('Validation');
     expect(screen.queryByTestId('held-out-hint')).not.toBeInTheDocument();
     // 0 % is allowed: no validation rows, with a note on what that means for training.
@@ -502,6 +577,7 @@ describe('PipelineEditor', () => {
     expect(settings.split.val).toBe(0.2);
     expect(screen.getByText(/Validation 20 % · ≈ 240 rows/)).toBeInTheDocument();
 
+    await openSplitOptions();
     const seed = screen.getByLabelText('Seed');
     await userEvent.clear(seed);
     await userEvent.type(seed, '7');
