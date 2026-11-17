@@ -399,8 +399,17 @@ REST_FRAMEWORK = {
         # The second step of a login with two-factor authentication (per IP address; wrong
         # codes are also limited per account, see two_factor.py).
         "two_factor": os.environ.get("BRICKDNN_TWO_FACTOR_RATE", "30/hour"),
+        # Scripts that log runs trained elsewhere (tracking.py): per account, a request per
+        # batch of points (the client sends at most one every two seconds).
+        "tracking": os.environ.get("BRICKDNN_TRACKING_RATE", "120/minute"),
     },
 }
+
+# Runs logged from the user's own machine (brick_dnn_core/tracking.py): runs of this kind an
+# account keeps, runs reporting at the same time, and points per run.
+TRACKING_MAX_RUNS = int(os.environ.get("BRICKDNN_TRACKING_MAX_RUNS", "500"))
+TRACKING_MAX_ACTIVE = int(os.environ.get("BRICKDNN_TRACKING_MAX_ACTIVE", "10"))
+TRACKING_MAX_POINTS = int(os.environ.get("BRICKDNN_TRACKING_MAX_POINTS", "20000"))
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),

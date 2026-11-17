@@ -511,6 +511,20 @@ export const ui = {
     Logo: {
       brickDnn: 'Brick DNN',
     },
+    OverlayChart: {
+      against_one: '{{yLabel}} against {{xLabel}}, {{count}} run.',
+      against_other: '{{yLabel}} against {{xLabel}}, {{count}} runs.',
+      fromTo: '{{label}}: {{first}} at {{xLabel}} {{firstX}} to {{last}} at {{xLabel}} {{lastX}}.',
+      noValues: '{{label}}: no values.',
+      noValuesYet: 'No values yet',
+      useTheArrowKeys: '{{title}}: use the arrow keys to read the values per {{xLabel}}',
+    },
+    ParallelCoordinates: {
+      summary_one: '{{title}}: {{count}} run on the axes {{axes}}.',
+      summary_other: '{{title}}: {{count}} runs on the axes {{axes}}.',
+      needTwo: 'Choose at least two axes.',
+      useTheArrowKeys: '{{title}}: use the arrow keys to go through the runs',
+    },
     MissingMatrix: {
       column: 'Column',
       columnsRows: '{{title}}. {{m}} columns, {{rows}} rows. {{value}}',

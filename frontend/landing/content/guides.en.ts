@@ -4,16 +4,18 @@
  */
 import type { Guide, GuideIndex } from './types.ts';
 
-const DOCS = 'https://github.com/alexanderKuehling/brick-dnn/blob/main/docs';
+const REPOSITORY = 'https://github.com/alexanderKuehling/brick-dnn';
+const DOCS = `${REPOSITORY}/blob/main/docs`;
 const DATE = '2026-11-16';
+const GDPR_DATE = '2026-11-17';
 
 const index: GuideIndex = {
-  title: 'Guides: neural networks, tabular data and segmentation – Brick DNN',
+  title: 'Guides: deep learning, tabular data, segmentation and GDPR – Brick DNN',
   description:
-    'Practical guides: build a neural network without code and export PyTorch, gradient boosting vs. MLP, U-Net segmentation and imbalanced classes.',
+    'Practical deep-learning guides: a neural network without code exported to PyTorch, gradient boosting vs. MLP, U-Net segmentation, rare classes and the GDPR.',
   h1: 'Guides',
   intro:
-    'Step-by-step guides to building, training and judging models with Brick DNN, and to the decisions along the way: which model for a table, how to segment images, what to do when one class is rare.',
+    'Step-by-step guides to building, training and judging deep-learning models with Brick DNN, and to the decisions along the way: which model for a table, how to segment images, what to do when one class is rare, and how to train with data that falls under the GDPR.',
 };
 
 const guides: Guide[] = [
@@ -22,7 +24,7 @@ const guides: Guide[] = [
     slug: 'build-a-neural-network-without-code',
     title: 'Build a neural network without code and export it to PyTorch',
     description:
-      'Build a neural network in the browser by connecting layers, check every tensor shape, and download clean PyTorch code that runs without Brick DNN.',
+      'No-code deep learning: build a neural network in the browser from layers, check every tensor shape and download clean PyTorch code that runs without Brick DNN.',
     h1: 'Build a neural network without code and export it to PyTorch',
     summary:
       'Connect layers on a canvas, let Brick DNN check every shape, and download a PyTorch script that runs on its own.',
@@ -213,7 +215,7 @@ const guides: Guide[] = [
     slug: 'image-segmentation-u-net',
     title: 'Image segmentation with a U-Net: from masks to a trained model',
     description:
-      'Train a U-Net for image segmentation: prepare images and masks, check the network, choose batch size and loss, and read mean IoU, Dice and the predictions.',
+      'Deep learning for image segmentation: train a U-Net, prepare images and masks, check the network, choose batch size and loss, and read mean IoU and Dice.',
     h1: 'Image segmentation with a U-Net: from masks to a trained model',
     summary:
       'From a ZIP file of images and masks to a trained U-Net, with mean IoU, Dice and the predicted masks.',
@@ -346,6 +348,63 @@ const guides: Guide[] = [
       },
     ],
     examples: ['gradient_boosting_classifier', 'svm_classifier', 'voting_ensemble_classifier'],
+  },
+  {
+    id: 'gdpr',
+    slug: 'gdpr-compliant-deep-learning',
+    title: 'GDPR-compliant deep learning: train neural networks with data in Europe',
+    description:
+      'Training deep-learning models under the GDPR: personal or anonymised data, where Brick DNN stores and trains in Switzerland, export, deletion and self-hosting.',
+    h1: 'GDPR-compliant deep learning: training neural networks with data in Europe',
+    summary:
+      'Which data needs care under the GDPR, where brickdnn.com stores and trains in Switzerland, and what to do with data that has to stay personal.',
+    lead: 'The GDPR does not forbid training neural networks. It asks what the data is, where it goes and who processes it. This guide answers these questions for Brick DNN: which data needs care, where brickdnn.com stores data and trains in Switzerland, and how to work with data that must not leave your institution.',
+    published: GDPR_DATE,
+    modified: GDPR_DATE,
+    type: 'Article',
+    sections: [
+      {
+        id: 'question',
+        title: 'The first question: is it personal data?',
+        html: '<p>The GDPR applies to personal data: information about a person who is identified or can be identified, directly or by combining it with other information. Much of deep learning involves none. Measurements from machines and sensors, images of materials, plants or products, simulation results, field trials and public benchmarks such as MNIST or CIFAR-10 say nothing about anyone. For such data the GDPR sets no rules on training; what remains is the question which provider you trust with it.</p><p>It is personal data as soon as rows or images can be linked to people: patient records, survey answers with a birth date and a postcode, photos with faces, texts with names, voice recordings, log files with user IDs. Then you need a legal basis and a defined purpose (Art. 5 and 6 GDPR), you keep to what that purpose needs, and every provider that processes the data on your behalf needs a contract under Art. 28. Health, genetic and biometric data are special categories with stricter rules (Art. 9).</p>',
+      },
+      {
+        id: 'anonymise',
+        title: 'Anonymised, pseudonymised or personal',
+        html: `<div class="table" role="region" aria-labelledby="states-caption" tabindex="0"><table><caption id="states-caption">Three states of a dataset under the GDPR</caption><thead><tr><th scope="col">State</th><th scope="col">What it means</th><th scope="col">GDPR</th></tr></thead><tbody>
+<tr><th scope="row">Personal</th><td>Names, e-mail addresses, IDs, or details that point to a person</td><td>Applies in full</td></tr>
+<tr><th scope="row">Pseudonymised</th><td>Identifiers replaced by codes; the key still exists, possibly somewhere else</td><td>Still personal data, applies in full (Recital 26)</td></tr>
+<tr><th scope="row">Anonymised</th><td>Nobody, you included, can link a row to a person with reasonable means</td><td>Does not apply (Recital 26)</td></tr>
+</tbody></table></div><p>Anonymising a table takes more than deleting the name column:</p><ul class="checks"><li>Remove direct identifiers: names, addresses, e-mail addresses, phone numbers, ID and record numbers.</li><li>Coarsen what identifies people in combination: the year instead of the birth date, the region instead of the postcode, age groups instead of exact ages.</li><li>Drop free-text columns; they often contain names.</li><li>Look for rare combinations: one row with an unusual value can be enough to recognise someone.</li><li>In images, look for faces, name tags, text burned into the image and metadata such as GPS positions in the EXIF data.</li></ul><p>Do this on your own computer before you upload anything. If you are not sure the result is anonymous, treat it as personal data and ask your data protection officer.</p>`,
+      },
+      {
+        id: 'brickdnn',
+        title: 'Where brickdnn.com keeps what',
+        html: `<p>When you train on brickdnn.com, your data is stored and processed here. The <a href="/privacy">privacy policy</a> (in German) has the full list with purposes and retention periods.</p><div class="table" role="region" aria-labelledby="where-caption" tabindex="0"><table><caption id="where-caption">Where brickdnn.com stores and processes data</caption><thead><tr><th scope="col">Data</th><th scope="col">Where</th><th scope="col">Provider</th></tr></thead><tbody>
+<tr><th scope="row">Uploaded files, prepared datasets, trained weights, training results</th><td>Server in Geneva, Switzerland; the trainings run there too</td><td>Infomaniak</td></tr>
+<tr><th scope="row">Accounts, networks, comments, the details of data and trainings (not the files)</th><td>Database in London, United Kingdom</td><td>Supabase</td></tr>
+<tr><th scope="row">Technical error reports, without user name, e-mail address, account ID or uploaded files</th><td>EU region in Frankfurt, Germany</td><td>Sentry</td></tr>
+<tr><th scope="row">E-mails about your account</th><td>EU</td><td>Brevo</td></tr>
+<tr><th scope="row">Payment, only if you buy a plan</th><td>United Kingdom</td><td>Paddle</td></tr>
+</tbody></table></div><p>The EU Commission recognises the data protection of Switzerland and of the United Kingdom as adequate (Art. 45 GDPR), so data may go there without further safeguards. Hosting, database, e-mail and error reports run under data processing agreements. The app sets no cookies and has no analytics or tracking, and your data is not sold.</p><p>One limit matters for this guide: the terms of use ask you not to upload personal data of third parties or confidential data to brickdnn.com, and the app reminds you when you upload. The hosted service is meant for non-personal and anonymised data. For everything else, read on.</p>`,
+      },
+      {
+        id: 'personal',
+        title: 'When the data has to stay personal',
+        html: `<p>Brick DNN is still useful when the data itself must not leave your institution. Three ways, from the least effort to the most:</p><ol class="numbered"><li><strong>Design here, train at home.</strong> Build and check the network on brickdnn.com without uploading anything; that needs no account. Export the PyTorch script and train it on your institution’s computers with your own data loader; the script imports nothing from Brick DNN. For a network with one flat input and one flat output it already contains a training loop for CSV files (<code>python model.py --csv data.csv</code>).</li><li><strong>Work on a stand-in.</strong> Upload an anonymised extract or synthetic data with the same columns, prepare it in the Data tab and train on the server until model and settings are right. The preparation exports as a pandas script, which you then run on the real data where it is.</li><li><strong>Run your own Brick DNN.</strong> Brick DNN is open source under the Apache 2.0 licence. <code>docker compose up -d</code> starts it on a server of your institution, with a local SQLite database unless you configure another one, and error reports are off unless you set them up; for neural networks, build the image with PyTorch (<code>BRICKDNN_INSTALL_TORCH=true</code>). Data, trainings and accounts then stay wherever that server is. The <a href="${REPOSITORY}#quick-start">quick start</a> describes the setup.</li></ol>`,
+      },
+      {
+        id: 'control',
+        title: 'Export and delete',
+        html: '<p>Whatever you upload, you can take back out and remove yourself:</p><ul class="checks"><li><strong>Download my data</strong> under <em>Account</em> gives a ZIP file with your networks and their history, data sources and preparations, datasets, training runs with their settings and metrics, and the uploaded files themselves (up to 200 MB in total; larger ones are listed). Trained weights download from each finished run, with the matching script.</li><li>Uploads, datasets and training runs can be deleted one by one at any time. Deleting the account removes everything it owns, files included.</li><li>Uploads, datasets and finished trainings nobody has used for 180 days are deleted automatically, and accounts after two years without use, with e-mail reminders beforehand.</li><li>Deleted data can remain in backups for a while, at most 5 weeks, until they are rotated out.</li></ul>',
+      },
+      {
+        id: 'checklist',
+        title: 'A checklist',
+        html: '<ol class="numbered"><li>Decide whether the data is personal. If it is not, train on brickdnn.com; the files stay on the server in Switzerland.</li><li>If it is, try to anonymise it on your own computer before uploading, and check rare combinations and image metadata.</li><li>If it has to stay personal, design the model here and train the exported code, or your own Brick DNN instance, where the data is.</li><li>Record purpose and legal basis in your institution’s record of processing activities, and involve the data protection officer early.</li><li>Download what you want to keep, and delete datasets and runs you no longer need.</li></ol><p>This guide describes how Brick DNN works and what the GDPR asks in general. It is not legal advice for your project.</p>',
+      },
+    ],
+    examples: ['tabular_regression', 'cnn_mnist', 'gradient_boosting_classifier'],
   },
 ];
 

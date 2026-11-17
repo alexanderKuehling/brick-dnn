@@ -17,6 +17,8 @@ export interface LegendItem {
   color: string;
   /** Mirrors the mark: rect for bars and areas, line for lines, dot for points. */
   shape?: 'rect' | 'line' | 'dot';
+  /** A dashed line (lines only). */
+  dashed?: boolean;
 }
 
 /** The data of a chart as a table (the text twin of every chart). */
@@ -30,14 +32,25 @@ export interface ChartTable {
 export function LegendKey({
   color,
   shape = 'rect',
+  dashed = false,
 }: {
   color: string;
   shape?: LegendItem['shape'];
+  dashed?: boolean;
 }) {
   return (
     <svg width={14} height={10} aria-hidden="true" style={{ flexShrink: 0 }}>
       {shape === 'line' && (
-        <line x1={1} x2={13} y1={5} y2={5} stroke={color} strokeWidth={2} strokeLinecap="round" />
+        <line
+          x1={1}
+          x2={13}
+          y1={5}
+          y2={5}
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap={dashed ? 'butt' : 'round'}
+          strokeDasharray={dashed ? '4 2' : undefined}
+        />
       )}
       {shape === 'dot' && <circle cx={7} cy={5} r={4} style={{ fill: color }} />}
       {shape === 'rect' && (
@@ -53,7 +66,7 @@ export function Legend({ items }: { items: LegendItem[] }) {
     <ul className={classes.legend} aria-label={i18n.t('ui.components.ChartFrame.legend')}>
       {items.map((item) => (
         <li key={item.key} className={classes.legendItem}>
-          <LegendKey color={item.color} shape={item.shape} />
+          <LegendKey color={item.color} shape={item.shape} dashed={item.dashed} />
           <Text size="xs" c="dimmed" truncate maw={200}>
             {item.label}
           </Text>

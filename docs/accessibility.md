@@ -102,6 +102,13 @@ combinations), almost all of them contrast. Fixed:
   `prefers-reduced-motion: reduce`, and the canvas zooms without animation.
 - **Line charts** (training curves): the x axis name and "no value" are translated.
 - **Target size** of the footer's legal links (24 px).
+- **The runs page** ([experiments.md](experiments.md)): sortable column headers are buttons
+  with `aria-sort` on the header cell; the overlay of curves, the scatter plot and the
+  parallel coordinates each have a text summary, a table view and one Tab stop whose arrow
+  keys read the values (of every run at an epoch, or of one run); runs keep their colour in
+  every chart and are told apart by dashes after the eighth colour, not by colour alone in
+  the legend and the table. Checked with axe in English and German (`RunsPage.test.tsx`,
+  `SharedComparisonPage.test.tsx`, `overlay.test.tsx`).
 
 After the fixes the browser check reports no serious or critical violation (76 checks). The
 pages reflow at 320 px and at 200 % zoom without horizontal scrolling (the editor's canvas is

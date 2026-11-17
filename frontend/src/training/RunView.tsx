@@ -51,6 +51,7 @@ import { isBoosting, kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
+import { ElsewhereBadge } from '@/experiments/ElsewhereBadge';
 import { ExplainHeadline } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
 import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
@@ -375,8 +376,16 @@ function NetworkRunView({
           <Title order={4} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {run.name}
           </Title>
-          <StatusBadge status={run.status} />
+          <Group gap={6} wrap="nowrap">
+            {run.external && <ElsewhereBadge external={run.external} />}
+            <StatusBadge status={run.status} />
+          </Group>
         </Group>
+        {run.external && (
+          <Text size="xs" c="dimmed" mt={4}>
+            {i18n.t('experiments.elsewhere.runNote', { count: run.external.points })}
+          </Text>
+        )}
         <Text size="xs" c="dimmed" mt={4}>
           {[
             by && i18n.t('training.run.by', { user: by }),
@@ -744,15 +753,17 @@ function NetworkRunView({
             {i18n.t('ui.training.RunView.preprocessingJson')}
           </Button>
         )}
-        <Button
-          variant="default"
-          leftSection={<IconFileCode size={16} />}
-          loading={downloading === 'script'}
-          onClick={() => void downloadScript()}
-        >
-          {i18n.t('ui.training.RunView.scriptPy')}
-        </Button>
-        {!sameNetwork && (
+        {run.graph.nodes.length > 0 && (
+          <Button
+            variant="default"
+            leftSection={<IconFileCode size={16} />}
+            loading={downloading === 'script'}
+            onClick={() => void downloadScript()}
+          >
+            {i18n.t('ui.training.RunView.scriptPy')}
+          </Button>
+        )}
+        {!sameNetwork && run.graph.nodes.length > 0 && (
           <Button
             variant="default"
             leftSection={<IconReplace size={16} />}

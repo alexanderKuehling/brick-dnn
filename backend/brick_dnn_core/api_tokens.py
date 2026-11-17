@@ -37,6 +37,10 @@ READ_ONLY_POSTS = {
     "training-run-predict",
     *MCP_URL_NAMES,
 }
+# What a token with the scope "runs:log" may use: logging runs trained elsewhere.
+LOG_SCOPE = "runs:log"
+TRACKING_URL_NAMES = {"tracking-runs", "tracking-run", "tracking-run-log", "tracking-run-finish"}
+SCOPES = ("", LOG_SCOPE)
 
 
 def hash_key(key: str) -> str:
@@ -44,7 +48,11 @@ def hash_key(key: str) -> str:
 
 
 def create_token(
-    user, name: str, read_only: bool = False, expires_in_days: int | None = None
+    user,
+    name: str,
+    read_only: bool = False,
+    expires_in_days: int | None = None,
+    scope: str = "",
 ) -> tuple[ApiToken, str]:
     """Create a token and return it with its secret, which is not stored anywhere."""
     key = PREFIX + secrets.token_urlsafe(32)
@@ -54,8 +62,9 @@ def create_token(
         name=name,
         prefix=key[: len(PREFIX) + VISIBLE_CHARS],
         key_hash=hash_key(key),
-        read_only=read_only,
+        read_only=read_only and scope != LOG_SCOPE,
         expires_at=expires_at,
+        scope=scope,
     )
     return token, key
 
@@ -90,6 +99,10 @@ class ApiTokenAuthentication(authentication.BaseAuthentication):
         # Apps connected with OAuth were allowed to use the MCP server, nothing else.
         if token.connection_id is not None and url_name not in MCP_URL_NAMES:
             raise exceptions.AuthenticationFailed("This token is only valid for the MCP server.")
+        if token.scope == LOG_SCOPE and url_name not in TRACKING_URL_NAMES:
+            raise exceptions.PermissionDenied(
+                "This API token may only log training runs (POST /api/tracking/runs/)."
+            )
         writes = request.method not in permissions.SAFE_METHODS
         if token.read_only and writes and url_name not in READ_ONLY_POSTS:
             raise exceptions.PermissionDenied("This API token is read-only.")

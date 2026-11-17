@@ -1053,6 +1053,7 @@ REST_ROUTES = {
     ("project-link", "POST"): ("publishing", "Changing the share link of a network"),
     ("project-members", "POST"): ("publishing", "Inviting people to a network"),
     ("project-data", "POST"): ("publishing", "Sharing data in a network"),
+    ("training-comparisons", "POST"): ("publishing", "Sharing training runs with a link"),
     ("project-detail", "DELETE"): ("deleting", "Deleting a network"),
     ("training-run-detail", "DELETE"): ("deleting", "Deleting a training run"),
     ("training-dataset-detail", "DELETE"): ("deleting", "Deleting a dataset"),
