@@ -950,6 +950,10 @@
   without one keep working.
 
 ### Fixed
+- **Hybrid networks without validation data.** A hybrid training (neural layers before a
+  classical model or ensemble) with a validation share of 0 failed after phase 1 with
+  "cannot reshape tensor of 0 elements": an empty set of rows still gave one empty batch.
+  Empty sets now give no batches.
 - **Dataset list loading forever.** Opening the training panel from the Data tab ("Train with
   this data") could leave the list of datasets on a spinner: the request of the panel was
   dropped when training became available in the same moment, and no new one was made. The
