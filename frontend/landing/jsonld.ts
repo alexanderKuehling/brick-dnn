@@ -6,6 +6,7 @@ import {
   AUTHOR,
   CONTACT_EMAIL,
   CURRENCY,
+  EDITOR_PATH,
   PLANS,
   REPOSITORY_URL,
   SITE_URL,
@@ -14,6 +15,11 @@ import {
 export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 export const WEBSITE_ID = `${SITE_URL}/#website`;
 export const SOFTWARE_ID = `${SITE_URL}/#software`;
+
+/** Where brickdnn.com is aimed at: Europe (the server is in Switzerland, see site.ts). */
+export const AREA_SERVED = { '@type': 'Continent', name: 'Europe' };
+/** The languages of the app and of the site. */
+export const LANGUAGES = ['en', 'de'];
 
 export function organization(assets: Assets): object {
   return {
@@ -29,6 +35,29 @@ export function organization(assets: Assets): object {
     },
     email: CONTACT_EMAIL,
     sameAs: [REPOSITORY_URL],
+    areaServed: AREA_SERVED,
+    knowsAbout: ['Deep learning', 'Neural networks', 'PyTorch', 'Machine learning'],
+  };
+}
+
+/**
+ * The application (the editor at /app), as the pages that describe it share it: the landing
+ * pages add their description, screenshots and features.
+ */
+export function softwareApplication(extra: object = {}): object {
+  return {
+    '@type': 'SoftwareApplication',
+    '@id': SOFTWARE_ID,
+    name: 'Brick DNN',
+    url: absolute(EDITOR_PATH),
+    applicationCategory: 'DeveloperApplication',
+    applicationSubCategory: 'Deep learning',
+    operatingSystem: 'Web browser',
+    inLanguage: LANGUAGES,
+    areaServed: AREA_SERVED,
+    isAccessibleForFree: true,
+    ...extra,
+    offers: offers(),
   };
 }
 

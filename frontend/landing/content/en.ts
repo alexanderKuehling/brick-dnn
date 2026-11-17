@@ -24,9 +24,9 @@ const mail = `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`;
 export const en: LandingContent = {
   lang: 'en',
   locale: 'en_US',
-  title: 'Brick DNN – visual editor for neural networks with PyTorch export',
+  title: 'Brick DNN – deep learning hosted in Europe, with PyTorch code export',
   description:
-    'Build neural networks from layers in the browser, check every tensor shape, train on servers in Switzerland and export readable PyTorch code. Free plan available.',
+    'Build deep-learning models from layers in the browser, train them GDPR-compliant on a server in Switzerland and export readable PyTorch code. Free plan available.',
   languageName: 'English',
   skipLink: 'Skip to content',
   nav: {
@@ -38,15 +38,15 @@ export const en: LandingContent = {
     editor: 'Open the editor',
   },
   hero: {
-    title: 'Build neural networks from layers. Export the PyTorch code.',
-    lead: 'Brick DNN is a browser-based editor for neural networks and classical machine-learning models. You connect layers on a canvas, see the shape of every tensor while you build, train on the server and take away a readable PyTorch or scikit-learn script.',
+    title: 'Deep learning in Europe: build networks from layers, export the PyTorch code.',
+    lead: 'Brick DNN is a browser-based editor for deep learning and classical machine learning. You connect layers on a canvas, see the shape of every tensor while you build, train on a server in Switzerland and take away a readable PyTorch or scikit-learn script. It is made for universities, researchers and companies that want their training data to stay in Europe.',
     primary: 'Open the editor',
     secondary: 'Pricing',
     facts: [
       'Free plan',
       'No account needed to build and export',
       'Open source, Apache 2.0',
-      'Servers in Switzerland',
+      'Hosted in Switzerland, GDPR-compliant',
     ],
     image: {
       id: 'editor',
@@ -60,11 +60,11 @@ export const en: LandingContent = {
     items: [
       {
         term: 'What it is',
-        html: 'A web application for designing, checking, training and exporting neural networks and classical machine-learning models. A model is a graph of layers (“bricks”); Brick DNN infers every tensor shape and generates a self-contained PyTorch script, or a scikit-learn script for classical models.',
+        html: 'A web application for designing, checking, training and exporting deep-learning models and classical machine-learning models, without writing code first. A model is a graph of layers (“bricks”); Brick DNN infers every tensor shape and works as a PyTorch code generator: it writes a self-contained PyTorch script, or a scikit-learn script for classical models.',
       },
       {
         term: 'Who it is for',
-        html: 'Students and teachers of machine learning and deep learning, researchers who work with tabular or image data, and practitioners who need a correct starting point quickly.',
+        html: 'Universities and their students and teachers of machine learning and deep learning, researchers who work with tabular or image data, and companies in Europe that need a correct starting point quickly and want to know where their data is.',
       },
       {
         term: 'What it costs',
@@ -72,7 +72,7 @@ export const en: LandingContent = {
       },
       {
         term: 'Where the data lives',
-        html: 'The application, uploaded files and training results are on a server in Switzerland. Accounts and project metadata are in a database in London (United Kingdom). No cookies, no tracking.',
+        html: 'In Europe. The application, uploaded files and training results are on a server in Switzerland, and trainings run there. Accounts and project metadata are in a database in London (United Kingdom). No cookies, no tracking. <a href="#privacy">Data in Europe</a> has the details.',
       },
       {
         term: 'Source code',
@@ -81,7 +81,7 @@ export const en: LandingContent = {
     ],
   },
   useCases: {
-    title: 'Use cases',
+    title: 'Deep learning for teaching, research and practice',
     intro:
       'Brick DNN is used for teaching, for research with tabular and image data, and for getting from an architecture sketch to working code.',
     items: [
@@ -158,7 +158,7 @@ export const en: LandingContent = {
   },
   features: {
     title: 'Features',
-    intro: 'One tool from the first sketch to a trained, explained model.',
+    intro: 'One tool from the first sketch to a trained and explained deep-learning model.',
     items: [
       {
         title: 'Shape inference and checks',
@@ -231,16 +231,25 @@ export const en: LandingContent = {
     ],
   },
   privacy: {
-    title: 'Privacy and data location',
-    intro: 'Brick DNN is operated from Germany and follows the GDPR. What is stored where:',
+    title: 'Data in Europe',
+    intro:
+      'Brick DNN is operated from Germany and follows the GDPR. Your training data stays in Europe. What is stored where, and how you take it with you:',
     items: [
       {
         title: 'Server in Switzerland',
-        html: 'The application, uploaded files, trained weights and training results are on a server of Infomaniak in Geneva, Switzerland. Trainings run there; your data does not leave the server for them.',
+        html: 'The application, uploaded files, prepared datasets, trained weights and training results are on a server of Infomaniak in Geneva, Switzerland. Trainings run there; your data does not leave the server for them. The EU recognises Switzerland’s level of data protection as adequate (Art. 45 GDPR).',
       },
       {
         title: 'Database in London',
-        html: 'Accounts, networks, comments and the details of data and trainings (not the files) are in a PostgreSQL database of Supabase in London, United Kingdom.',
+        html: 'Accounts, networks, comments and the details of data and trainings (not the files) are in a PostgreSQL database of Supabase in London, United Kingdom, which also has an adequacy decision of the EU.',
+      },
+      {
+        title: 'Export and deletion',
+        html: '<em>Download my data</em> under <em>Account</em> gives you a ZIP file with your networks, data preparations, training results and uploaded files; trained weights download from each run. You can delete single uploads and trainings, or the whole account with everything in it. Uploads and trainings nobody has used for 180 days are deleted automatically.',
+      },
+      {
+        title: 'Code that runs anywhere',
+        html: 'The exported PyTorch, scikit-learn and pandas scripts import nothing from Brick DNN. Data that must not leave your institution, such as personal data, stays there: build the model here, train the code on your own computers, or run Brick DNN on your own server. The guide <a href="/guides/gdpr-compliant-deep-learning/">GDPR-compliant deep learning</a> shows how.',
       },
       {
         title: 'No cookies, no tracking',
@@ -254,12 +263,12 @@ export const en: LandingContent = {
     more: 'The privacy policy (in German) lists every provider, purpose and retention period.',
   },
   teaching: {
-    title: 'For teaching and research',
+    title: 'For universities and research',
     items: [
       'A free plan with training on the server; no account is needed to build networks and export code.',
       'Exported PyTorch and scikit-learn code runs without Brick DNN, so course material and published results stay usable.',
-      'Data stays on servers in Switzerland and in the United Kingdom, without tracking.',
-      'Open source: an institution can run its own instance.',
+      'Data stays in Europe, on servers in Switzerland and in the United Kingdom, without tracking.',
+      'Open source: a university or institute can run its own instance.',
     ],
     discount: `Discounts for teaching and research are available on request: ${mail}.`,
   },
@@ -295,7 +304,7 @@ export const en: LandingContent = {
     items: [
       {
         question: 'What is Brick DNN?',
-        html: 'Brick DNN is a web application for building neural networks and classical machine-learning models from layers (“bricks”). It infers the shape of every tensor, points out mistakes before anything runs, trains models on the server and exports them as readable PyTorch or scikit-learn code.',
+        html: 'Brick DNN is a web application for deep learning: you build neural networks and classical machine-learning models from layers (“bricks”), without code. It infers the shape of every tensor, points out mistakes before anything runs, trains models on the server and exports them as readable PyTorch or scikit-learn code.',
       },
       {
         question: 'Do I need an account?',
@@ -307,7 +316,11 @@ export const en: LandingContent = {
       },
       {
         question: 'Where is my data stored and processed?',
-        html: 'Uploaded files, trained weights and training results are stored and processed on a server of Infomaniak in Switzerland. Accounts and project metadata are in a database of Supabase in London. There are no cookies and no tracking; the privacy policy lists every provider.',
+        html: 'In Europe. Uploaded files, trained weights and training results are stored and processed on a server of Infomaniak in Switzerland. Accounts and project metadata are in a database of Supabase in London. There are no cookies and no tracking; the privacy policy lists every provider.',
+      },
+      {
+        question: 'Can I train deep-learning models GDPR-compliant with Brick DNN?',
+        html: 'Brick DNN follows the GDPR for your account and the data you upload, and trains on its server in Switzerland. Personal data of others and confidential data should not be uploaded to brickdnn.com, though: anonymise it first, or build the model here and train the exported code, or your own Brick DNN instance, on your institution’s computers. The <a href="/guides/gdpr-compliant-deep-learning/">guide on GDPR-compliant deep learning</a> goes through the options.',
       },
       {
         question: 'What does it cost?',
@@ -328,7 +341,7 @@ export const en: LandingContent = {
     ],
   },
   footer: {
-    tagline: 'Neural networks from bricks, with readable PyTorch code.',
+    tagline: 'Deep learning from bricks, hosted in Switzerland, with readable PyTorch code.',
     legalLabel: 'Legal',
     legal: {
       imprint: 'Imprint',
@@ -343,10 +356,11 @@ export const en: LandingContent = {
     language: 'Language',
   },
   appDescription:
-    'Browser-based editor for neural networks and classical machine-learning models with live shape inference, training on the server and export of readable PyTorch and scikit-learn code.',
+    'Browser-based editor for deep learning and classical machine-learning models with live shape inference, training on a server in Switzerland under the GDPR and export of readable PyTorch and scikit-learn code.',
   featureList: [
-    'Drag-and-drop editor for neural networks with live shape inference',
-    'Export of runnable PyTorch and scikit-learn code',
+    'Drag-and-drop editor for deep-learning models with live shape inference',
+    'PyTorch code generator: export of runnable PyTorch and scikit-learn code',
+    'Hosting and training on a server in Switzerland, GDPR-compliant',
     'Gradient boosting, support vector machines, Gaussian processes, ensembles and hybrid networks',
     'Data preparation for CSV, Excel, JSON and Parquet files',
     'Training on the server with hyperparameter search',

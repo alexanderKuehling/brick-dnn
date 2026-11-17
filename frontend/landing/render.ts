@@ -6,7 +6,14 @@ import { de } from './content/de.ts';
 import { en } from './content/en.ts';
 import type { Item, LandingContent } from './content/types.ts';
 import { escapeHtml, picture, plainText, scriptJson, type Assets } from './html.ts';
-import { offers, organization, ORGANIZATION_ID, SOFTWARE_ID, WEBSITE_ID } from './jsonld.ts';
+import {
+  LANGUAGES,
+  organization,
+  ORGANIZATION_ID,
+  SOFTWARE_ID,
+  softwareApplication,
+  WEBSITE_ID,
+} from './jsonld.ts';
 import { alternateLinks, siteFooter, siteHeader, type Chrome } from './layout.ts';
 import { allPages, llmsSections } from './pages.ts';
 import {
@@ -55,27 +62,17 @@ export function structuredData(c: LandingContent, assets: Assets): object {
         '@id': website,
         url: `${SITE_URL}/`,
         name: 'Brick DNN',
-        inLanguage: ['en', 'de'],
+        inLanguage: LANGUAGES,
         publisher: { '@id': ORGANIZATION_ID },
       },
-      {
-        '@type': 'SoftwareApplication',
-        '@id': software,
-        name: 'Brick DNN',
-        url: absolute(EDITOR_PATH),
+      softwareApplication({
         description: c.appDescription,
-        applicationCategory: 'DeveloperApplication',
-        applicationSubCategory: 'Machine learning',
-        operatingSystem: 'Web browser',
-        inLanguage: 'en',
-        isAccessibleForFree: true,
         license: LICENSE_URL,
         codeRepository: REPOSITORY_URL,
         screenshot: shotIds(c).map((id) => absolute(assets.images[id].sources.at(-1)!.src)),
         featureList: c.featureList,
         publisher: { '@id': ORGANIZATION_ID },
-        offers: offers(),
-      },
+      }),
       {
         '@type': 'FAQPage',
         '@id': page,
@@ -353,11 +350,13 @@ ${plans}
 
 ${c.pricing.notes.map((note) => `- ${note}`).join('\n')}
 
-## Privacy and data location
+## ${c.privacy.title}
+
+${plainText(c.privacy.intro)}
 
 ${list(c.privacy.items)}
 
-## Teaching and research
+## ${c.teaching.title}
 
 ${c.teaching.items.map((item) => `- ${item}`).join('\n')}
 - ${plainText(c.teaching.discount)}

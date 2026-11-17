@@ -352,6 +352,23 @@
   the charts and metrics.
 
 ### Changed
+- **brickdnn.com's pages put deep learning and data in Europe first.** Titles, meta
+  descriptions, hero, section headings and FAQ of `/` and `/de/` now say what Brick DNN is for
+  in the words people search with: deep learning, hosted in Switzerland, GDPR-compliant
+  (*DSGVO-konform*), a PyTorch code generator without code to write first, for universities,
+  researchers and companies in Europe. The section *Privacy and data location* becomes *Data
+  in Europe* / *Daten in Europa* (same anchor `#privacy`): where the server is, what is stored
+  where, export and deletion, and that the exported code runs anywhere, with links to the
+  privacy policy and to a new guide, *GDPR-compliant deep learning* /
+  *Deep Learning DSGVO-konform* (`/guides/gdpr-compliant-deep-learning/`,
+  `/de/anleitungen/deep-learning-dsgvo-konform/`): personal, pseudonymised and anonymised
+  data, where brickdnn.com keeps what, and three ways to work with data that has to stay
+  personal (train the exported code at home, a stand-in dataset, an own instance). The pages
+  only say *Europe* and *Switzerland*, never *EU*, for the server, and a test checks that.
+  JSON-LD: `SoftwareApplication` and `Organization` have `areaServed` Europe, the application
+  is `inLanguage` English and German, and the German pricing page shares the same application
+  (`softwareApplication()` in `jsonld.ts`). The descriptions of the guides, the gallery and
+  some example pages mention deep learning.
 - **brickdnn.com: smaller storage quotas, fewer local backups.** The plans now include 0.5 GB
   (Free), 3 GB (Starter), 10 GB (Plus) and 50 GB (Pro) instead of 1 / 5 / 20 / 100 GB, so that
   the storage the plans promise fits the server's disk; compute and prices are unchanged. The

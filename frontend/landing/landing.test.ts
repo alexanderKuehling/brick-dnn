@@ -126,6 +126,10 @@ describe.each(LANGS)('landing page %s', (lang) => {
       PLANS.map((plan) => [plan.name, String(plan.price), 'EUR'])
     );
     expect(app.url).toBe(`https://brickdnn.com${EDITOR_PATH}`);
+    expect(app.inLanguage).toEqual(['en', 'de']);
+    for (const node of [app, graph.find((node) => node['@type'] === 'Organization')!]) {
+      expect(node.areaServed).toEqual({ '@type': 'Continent', name: 'Europe' });
+    }
     const faq = graph.find((node) => node['@type'] === 'FAQPage')!;
     const visible = [...doc.querySelectorAll('#faq h3')].map((h3) => h3.textContent);
     expect(faq.mainEntity.map((q: any) => q.name)).toEqual(visible);
@@ -592,6 +596,31 @@ test('the content pages: every example and guide in both languages, unique title
       CONTENT_FOLDERS.some((folder) => page.path.startsWith(folder)),
       page.path
     ).toBe(true);
+  }
+});
+
+test('the pages say where the server is, and never that it is in the EU', () => {
+  // brickdnn.com's server is in Switzerland (Infomaniak, Geneva), which is in Europe but not
+  // in the EU; the privacy policy (deploy/sites/brickdnn.com/legal/privacy.md) says the same.
+  const texts = [
+    ...LANGS.map((lang) => renderPage(lang, ASSETS)),
+    ...RENDERED.values(),
+    renderLlms(),
+  ].map((html) => plainText(html.replace(/<script[\s\S]*?<\/script>/g, '')));
+  const wrong =
+    /\b(hosted in the EU|EU[- ]servers?|servers? in the EU|EU[- ]hosting)\b|in der EU gehostet|Servern? in der EU|EU-Server/i;
+  for (const text of texts) {
+    expect(text).not.toMatch(wrong);
+  }
+  for (const lang of LANGS) {
+    const home = parse(renderPage(lang, ASSETS));
+    expect(home.querySelector('#privacy')!.textContent).toMatch(/Switzerland|Schweiz/);
+    // The section on data in Europe leads to the privacy policy and to the GDPR guide.
+    const links = [...home.querySelectorAll('#privacy a')].map((a) => a.getAttribute('href'));
+    const gdpr = GUIDE_COPY[lang].guides.find((guide) => guide.id === 'gdpr')!;
+    expect(links).toEqual(
+      expect.arrayContaining(['/privacy', `${GUIDES_PATHS[lang]}${gdpr.slug}/`])
+    );
   }
 });
 
