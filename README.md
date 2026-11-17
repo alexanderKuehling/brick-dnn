@@ -106,6 +106,14 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   measured like a run, next to each of its members on the same rows, has its own decision
   threshold and predicts raw rows in the web app, over the REST API and over MCP. See
   [docs/training.md](docs/training.md#ensembles).
+- **Experiment tracker**: the runs page lists every run of your networks in one table
+  (status, duration, dataset, model, settings such as optimizer, learning rate and batch
+  size, and results such as validation loss, F1, PR AUC, RMSE or IoU), sorted and filtered on
+  the server, with the columns you choose kept on your account. Tag, note and star runs,
+  overlay the curves of up to ten runs (per-run colours, smoothing, epochs or time, a warning
+  when their losses differ in kind), plot a setting against a result or draw parallel
+  coordinates, and share a comparison read-only with a link. See
+  [docs/experiments.md](docs/experiments.md).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
   maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation
   importance (tables), compare decision boundaries of an MLP, an SVM and a Gaussian process,

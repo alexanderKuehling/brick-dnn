@@ -278,6 +278,15 @@ class TrainingRun(models.Model):
     # instead of training a network. Its "training" predicts the validation and test rows
     # with every member and measures the combination; ``config`` holds the method.
     kind = models.CharField(max_length=10, choices=KINDS, default="training", db_default="training")
+    # The experiment tracker (experiments.py): labels, a note and a star that its owner and
+    # the editors of its project give the run, to find and compare it later. Null: no tags.
+    tags = models.JSONField(null=True, blank=True)
+    note = models.TextField(blank=True, default="", db_default="")
+    starred = models.BooleanField(default=False, db_default=False)
+    # The headline numbers of a finished run in one flat dict (val_loss, test_macro_f1,
+    # val_pr_auc …), taken from its state once it ended (experiments.summary_of): the runs
+    # table sorts and filters by them without reading every state.json. Null: not yet.
+    summary = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -321,6 +330,32 @@ class EnsembleMember(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} in {self.ensemble_id}"
+
+
+class RunComparison(models.Model):
+    """Runs compared side by side and shared read-only with a link (``/compare/<token>``,
+    see experiments.py). Only the runs, columns and options chosen here are shown; deleting
+    the comparison turns the link off for good."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="run_comparisons"
+    )
+    name = models.CharField(max_length=120)
+    token = models.CharField(max_length=64, unique=True)
+    # The ids of the runs in the order chosen (a deleted run drops out).
+    run_ids = models.JSONField(default=list)
+    # The columns of the table, and the chart settings (metric, x axis, smoothing, scatter).
+    columns = models.JSONField(default=list)
+    options = models.JSONField(default=dict)
+    # Whether the tags and notes of the runs are shown too (no by default).
+    include_notes = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.owner})"
 
 
 class TrainingWorker(models.Model):
@@ -635,6 +670,9 @@ class UserProfile(models.Model):
         choices=[("en", "English"), ("de", "Deutsch")],
         help_text="Language of the app and of e-mails. Empty: not chosen (English e-mails).",
     )
+    # Settings of the app that follow the user from browser to browser, e.g. the columns of
+    # the runs table (``{"runs_columns": [...]}``, see experiments.py). Null: the defaults.
+    preferences = models.JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"Profile of {self.user}"

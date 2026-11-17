@@ -17,6 +17,8 @@ import { EDITOR_PATH, RedirectToEditor } from './components/RedirectToEditor';
 import { RequireAuth } from './components/RequireAuth';
 import { MAIN_ID, SkipLink } from './components/SkipLink';
 import { DataPage } from './data/DataPage';
+import { RunsPage } from './experiments/RunsPage';
+import { SharedComparisonPage } from './experiments/SharedComparisonPage';
 import { LocalizedMantineProvider, LocalizedModalsProvider } from './i18n/mantine';
 import { LegalPage } from './legal/LegalPage';
 import { MonitoredRoutes } from './monitoring';
@@ -59,6 +61,17 @@ export default function App() {
                       </RequireAuth>
                     }
                   />
+                  {/* Every run side by side: the experiment tracker (docs/experiments.md). */}
+                  <Route
+                    path="/runs"
+                    element={
+                      <RequireAuth>
+                        <RunsPage />
+                      </RequireAuth>
+                    }
+                  />
+                  {/* Runs compared and shared with a read-only link: no account needed. */}
+                  <Route path="/compare/:token" element={<SharedComparisonPage />} />
                   <Route
                     path="/tokens"
                     element={

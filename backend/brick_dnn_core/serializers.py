@@ -267,10 +267,19 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "decision_threshold",
             "kind",
             "ensemble",
+            "tags",
+            "note",
+            "starred",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+
+    def get_tags(self, obj: TrainingRun) -> list[str]:
+        """Labels of the experiment tracker (experiments.py); also ``note`` and ``starred``."""
+        return list(obj.tags or [])
+
     ensemble = serializers.SerializerMethodField()
 
     def get_ensemble(self, obj: TrainingRun) -> dict | None:

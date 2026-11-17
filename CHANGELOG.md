@@ -3,6 +3,29 @@
 ## Unreleased
 
 ### Added
+- **An experiment tracker: the runs page.** `/runs` (*Runs* in the header, *Compare runs* in
+  the training panel's history) lists every run the user can see (own runs and those of
+  shared networks) in one table: status, start, duration, dataset, model, the main settings
+  and the headline results per split (loss, accuracy, balanced accuracy, F1, ROC and PR AUC,
+  RMSE, MAE, R², IoU, Dice …), filtered by network, dataset, type, status, tag, star and text,
+  sorted and paged on the server (`GET /api/training/runs/table/`). The results of finished
+  runs are read from their state once and kept in the new `TrainingRun.summary`. The columns
+  are chosen per user and kept on the account (`UserProfile.preferences`,
+  `/api/training/runs/preferences/`); a search's row expands to its trials. Up to ten runs
+  are compared below the table: their loss and a metric in one chart each (`OverlayChart`:
+  a colour per run, dashed after the eighth, legend, smoothing, epochs or time on the x axis,
+  hover and arrow keys, a table view; `GET /api/training/runs/curves/`) with a warning when
+  their losses differ in kind or their tasks differ, a scatter plot of any setting against
+  any result (log axis for the learning rate) and parallel coordinates (`ParallelCoordinates`,
+  plain SVG). Runs get **tags, a note and a star** (`PATCH
+  /api/training/runs/<id>/annotations/`, who started the run and the network's owner and
+  editors), shown in the table and filterable. **Shared comparisons**: a read-only link
+  `/compare/<token>` with the chosen runs' table, curves and scatter plot, without who started
+  them, their networks or (unless chosen) their tags and notes; only own runs and runs of own
+  networks; revoked by deleting it (`/api/training/comparisons/`, public
+  `/api/shared/runs/<token>/`, model `RunComparison`). The data export has the tags, notes and
+  stars and `run_comparisons.json`. Migration 0022. English and German. See
+  docs/experiments.md.
 - **A second built-in segmentation dataset, Cells.** 400 training and 100 test images of
   96×96 pixels, generated on the server like Shapes (nothing to upload or download), that
   look like fluorescence microscopy: two to seven pink to magenta cells, each with a blue to

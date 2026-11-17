@@ -8,6 +8,7 @@ from . import (
     approvals,
     billing_views,
     data_views,
+    experiments_views,
     explain_views,
     legal,
     mcp,
@@ -175,6 +176,22 @@ urlpatterns = [
     ),
     path("training/check/", views.training_check, name="training-check"),
     path("training/ensembles/", views.EnsembleView.as_view(), name="training-ensembles"),
+    # Runs compared side by side and shared with a read-only link (experiments.py).
+    path(
+        "training/comparisons/",
+        experiments_views.ComparisonListView.as_view(),
+        name="training-comparisons",
+    ),
+    path(
+        "training/comparisons/<int:pk>/",
+        experiments_views.ComparisonDetailView.as_view(),
+        name="training-comparison",
+    ),
+    path(
+        "shared/runs/<str:token>/",
+        experiments_views.SharedComparisonView.as_view(),
+        name="shared-comparison",
+    ),
     path("data/", data_views.data_status, name="data"),
     path("data/steps/", data_views.data_steps, name="data-steps"),
     # Explanations of a trained model (explain_views.py).

@@ -58,10 +58,17 @@ import type {
   RecoveryCodes,
   RowAnalysis,
   RowAnalysisRequest,
+  RunAnnotations,
+  RunComparison,
+  RunComparisonInput,
+  RunCurves,
   RunDetail,
   RunInput,
   RunPreviews,
   RunSummary,
+  RunTable,
+  RunTableQuery,
+  SharedComparison,
   SharedNetwork,
   ShareLink,
   SimilarRows,
@@ -626,6 +633,53 @@ const serverApi = {
           body: { weights },
           auth: true,
         }),
+      /** The runs table: filtered, sorted and paged on the server. */
+      table: (query: RunTableQuery = {}, signal?: AbortSignal) =>
+        request<RunTable>(`/api/training/runs/table/${queryString(query)}`, {
+          auth: true,
+          signal,
+        }),
+      /** The curves of up to 10 runs for one chart. */
+      curves: (ids: string[], signal?: AbortSignal) =>
+        request<RunCurves>(`/api/training/runs/curves/${queryString({ ids: ids.join(',') })}`, {
+          auth: true,
+          signal,
+        }),
+      /** Tags, note and star; who started it and the editors of its network (else 403). */
+      annotate: (id: string, body: Partial<Omit<RunAnnotations, 'id'>>) =>
+        request<RunAnnotations>(`/api/training/runs/${id}/annotations/`, {
+          method: 'PATCH',
+          body,
+          auth: true,
+        }),
+      /** The columns of the runs table the user chose (null: the defaults). */
+      columns: (signal?: AbortSignal) =>
+        request<{ columns: string[] | null }>('/api/training/runs/preferences/', {
+          auth: true,
+          signal,
+        }),
+      setColumns: (columns: string[] | null) =>
+        request<{ columns: string[] | null }>('/api/training/runs/preferences/', {
+          method: 'PUT',
+          body: { columns },
+          auth: true,
+        }),
+    },
+    /** Comparisons shared with a read-only link. */
+    comparisons: {
+      list: () => request<RunComparison[]>('/api/training/comparisons/', { auth: true }),
+      create: (data: RunComparisonInput) =>
+        request<RunComparison>('/api/training/comparisons/', {
+          method: 'POST',
+          body: data,
+          auth: true,
+        }),
+      /** Turns the link off for good. */
+      remove: (id: number) =>
+        request<void>(`/api/training/comparisons/${id}/`, { method: 'DELETE', auth: true }),
+      /** Public: no login needed. 404 if the link is unknown or was turned off. */
+      shared: (token: string, signal?: AbortSignal) =>
+        request<SharedComparison>(`/api/shared/runs/${encodeURIComponent(token)}/`, { signal }),
     },
     ensembles: {
       /**

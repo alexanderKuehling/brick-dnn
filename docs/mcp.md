@@ -667,7 +667,7 @@ was done), *failed* or *denied*.
 **REST API.** It cannot ask: a request with a personal API token whose rule covers it is
 refused with `403` and a message that points to MCP or the web app. Covered are the trainings
 above the limit (`POST /api/training/runs/`), publishing (`POST /api/projects/<id>/link/`,
-`…/members/`, `…/data/`) and deleting (`DELETE` of networks, runs, datasets, data files and
+`…/members/`, `…/data/`, and sharing runs with `POST /api/training/comparisons/`) and deleting (`DELETE` of networks, runs, datasets, data files and
 preparations).
 
 Requests keep the validated arguments of the call (e.g. the graph and settings of a

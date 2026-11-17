@@ -19,6 +19,7 @@ are in [`deploy/legal/`](../deploy/legal/README.md). None of this is legal advic
 | **Data preparations:** steps and settings | database | deleted by the user, with the account or with their source |
 | **Training datasets:** an uploaded CSV file or the images of a ZIP file | `BRICKDNN_DATA_DIR/training/datasets/<id>/` | as imports |
 | **Training runs:** network, settings and metrics; job, state, log and trained weights; for a segmentation, eight small preview images (validation images of the dataset with their masks and the predicted masks) | database; `BRICKDNN_DATA_DIR/training/runs/<id>/` | as imports (finished runs only) |
+| **Tags, notes and stars of runs; shared comparisons:** the words, note and star given to a run (by its starter or the editors of its network); for a comparison shared with a link its name, token, runs, columns and chart settings. The link shows the runs' names, datasets, settings, results and curves, not who started them or their networks, and tags and notes only if the owner chose so | database | with the run (tags, notes) / deleted by the owner, which turns the link off (comparisons); with the account |
 | **API tokens and connected apps:** name, start of the token, SHA-256 hash, dates, the app's name, their monthly budget | database | revoked by the user, or with the account |
 | **Agent activity log:** every MCP tool call and API request made with a token or app: token or app name, start of the token, user agent, tool or route, outcome and error message, duration, ids and names of what it touched, summarised arguments (sizes and counts, never file contents, prediction inputs or secrets) | database | `BRICKDNN_AGENT_LOG_DAYS` (90) days, at most 20,000 entries per account; with the account. Kept when the token is revoked |
 | **Approval requests and rules:** what each token and app may do without asking; actions of agents that waited for the user's approval, with the arguments of the call (e.g. a training's network and settings; never file contents), the decision, the user's message to the agent and the result | database | 90 days (`purge_old_data`; not while they wait); with the account |
@@ -108,7 +109,8 @@ cannot), rate limited with `BRICKDNN_ACCOUNT_RATE` (30/hour):
   secret), own
   networks with their history, memberships, own comments, API tokens (no secrets), connected
   apps, the agent activity log, approval rules and requests, data sources, preparations, datasets, training runs
-  (settings, metrics; not the weights), the usage records with the plan and budgets
+  (settings, metrics, tags, notes and stars; not the weights), the comparisons shared with a
+  link (`run_comparisons.json`), the usage records with the plan and budgets
   (`usage.json`) and, for accounts that bought a plan, `billing.json` (below), plus the
   uploaded files themselves up to `BRICKDNN_EXPORT_MAX_FILES_MB` (200 MB)
   in total. Files beyond that are listed in `files.json` with a note. Nothing of other users

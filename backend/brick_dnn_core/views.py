@@ -23,6 +23,7 @@ from . import (
     catalog,
     downloads,
     ensembles,
+    experiments,
     notices,
     raw_predictions,
     recovery,
@@ -430,6 +431,51 @@ class TrainingRunViewSet(
     def list(self, request: Request, *args, **kwargs) -> Response:
         training.sync_runs(self.get_queryset().filter(status__in=ACTIVE_STATUSES))
         return super().list(request, *args, **kwargs)
+
+    # The experiment tracker (experiments.py) --------------------------------
+
+    @action(detail=False, methods=["get"])
+    def table(self, request: Request) -> Response:
+        """The runs table: every visible run with its settings and headline numbers,
+        filtered, sorted and paged (see experiments.table for the parameters)."""
+        try:
+            return Response(experiments.table(request.user, request.query_params))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"])
+    def curves(self, request: Request) -> Response:
+        """``?ids=<id>,<id>``: the curves of up to 10 runs, for one chart."""
+        ids = [i for i in (request.query_params.get("ids") or "").split(",") if i.strip()]
+        try:
+            return Response(experiments.curves(request.user, ids))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get", "put"])
+    def preferences(self, request: Request) -> Response:
+        """The columns of the runs table the user chose, kept on the account."""
+        if request.method == "GET":
+            return Response(experiments.get_preferences(request.user))
+        try:
+            return Response(experiments.set_preferences(request.user, request.data))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["patch"])
+    def annotations(self, request: Request, pk=None) -> Response:
+        """``{tags?, note?, starred?}``: who started the run and the owner and editors of
+        its network; 403 for viewers."""
+        run = self.get_object()
+        if not experiments.can_annotate(request.user, run):
+            raise PermissionDenied(
+                gettext("Only who started the run and the editors of its network can change this.")
+            )
+        try:
+            run = experiments.annotate(request.user, run, request.data)
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(experiments.annotations(run))
 
     def create(self, request: Request) -> Response:
         """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?, "project"?}``.

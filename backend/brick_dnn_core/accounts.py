@@ -62,6 +62,7 @@ from . import training_service as training
 from .agent_activity import export_entries
 from .api_tokens import IsLoggedInUser
 from .approvals import export_approvals
+from .experiments import export_comparisons
 from .models import (
     AgentAction,
     ApiToken,
@@ -196,7 +197,9 @@ data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
 training_runs.json       your trainings: network, settings, status and metrics; ensembles
-                         with the runs they combine
+                         with the runs they combine; your tags, notes and stars
+run_comparisons.json     comparisons of runs you shared with a link: the runs, columns and
+                         the link's token
 usage.json               the compute (CPU time) your trainings and predictions used, per
                          month, with the API token or app that caused it, and your limits
 {billing}files.json               the uploaded files: where they are in this ZIP file, or why not
@@ -427,6 +430,10 @@ def _runs(user) -> list[dict[str, Any]]:
             "has_weights": run.has_weights,
             "cpu_seconds": run.cpu_seconds,
             "stop_reason": run.stop_reason or None,
+            "tags": list(run.tags or []),
+            "note": run.note,
+            "starred": run.starred,
+            "summary": run.summary,
             "created_at": run.created_at,
             "started_at": run.started_at,
             "finished_at": run.finished_at,
@@ -521,6 +528,7 @@ def export_account(user, out: IO[bytes]) -> None:
         _json(archive, "data_preparations.json", _data_preps(user))
         _json(archive, "datasets.json", _datasets(user))
         _json(archive, "training_runs.json", _runs(user))
+        _json(archive, "run_comparisons.json", export_comparisons(user))
         _json(archive, "usage.json", budgets.export_records(user))
         if paid:
             _json(archive, "billing.json", paid)

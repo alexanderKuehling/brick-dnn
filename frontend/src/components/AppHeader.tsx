@@ -3,6 +3,7 @@ import {
   IconAccessible,
   IconActivity,
   IconBrandGithub,
+  IconChartLine,
   IconChevronDown,
   IconCoffee,
   IconFileText,
@@ -114,6 +115,18 @@ export function AppHeader() {
               color="gray"
             >
               {t('nav.myNetworks')}
+            </Button>
+          )}
+          {user && (
+            <Button
+              component={Link}
+              to="/runs"
+              variant={navVariant('/runs')}
+              aria-current={navVariant('/runs') === 'light' ? 'page' : undefined}
+              size="compact-md"
+              color="gray"
+            >
+              {t('nav.runs')}
             </Button>
           )}
           {pricing && (
@@ -348,6 +361,7 @@ function PhoneMenu({
           {item(EDITOR_PATH, t('nav.builder'), <IconTopologyStar3 size={16} />)}
           {item('/data', t('nav.data'), <IconTable size={16} />)}
           {loggedIn && item('/projects', t('nav.myNetworks'), <IconFolder size={16} />)}
+          {loggedIn && item('/runs', t('nav.runs'), <IconChartLine size={16} />)}
           {pricing && item('/pricing', t('nav.pricing'), <IconTag size={16} />)}
           <Menu.Divider />
           <Menu.Item
