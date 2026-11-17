@@ -8,6 +8,8 @@ const PAGES: [pattern: string, title: () => string][] = [
   ['/app', () => i18n.t('nav.builder')],
   ['/data/:prepId?', () => i18n.t('nav.data')],
   ['/projects', () => i18n.t('nav.myNetworks')],
+  ['/runs', () => i18n.t('nav.runs')],
+  ['/compare/:token', () => i18n.t('a11y.titles.comparison')],
   ['/tokens', () => i18n.t('nav.apiTokens')],
   ['/activity', () => i18n.t('nav.agentActivity')],
   ['/account', () => i18n.t('nav.account')],

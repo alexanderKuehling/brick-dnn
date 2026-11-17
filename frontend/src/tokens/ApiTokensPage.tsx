@@ -33,6 +33,7 @@ import { BudgetEditor, MonthUsage } from '@/usage/BudgetEditor';
 import { ActivityLink } from './ActivityLink';
 import { ConnectedApps } from './ConnectedApps';
 import { CreateTokenModal } from './CreateTokenModal';
+import { LoggingSetup } from './LoggingSetup';
 import { McpSetup } from './McpSetup';
 import classes from './Tokens.module.css';
 
@@ -66,10 +67,15 @@ function TokenItem({
             <Text fw={600} className={classes.name}>
               {token.name}
             </Text>
-            <Badge variant="light" color={token.read_only ? 'gray' : 'brick'}>
-              {token.read_only
-                ? i18n.t('ui.tokens.ApiTokensPage.readOnly')
-                : i18n.t('ui.tokens.ApiTokensPage.fullAccess')}
+            <Badge
+              variant="light"
+              color={token.scope === 'runs:log' ? 'teal' : token.read_only ? 'gray' : 'brick'}
+            >
+              {token.scope === 'runs:log'
+                ? i18n.t('experiments.logging.scopeBadge')
+                : token.read_only
+                  ? i18n.t('ui.tokens.ApiTokensPage.readOnly')
+                  : i18n.t('ui.tokens.ApiTokensPage.fullAccess')}
             </Badge>
             {expired && (
               <Badge variant="filled" color="red">
@@ -287,6 +293,16 @@ export function ApiTokensPage() {
           {i18n.t('ui.tokens.ApiTokensPage.withBrickDnnSMcp')}
         </Text>
         <McpSetup />
+      </section>
+
+      <section className={classes.section} aria-labelledby="logging-title">
+        <Title order={3} id="logging-title" mb="xs">
+          {i18n.t('experiments.logging.title')}
+        </Title>
+        <Text size="sm" c="dimmed" mb="md" maw={720}>
+          {i18n.t('experiments.logging.intro')}
+        </Text>
+        <LoggingSetup />
       </section>
 
       {rules && <DefaultApprovals rules={rules} onRule={(rule) => saveRule(null, rule)} />}

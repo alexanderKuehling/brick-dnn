@@ -6,9 +6,9 @@
 import type { ExampleCopy, ExampleGallery } from './types.ts';
 
 const gallery: ExampleGallery = {
-  title: 'Beispiele für neuronale Netze in PyTorch und scikit-learn – Brick DNN',
+  title: 'Deep-Learning-Beispiele in PyTorch und scikit-learn – Brick DNN',
   description:
-    'Mitgelieferte Beispiele: MLP, CNN, ResNet-Block, U-Net, LSTM, Transformer, Gradient Boosting, SVM, Gauß-Prozesse und Ensembles, jeweils mit Diagramm und Code.',
+    'Deep-Learning-Beispiele: MLP, CNN, ResNet-Block, U-Net, LSTM, Transformer, dazu Gradient Boosting, SVM, Gauß-Prozesse und Ensembles, mit Diagramm und Code.',
   h1: 'Beispielnetze mit Diagramm, Tensorformen und Code',
   intro:
     'Jedes Beispiel hier ist ein Netz, das in Brick DNN mitgeliefert wird. Seine Seite zeigt, wie die Schichten verbunden sind, welche Ausgabeform und wie viele Parameter jede Schicht hat, und das vollständige Skript, das der Editor erzeugt: PyTorch für neuronale Netze, scikit-learn für klassische Modelle. Jedes Beispiel lässt sich im Editor öffnen, ändern, prüfen und trainieren.',
@@ -76,7 +76,7 @@ const examples: ExampleCopy[] = [
     name: 'Kleines CNN für MNIST',
     title: 'CNN für MNIST in PyTorch – Beispiel für ein kleines Faltungsnetz',
     description:
-      'Ein kleines Faltungsnetz (CNN) für MNIST in PyTorch: zwei Conv2d-Blöcke mit Max-Pooling und ein dichter Kopf, etwa 99 % Testgenauigkeit, mit Code und Formen.',
+      'Ein kleines Faltungsnetz (CNN) für MNIST in PyTorch, ein klassisches erstes Deep-Learning-Modell: zwei Conv2d-Blöcke mit Max-Pooling und ein dichter Kopf, mit Code.',
     h1: 'CNN für MNIST in PyTorch',
     task: 'classification',
     summary:
@@ -124,7 +124,7 @@ const examples: ExampleCopy[] = [
     name: 'U-Net zur Segmentierung',
     title: 'U-Net zur Bildsegmentierung in PyTorch – Beispiel mit Code',
     description:
-      'Ein U-Net zur semantischen Segmentierung in PyTorch: Encoder, Decoder mit ConvTranspose2d und Skip-Verbindungen, ein Klassen-Score je Pixel, mit Code.',
+      'Ein U-Net, ein verbreitetes Deep-Learning-Modell zur semantischen Segmentierung, in PyTorch: Encoder, Decoder mit ConvTranspose2d, Skip-Verbindungen, Score je Pixel.',
     h1: 'U-Net zur Bildsegmentierung in PyTorch',
     task: 'segmentation',
     summary:
@@ -173,7 +173,7 @@ const examples: ExampleCopy[] = [
     name: 'LSTM-Textklassifikator',
     title: 'LSTM für Sentiment-Analyse in PyTorch – Beispiel mit Code',
     description:
-      'Ein bidirektionales LSTM als Textklassifikator in PyTorch: Token-IDs, Embeddings, LSTM und eine Linear-Schicht für positive oder negative Stimmung, mit Code.',
+      'Deep Learning für Text: ein bidirektionales LSTM als Klassifikator in PyTorch, mit Token-IDs, Embeddings und einer Linear-Schicht für positive oder negative Stimmung.',
     h1: 'LSTM für Sentiment-Analyse in PyTorch',
     task: 'sequence',
     summary: 'Token-IDs → Embeddings → bidirektionales LSTM → positiv oder negativ.',
@@ -220,7 +220,7 @@ const examples: ExampleCopy[] = [
     name: 'Regression auf Tabellendaten',
     title: 'Regression mit neuronalem Netz auf Tabellendaten in PyTorch',
     description:
-      'Ein kleines MLP, das aus 8 numerischen Merkmalen eine Zahl vorhersagt, in PyTorch, mit Batch-Normalisierung und einer Trainingsschleife für CSV-Dateien.',
+      'Deep Learning auf Tabellen: Ein kleines MLP in PyTorch sagt aus 8 numerischen Merkmalen eine Zahl vorher, mit Batch-Normalisierung und Trainingsschleife für CSV.',
     h1: 'Regression mit neuronalem Netz auf Tabellendaten',
     task: 'regression',
     summary:

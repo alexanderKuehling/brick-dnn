@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IconStack2, IconTrash } from '@tabler/icons-react';
+import { IconStack2, IconStarFilled, IconTrash } from '@tabler/icons-react';
 import {
   ActionIcon,
   Alert,
@@ -16,6 +16,8 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import type { RunDetail, RunSummary } from '@/api';
+import { CompareLink } from '@/experiments/CompareLink';
+import { ElsewhereBadge } from '@/experiments/ElsewhereBadge';
 import { i18n, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
@@ -176,6 +178,12 @@ export function HistoryView({
   return (
     <Stack gap={4}>
       {toggle}
+      <Group justify="space-between" gap="xs" mb={4} wrap="nowrap">
+        <Text size="xs" c="dimmed">
+          {i18n.t('experiments.history.compareHint')}
+        </Text>
+        <CompareLink project={network && shownFilter === 'network' ? scope.project!.id : null} />
+      </Group>
       {offerCombine && (
         <Group justify="space-between" gap="xs" mb={4} wrap="nowrap">
           <Text size="xs" c="dimmed">
@@ -240,12 +248,21 @@ export function HistoryView({
                     <Text size="sm" fw={600} truncate>
                       {run.name}
                     </Text>
+                    {run.external && <ElsewhereBadge external={run.external} />}
                     {isEnsemble(run) && (
                       <Badge variant="outline" color="grape" tt="none" style={{ flexShrink: 0 }}>
                         {i18n.t('ui.training.HistoryView.ensemble')}
                       </Badge>
                     )}
                     <StatusBadge status={run.status} />
+                    {run.starred && (
+                      <IconStarFilled
+                        size={14}
+                        role="img"
+                        aria-label={i18n.t('experiments.table.starred')}
+                        style={{ flexShrink: 0, color: 'var(--mantine-color-yellow-filled)' }}
+                      />
+                    )}
                   </Group>
                   <Text size="xs" c="dimmed" truncate>
                     {[

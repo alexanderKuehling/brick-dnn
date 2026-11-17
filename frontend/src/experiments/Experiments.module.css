@@ -1,0 +1,81 @@
+/* The runs page, its table and the shared comparison. */
+
+.table {
+  font-variant-numeric: tabular-nums;
+
+  /* Cells keep their content on one line; the table scrolls sideways instead. */
+  & th,
+  & td {
+    white-space: nowrap;
+  }
+
+  /* Badges and names at their full width, not cut off by a narrow column. */
+  & td > *,
+  & td :global(.mantine-Badge-root) {
+    min-width: max-content;
+  }
+
+  & tr[data-selected] td {
+    background-color: var(--mantine-primary-color-light);
+  }
+}
+
+.headerCell {
+  white-space: nowrap;
+}
+
+.sortButton {
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--mantine-radius-xs);
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.sortIdle {
+  opacity: 0.45;
+}
+
+.nameCell {
+  min-width: 180px;
+}
+
+.cell {
+  white-space: nowrap;
+}
+
+.noteIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+}
+
+.starStatic {
+  color: var(--mantine-color-yellow-filled);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  align-items: flex-end;
+}
+
+.compare {
+  padding: var(--mantine-spacing-md);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+.snippet {
+  margin: 0;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+  border-radius: var(--mantine-radius-sm);
+}

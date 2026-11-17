@@ -6,9 +6,9 @@
 import type { ExampleCopy, ExampleGallery } from './types.ts';
 
 const gallery: ExampleGallery = {
-  title: 'Neural network examples in PyTorch and scikit-learn – Brick DNN',
+  title: 'Deep-learning examples in PyTorch and scikit-learn – Brick DNN',
   description:
-    'Built-in examples: MLP, CNN, ResNet block, U-Net, LSTM, Transformer, gradient boosting, SVM, Gaussian processes and ensembles, each with diagram, shapes and code.',
+    'Deep-learning examples: MLP, CNN, ResNet block, U-Net, LSTM, Transformer, plus gradient boosting, SVM, Gaussian processes and ensembles, with diagram and code.',
   h1: 'Example networks with diagram, shapes and code',
   intro:
     'Each example below is a network that ships with Brick DNN. Its page shows how the layers are connected, the output shape and parameter count of every layer, and the complete script the editor generates, in PyTorch for neural networks and in scikit-learn for classical models. Open any of them in the editor to change it, check it and train it.',
@@ -74,7 +74,7 @@ const examples: ExampleCopy[] = [
     name: 'Small CNN for MNIST',
     title: 'CNN for MNIST in PyTorch – small convolutional network example',
     description:
-      'A small convolutional neural network for MNIST in PyTorch: two Conv2d blocks with max pooling and a dense head, about 99 % test accuracy, with code and shapes.',
+      'A small convolutional neural network for MNIST in PyTorch, a classic first deep-learning model: two Conv2d blocks with max pooling and a dense head, with code.',
     h1: 'CNN for MNIST in PyTorch',
     task: 'classification',
     summary: 'Two convolution blocks and a classifier head: about 99 % test accuracy on MNIST.',
@@ -121,7 +121,7 @@ const examples: ExampleCopy[] = [
     name: 'U-Net for segmentation',
     title: 'U-Net for image segmentation in PyTorch – example code',
     description:
-      'A U-Net for semantic segmentation in PyTorch: encoder, decoder with ConvTranspose2d and skip connections, one class score per pixel, with diagram, shapes and code.',
+      'A U-Net, a common deep-learning model for semantic segmentation, in PyTorch: encoder, decoder with ConvTranspose2d, skip connections, a class score per pixel.',
     h1: 'U-Net for image segmentation in PyTorch',
     task: 'segmentation',
     summary:
@@ -170,7 +170,7 @@ const examples: ExampleCopy[] = [
     name: 'LSTM text classifier',
     title: 'LSTM for sentiment analysis in PyTorch – text classifier example',
     description:
-      'A bidirectional LSTM text classifier in PyTorch: token ids, embeddings, LSTM and a Linear layer for positive or negative sentiment, with shapes and code.',
+      'Deep learning for text: a bidirectional LSTM classifier in PyTorch with token ids, embeddings and a Linear layer for positive or negative sentiment, with code.',
     h1: 'LSTM for sentiment analysis in PyTorch',
     task: 'sequence',
     summary: 'Token ids → embeddings → bidirectional LSTM → positive or negative.',
@@ -217,7 +217,7 @@ const examples: ExampleCopy[] = [
     name: 'Tabular regression',
     title: 'Neural network regression on tabular data in PyTorch – MLP example',
     description:
-      'A small MLP that predicts a number from 8 numeric features, in PyTorch, with batch normalization and a training loop for CSV files in the generated code.',
+      'Deep learning on tables: a small MLP in PyTorch predicts a number from 8 numeric features, with batch normalization and a training loop for CSV files.',
     h1: 'Neural network regression on tabular data in PyTorch',
     task: 'regression',
     summary: 'Predicts one number from 8 numeric features; the script trains on a CSV file.',

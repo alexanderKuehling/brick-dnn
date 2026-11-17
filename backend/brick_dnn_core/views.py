@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 import brickdnn
 from brickdnn import service
+from brickdnn.codegen import TRACKING_URL
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import (
@@ -23,6 +24,7 @@ from . import (
     catalog,
     downloads,
     ensembles,
+    experiments,
     notices,
     raw_predictions,
     recovery,
@@ -34,6 +36,7 @@ from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .budgets import Actor, BudgetError, token_usage
 from .models import ApiToken, Dataset, TrainingRun
+from .oauth import site_url
 from .retention import touch
 from .serializers import (
     ApiTokenCreateSerializer,
@@ -84,9 +87,16 @@ def analyze_graph(request: Request) -> Response:
 def generate(request: Request) -> Response | HttpResponse:
     """Generate a PyTorch script (see ``brickdnn.service.generate`` for the body).
 
-    Add ``?download=1`` to get the file as an attachment instead of JSON.
+    Add ``?download=1`` to get the file as an attachment instead of JSON. A script that
+    logs its training to Brick DNN logs to this server unless ``tracking_url`` says otherwise.
     """
-    status_code, payload = service.generate(request.data)
+    data = request.data
+    if isinstance(data, dict) and isinstance(data.get("options"), dict):
+        options = data["options"]
+        here = site_url(request)
+        if "tracking_url" not in options and TRACKING_URL.match(here):
+            data = {**data, "options": {**options, "tracking_url": here}}
+    status_code, payload = service.generate(data)
     if status_code == status.HTTP_200_OK and request.query_params.get("download"):
         response = HttpResponse(payload["code"], content_type="text/x-python; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="{payload["filename"]}"'
@@ -430,6 +440,51 @@ class TrainingRunViewSet(
     def list(self, request: Request, *args, **kwargs) -> Response:
         training.sync_runs(self.get_queryset().filter(status__in=ACTIVE_STATUSES))
         return super().list(request, *args, **kwargs)
+
+    # The experiment tracker (experiments.py) --------------------------------
+
+    @action(detail=False, methods=["get"])
+    def table(self, request: Request) -> Response:
+        """The runs table: every visible run with its settings and headline numbers,
+        filtered, sorted and paged (see experiments.table for the parameters)."""
+        try:
+            return Response(experiments.table(request.user, request.query_params))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"])
+    def curves(self, request: Request) -> Response:
+        """``?ids=<id>,<id>``: the curves of up to 10 runs, for one chart."""
+        ids = [i for i in (request.query_params.get("ids") or "").split(",") if i.strip()]
+        try:
+            return Response(experiments.curves(request.user, ids))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get", "put"])
+    def preferences(self, request: Request) -> Response:
+        """The columns of the runs table the user chose, kept on the account."""
+        if request.method == "GET":
+            return Response(experiments.get_preferences(request.user))
+        try:
+            return Response(experiments.set_preferences(request.user, request.data))
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["patch"])
+    def annotations(self, request: Request, pk=None) -> Response:
+        """``{tags?, note?, starred?}``: who started the run and the owner and editors of
+        its network; 403 for viewers."""
+        run = self.get_object()
+        if not experiments.can_annotate(request.user, run):
+            raise PermissionDenied(
+                gettext("Only who started the run and the editors of its network can change this.")
+            )
+        try:
+            run = experiments.annotate(request.user, run, request.data)
+        except experiments.ExperimentInputError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(experiments.annotations(run))
 
     def create(self, request: Request) -> Response:
         """Start a training: ``{"name", "graph", "dataset", "config", "tuning"?, "project"?}``.

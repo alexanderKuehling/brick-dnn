@@ -257,11 +257,13 @@ generate, training check, predictions, MCP). The MCP server for AI assistants is
 | Method | Path                         | Body                                         | Response                       |
 | ------ | ---------------------------- | -------------------------------------------- | ------------------------------ |
 | GET    | `/api/auth/api-tokens/`      | –                                            | `[ApiToken]`, newest first     |
-| POST   | `/api/auth/api-tokens/`      | `{name, read_only?, expires_in_days?}`       | `201 {...ApiToken, token}`     |
+| POST   | `/api/auth/api-tokens/`      | `{name, read_only?, scope?, expires_in_days?}` | `201 {...ApiToken, token}`     |
 | DELETE | `/api/auth/api-tokens/<id>/` | –                                            | `204`, the token stops working |
 
-`ApiToken` is `{id, name, prefix, read_only, created_at, last_used_at, expires_at,
-budget_cpu_minutes, used_cpu_minutes}`; `PATCH /api/auth/api-tokens/<id>/
+`ApiToken` is `{id, name, prefix, read_only, scope, created_at, last_used_at, expires_at,
+budget_cpu_minutes, used_cpu_minutes}`; `scope` `"runs:log"` makes a token that may only log
+runs trained elsewhere ([below](#logging-runs-from-elsewhere)), `""` (the default) one that
+may do what `read_only` allows; `PATCH /api/auth/api-tokens/<id>/
 {budget_cpu_minutes}` sets its monthly compute budget (see
 [Usage and budgets](#usage-and-budgets)).
 `expires_in_days` is `7`, `30`, `90`, `365` or `null` (never, the default). The token itself
@@ -433,6 +435,7 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | GET / DELETE | `/api/training/datasets/<id>/`   | One dataset / delete it with its files              |
 | POST   | `/api/training/check/`                 | `{graph, dataset, config?, tuning?}`: does the network fit the data, what will it cost, do the budgets allow it, how long would it wait? |
 | GET    | `/api/training/runs/`                  | Your runs, newest first                             |
+| GET    | `/api/training/runs/table/`            | The runs table: filtered, sorted, paged ([below](#experiments-runs-side-by-side)) |
 | POST   | `/api/training/runs/`                  | Start a run `{name, graph, dataset, config, tuning?}` |
 | GET    | `/api/training/runs/<id>/`             | Run with live state (history, progress, log)        |
 | POST   | `/api/training/runs/<id>/stop/`        | Stop after the current batch (the best weights so far are kept); cancels a run that is still `queued` |
@@ -737,6 +740,131 @@ answers `409` (with a training queue: its limit of waiting trainings). Runs have
 stop_reason}` (`stop_reason`: `user`, `budget` or `run_limit`) and `started_via` (`{source:
 "token" | "app", name}`, null in the web app); the answer to a start adds `budget_warning`.
 See [training.md](training.md#usage-and-budgets).
+
+## Experiments: runs side by side
+
+The runs table, curves of several runs, tags/notes/stars and shared comparisons, see
+[experiments.md](experiments.md). Login required (website or API token), except the shared
+link.
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/api/training/runs/table/` | `RunTable`: the runs you can see, filtered, sorted and paged |
+| GET | `/api/training/runs/curves/?ids=<id>,<id>` | `{runs: [RunCurve], missing}`: the curves of up to 10 runs, in this order; ids you cannot see are in `missing` |
+| PATCH | `/api/training/runs/<id>/annotations/` | `{tags?, note?, starred?}` → `{id, tags, note, starred}`; who started the run and the owner and editors of its network (others `403`) |
+| GET / PUT | `/api/training/runs/preferences/` | `{columns}`: the columns of the runs table, kept on the account (`null`: the defaults) |
+| GET / POST | `/api/training/comparisons/` | Your shared comparisons, newest first / share runs `{name?, runs, columns?, options?, include_notes?}` → `201 RunComparison` |
+| GET / DELETE | `/api/training/comparisons/<id>/` | One of them / delete it: the link stops working |
+| GET | `/api/shared/runs/<token>/` | A shared comparison, for everyone (`404` once it was deleted) |
+
+Query parameters of the table: `project` (a network's id), `dataset` (a key of
+`facets.datasets`, e.g. `upload:7` or `builtin:mnist`), `status`, `family` (`neural`,
+`classical`, `hybrid`, `ensemble`, or `external`: [logged from
+elsewhere](#logging-runs-from-elsewhere)), `tag`, `starred=true`, `mine=true`, `q` (in the name,
+note, tags and dataset), `ids` (comma separated), `sort` (`name`, `status`, `created_at`
+(default), `duration`, `dataset`, `model`, `kind`, `setting:<key>` or `metric:<key>`), `order`
+(`asc`, `desc`; runs without a value come last either way), `page` (from 1) and `page_size`
+(default 50, at most 200). The table looks at your newest 5,000 runs (`truncated`).
+
+`RunTable` is `{count, page, pages, page_size, sort, order, results: [RunRow], facets: {tags:
+[{name, count}], datasets: [{key, name}], projects: [{id, name}], families}, truncated, limits:
+{compare: 10, tags: 20, note: 2000}}`. A `RunRow`:
+
+```json
+{"id": "…", "name": "MLP", "status": "completed", "kind": "training", "family": "neural",
+ "task": "classification", "model": "Neural network",
+ "dataset": {"key": "upload:7", "kind": "upload", "name": "iris.csv"},
+ "created_at": "…", "started_at": "…", "finished_at": "…", "duration_seconds": 300.0,
+ "epochs": 10, "epochs_done": 10, "trials_done": 0, "search": false, "total_params": 1234,
+ "loss": "cross_entropy",
+ "settings": {"optimizer": "adam", "learning_rate": 0.001, "batch_size": 64, "epochs": 10},
+ "metrics": {"val_loss": 0.4, "val_accuracy": 0.9, "val_macro_f1": 0.88, "val_pr_auc": 0.71,
+             "test_accuracy": 0.89, "best_epoch": 9},
+ "starred": false, "external": null, "tags": ["baseline"], "note": "",
+ "project": 3, "project_name": "Iris net", "started_by": "ada", "mine": true,
+ "can_annotate": true}
+```
+
+`settings` has the main settings of `config` that are set (`optimizer`, `learning_rate`,
+`batch_size`, `epochs`, `weight_decay`, `loss`, `val_split`, `test_split`, `patience`, `seed`,
+`max_samples`, `label_smoothing`, `focal_gamma`, `huber_delta`, `feature_training`), an
+ensemble's `method`, and a search's `search` (`random`, `grid`), `trials` and
+`search_metric`. `metrics` are the numbers of the kept epoch (`train_loss`, `val_loss`,
+`val_accuracy`, `val_rmse`, `val_r2`, `test_*`, a segmentation's `val_iou`, `val_dice` …) and of
+the final evaluation per split (`val_` and `test_` + `accuracy`, `balanced_accuracy`,
+`macro_f1`, `weighted_f1`, `log_loss`, `roc_auc`, `pr_auc`, `mae`, `mse`, `rmse`, `r2`,
+`mape`, `median_absolute_error`, `max_error`), and `best_epoch`. They are read from a finished
+run's state once and kept with it.
+
+A `RunCurve` is `{id, name, status, kind, family, task, loss, loss_label, x_unit: "epoch",
+points: [{x, epoch, time, train_loss, val_loss, train_accuracy, val_accuracy, val_rmse, val_r2,
+val_iou, val_dice, val_pixel_accuracy}]}` with the values a run has; `time` counts the seconds
+since the training started (the sum of the epochs' durations). At most 2,000 points per run,
+evenly spaced, with the first and the last.
+
+**Tags and notes.** `tags`: at most 20, each at most 40 characters (spaces are collapsed,
+duplicates dropped); `note`: at most 2,000 characters; `starred`: `true` or `false`. Control
+characters are removed. `400` for anything else.
+
+**Shared comparisons.** `runs` lists 1 to 10 run ids you can see and may share: runs you
+started and runs of networks you own (`400` names a run someone else started in a network
+you only edit). `columns` are column ids of the table (`status`, `setting:learning_rate`,
+`metric:val_pr_auc` …, at most 60), `options` `{metric, x_axis: "epoch" | "time", smoothing
+(0–0.99), scatter_x, scatter_y}`. At most 100 per account. A `RunComparison` is `{id, name,
+token, runs, columns, options, include_notes, created_at}`. The public answer is `{name,
+created_at, columns, options, include_notes, runs: [RunRow], curves: [RunCurve]}` whose rows
+have no `started_by`, `project`, `project_name`, `mine` or `can_annotate`, and no `tags` and
+`note` unless `include_notes`. The runs are checked again on every request: deleted runs, and
+runs the owner may no longer share, drop out.
+
+## Logging runs from elsewhere
+
+A script that trains on the user's own machine logs its curves into a run of `kind`
+`"external"` ([experiments.md](experiments.md#runs-that-ran-elsewhere)). Only personal API
+tokens (`Authorization: Bearer bdnn_…`), full-access ones or those with the scope `runs:log`
+(`POST /api/auth/api-tokens/` `{name, scope: "runs:log"}`: they may use these endpoints and
+nothing else); website logins, read-only tokens and the tokens of connected apps get `403`.
+
+| Method | Path | Body | Response |
+| ------ | ---- | ---- | -------- |
+| POST | `/api/tracking/runs/` | `{name?, project?, dataset?, task?, config?, epochs?, client?}` | `201 TrackingRun`: a run that is `running` |
+| POST | `/api/tracking/runs/<id>/log/` | `{points: [{epoch? \| step?, time?, <metric>: number}]}` | `TrackingRun` |
+| PATCH | `/api/tracking/runs/<id>/` | `{name?, config?, summary?, message?}` | `TrackingRun`; `config` and `summary` are merged |
+| POST | `/api/tracking/runs/<id>/finish/` | `{status: "completed" \| "failed" \| "stopped", summary?, message?}` | `TrackingRun` |
+| GET | `/api/tracking/runs/<id>/` | – | `TrackingRun` |
+
+`TrackingRun` is `{id, name, status, project, points, url, limits: {max_runs, max_active_runs,
+max_points, max_batch, max_body_bytes, max_metrics}}`. Only the token owner's runs of this kind
+are reachable (`404` otherwise).
+
+- `project`: a network the user owns or edits (`400` otherwise); the run belongs to it (its
+  members see it) and gets a copy of its graph. `task`: `classification`, `regression` or
+  `segmentation`. `config`: an object (numbers, text, lists, objects; at most 4 levels and
+  16 KB, `413`). `name`, `dataset` (shown as the dataset's name) and `client`: text.
+- A point has a whole `epoch` or `step` from 0, optionally `time` (seconds since the start)
+  and up to 32 metrics: names of letters, digits and `_ . / -` starting with a letter (at
+  most 64 characters), values finite numbers (`null` leaves a gap). The run's `metrics` follow
+  the last points (`train_loss`, `val_loss`, `val_accuracy`, `val_rmse` …), its `epochs_done`
+  the highest epoch or step.
+- `summary`: up to 64 numbers by name, e.g. `{"test_accuracy": 0.93}`; `test_*` become the
+  run's test metrics, all of them columns of the runs table.
+
+**Limits and errors.** `400` with `detail` for anything malformed; `409` with `code`
+`finished` (the run ended, also when it was stopped in the app), `points_limit` (more than
+`BRICKDNN_TRACKING_MAX_POINTS`, 20,000, per run), `active_limit`
+(`BRICKDNN_TRACKING_MAX_ACTIVE`, 10, runs of the account logging at a time) or `runs_limit`
+(`BRICKDNN_TRACKING_MAX_RUNS`, 500, such runs kept per account); `413` `too_large` for more
+than 1,000 points or 512 KB in one request; `403` `storage_quota_exceeded` when the account's
+storage is full (the points are stored in the run's directory and count); `429` above
+`BRICKDNN_TRACKING_RATE` (120/minute per account). A run that has not reported for 24 hours
+ends as `failed`. These runs use no CPU time, never wait in the training queue and do not
+count as trainings at a time.
+
+In the other answers such a run has `kind: "external"`, `dataset.kind: "external"`, no
+weights, `external: {client, points, reported_at}` (null for other runs) and a `state` built
+from its points (`history`, `test`, `external`); `POST /api/training/runs/<id>/stop/` ends it.
+The generated script and the client are described in
+[experiments.md](experiments.md#runs-that-ran-elsewhere).
 
 ## Usage and budgets
 

@@ -7,7 +7,7 @@ from rest_framework import serializers
 from brickdnn.graph import MAX_EDGES, MAX_NODES
 
 from . import languages, legal, site_admins
-from .api_tokens import EXPIRY_DAYS
+from .api_tokens import EXPIRY_DAYS, SCOPES
 from .models import ApiToken, DataPrep, Dataset, DataSource, Project, TrainingRun, UserProfile
 
 User = get_user_model()
@@ -156,6 +156,7 @@ class ApiTokenSerializer(UsageMixin, serializers.ModelSerializer):
             "name",
             "prefix",
             "read_only",
+            "scope",
             "created_at",
             "last_used_at",
             "expires_at",
@@ -179,6 +180,8 @@ class BudgetSerializer(serializers.Serializer):
 class ApiTokenCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     read_only = serializers.BooleanField(default=False)
+    # "runs:log": the token may only log runs trained elsewhere (tracking.py).
+    scope = serializers.ChoiceField(choices=SCOPES, default="", required=False)
     expires_in_days = serializers.ChoiceField(
         choices=EXPIRY_DAYS, allow_null=True, required=False, default=None
     )
@@ -267,10 +270,29 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "decision_threshold",
             "kind",
             "ensemble",
+            "tags",
+            "note",
+            "starred",
+            "external",
         ]
         read_only_fields = fields
 
     started_by = serializers.SerializerMethodField()
+    external = serializers.SerializerMethodField()
+
+    def get_external(self, obj: TrainingRun) -> dict | None:
+        """A run logged from elsewhere (``kind`` "external", tracking.py): its client, points
+        and last report; null for runs trained here."""
+        from .tracking import describe
+
+        return describe(obj)
+
+    tags = serializers.SerializerMethodField()
+
+    def get_tags(self, obj: TrainingRun) -> list[str]:
+        """Labels of the experiment tracker (experiments.py); also ``note`` and ``starred``."""
+        return list(obj.tags or [])
+
     ensemble = serializers.SerializerMethodField()
 
     def get_ensemble(self, obj: TrainingRun) -> dict | None:

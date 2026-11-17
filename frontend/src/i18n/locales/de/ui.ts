@@ -525,6 +525,21 @@ export const ui: Messages<typeof en> = {
     Logo: {
       brickDnn: 'Brick DNN',
     },
+    OverlayChart: {
+      against_one: '{{yLabel}} über {{xLabel}}, {{count}} Lauf.',
+      against_other: '{{yLabel}} über {{xLabel}}, {{count}} Läufe.',
+      fromTo:
+        '{{label}}: {{first}} bei {{xLabel}} {{firstX}} bis {{last}} bei {{xLabel}} {{lastX}}.',
+      noValues: '{{label}}: keine Werte.',
+      noValuesYet: 'Noch keine Werte',
+      useTheArrowKeys: '{{title}}: Lesen Sie die Werte pro {{xLabel}} mit den Pfeiltasten',
+    },
+    ParallelCoordinates: {
+      summary_one: '{{title}}: {{count}} Lauf auf den Achsen {{axes}}.',
+      summary_other: '{{title}}: {{count}} Läufe auf den Achsen {{axes}}.',
+      needTwo: 'Wählen Sie mindestens zwei Achsen.',
+      useTheArrowKeys: '{{title}}: Gehen Sie mit den Pfeiltasten durch die Läufe',
+    },
     MissingMatrix: {
       column: 'Spalte',
       columnsRows: '{{title}}. {{m}} Spalten, {{rows}} Zeilen. {{value}}',
