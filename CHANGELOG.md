@@ -450,6 +450,14 @@
   is `inLanguage` English and German, and the German pricing page shares the same application
   (`softwareApplication()` in `jsonld.ts`). The descriptions of the guides, the gallery and
   some example pages mention deep learning.
+- **brickdnn.com: the database is on its own server in Switzerland.** After the move from
+  Supabase (London) to the PostgreSQL service on the Infomaniak server, the privacy policy says
+  so: the database runs on the same server, under the same data processing agreement and the
+  adequacy decision for Switzerland; Supabase and the sentence on transfers to the USA under
+  standard contractual clauses are gone, and section 11 names the hourly backups (24 hours) and
+  the offsite copies at Swiss Backup (35 days). The site settings switch on hourly backups
+  (`BRICKDNN_BACKUP_KEEP_HOURLY=24`). The template policy and the checklist in `deploy/legal/`
+  name the PostgreSQL service as a database on the server.
 - **brickdnn.com: smaller storage quotas, fewer local backups.** The plans now include 0.5 GB
   (Free), 3 GB (Starter), 10 GB (Plus) and 50 GB (Pro) instead of 1 / 5 / 20 / 100 GB, so that
   the storage the plans promise fits the server's disk; compute and prices are unchanged. The
