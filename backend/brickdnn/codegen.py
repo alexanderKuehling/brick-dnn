@@ -100,6 +100,20 @@ SCRIPT_NAMES = {
     "class_weights",
     "focal_loss",
     "make_loss",
+    # Logging to Brick DNN (brickdnn/tracking.py, copied into the script).
+    "BrickDNNRun",
+    "BRICKDNN_URL",
+    "BRICKDNN_PROJECT",
+    "json",
+    "math",
+    "os",
+    "sys",
+    "time",
+    "urllib",
+    "run",
+    "summary",
+    "squared",
+    "test_rows",
     "x",
     "model",
     "out",
@@ -115,6 +129,8 @@ RESERVED = set(keyword.kwlist) | set(dir(builtins)) | NN_MODULE_ATTRIBUTES | SCR
 # The settings of the loss that the training code of a script takes (see
 # brickdnn.training.losses), with the names of the training settings.
 LOSS_OPTIONS = ("loss", "class_weights", "focal_gamma", "label_smoothing", "huber_delta")
+# The server a script logs to: no quotes, spaces or anything else that would break the code.
+TRACKING_URL = re.compile(r"^https?://[A-Za-z0-9.\-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 
 
 @dataclass
@@ -129,6 +145,14 @@ class GeneratorOptions:
     focal_gamma: float = 2.0
     label_smoothing: float = 0.0
     huber_delta: float = 1.0
+    # The CSV training loop logs its curves, settings and test numbers to Brick DNN, but only
+    # while the environment variable BRICKDNN_TOKEN is set (brickdnn/tracking.py): without it
+    # the script runs offline with the same results. ``tracking_url`` is the default server,
+    # ``tracking_project`` the saved network the runs belong to (both overridable with
+    # BRICKDNN_URL and BRICKDNN_PROJECT). The token is never written into the script.
+    log_to_brickdnn: bool = True
+    tracking_url: str = SITE_URL
+    tracking_project: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> GeneratorOptions:
@@ -141,11 +165,24 @@ class GeneratorOptions:
         from .training.config import TrainingConfig  # ConfigError is a ValueError
 
         loss = TrainingConfig.from_dict({key: data.get(key) for key in LOSS_OPTIONS})
+        url = data.get("tracking_url") or SITE_URL
+        if not isinstance(url, str) or len(url) > 200 or not TRACKING_URL.match(url):
+            raise ValueError(
+                "'tracking_url' must be an http(s) address such as https://brickdnn.com."
+            )
+        project = data.get("tracking_project")
+        if project is not None and (
+            isinstance(project, bool) or not isinstance(project, int) or project < 1
+        ):
+            raise ValueError("'tracking_project' must be the id of a saved network.")
         return cls(
             class_name=name,
             include_main=bool(data.get("include_main", True)),
             include_training=bool(data.get("include_training", True)),
             **{key: getattr(loss, key) for key in LOSS_OPTIONS},
+            log_to_brickdnn=bool(data.get("log_to_brickdnn", True)),
+            tracking_url=url.rstrip("/"),
+            tracking_project=project,
         )
 
 
@@ -237,11 +274,14 @@ class _Generator:
 
     def render(self) -> str:
         training = self.opt.include_main and self.opt.include_training and self._can_train()
+        self.logging = training and self.opt.log_to_brickdnn
         parts = [self._model_class()]
         if self.opt.include_main:
             parts.append(_COUNT_PARAMETERS)
             if training:
                 parts.append(self._training_code())
+            if self.logging:
+                parts.append(self._tracking_code())
             parts.append(self._main(training))
         header = BANNER + "\n" + self._docstring(training) + "\n\n" + self._imports(training)
         # PEP 8: two blank lines between top-level definitions.
@@ -279,13 +319,48 @@ class _Generator:
                 "",
                 "    python this_file.py --csv data.csv --epochs 20",
                 "    python this_file.py --predict new_data.csv",
+                "",
+                "--test-split 0.2 holds out a fifth of the rows and measures the model on them",
+                "once at the end.",
+            ]
+        if training and self.opt.log_to_brickdnn:
+            lines += [
+                "",
+                "Log the training to Brick DNN, to see its curves next to the runs trained there",
+                "(the runs page): create an API token on the page API tokens (one that may only",
+                "log runs is enough) and set it in the environment before you train:",
+                "",
+                "    export BRICKDNN_TOKEN=<your token>",
+                "    python this_file.py --csv data.csv --epochs 20",
+                "",
+                "It sends the loss and the metrics of every epoch, the settings, the name of the",
+                "CSV file and the test results to BRICKDNN_URL (default "
+                + self.opt.tracking_url
+                + "). Without",
+                "BRICKDNN_TOKEN nothing is sent and the script runs offline with the same results;",
+                "a network error never stops the training. The token is never stored in this file.",
             ]
         lines.append('"""')
         return "\n".join(lines)
 
     def _imports(self, training: bool) -> str:
         lines = []
-        if training:
+        if training and self.logging:
+            lines += [
+                "from __future__ import annotations",
+                "",
+                "import argparse",
+                "import csv",
+                "import json",
+                "import math",
+                "import os",
+                "import sys",
+                "import time",
+                "import urllib.error",
+                "import urllib.request",
+                "",
+            ]
+        elif training:
             lines += ["import argparse", "import csv", ""]
         lines += ["import torch", "import torch.nn as nn"]
         if training:
@@ -372,6 +447,10 @@ class _Generator:
                 '    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")',
                 '    parser.add_argument("--seed", type=int, default=0, help="for a repeatable run")',
                 "    parser.add_argument(",
+                '        "--test-split", type=float, default=0.0, help="share of the rows held out '
+                'as a test set"',
+                "    )",
+                "    parser.add_argument(",
                 '        "--save", default="model.pt", help="the trained model (--csv writes it, '
                 '--predict reads it)"',
                 "    )",
@@ -391,12 +470,58 @@ class _Generator:
             '    print(f"Trainable parameters: {count_parameters(model):,}")',
             "",
         ]
-        if training:
+        if training and self.logging:
+            task = "classification" if self._classification() else "regression"
+            lines += [
+                "    if args.csv:",
+                "        header, features, target = load_csv(args.csv)",
+                "        # Logged to Brick DNN only with the environment variable BRICKDNN_TOKEN.",
+                "        with BrickDNNRun.start(",
+                f'            name="{name}",',
+                "            config={",
+                '                "epochs": args.epochs,',
+                '                "batch_size": args.batch_size,',
+                '                "learning_rate": args.lr,',
+                '                "optimizer": "adam",',
+                '                "seed": args.seed,',
+                f'                "loss": "{self._loss_name(task)}",',
+                '                "val_split": 0.2,',
+                '                "test_split": args.test_split,',
+                "            },",
+                "            project=BRICKDNN_PROJECT,",
+                "            dataset=os.path.basename(args.csv),",
+                f'            task="{task}",',
+                "            epochs=args.epochs,",
+                "            url=BRICKDNN_URL,",
+                "        ) as run:",
+                "            mean, std = train(",
+                "                model,",
+                "                features,",
+                "                target,",
+                "                args.epochs,",
+                "                args.batch_size,",
+                "                args.lr,",
+                "                args.seed,",
+                "                args.test_split,",
+                "                run,",
+                "            )",
+                "        save_model(model, args.save, header, mean, std)",
+                "        return",
+                "",
+            ]
+        elif training:
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
                 "        mean, std = train(",
-                "            model, features, target, args.epochs, args.batch_size, args.lr, args.seed",
+                "            model,",
+                "            features,",
+                "            target,",
+                "            args.epochs,",
+                "            args.batch_size,",
+                "            args.lr,",
+                "            args.seed,",
+                "            args.test_split,",
                 "        )",
                 "        save_model(model, args.save, header, mean, std)",
                 "        return",
@@ -420,6 +545,23 @@ class _Generator:
             and len(source.shape) == 1
             and target.shape is not None
             and len(target.shape) == 1
+        )
+
+    def _classification(self) -> bool:
+        return self._node(self.a.outputs[0]).shape[0] > 1  # type: ignore[index]
+
+    def _tracking_code(self) -> str:
+        import inspect
+
+        from .tracking import BrickDNNRun
+
+        project = str(self.opt.tracking_project) if self.opt.tracking_project else "None"
+        return (
+            _TRACKING_HEADER.replace("[[URL]]", self.opt.tracking_url).replace(
+                "[[PROJECT]]", project
+            )
+            + "\n\n\n"
+            + inspect.getsource(BrickDNNRun).rstrip()
         )
 
     def _training_code(self) -> str:
@@ -449,6 +591,11 @@ class _Generator:
             )
             metric_print = "  val acc {correct / len(val_set):.1%}"
             predictions = "outputs.argmax(dim=1).tolist()"
+            val_metric = '"val_accuracy": correct / len(val_set)'
+            test_metric = (
+                '            summary["test_accuracy"] = '
+                "(outputs.argmax(dim=1) == targets).float().mean().item()\n"
+            )
         else:
             header = (
                 f"NUM_FEATURES = {n_features}\n"
@@ -461,13 +608,29 @@ class _Generator:
             if code is not None:
                 header += "\n" + code
                 loss = "make_loss(target[train_rows])"
-            metric_init = "        val_loss = 0.0\n"
-            metric_update = ""
+            metric_init = "        val_loss, squared = 0.0, 0.0\n"
+            metric_update = "                squared += ((outputs - targets) ** 2).sum().item()\n"
             metric_print = ""
             predictions = "outputs[:, 0].tolist()"
+            val_metric = '"val_rmse": (squared / len(val_set)) ** 0.5'
+            test_metric = (
+                '            summary["test_rmse"] = '
+                "((outputs - targets) ** 2).mean().sqrt().item()\n"
+            )
 
+        if self.logging:
+            run_param = "\n    run: BrickDNNRun | None = None,"
+            log_epoch = "        if run is not None:\n            run.log(epoch=epoch, **summary)\n"
+            log_end = "    if run is not None:\n        run.finish(summary=summary)\n"
+        else:
+            run_param = log_epoch = log_end = ""
         return (
-            _TRAINING_TEMPLATE.replace("[[HEADER]]", header)
+            _TRAINING_TEMPLATE.replace("[[RUN_PARAM]]", run_param)
+            .replace("[[LOG_EPOCH]]", log_epoch)
+            .replace("[[LOG_END]]", log_end)
+            .replace("[[VAL_METRIC]]", val_metric)
+            .replace("[[TEST_METRIC]]", test_metric)
+            .replace("[[HEADER]]", header)
             .replace("[[TARGETS]]", targets)
             .replace("[[TASK]]", task)
             .replace("[[LOSS]]", loss)
@@ -605,6 +768,17 @@ def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)"""
 
 
+_TRACKING_HEADER = """\
+# --------------------------------------------------------------------------- #
+# Logging to Brick DNN, only with the environment variable BRICKDNN_TOKEN
+# --------------------------------------------------------------------------- #
+
+# The server and the saved network the runs belong to (BRICKDNN_URL and BRICKDNN_PROJECT
+# override them). The token is never stored here: it is read from BRICKDNN_TOKEN.
+BRICKDNN_URL = "[[URL]]"
+BRICKDNN_PROJECT = [[PROJECT]]"""
+
+
 _TRAINING_TEMPLATE = '''\
 # --------------------------------------------------------------------------- #
 # Training on a CSV file, and predictions for new rows
@@ -647,9 +821,11 @@ def train(
     batch_size: int,
     lr: float,
     seed: int,
+    test_split: float = 0.0,[[RUN_PARAM]]
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Train on a random 80 % of the rows and validate on the rest (the split depends only
-    on ``seed``).
+    on ``seed``). With ``test_split``, that share of the rows is held out as a test set and
+    measured once at the end.
 
     Returns the mean and standard deviation that standardise the features. They come from
     the training rows only, and new data has to be standardised with them as well.
@@ -659,7 +835,11 @@ def train(
     generator = torch.Generator().manual_seed(seed)
     order = torch.randperm(len(features), generator=generator)
     n_val = max(1, len(features) // 5)
-    val_rows, train_rows = order[:n_val], order[n_val:]
+    n_test = int(len(features) * test_split)
+    if not 0 <= test_split < 1 or len(features) - n_val - n_test < 2:
+        raise SystemExit("The test split leaves too few rows for training.")
+    val_rows, test_rows = order[:n_val], order[n_val : n_val + n_test]
+    train_rows = order[n_val + n_test :]
 
     mean = features[train_rows].mean(dim=0)
     std = features[train_rows].std(dim=0)
@@ -684,11 +864,14 @@ def train(
     else:
         device = "cpu"
     print(f"Training on {device}: {len(train_set)} rows, {len(val_set)} for validation")
+    if n_test:
+        print(f"{n_test} rows are held out for the test")
     model.to(device)
 
     loss_fn = [[LOSS]]
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    summary: dict[str, float] = {}
     for epoch in range(1, epochs + 1):
         model.train()
         train_loss, seen = 0.0, 0
@@ -711,7 +894,21 @@ def train(
             f"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}"
             f"  val loss {val_loss / len(val_set):.4f}[[METRIC_PRINT]]"
         )
-    model.cpu()
+        summary = {
+            "train_loss": train_loss / max(seen, 1),
+            "val_loss": val_loss / len(val_set),
+            [[VAL_METRIC]],
+        }
+[[LOG_EPOCH]]
+    if n_test:
+        model.eval()
+        with torch.no_grad():
+            inputs, targets = features[test_rows].to(device), target[test_rows].to(device)
+            outputs = model(inputs)
+            summary["test_loss"] = loss_fn(outputs, targets).item()
+[[TEST_METRIC]]        tested = [f"{key[5:]} {value:.4f}" for key, value in summary.items() if "test" in key]
+        print("Test:", ", ".join(tested))
+[[LOG_END]]    model.cpu()
     return mean, std
 
 

@@ -3,6 +3,29 @@
 ## Unreleased
 
 ### Added
+- **Runs that ran elsewhere: logging from the exported script back into Brick DNN.** A
+  training of the exported PyTorch script on the user's own machine or GPU logs its curves
+  into a run of the new kind `external` (badge *ran elsewhere* in the runs table, the
+  history, the run view and comparisons; filter *Ran elsewhere*; live-updating while it
+  runs). API `/api/tracking/runs/` (create, `log/` points in batches, `PATCH` config and
+  summary, `finish/` as completed, failed or stopped) for personal API tokens, including the
+  new token scope `runs:log` (*Only log training runs* on the tokens page: such a token can do
+  nothing else); strict validation, limits per account (500 runs, 10 logging at a time), per
+  run (20,000 points) and per request (1,000 points, 512 KB), rate limit
+  `BRICKDNN_TRACKING_RATE`; the points count toward the storage quota, never toward CPU time,
+  and the runs are never in the training queue. A run that reports nothing for a day ends
+  as failed; *Stop* in the app refuses further reports. New stdlib-only client
+  `brickdnn/tracking.py` (`BrickDNNRun`): off without `BRICKDNN_TOKEN`, batches points, warns
+  once on an error, keeps up to 1,000 points, retries and gives up quietly, never raises. The
+  code generator embeds it (option `log_to_brickdnn`, default on, *Log to Brick DNN* in the
+  code view; `tracking_url` and `tracking_project` from the server and the saved network):
+  the CSV loop logs loss and accuracy or RMSE per epoch, the settings and the test results
+  of the new `--test-split`; without the variable the script runs offline with identical
+  results, and the token is never written into it. The script's README section says how.
+  The tokens page explains it with copyable commands. MCP `list_training_runs` and
+  `get_training_run` show `ran_elsewhere` and the reported numbers. The data export has every
+  logged point; the privacy pages say what is stored (a dated sentence in the policy of
+  brickdnn.com). Migration 0023. See docs/experiments.md.
 - **An experiment tracker: the runs page.** `/runs` (*Runs* in the header, *Compare runs* in
   the training panel's history) lists every run the user can see (own runs and those of
   shared networks) in one table: status, start, duration, dataset, model, the main settings

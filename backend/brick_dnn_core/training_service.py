@@ -815,8 +815,9 @@ def start_lock():
 
 def active_run_count() -> int:
     """Number of active runs of all users (after updating their status)."""
-    sync_runs(TrainingRun.objects.filter(status__in=ACTIVE_STATUSES))
-    return TrainingRun.objects.filter(status__in=ACTIVE_STATUSES).count()
+    runs = TrainingRun.objects.filter(status__in=ACTIVE_STATUSES).exclude(kind="external")
+    sync_runs(runs)
+    return runs.count()
 
 
 def start_run(
@@ -956,7 +957,11 @@ def start_new(
                 raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
             if active >= settings.TRAINING_MAX_RUNS:
                 raise TrainingBusy(BUSY_MESSAGE)
-            mine = TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES).count()
+            mine = (
+                TrainingRun.objects.filter(owner=user, status__in=ACTIVE_STATUSES)
+                .exclude(kind="external")
+                .count()
+            )
             if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
                 raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
             run = create(limit, message="Starting …")
@@ -1405,7 +1410,12 @@ def sync_run(run: TrainingRun) -> TrainingRun:
     worker, the web server only reads what the runner reports (progress, usage) and asks it
     to stop when a budget is used up; whether the process is alive is for the worker that
     started it to judge. The web server instead checks that this worker is: the runs of a
-    dead worker go back into the queue (training_queue.recover)."""
+    dead worker go back into the queue (training_queue.recover). A run logged from
+    elsewhere has no process: it only ends when its script stops reporting (tracking.py)."""
+    if run.kind == "external":
+        from . import tracking
+
+        return tracking.sync(run)
     if run.status not in ACTIVE_STATUSES:
         return run
     if run.status == QUEUED:
@@ -1506,7 +1516,12 @@ def stop_run(run: TrainingRun) -> TrainingRun:
     The request is a ``STOP`` file in the run directory and a time in the database. The
     runner follows the file; whoever looks after its process (the worker, or the web server
     without one) kills it if it does not, and passes a request it only finds in the database
-    on to the runner."""
+    on to the runner. A run logged from elsewhere just ends: its script's further reports
+    are refused (tracking.py)."""
+    if run.kind == "external":
+        from . import tracking
+
+        return tracking.stop(run)
     sync_run(run)
     if run.status == QUEUED and not queue.cancel(run):
         with contextlib.suppress(TrainingRun.DoesNotExist):
@@ -1526,6 +1541,8 @@ def terminate_run(run: TrainingRun) -> None:
     """Kill the process of an active run (used before deleting it). With a training worker
     the web server cannot: the worker kills the process as soon as it sees that the run is
     gone (training_worker.py)."""
+    if run.kind == "external":
+        return  # no process here
     sync_run(run)
     if run.status in RUNNING_STATUSES and _supervises(run):
         # Still active after the sync: the process is alive and its pid is trustworthy.
@@ -1615,6 +1632,10 @@ def state_of(run: TrainingRun) -> dict[str, Any] | None:
     """
     if run.status == QUEUED:
         return None  # nothing was trained yet (after a restart: not in this attempt)
+    if run.kind == "external":
+        from . import tracking
+
+        return tracking.state_of(run)  # its logged points
     state = read_run_state(run)
     if (
         state is not None
@@ -1757,6 +1778,11 @@ def preview_file(run: TrainingRun, name: Any) -> Path | None:
 
 def no_weights_reason(run: TrainingRun) -> str:
     """Why a run has no weights to download or predict with (for the user)."""
+    if run.kind == "external":
+        return (
+            "This run was trained elsewhere and logged its curves here: its weights stayed "
+            "where it ran."
+        )
     if run.kind == "ensemble" and run.has_weights:
         return (
             "An ensemble has no weights of its own: it predicts with its members. Their runs "
@@ -2110,7 +2136,7 @@ def _delete_run_files(sender, instance: TrainingRun, **kwargs) -> None:
     def remove() -> None:
         # With a training worker, its worker kills the process (and removes what the
         # process wrote meanwhile) when it sees that the run is gone.
-        if _supervises(run):
+        if _supervises(run) and run.kind != "external":
             if run.status in RUNNING_STATUSES:
                 _kill(run, wait=3.0)  # only kills a process that still is this runner
             _PROCESSES.pop(str(run.pk), None)

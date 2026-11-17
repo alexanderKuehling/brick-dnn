@@ -162,8 +162,10 @@ def summary_of(run: TrainingRun, state: dict[str, Any] | None) -> dict[str, Any]
     kept = state.get("weights_epoch")
     if isinstance(kept, int) and not isinstance(kept, bool):
         found["best_epoch"] = kept
-    if isinstance(run.summary, dict) and run.kind == "external":
-        found.update(_numbers(run.summary))  # what the script reported at the end
+    if run.kind == "external":
+        external = run.plan.get("external") if isinstance(run.plan, dict) else None
+        if isinstance(external, dict):
+            found.update(_numbers(external.get("summary")))  # what the script reported
     return found
 
 
@@ -233,6 +235,8 @@ def model_label(run: TrainingRun) -> str:
     ('SVC on learned features') or 'Ensemble'."""
     if run.kind == "ensemble":
         return "Ensemble"
+    if run.kind == "external" and not (isinstance(run.graph, dict) and run.graph.get("nodes")):
+        return "Script"
     from .ensembles import _model_label
 
     return _model_label(run) or "Neural network"
@@ -289,6 +293,13 @@ def _loss(run: TrainingRun) -> str | None:
     return loss if isinstance(loss, str) else None
 
 
+def _external(run: TrainingRun) -> dict[str, Any] | None:
+    """A run logged from elsewhere: its client, points and last report (null otherwise)."""
+    from .tracking import describe
+
+    return describe(run)
+
+
 def run_row(
     run: TrainingRun,
     user,
@@ -327,11 +338,14 @@ def run_row(
         "settings": _settings(run),
         "metrics": dict(run.summary) if isinstance(run.summary, dict) else {},
         "starred": run.starred,
+        "external": _external(run),
     }
     if public:
         if include_notes:
             row["tags"] = list(run.tags or [])
             row["note"] = run.note
+        else:
+            row["starred"] = False  # stars are annotations too
         return row
     row.update(
         {
@@ -423,7 +437,8 @@ def _facets(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def table(user, params) -> dict[str, Any]:
     """``GET /api/training/runs/table/``: the runs ``user`` can see, filtered, sorted and
     paged. Query parameters: ``project``, ``dataset`` (a key of ``facets.datasets``),
-    ``status``, ``family`` (neural, classical, hybrid, ensemble, external), ``tag``,
+    ``status``, ``family`` (neural, classical, hybrid, ensemble, or external: logged from
+    elsewhere), ``tag``,
     ``starred=true``, ``mine=true``, ``q`` (in the name, note or tags), ``ids`` (comma
     separated), ``sort`` (name, status, created_at, duration, dataset, model, kind,
     ``setting:<key>``, ``metric:<key>``), ``order`` (asc, desc), ``page``, ``page_size``."""
@@ -556,7 +571,10 @@ def curve_points(run: TrainingRun, state: dict[str, Any] | None) -> list[dict[st
         epoch = entry.get("epoch")
         epoch = epoch if isinstance(epoch, int) and not isinstance(epoch, bool) else index + 1
         seconds = _number(entry.get("seconds"))
-        if seconds is not None:
+        logged = _number(entry.get("time"))  # a run logged elsewhere: since its start
+        if logged is not None:
+            elapsed, seconds = logged, logged
+        elif seconds is not None:
             elapsed += seconds
         point: dict[str, Any] = {
             "x": epoch,
@@ -576,6 +594,7 @@ def curve_of(run: TrainingRun) -> dict[str, Any]:
 
     state = state_of(run) if run.status != "queued" else None
     loss = state.get("loss") if isinstance(state, dict) else None
+    external = state.get("external") if isinstance(state, dict) else None
     return {
         "id": str(run.pk),
         "name": run.name,
@@ -585,7 +604,7 @@ def curve_of(run: TrainingRun) -> dict[str, Any]:
         "task": run.plan.get("task") if isinstance(run.plan, dict) else None,
         "loss": _loss(run),
         "loss_label": loss.get("label") if isinstance(loss, dict) else None,
-        "x_unit": "epoch",
+        "x_unit": external.get("x_unit", "epoch") if isinstance(external, dict) else "epoch",
         "points": curve_points(run, state),
     }
 

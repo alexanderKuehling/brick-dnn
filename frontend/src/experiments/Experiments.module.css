@@ -3,6 +3,18 @@
 .table {
   font-variant-numeric: tabular-nums;
 
+  /* Cells keep their content on one line; the table scrolls sideways instead. */
+  & th,
+  & td {
+    white-space: nowrap;
+  }
+
+  /* Badges and names at their full width, not cut off by a narrow column. */
+  & td > *,
+  & td :global(.mantine-Badge-root) {
+    min-width: max-content;
+  }
+
   & tr[data-selected] td {
     background-color: var(--mantine-primary-color-light);
   }

@@ -62,6 +62,7 @@ export const experiments = {
     classical: 'Classical model',
     hybrid: 'Hybrid network',
     ensemble: 'Ensemble',
+    external: 'Ran elsewhere',
   },
   setting: {
     optimizer: 'Optimizer',
@@ -224,6 +225,38 @@ export const experiments = {
     tableLabel: 'Runs of “{{name}}”',
     noRuns: 'The runs of this comparison were deleted.',
     gone: 'This link does not exist or was turned off.',
+  },
+  elsewhere: {
+    badge: 'ran elsewhere',
+    tooltip_one: 'Logged by a script on another machine: {{count}} point, last report {{date}}.',
+    tooltip_other: 'Logged by a script on another machine: {{count}} points, last report {{date}}.',
+    runNote_one:
+      'Trained elsewhere: a script logged {{count}} point of its curves here. Its weights stayed where it ran.',
+    runNote_other:
+      'Trained elsewhere: a script logged {{count}} points of its curves here. Its weights stayed where it ran.',
+    script: 'Script',
+  },
+  logging: {
+    title: 'Log trainings from your own machine',
+    intro:
+      'Train the exported script on your laptop or a GPU server, and its curves appear on the runs page next to the runs trained here, marked “ran elsewhere”.',
+    step1:
+      'Export the network with “Export .py” (in the code view, “Log to Brick DNN” is on by default). The CSV training loop logs the loss and the metrics of every epoch, the settings and the test results.',
+    step2:
+      'Create a token for it below; a token that may only log runs is enough. The token is never written into the script: set it in the environment.',
+    step3:
+      'Train as usual. Without BRICKDNN_TOKEN the script sends nothing and runs offline with the same results; a network error never stops the training.',
+    copyCommands: 'Copy the commands',
+    ownLoop: 'In a training loop of your own, the client of the brickdnn package does the same:',
+    copyPython: 'Copy the Python code',
+    privacy:
+      'Brick DNN stores what the script sends (settings, metrics per epoch, the name of the CSV file) with the run; it is deleted with the run or your account and is part of your data export.',
+    codeSwitch: 'Log to Brick DNN',
+    codeSwitchHelp: 'Only with the environment variable BRICKDNN_TOKEN',
+    scopeLabel: 'Only log training runs',
+    scopeHelp:
+      'For scripts on your own machine: create runs and log their curves, nothing else. Safe to keep on a shared GPU server.',
+    scopeBadge: 'Logs runs',
   },
   history: {
     compare: 'Compare runs',

@@ -78,6 +78,7 @@ from .models import (
 )
 from .retention import record_activity
 from .serializers import clean_email, email_field
+from .tracking import read_points
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -197,7 +198,8 @@ data_sources.json        CSV files you imported in the Data tab
 data_preparations.json   your data preparations: steps and settings
 datasets.json            your training datasets
 training_runs.json       your trainings: network, settings, status and metrics; ensembles
-                         with the runs they combine; your tags, notes and stars
+                         with the runs they combine; your tags, notes and stars; for runs
+                         logged from your own machine every point their script sent
 run_comparisons.json     comparisons of runs you shared with a link: the runs, columns and
                          the link's token
 usage.json               the compute (CPU time) your trainings and predictions used, per
@@ -434,6 +436,8 @@ def _runs(user) -> list[dict[str, Any]]:
             "note": run.note,
             "starred": run.starred,
             "summary": run.summary,
+            # Runs logged from elsewhere: every point their script sent.
+            "points": read_points(run) if run.kind == "external" else None,
             "created_at": run.created_at,
             "started_at": run.started_at,
             "finished_at": run.finished_at,

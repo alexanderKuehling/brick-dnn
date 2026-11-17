@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 import type { RunDetail, RunSummary } from '@/api';
 import { CompareLink } from '@/experiments/CompareLink';
+import { ElsewhereBadge } from '@/experiments/ElsewhereBadge';
 import { i18n, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
@@ -247,6 +248,7 @@ export function HistoryView({
                     <Text size="sm" fw={600} truncate>
                       {run.name}
                     </Text>
+                    {run.external && <ElsewhereBadge external={run.external} />}
                     {isEnsemble(run) && (
                       <Badge variant="outline" color="grape" tt="none" style={{ flexShrink: 0 }}>
                         {i18n.t('ui.training.HistoryView.ensemble')}

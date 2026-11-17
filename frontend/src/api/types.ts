@@ -176,6 +176,10 @@ export interface GenerateOptions {
   include_main?: boolean;
   include_training?: boolean;
   filename?: string;
+  /** The CSV loop logs to Brick DNN while BRICKDNN_TOKEN is set (default on). */
+  log_to_brickdnn?: boolean;
+  /** The saved network the logged runs belong to. */
+  tracking_project?: number;
 }
 
 export interface GenerateResult {
@@ -309,6 +313,8 @@ export interface ApiToken {
   /** The start of the token (e.g. "bdnn_Ab3dEf9h"), to recognise it. */
   prefix: string;
   read_only: boolean;
+  /** "runs:log": the token may only log runs trained elsewhere; "": what read_only allows. */
+  scope?: ApiTokenScope;
   created_at: string;
   last_used_at: string | null;
   expires_at: string | null;
@@ -318,9 +324,12 @@ export interface ApiToken {
   used_cpu_minutes?: number;
 }
 
+export type ApiTokenScope = '' | 'runs:log';
+
 export interface ApiTokenInput {
   name: string;
   read_only?: boolean;
+  scope?: ApiTokenScope;
   expires_in_days?: ApiTokenExpiry | null;
 }
 
@@ -1559,9 +1568,21 @@ export interface RunSummary {
   tags?: string[];
   note?: string;
   starred?: boolean;
+  /** Logged from elsewhere (`kind` "external"); null for runs trained here. */
+  external?: ExternalRunInfo | null;
 }
 
-export type RunKind = 'training' | 'ensemble';
+export type RunKind = 'training' | 'ensemble' | 'external';
+
+/** A run trained elsewhere whose script logs its curves here (backend tracking.py). */
+export interface ExternalRunInfo {
+  /** What logged it, e.g. "brickdnn-tracking/1". */
+  client: string | null;
+  /** Points of the curves logged so far. */
+  points: number;
+  /** When the script last reported (ISO). */
+  reported_at: string | null;
+}
 
 export type RunFamily = 'neural' | 'classical' | 'hybrid' | 'ensemble';
 
@@ -2989,6 +3010,8 @@ export interface RunRow {
   /** Headline numbers: val_loss, test_accuracy, val_macro_f1, test_pr_auc, best_epoch … */
   metrics: Record<string, number>;
   starred: boolean;
+  /** Logged from elsewhere by a script; null for runs trained here. */
+  external?: ExternalRunInfo | null;
   /** Missing in a shared comparison unless its owner chose to show them. */
   tags?: string[];
   note?: string;

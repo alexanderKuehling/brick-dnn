@@ -31,6 +31,7 @@ import { useTranslation } from '@/i18n';
 import { StatusBadge } from '@/training/runActions';
 import { TrialsTable } from '@/training/RunView';
 import type { Column } from './columns';
+import { ElsewhereBadge } from './ElsewhereBadge';
 import classes from './Experiments.module.css';
 
 export interface RunsTableProps {
@@ -55,6 +56,7 @@ export function RunBadges({ row }: { row: RunRow }) {
   const { t } = useTranslation();
   return (
     <>
+      {row.external && <ElsewhereBadge external={row.external} />}
       {row.family === 'ensemble' && (
         <Badge size="xs" variant="outline" color="grape" tt="none">
           {t('experiments.family.ensemble')}
@@ -158,7 +160,9 @@ export function RunsTable({
             aria-label={t('experiments.table.sortBy', { label: column.label })}
           >
             <Group gap={4} wrap="nowrap" justify={column.numeric ? 'flex-end' : 'flex-start'}>
-              <span>{column.label}</span>
+              <Text span size="xs" fw={600}>
+                {column.label}
+              </Text>
               {sorted ? (
                 order === 'asc' ? (
                   <IconArrowUp size={12} aria-hidden />
@@ -269,7 +273,7 @@ export function RunsTable({
                           {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
                         </ActionIcon>
                       )}
-                      <Text size="xs" fw={600} truncate maw={260} title={row.name}>
+                      <Text size="xs" fw={600} title={row.name}>
                         {row.name}
                       </Text>
                       <RunBadges row={row} />

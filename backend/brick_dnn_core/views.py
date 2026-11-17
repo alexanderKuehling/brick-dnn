@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 import brickdnn
 from brickdnn import service
+from brickdnn.codegen import TRACKING_URL
 from brickdnn.training import ACTIVE_STATUSES, DatasetError
 
 from . import (
@@ -35,6 +36,7 @@ from .accounts import LoginSerializer, tokens_for
 from .api_tokens import MAX_TOKENS_PER_USER, IsLoggedInUser, create_token
 from .budgets import Actor, BudgetError, token_usage
 from .models import ApiToken, Dataset, TrainingRun
+from .oauth import site_url
 from .retention import touch
 from .serializers import (
     ApiTokenCreateSerializer,
@@ -85,9 +87,16 @@ def analyze_graph(request: Request) -> Response:
 def generate(request: Request) -> Response | HttpResponse:
     """Generate a PyTorch script (see ``brickdnn.service.generate`` for the body).
 
-    Add ``?download=1`` to get the file as an attachment instead of JSON.
+    Add ``?download=1`` to get the file as an attachment instead of JSON. A script that
+    logs its training to Brick DNN logs to this server unless ``tracking_url`` says otherwise.
     """
-    status_code, payload = service.generate(request.data)
+    data = request.data
+    if isinstance(data, dict) and isinstance(data.get("options"), dict):
+        options = data["options"]
+        here = site_url(request)
+        if "tracking_url" not in options and TRACKING_URL.match(here):
+            data = {**data, "options": {**options, "tracking_url": here}}
+    status_code, payload = service.generate(data)
     if status_code == status.HTTP_200_OK and request.query_params.get("download"):
         response = HttpResponse(payload["code"], content_type="text/x-python; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="{payload["filename"]}"'

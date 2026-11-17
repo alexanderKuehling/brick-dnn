@@ -4,7 +4,8 @@ Every training is a run with its own view (curves, metrics, evaluation) in the t
 The **runs page** (`/runs`, *Runs* in the header, or *Compare runs* in the panel's
 *History*) puts all of them side by side: a table of every run with its settings and
 results, the curves of up to ten runs in one chart, settings against results, and a
-read-only link to share a comparison.
+read-only link to share a comparison. Trainings on your own machine can log their curves
+into it too ([Runs that ran elsewhere](#runs-that-ran-elsewhere)).
 
 ## The runs table
 
@@ -17,7 +18,7 @@ network's editors and its owner see it). Filters above it narrow it down:
 | Search | in the name, the note, the tags and the dataset's name |
 | Network | the runs of one saved network (the history's *Compare runs* opens the page with it) |
 | Dataset | runs of one dataset: an upload, a dataset of the Data tab or a built-in one |
-| Type | neural networks, classical models, hybrid networks or ensembles |
+| Type | neural networks, classical models, hybrid networks, ensembles, or runs that ran elsewhere |
 | Status, tag | as they say |
 | Starred only, only my runs | |
 
@@ -96,10 +97,95 @@ The links, and the tags, notes and stars of your runs, are part of *Download my 
 (`run_comparisons.json`, `training_runs.json`) and are deleted with the account
 ([privacy.md](privacy.md)).
 
+## Runs that ran elsewhere
+
+Train the exported script on your own laptop or a GPU server, and its curves appear on the
+runs page next to the runs trained here, with the badge *ran elsewhere*. Comparisons, tags,
+notes and shared links work for them like for any run. Nothing is computed on the server for
+them: they use none of your compute (CPU time) and do not wait in the training queue.
+
+**1. The script.** *Export .py* (or the code view) writes a script whose CSV training loop
+logs to Brick DNN; *Log to Brick DNN* in the code view is on by default and turns it off.
+Logging is **inert** unless the environment variable `BRICKDNN_TOKEN` is set: without it the
+script sends nothing and trains offline with exactly the same results (the same numbers,
+the same weights) as a script without logging. The token is never written into the script.
+With it, the script sends
+
+- at the start: the run's name, the settings (epochs, batch size, learning rate, optimizer,
+  seed, loss, validation and test split), the task, the name of the CSV file and the saved
+  network it was exported from;
+- after every epoch: the training and validation loss and the validation accuracy (a
+  classification) or RMSE (a regression), with the seconds since the start;
+- at the end: the test results (with `--test-split`, e.g. `--test-split 0.2`, which holds out
+  that share of the rows and measures the model on them once at the end; without it the last
+  validation results), and whether it completed, failed (an error) or was stopped (Ctrl+C).
+
+`BRICKDNN_URL` names the server (default: the one the script was exported from, e.g.
+`https://brickdnn.com`), `BRICKDNN_PROJECT` the id of the network the run belongs to (default:
+the saved network it was exported from), `BRICKDNN_RUN_NAME` its name.
+
+**2. A token.** On the page *API tokens*, create a token with *Only log training runs*: it
+may create runs and log their curves, and nothing else (no networks, data or MCP), so it is
+safe to keep on a shared GPU server. A full-access token logs too; read-only tokens and the
+tokens of connected apps do not.
+
+**3. Train.**
+
+```bash
+export BRICKDNN_TOKEN=bdnn_...            # PowerShell: $env:BRICKDNN_TOKEN = "bdnn_..."
+python my_network.py --csv data.csv --epochs 20 --test-split 0.2
+```
+
+The script prints `Brick DNN: logging this run to …/runs`, and the run appears in the runs
+table, live-updating (every five seconds) while it runs.
+
+**It never stops the training.** The client sends the points in batches (at most every two
+seconds, 200 at a time), with a timeout of five seconds. On the first error it prints one
+warning, keeps up to 1,000 points and tries again ten seconds later; after three failures in
+a row, or when the server refuses for good (a wrong token, a limit, a run stopped in the app),
+it switches logging off and the training goes on.
+
+**In a training loop of your own,** the same client is in the `brickdnn` package (only the
+standard library; `pip install` it as in the [README](../README.md#use-the-generator-without-the-ui)):
+
+```python
+from brickdnn.tracking import BrickDNNRun
+
+with BrickDNNRun.start(name="ResNet on my GPU", config={"learning_rate": 1e-3}, task="classification") as run:
+    for epoch in range(1, 21):
+        ...  # train and validate
+        run.log(epoch=epoch, train_loss=train_loss, val_loss=val_loss, val_accuracy=accuracy)
+    run.finish(summary={"test_accuracy": test_accuracy})
+```
+
+`log` takes an `epoch` or a `step` and any numbers (also tensors and NumPy numbers; others
+are left out), `finish` the final numbers. Leaving the `with` block with an error ends the run
+as failed, with Ctrl+C as stopped.
+
+**In the app.** A run from elsewhere has its curves, settings and numbers, but no weights: it
+cannot predict, be explained or join an ensemble. *Stop* ends it in the app; the script's
+further reports are then refused and it stops logging. A run that reports nothing for 24
+hours ends as failed. It belongs to whoever owns the token, and to the network given (one
+they own or edit), whose members see it.
+
+**Limits.** An account keeps at most 500 runs logged from elsewhere
+(`BRICKDNN_TRACKING_MAX_RUNS`), 10 of them logging at a time (`BRICKDNN_TRACKING_MAX_ACTIVE`),
+20,000 points per run (`BRICKDNN_TRACKING_MAX_POINTS`), 1,000 points and 512 KB per request,
+32 metrics per point, and 120 requests a minute (`BRICKDNN_TRACKING_RATE`). The points are a
+file next to the run and count toward the storage quota of the account.
+
+**Privacy.** The server stores what the script sends (above), with the run: it is deleted
+with the run or the account and is part of *Download my data* (`training_runs.json` has every
+point). The activity log of agents records when a token created or finished a run, not every
+batch of points.
+
 ## API
 
 The endpoints are in [api.md](api.md#experiments-runs-side-by-side):
 `GET /api/training/runs/table/`, `GET /api/training/runs/curves/?ids=…`,
 `PATCH /api/training/runs/<id>/annotations/`, `GET`/`PUT /api/training/runs/preferences/`,
 `GET`/`POST /api/training/comparisons/`, `DELETE /api/training/comparisons/<id>/` and the
-public `GET /api/shared/runs/<token>/`.
+public `GET /api/shared/runs/<token>/`; runs from elsewhere are logged with
+[`/api/tracking/runs/`](api.md#logging-runs-from-elsewhere). Over MCP,
+`list_training_runs` and `get_training_run` include them (`ran_elsewhere`, and `reported`: the
+numbers the script sent at the end), see [mcp.md](mcp.md).

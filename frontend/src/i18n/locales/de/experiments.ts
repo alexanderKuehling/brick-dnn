@@ -65,6 +65,7 @@ export const experiments: Messages<typeof en> = {
     classical: 'Klassisches Modell',
     hybrid: 'Hybrides Netz',
     ensemble: 'Ensemble',
+    external: 'Anderswo trainiert',
   },
   setting: {
     optimizer: 'Optimierer',
@@ -230,6 +231,40 @@ export const experiments: Messages<typeof en> = {
     tableLabel: 'Läufe von „{{name}}“',
     noRuns: 'Die Läufe dieses Vergleichs wurden gelöscht.',
     gone: 'Diesen Link gibt es nicht, oder er wurde abgeschaltet.',
+  },
+  elsewhere: {
+    badge: 'anderswo trainiert',
+    tooltip_one:
+      'Von einem Skript auf einem anderen Rechner protokolliert: {{count}} Punkt, letzte Meldung {{date}}.',
+    tooltip_other:
+      'Von einem Skript auf einem anderen Rechner protokolliert: {{count}} Punkte, letzte Meldung {{date}}.',
+    runNote_one:
+      'Anderswo trainiert: Ein Skript hat {{count}} Punkt seiner Kurven hierher gemeldet. Seine Gewichte sind dort geblieben, wo es lief.',
+    runNote_other:
+      'Anderswo trainiert: Ein Skript hat {{count}} Punkte seiner Kurven hierher gemeldet. Seine Gewichte sind dort geblieben, wo es lief.',
+    script: 'Skript',
+  },
+  logging: {
+    title: 'Trainings vom eigenen Rechner protokollieren',
+    intro:
+      'Trainieren Sie das exportierte Skript auf Ihrem Laptop oder einem GPU-Server: Seine Kurven erscheinen auf der Seite „Läufe“ neben den hier trainierten Läufen, markiert mit „anderswo trainiert“.',
+    step1:
+      'Exportieren Sie das Netz mit „.py exportieren“ (in der Code-Ansicht ist „An Brick DNN protokollieren“ standardmäßig an). Die CSV-Trainingsschleife meldet Verlust und Metriken jeder Epoche, die Einstellungen und die Testergebnisse.',
+    step2:
+      'Erstellen Sie unten einen Token dafür; ein Token, der nur Läufe protokollieren darf, genügt. Der Token steht nie im Skript: Setzen Sie ihn in der Umgebung.',
+    step3:
+      'Trainieren Sie wie gewohnt. Ohne BRICKDNN_TOKEN sendet das Skript nichts und läuft offline mit denselben Ergebnissen; ein Netzwerkfehler hält das Training nie an.',
+    copyCommands: 'Befehle kopieren',
+    ownLoop: 'In einer eigenen Trainingsschleife tut der Client des Pakets brickdnn dasselbe:',
+    copyPython: 'Python-Code kopieren',
+    privacy:
+      'Brick DNN speichert, was das Skript sendet (Einstellungen, Metriken je Epoche, den Namen der CSV-Datei), beim Lauf; es wird mit dem Lauf oder Ihrem Konto gelöscht und ist Teil Ihres Datenexports.',
+    codeSwitch: 'An Brick DNN protokollieren',
+    codeSwitchHelp: 'Nur mit der Umgebungsvariablen BRICKDNN_TOKEN',
+    scopeLabel: 'Nur Trainingsläufe protokollieren',
+    scopeHelp:
+      'Für Skripte auf Ihrem eigenen Rechner: Läufe anlegen und ihre Kurven melden, sonst nichts. Darf auch auf einem geteilten GPU-Server liegen.',
+    scopeBadge: 'Protokolliert Läufe',
   },
   history: {
     compare: 'Läufe vergleichen',

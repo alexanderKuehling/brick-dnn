@@ -375,12 +375,23 @@ def run_summary(run: TrainingRun, context: dict[str, Any] | None = None) -> dict
         "trials": run.trials_done or None,
         "has_weights": run.has_weights,
         "ensemble": _ensemble_line(run),
+        "ran_elsewhere": _elsewhere(run),
         "started_by": run.owner.get_username(),
         "project": run.project_id,
         "created_at": run.created_at.isoformat(),
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
     }
     return _no_none(summary)
+
+
+def _elsewhere(run: TrainingRun) -> str | None:
+    """'logged by a script: 120 points' for a run trained on the user's own machine."""
+    if run.kind != "external":
+        return None
+    from .tracking import describe
+
+    info = describe(run) or {}
+    return f"logged by a script ({info.get('client') or 'unknown client'}): {info.get('points', 0)} points"
 
 
 def _ensemble_line(run: TrainingRun) -> str | None:
@@ -519,6 +530,7 @@ def run_detail(
         "started_via": _started_via(run),
         "has_weights": run.has_weights,
         "decision_threshold": threshold,
+        "ran_elsewhere": _elsewhere(run),
         "started_by": run.owner.get_username(),
         "project": run.project_id,
         "created_at": run.created_at.isoformat(),
@@ -542,6 +554,8 @@ def run_detail(
         detail["evaluation"] = evaluation_summary(state["evaluation"], threshold)
     if run.kind == "ensemble":
         detail["ensemble"] = ensemble_details(run, state, user)
+    if run.kind == "external" and isinstance(state.get("external"), dict):
+        detail["reported"] = _metrics(state["external"].get("summary"))
     if run.tuning or state.get("trials"):
         tuning = run.tuning if isinstance(run.tuning, dict) else {}
         live = state.get("tuning") if isinstance(state.get("tuning"), dict) else {}

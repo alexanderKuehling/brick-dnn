@@ -269,6 +269,9 @@ export function modelText(row: RunRow): string {
   if (row.family === 'ensemble') {
     return i18n.t('experiments.family.ensemble');
   }
+  if (row.model === 'Script') {
+    return i18n.t('experiments.elsewhere.script');
+  }
   if (row.model === 'Neural network') {
     return i18n.t('experiments.family.neural');
   }

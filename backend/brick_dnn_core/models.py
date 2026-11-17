@@ -195,7 +195,7 @@ class TrainingRun(models.Model):
         ("stopped", "Stopped"),
         ("failed", "Failed"),
     ]
-    KINDS = [("training", "Training"), ("ensemble", "Ensemble")]
+    KINDS = [("training", "Training"), ("ensemble", "Ensemble"), ("external", "Ran elsewhere")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -277,6 +277,8 @@ class TrainingRun(models.Model):
     # "ensemble": the run combines finished runs (its EnsembleMember rows, see ensembles.py)
     # instead of training a network. Its "training" predicts the validation and test rows
     # with every member and measures the combination; ``config`` holds the method.
+    # "external": trained elsewhere (the user's own machine) by a script that logs its curves
+    # here with an API token (tracking.py); nothing runs on the server, there are no weights.
     kind = models.CharField(max_length=10, choices=KINDS, default="training", db_default="training")
     # The experiment tracker (experiments.py): labels, a note and a star that its owner and
     # the editors of its project give the run, to find and compare it later. Null: no tags.
@@ -439,6 +441,10 @@ class ApiToken(models.Model):
     key_hash = models.CharField(max_length=64, unique=True)
     # Read-only tokens can look at everything but change nothing.
     read_only = models.BooleanField(default=False)
+    # "runs:log": the token may only log runs trained elsewhere (tracking.py), nothing else;
+    # empty: everything ``read_only`` allows.
+    SCOPES = [("", "Full access"), ("runs:log", "Only log training runs")]
+    scope = models.CharField(max_length=20, blank=True, choices=SCOPES, default="", db_default="")
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)

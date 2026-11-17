@@ -65,7 +65,8 @@ always fills the screen.
 All runs are kept in the **History** tab together with the exact network that was trained.
 *Compare runs* there opens the [runs page](experiments.md): every run in one table with its
 settings and results, the curves of several runs in one chart, tags and notes, and
-comparisons shared with a link.
+comparisons shared with a link. Trainings of the exported script on your own machine can log
+their curves there too ([Runs that ran elsewhere](experiments.md#runs-that-ran-elsewhere)).
 With Docker Compose, trainings wait in a [queue](#the-training-queue) and a worker trains
 them one after the other; without it, the web server trains itself, one training at a time
 by default (`BRICKDNN_TRAINING_MAX_RUNS`), and refuses a start while it is busy.

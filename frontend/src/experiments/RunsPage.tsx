@@ -42,7 +42,7 @@ import classes from './Experiments.module.css';
 export const POLL_MS = 5000;
 const PAGE_SIZE = 50;
 const STATUSES: RunStatus[] = ['queued', 'running', 'completed', 'stopped', 'failed'];
-const FAMILIES = ['neural', 'classical', 'hybrid', 'ensemble'] as const;
+const FAMILIES = ['neural', 'classical', 'hybrid', 'ensemble', 'external'] as const;
 
 /** The filters, sorting and page of the table, as they are in the address. */
 function queryFrom(params: URLSearchParams): RunTableQuery {

@@ -409,7 +409,9 @@ def test_columns_are_remembered_per_user(ada, bob):
 def test_share_a_comparison_read_only_and_revoke_it(ada, bob, net):
     a = make_run(ada, "mine")
     b = make_run(bob, "bob's run in ada's net", project=net)
-    TrainingRun.objects.filter(pk=a.pk).update(note="private thoughts", tags=["secret"])
+    TrainingRun.objects.filter(pk=a.pk).update(
+        note="private thoughts", tags=["secret"], starred=True
+    )
     client = client_for(ada)
     created = client.post(
         "/api/training/comparisons/",
@@ -439,6 +441,7 @@ def test_share_a_comparison_read_only_and_revoke_it(ada, bob, net):
     for private in ("started_by", "bob@", "ada@", "Iris net", "private thoughts", "secret"):
         assert private not in text
     assert "project" not in data["runs"][0] and "tags" not in data["runs"][0]
+    assert data["runs"][0]["starred"] is False
     assert len(data["curves"]) == 2 and len(data["curves"][0]["points"]) == 3
 
     # Listed for its owner only, and revoked by deleting it.
