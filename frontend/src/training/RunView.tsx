@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -50,9 +50,10 @@ import { semanticKey, slugify } from '@/builder/graph';
 import { isBoosting, kernelLines, kernelTerms } from '@/builder/kinds';
 import { seriesColor } from '@/components/charts/colors';
 import { formatPercentTick } from '@/components/chartScale';
+import { InfoHint } from '@/components/InfoHint';
 import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChart';
 import { ElsewhereBadge } from '@/experiments/ElsewhereBadge';
-import { ExplainHeadline } from '@/explain/ExplainButton';
+import { ExplainButton } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
 import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { AccountLink } from '@/usage/CostEstimate';
@@ -153,7 +154,7 @@ function Tile({
   next?: { label: string; value: string };
 }) {
   return (
-    <Paper withBorder p="xs" radius="sm">
+    <Paper p="xs" radius="sm" className={classes.tile}>
       {next ? (
         <Group gap="xs" align="flex-start" justify="space-between">
           <Metric label={label} value={value} />
@@ -168,6 +169,15 @@ function Tile({
         </Text>
       )}
     </Paper>
+  );
+}
+
+/** The heading of a part of the results (training curves, files …). */
+export function RunSectionTitle({ children, id }: { children: ReactNode; id?: string }) {
+  return (
+    <Text component="h5" id={id} size="sm" fw={600} m={0}>
+      {children}
+    </Text>
   );
 }
 
@@ -217,6 +227,7 @@ function NetworkRunView({
   const [predictOpened, predict] = useDisclosure(false);
   const [downloading, setDownloading] = useState<'weights' | 'script' | null>(null);
   const logViewport = useRef<HTMLDivElement>(null);
+  const curvesHeading = useId();
 
   const base = scriptBase(run.name);
   // A classical model (scikit-learn) is fitted once and saved as a joblib file; a hybrid
@@ -348,7 +359,7 @@ function NetworkRunView({
 
   // ---------------------------------------------------------------- render
   return (
-    <Stack gap="md">
+    <Stack gap="lg">
       <Group justify="space-between" wrap="nowrap" gap="xs">
         <Button
           variant="subtle"
@@ -402,8 +413,6 @@ function NetworkRunView({
             .filter(Boolean)
             .join(' · ')}
         </Text>
-        {/* Explanations of the trained model (src/explain). */}
-        {run.has_weights && !active && <ExplainHeadline run={run} />}
       </div>
 
       <RunProgress
@@ -577,7 +586,18 @@ function NetworkRunView({
           )}
 
           {history.length > 0 ? (
-            <Stack gap="lg">
+            <Stack gap="lg" component="section" aria-labelledby={curvesHeading}>
+              <Group gap={4} wrap="nowrap">
+                <RunSectionTitle id={curvesHeading}>
+                  {i18n.t('ui.training.RunView.trainingCurves')}
+                </RunSectionTitle>
+                {/* Which loss the curves show matters when runs are compared: on demand. */}
+                {loss && (
+                  <InfoHint topic={i18n.t('ui.training.RunView.trainingCurves')}>
+                    {i18n.t('ui.training.RunView.lossTheCurvesEarlyStopping', { loss })}
+                  </InfoHint>
+                )}
+              </Group>
               {tuning && (
                 <Text size="xs" c="dimmed" mb={-8}>
                   {runningTrial !== null
@@ -587,11 +607,7 @@ function NetworkRunView({
                       : null}
                 </Text>
               )}
-              {loss && (
-                <Text size="xs" c="dimmed" mb={-8}>
-                  {i18n.t('ui.training.RunView.lossTheCurvesEarlyStopping', { loss })}
-                </Text>
-              )}
+
               <LineChart
                 title={i18n.t('ui.training.RunView.loss')}
                 x={charts.x}
@@ -713,6 +729,9 @@ function NetworkRunView({
         </div>
       )}
 
+      {!active && (run.has_weights || run.graph.nodes.length > 0) && (
+        <RunSectionTitle>{i18n.t('ui.training.RunView.modelAndFiles')}</RunSectionTitle>
+      )}
       <Group gap="xs">
         {active && canStopRun(run, scope) && (
           <Button
@@ -742,6 +761,8 @@ function NetworkRunView({
                 : i18n.t('ui.training.RunView.weightsPt')}
           </Button>
         )}
+        {/* Explanations of the trained model (src/explain). */}
+        {run.has_weights && !active && <ExplainButton run={run} />}
         {preprocessing && (
           <Button
             variant="default"
@@ -1619,7 +1640,7 @@ function TestResultCard({
     note = i18n.t('ui.training.RunView.notMeasuredTheTrainingDid');
   }
   return (
-    <Paper withBorder p="xs" radius="sm">
+    <Paper p="xs" radius="sm" className={classes.tile}>
       <Group justify="space-between" wrap="nowrap" gap="sm">
         <Group gap="md" wrap="nowrap" align="flex-start" style={{ flexShrink: 0 }}>
           <Metric label={label} value={value} />

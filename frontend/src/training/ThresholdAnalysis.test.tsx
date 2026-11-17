@@ -66,7 +66,7 @@ describe('The decision threshold of a binary classification', () => {
     expect(tile('PR AUC')).toHaveTextContent('average precision of “fraud”');
   });
 
-  it('starts at the saved threshold with the results of every split', () => {
+  it('starts at the saved threshold with the results of every split', async () => {
     show(finished(binaryEvaluation()));
     expect(within(section()).getByTestId('threshold-value')).toHaveTextContent('0.5');
     expect(slider()).toHaveAttribute('aria-valuenow', '4');
@@ -80,9 +80,14 @@ describe('The decision threshold of a binary classification', () => {
       ['True negatives', '88', '44'],
       ['False negatives (fraud missed)', '6', '3'],
     ]);
+    // How the threshold works and where the numbers come from: next to the heading.
+    await userEvent.click(
+      within(section()).getByRole('button', { name: 'More about “Decision threshold”' })
+    );
     expect(
-      within(section()).getByText(/The thresholds and suggestions come from the validation rows/)
+      await screen.findByText(/The thresholds and suggestions come from the validation rows/)
     ).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     expect(within(section()).getByTestId('saved-threshold')).toHaveTextContent(
       'Predictions use 0.5.'
     );

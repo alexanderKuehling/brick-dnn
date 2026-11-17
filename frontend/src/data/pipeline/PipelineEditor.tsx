@@ -183,7 +183,7 @@ export function PipelineEditor({
   );
 
   return (
-    <Stack gap="md" className={classes.editor}>
+    <Stack gap="lg" className={classes.editor}>
       <TargetSplitCard
         settings={settings}
         onSettingsChange={onSettingsChange}
@@ -197,7 +197,7 @@ export function PipelineEditor({
       />
 
       <section aria-labelledby={headingId} aria-busy={previewing}>
-        <Group justify="space-between" mb="xs" wrap="nowrap">
+        <Group justify="space-between" mb="sm" wrap="nowrap">
           <Group gap={8} wrap="nowrap">
             <Title order={3} size="h5" id={headingId}>
               {i18n.t('ui.data.PipelineEditor.steps')}

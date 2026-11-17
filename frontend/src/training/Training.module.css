@@ -155,3 +155,46 @@
     font-weight: 700;
   }
 }
+
+/* ---- the training settings ---------------------------------------------- */
+
+/* The heading of a group of settings (Model and optimizer, Schedule …), with its hint. */
+.sectionHead {
+  min-height: 28px;
+  margin-bottom: var(--mantine-spacing-sm);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.advancedToggle {
+  margin-left: calc(var(--mantine-spacing-xs) * -1);
+}
+
+/* The start of a training stays in view at the bottom of the panel while the settings scroll. */
+.startBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0 calc(var(--mantine-spacing-md) * -1) calc(var(--mantine-spacing-md) * -1);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-top: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+}
+
+/* ---- results of a run -------------------------------------------------- */
+
+/* A metric of a run: a quiet panel instead of a frame, so a grid of them reads as one block. */
+.tile {
+  border-radius: var(--mantine-radius-sm);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}

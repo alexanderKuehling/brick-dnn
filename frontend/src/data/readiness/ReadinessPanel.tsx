@@ -272,8 +272,8 @@ export function ReadinessPanel({
           title={i18n.t('ui.data.ReadinessPanel.readyForTraining')}
         >
           {notes.length > 0
-            ? i18n.t('ui.data.ReadinessPanel.theDataCanBeUsed', { notes: notes.join(' and ') })
-            : i18n.t('ui.data.ReadinessPanel.theDataCanBeUsed2')}
+            ? i18n.t('ui.data.ReadinessPanel.lookAtTheNotesBelow', { notes: notes.join(' and ') })
+            : null}
         </Alert>
       ) : (
         <Alert

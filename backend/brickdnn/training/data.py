@@ -229,6 +229,8 @@ def iterate_batches(
     generator: torch.Generator | None = None,
 ):
     n = len(source)
+    if n == 0:
+        return  # torch.arange(0).split() would still give one empty batch
     order = torch.randperm(n, generator=generator) if shuffle else torch.arange(n)
     for indices in order.split(batch_size):
         if drop_last and len(indices) < batch_size:

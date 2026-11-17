@@ -22,6 +22,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import type { ClassificationEvaluation, ThresholdCurve } from '@/api';
 import { CurveChart } from '@/components/charts/CurveChart';
+import { InfoHint } from '@/components/InfoHint';
 import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { formatPercent } from './format';
 import {
@@ -201,19 +202,21 @@ export function ThresholdAnalysis({
       aria-label={i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}
     >
       <Stack gap="sm">
-        <div>
+        <Group gap={4} wrap="nowrap">
           <Text size="sm" fw={600}>
             {i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}
           </Text>
-          <Text size="xs" c="dimmed">
+          {/* How the threshold works, and where its numbers come from: on demand. */}
+          <InfoHint topic={i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}>
             {i18n.t('ui.training.ThresholdAnalysis.aRowIsPredictedWhen', {
               positive,
               positive2: positive,
               negative,
               positive3: positive,
             })}
-          </Text>
-        </div>
+            {source === 'val' && ` ${SOURCE_NOTES.val}`}
+          </InfoHint>
+        </Group>
         <Group gap="lg" align="flex-end" wrap="wrap">
           <div>
             <Text size="xs" c="dimmed">
@@ -249,7 +252,8 @@ export function ThresholdAnalysis({
           label={(i) => formatThreshold(thresholds[i])}
           marks={marks}
           thumbLabel="Decision threshold"
-          aria-valuetext={formatThreshold(threshold)}
+          // On the thumb (role slider), not on the root, which has no role.
+          thumbProps={{ 'aria-valuetext': formatThreshold(threshold) }}
           mb="md"
         />
         <ScrollArea type="auto">
@@ -286,9 +290,12 @@ export function ThresholdAnalysis({
             </Table.Tbody>
           </Table>
         </ScrollArea>
-        <Text size="xs" c="dimmed">
-          {SOURCE_NOTES[source]}
-        </Text>
+        {/* Numbers that are not from the validation rows are optimistic: always said. */}
+        {source !== 'val' && (
+          <Text size="xs" c="dimmed">
+            {SOURCE_NOTES[source]}
+          </Text>
+        )}
         <Group gap="xs" justify="space-between" wrap="wrap">
           <Text size="xs" c="dimmed" data-testid="saved-threshold">
             {i18n.t('ui.training.ThresholdAnalysis.predictionsUse')} {formatThreshold(saved)}

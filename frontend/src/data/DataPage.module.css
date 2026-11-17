@@ -53,7 +53,11 @@
 }
 
 .editorInner {
-  padding: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-md);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding: var(--mantine-spacing-sm);
+  }
 }
 
 .results {
@@ -75,7 +79,7 @@
   display: flex;
   align-items: center;
   gap: var(--mantine-spacing-xs);
-  padding-right: var(--mantine-spacing-sm);
+  padding-inline: var(--mantine-spacing-xs) var(--mantine-spacing-md);
   border-bottom: 1px solid var(--mantine-color-default-border);
 }
 
@@ -105,7 +109,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--mantine-spacing-xs);
-  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm) 0;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md) 0;
 
   &:empty {
     display: none;
@@ -126,13 +130,70 @@
 }
 
 .panelPadded {
-  padding: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-md);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding: var(--mantine-spacing-sm);
+  }
+}
+
+/* ---- toolbar of a preparation ------------------------------------------ */
+
+/* One row: name, table and save state on the left, the actions on the right. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: 56px;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+}
+
+.toolbarStart {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbarEnd {
+  flex: none;
+}
+
+.nameInput {
+  flex: 0 1 260px;
+  min-width: 96px;
+}
+
+.sourceName {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  & > svg {
+    flex: none;
+  }
+
+  & > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.sharedNote {
+  padding: 6px var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
 }
 
 /* ---- sidebar lists ---------------------------------------------------- */
 
 .sectionTitle {
-  padding: var(--mantine-spacing-sm) var(--mantine-spacing-sm) 4px;
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-sm) 6px;
 }
 
 .row {

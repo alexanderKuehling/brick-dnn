@@ -91,7 +91,6 @@ export const training: Messages<typeof en> = {
       '„{{name}}“ (gestartet von {{user}}) trainiert noch. Sie können ein neues starten, wenn es abgeschlossen ist.',
     showIt: 'Anzeigen',
     data: 'Daten',
-    settings: 'Einstellungen',
     tooMany: 'Zu viele Trainings warten',
     another: 'Ein anderes Training läuft',
     cannotStart: 'Das Training kann nicht gestartet werden',
@@ -129,18 +128,16 @@ export const training: Messages<typeof en> = {
     officialTest: 'Auf den offiziellen Testbildern testen',
     holdOut: 'Testdaten zurückhalten',
     ownSplitImages:
-      'Dieser Datensatz bringt seine eigene Aufteilung mit, die Ordner train, val und test: {{split}} Bilder für Training, Validierung und Test. Das Training verwendet sie unverändert.',
+      'Aufgeteilt nach den Ordnern train, val und test: {{split}} Bilder; das Training verwendet sie unverändert.',
     ownSplitRows:
-      'Dieser Datensatz bringt seine eigene Aufteilung aus dem Daten-Tab mit: {{split}} Zeilen für Training, Validierung und Test. Das Training verwendet sie unverändert; ändern Sie sie im Daten-Tab.',
-    builtinTest:
-      'Bei eingebauten Datensätzen immer an: Auf den offiziellen Testbildern wird nie trainiert, und sie entscheiden nicht über die Gewichte; die behaltenen Gewichte werden nach dem Training einmal darauf gemessen. Der Validierungsanteil wird aus den Trainingsbildern genommen.',
+      'Aufteilung aus dem Daten-Tab: {{split}} Zeilen für Training, Validierung und Test; ändern Sie sie dort.',
+    builtinTest: 'Eingebaute Datensätze werden immer auf ihren offiziellen Testbildern getestet.',
     testHint:
       'Wird nie trainiert und nicht zum Vergleich von Einstellungen verwendet: Das endgültige Modell wird nach dem Training einmal darauf gemessen.',
     testSplit: 'Testanteil',
     maxSamples: 'Max. Stichproben',
     maxRowsHint:
       '{{model}} wird auf diesem Server an höchstens {{rows}} Trainingszeilen angepasst; größere Trainingsmengen werden ausgedünnt.',
-    maxSamplesHint: 'Trainingszeilen für die Anpassung (leer: alle).',
     allUpTo: 'Alle, bis zu {{rows}}',
     all: 'Alle',
     seed: 'Seed',
@@ -151,11 +148,10 @@ export const training: Messages<typeof en> = {
       '{{model}} wird einmal mit scikit-learn auf der CPU angepasst: Es gelten nur die Aufteilung, die Zeilenzahl und der Seed; die Anpassung optimiert die Kernel-Hyperparameter selbst.',
     search: 'Hyperparameter-Suche',
     searchClassical:
-      'Passt das Modell mehrmals mit anderen Werten seiner Parameter an und behält das beste.',
+      'Passt das Modell mehrmals mit anderen Parameterwerten an und behält das beste.',
     searchHybrid:
-      'Passt {{model}} mehrmals mit anderen Werten seiner Parameter an die Merkmale an und kann die Merkmale in jedem Versuch mit anderen Trainingseinstellungen neu lernen; behält den besten Versuch.',
-    searchNeural:
-      'Trainiert das Netz mehrmals mit verschiedenen Einstellungen und behält das beste (standardmäßig das mit dem niedrigsten Validierungsverlust).',
+      'Passt {{model}} mehrmals mit anderen Parameterwerten an und behält den besten Versuch.',
+    searchNeural: 'Trainiert das Netz mehrmals mit anderen Einstellungen und behält das beste.',
     hybridNote:
       'Zwei Phasen: Die neuronalen Schichten lernen {{features}} mit einem temporären linearen Kopf auf der Zielspalte (die Einstellungen unten), dann wird {{model}} an die Merkmale der Trainingszeilen angepasst.',
     hybridNoteMax:
@@ -164,16 +160,13 @@ export const training: Messages<typeof en> = {
     nFeatures_other: '{{count}} Merkmale',
     theFeatures: 'die Merkmale',
     features: 'Merkmale',
-    frozenHint:
-      'Die neuronalen Schichten behalten ihre zufälligen Anfangsgewichte: Nichts wird trainiert, daher werden die Trainingseinstellungen (Epochen, Batchgröße, Lernrate, Optimierer, Weight Decay, Early Stopping) nicht verwendet.',
+    frozenHint: 'Nichts wird trainiert: Die Trainingseinstellungen unten werden nicht verwendet.',
     epochs: 'Epochen',
     epochsFrozen: 'Nicht verwendet: die Merkmale bleiben zufällig',
     perTrial: 'Pro Versuch der Suche',
-    epochsHint: 'Durchläufe durch die Trainingsdaten',
     batchSize: 'Batchgröße',
-    imagesPerStepMax: 'Bilder pro Optimierungsschritt; bis zu {{max}} passen in den Speicher',
-    imagesPerStep: 'Bilder pro Optimierungsschritt (4 bis 16 sind bei Segmentierung üblich)',
-    samplesPerStep: 'Stichproben pro Optimierungsschritt',
+    imagesPerStepMax: 'Bis zu {{max}} passen in den Speicher',
+    imagesPerStep: '4 bis 16 sind bei Segmentierung üblich',
     learningRate: 'Lernrate',
     optimizer: 'Optimierer',
     device: 'Gerät',
@@ -185,8 +178,6 @@ export const training: Messages<typeof en> = {
     earlyStoppingHint:
       'Stoppen, wenn sich der Validierungsverlust so viele Epochen lang nicht verbessert hat',
     restoreBest: 'Gewichte der besten Epoche behalten',
-    restoreBestHint:
-      'Die Gewichte mit dem niedrigsten Validierungsverlust testen und speichern, nicht die der letzten Epoche.',
     restoreBestNoVal:
       'Ohne Validierungsdaten nicht verwendet: Die Gewichte der letzten Epoche werden behalten.',
     options: {
@@ -198,6 +189,13 @@ export const training: Messages<typeof en> = {
         cross_entropy: 'Kreuzentropie',
         cross_entropy_dice: 'Kreuzentropie + Dice',
       },
+    },
+    sections: {
+      model: 'Modell und Optimierer',
+      schedule: 'Epochen und Early Stopping',
+      split: 'Validierungs- und Testdaten',
+      search: 'Suche',
+      fit: 'Anpassung',
     },
   },
 };
