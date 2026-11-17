@@ -229,6 +229,8 @@ def iterate_batches(
     generator: torch.Generator | None = None,
 ):
     n = len(source)
+    if n == 0:
+        return  # torch.arange(0).split() would still give one empty batch
     order = torch.randperm(n, generator=generator) if shuffle else torch.arange(n)
     for indices in order.split(batch_size):
         if drop_last and len(indices) < batch_size:
@@ -418,6 +420,8 @@ def prepare_data(
             return segmentation_data(plan, info, path, config, reporter, generator)
         if info.kind == "random":
             return demo_data(plan, config, generator, reporter)
+        if info.kind == "builtin" and info.tokens is not None:
+            return text_data(plan, info, config, reporter, generator)
         if info.kind == "builtin":
             if data_root is None:
                 raise TrainingError("No folder for downloaded datasets was configured.")
@@ -702,6 +706,61 @@ def builtin_data(
     official = TensorSource([official_images], [official_labels], [transform])
     return PreparedData(
         Subset(training, train_rows), Subset(training, val_rows), preprocessing, test=official
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Built-in text datasets (generated, see textsets.py)
+# --------------------------------------------------------------------------- #
+
+
+def text_data(
+    plan: TrainingPlan,
+    info: DatasetInfo,
+    config: TrainingConfig,
+    reporter: Reporter,
+    generator: torch.Generator,
+) -> PreparedData:
+    """A built-in text dataset: token ids (long) and classes, generated here. Validation data
+    comes from its training texts; its test texts are the test set (like the official test
+    split of the other built-in datasets). The preprocessing keeps the vocabulary, so that
+    predictions can turn new texts into token ids the same way."""
+    from .textsets import TEXT_PAD, TEXT_UNK, text_dataset, text_vocabulary
+
+    spec = BUILTIN_DATASETS.get(info.builtin or "")
+    if spec is None or not spec.is_text:
+        raise TrainingError(f"Unknown built-in dataset '{info.builtin}'.")
+    reporter.status("preparing", f"Generating {spec.name} …")
+    ids, labels = text_dataset(spec.id, 0, spec.train_size + spec.test_size)
+    tokens = torch.tensor(ids, dtype=torch.long)
+    classes = torch.tensor(labels, dtype=torch.long)
+    train_rows, val_rows, _ = split_indices(
+        spec.train_size, config.val_split, config.max_samples, generator
+    )
+    test_rows = torch.arange(spec.train_size, spec.train_size + spec.test_size)
+    if config.max_samples is not None:
+        n_test = val_size_for(config.max_samples, BUILTIN_TEST_SHARE)
+        if n_test < len(test_rows):
+            keep = torch.randperm(len(test_rows), generator=generator)[:n_test]
+            test_rows = test_rows[keep.sort().values]
+    vocabulary = list(text_vocabulary(spec.id))
+    preprocessing = {
+        "kind": "tokens",
+        "dataset": spec.id,
+        "length": spec.shape[0],
+        # Token id i is vocabulary[i]; texts are lower-cased and split into words and
+        # punctuation marks (textsets.tokenize), unknown words get the id of <unk>.
+        "vocabulary": vocabulary,
+        "pad_id": vocabulary.index(TEXT_PAD),
+        "unknown_id": vocabulary.index(TEXT_UNK),
+        "class_names": list(plan.class_names or spec.class_names),
+    }
+    source = TensorSource([tokens], [classes])
+    return PreparedData(
+        Subset(source, train_rows),
+        Subset(source, val_rows),
+        preprocessing,
+        test=Subset(source, test_rows),
     )
 
 

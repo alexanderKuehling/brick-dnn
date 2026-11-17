@@ -583,7 +583,10 @@ def test_dataset_info_round_trip():
 
 
 def test_builtin_datasets():
-    assert set(BUILTIN_DATASETS) == {"mnist", "fashion_mnist", "cifar10", "shapes", "cells"}
+    assert list(BUILTIN_DATASETS) == [
+        *("mnist", "fashion_mnist", "cifar10", "shapes", "cells"),
+        *("sentiment", "lookup", "topics"),
+    ]
     data = BUILTIN_DATASETS["mnist"].to_dict()
     assert data["download_mb"] == 12 and data["train_size"] == 60_000
     assert data["test_size"] == 10_000 and "val_size" not in data
@@ -665,7 +668,7 @@ def test_cifar_into_grayscale_network():
     [
         ("mlp_mnist", "cifar10", "Set the Input shape to 3072 or to 3, 32, 32."),
         ("tabular_regression", "mnist", "Set the Input shape to 784 or to 1, 28, 28."),
-        ("lstm_sentiment", "mnist", "Text models can only be trained on demo data"),
+        ("lstm_sentiment", "mnist", "Text models train on the built-in text datasets"),
         ("transformer_classifier", "cifar10", "integer token ids"),
         ("multi_input", "mnist", "needs a network with exactly one Input layer"),
     ],

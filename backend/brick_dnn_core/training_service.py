@@ -441,7 +441,7 @@ def capabilities(user=None) -> dict[str, Any]:
         "devices": info.get("devices", []) if available else [],
         "default_device": info.get("default_device") if available else None,
         "builtin_datasets": [
-            # Generated datasets (Shapes, Cells) need no torchvision.
+            # Generated datasets (Shapes, Cells, the texts) need no torchvision.
             {**dataset.to_dict(), "available": has_torchvision or dataset.generated}
             for dataset in BUILTIN_DATASETS.values()
         ],
@@ -1980,6 +1980,12 @@ def run_prediction(prediction: Prediction, actor: Actor) -> dict[str, Any]:
             )
     except ValueError as exc:
         raise PredictionFailed(str(exc)) from None
+    if prepared.texts is not None:
+        # Texts: the words the network read (without the padding) and the unknown ones.
+        for item, text in zip(predictions, prepared.texts, strict=True):
+            item["tokens"] = text["tokens"]
+            if text["unknown"]:
+                item["unknown_words"] = text["unknown"]
     answer: dict[str, Any] = {
         "run": {"id": str(run.pk), "name": run.name},
         "task": run.plan.get("task"),

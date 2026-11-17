@@ -151,9 +151,14 @@ describe('the loss of the settings', () => {
     expect(screen.queryByLabelText('Huber delta')).not.toBeInTheDocument();
     await choose('Loss', 'Huber loss');
     const delta = screen.getByLabelText('Huber delta');
-    expect(delta).toHaveAccessibleDescription(
-      'Where the loss turns from squared to linear, in standard deviations of the target'
-    );
+    // What delta means is shown on demand, next to its label.
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Huber delta”' }));
+    expect(
+      await screen.findByText(
+        'Where the loss turns from squared to linear, in standard deviations of the target'
+      )
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
     expect(config()).toMatchObject({ loss: 'huber', huber_delta: 1 });
     await userEvent.clear(delta);
     await userEvent.type(delta, '0');
@@ -293,7 +298,7 @@ describe('the loss of a run', () => {
 });
 
 describe('the run view', () => {
-  it('says which loss the curves show', () => {
+  it('says which loss the curves show', async () => {
     const run = regressionDetail();
     const huber: RunDetail = {
       ...run,
@@ -314,8 +319,10 @@ describe('the run view', () => {
         onLoadNetwork={vi.fn()}
       />
     );
+    // Next to the heading of the curves, on demand.
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Training curves”' }));
     expect(
-      screen.getByText(
+      await screen.findByText(
         'Loss: Huber loss (delta 0.5 standard deviations). The curves, early stopping and the kept epoch use this loss; losses of different kinds are not comparable, so compare runs by their metrics.'
       )
     ).toBeInTheDocument();

@@ -4,8 +4,9 @@ Five kinds of data can be used for training:
 
 ``random``   demo data generated to fit the network, with a hidden rule it can learn
 ``builtin``  MNIST, Fashion-MNIST or CIFAR-10 (downloaded on first use, needs torchvision),
-             or Shapes and Cells (generated images with a class for every pixel, see
-             shapes.py, cells.py and generators.py)
+             Shapes and Cells (generated images with a class for every pixel, see
+             shapes.py, cells.py and generators.py), or Sentiment, Key lookup and Topics
+             (generated texts of token ids with one class each, see textsets.py)
 ``csv``      a CSV file: every column but the last is a feature, the last one is the target
 ``images``   a folder (or ZIP file) with one sub-folder of images per class
 ``segmentation``  a folder (or ZIP file) with images and one mask per image, see
@@ -64,7 +65,7 @@ class BuiltinDataset:
     id: str
     name: str
     description: str
-    shape: tuple[int, int, int]  # (channels, height, width)
+    shape: tuple[int, ...]  # images: (channels, height, width); tokens: (sequence length,)
     class_names: tuple[str, ...]
     train_size: int
     test_size: int  # the official test split
@@ -77,13 +78,23 @@ class BuiltinDataset:
     generated: bool = False
     # Segmentation: the share of the pixels of each class.
     class_pixel_share: tuple[float, ...] | None = None
+    # "images", or "tokens": texts as token ids (padded to the length in ``shape``) for an
+    # Input with data type long and an Embedding layer, see textsets.py.
+    input_kind: str = "images"
+    # Tokens: the number of words of the vocabulary (with <pad> and <unk>).
+    vocab_size: int | None = None
+
+    @property
+    def is_text(self) -> bool:
+        return self.input_kind == "tokens"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
             "task": self.task,
+            "input_kind": self.input_kind,
             "sample_shape": list(self.shape),
             "num_classes": len(self.class_names),
             "class_names": list(self.class_names),
@@ -91,6 +102,13 @@ class BuiltinDataset:
             "test_size": self.test_size,
             "download_mb": self.download_mb,
         }
+        if self.is_text:
+            from .textsets import text_examples
+
+            data["vocab_size"] = self.vocab_size
+            data["sequence_length"] = self.shape[0]
+            data["examples"] = text_examples(self.id)
+        return data
 
     def info(self) -> DatasetInfo:
         info = DatasetInfo(
@@ -103,6 +121,8 @@ class BuiltinDataset:
             train_size=self.train_size,
             test_size=self.test_size,
         )
+        if self.is_text:
+            info.tokens = {"vocab_size": self.vocab_size, "length": self.shape[0]}
         if self.task == "segmentation":
             info.task = "segmentation"
             info.segmentation = {
@@ -111,6 +131,28 @@ class BuiltinDataset:
                 "class_pixel_share": list(self.class_pixel_share or ()),
             }
         return info
+
+
+def _text_dataset(dataset_id: str, name: str, description: str) -> BuiltinDataset:
+    """A built-in text dataset of textsets.py."""
+    from .textsets import TEXT_DATASETS
+
+    _, vocabulary, length, classes, _, train, test = TEXT_DATASETS[dataset_id]
+    return BuiltinDataset(
+        id=dataset_id,
+        name=name,
+        description=description,
+        shape=(length,),
+        class_names=tuple(classes),
+        train_size=train,
+        test_size=test,
+        download_mb=0,
+        mean=(),
+        std=(),
+        generated=True,
+        input_kind="tokens",
+        vocab_size=len(vocabulary),
+    )
 
 
 BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
@@ -207,6 +249,26 @@ BUILTIN_DATASETS: dict[str, BuiltinDataset] = {
             generated=True,
             class_pixel_share=CELLS_PIXEL_SHARE,
         ),
+        _text_dataset(
+            "sentiment",
+            "Sentiment",
+            'Text: short reviews, positive or negative. Negations ("not good") flip a word '
+            'and after "but" the second half decides, so the word order matters. Generated, '
+            "151 words, 24 tokens per text.",
+        ),
+        _text_dataset(
+            "lookup",
+            "Key lookup",
+            'Text: eight key-value pairs and a question ("c7 x2 m4 … ? x" → 2). Attention '
+            "finds the asked pair; an average of the tokens stays near chance. Generated, "
+            "289 tokens, 10 per text.",
+        ),
+        _text_dataset(
+            "topics",
+            "Topics",
+            "Text: about science, sports, cooking or travel, recognisable by its words in any "
+            "order. An easy first dataset. Generated, 161 words, 64 tokens per text.",
+        ),
     )
 }
 
@@ -259,6 +321,9 @@ class DatasetInfo:
     # "segmentation" for data with a class for every pixel (the built-in Shapes and
     # segmentation folders); None for one label or value per sample.
     task: str | None = None
+    # Texts as token ids (the built-in Sentiment, Key lookup, Topics): {"vocab_size": V,
+    # "length": L}; the samples are L token ids from 0 to V - 1 (0 is the padding).
+    tokens: dict[str, Any] | None = None
     # Segmentation: how the masks are read and what was found (see segmentation.py):
     # {"mask_format": "binary" | "indices" | "levels" | "colors", "mask_values": [...] | None,
     #  "ignore_index": 255 | None, "ignored_share", "class_pixel_share": [share per class],

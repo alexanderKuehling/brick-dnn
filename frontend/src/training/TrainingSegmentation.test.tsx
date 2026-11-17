@@ -513,10 +513,10 @@ describe('Fitting a network to segmentation data', () => {
       },
     ];
     expect(onlyInputAndOutput(fixes)).toBe(true);
-    expect(describeFixes(fixes, true)).toBe(
+    expect(describeFixes(fixes, 'images')).toBe(
       'Input set to 3×64×64, last layer to 4 output channels'
     );
-    expect(describeFixes([fixes[1]], true)).toBe('Last layer set to 4 output channels');
+    expect(describeFixes([fixes[1]], 'images')).toBe('Last layer set to 4 output channels');
     const transposed = { ...fixes[1], type: 'ConvTranspose2d' };
     expect(onlyInputAndOutput([transposed])).toBe(true);
     // Other parameters of a convolution are never changed without asking.
@@ -624,9 +624,7 @@ describe('Settings of a segmentation', () => {
     render(<Form segmentation={scope} />);
     const batch = screen.getByLabelText('Batch size') as HTMLInputElement;
     expect(batch.value).toBe('8');
-    expect(
-      screen.getByText('Images per optimizer step; up to 50 fit into memory')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Up to 50 fit into memory')).toBeInTheDocument();
     await userEvent.clear(batch);
     await userEvent.type(batch, '64');
     expect(

@@ -375,17 +375,20 @@ export function calendarCounts(values: readonly number[]): { weekday: number[]; 
 }
 
 /** "Based on a random sample of 5,000 of 1,234,567 rows." */
-export function sampleNote(sample: DataSample): string {
-  return sample.rows >= sample.n_total
-    ? `Based on all ${formatCount(sample.n_total)} rows.`
-    : `Based on a random sample of ${formatCount(sample.rows)} of ${formatCount(sample.n_total)} rows.`;
+export function sampleNote(sample: DataSample, always = false): string {
+  if (sample.rows >= sample.n_total) {
+    // All rows: nothing worth a note, unless the caller lists the basis of everything.
+    return always ? `Based on all ${formatCount(sample.n_total)} rows.` : '';
+  }
+  return `Based on a random sample of ${formatCount(sample.rows)} of ${formatCount(sample.n_total)} rows.`;
 }
 
 /** What the correlations, associations and duplicate counts are based on. */
-export function analysisNote(profile: DataProfile): string {
-  return profile.analysis_rows < profile.n_rows
-    ? `Based on a random sample of ${formatCount(profile.analysis_rows)} of ${formatCount(profile.n_rows)} rows.`
-    : `Based on all ${formatCount(profile.n_rows)} rows.`;
+export function analysisNote(profile: DataProfile, always = false): string {
+  if (profile.analysis_rows >= profile.n_rows) {
+    return always ? `Based on all ${formatCount(profile.n_rows)} rows.` : '';
+  }
+  return `Based on a random sample of ${formatCount(profile.analysis_rows)} of ${formatCount(profile.n_rows)} rows.`;
 }
 
 /** Text lengths of a text/categorical column (for a length histogram). */

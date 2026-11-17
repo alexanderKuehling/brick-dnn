@@ -6,9 +6,10 @@ import { i18n, useTranslation } from '@/i18n';
 import { formatThreshold } from '../threshold';
 import { ImagePredict } from './ImagePredict';
 import { TabularPredict } from './TabularPredict';
+import { TextPredict } from './TextPredict';
 
 /**
- * Try a trained run: predict a row typed in, pasted CSV rows, an uploaded or drawn image.
+ * Try a trained run: predict a row typed in, pasted CSV rows, an uploaded or drawn image, texts.
  * Loads what the run takes when it is shown (GET …/predict-form/). A binary classification
  * says which decision threshold its predictions use.
  */
@@ -70,6 +71,8 @@ export function PredictionPanel({
     );
   } else if (form.kind === 'image' && form.image) {
     body = <ImagePredict runId={runId} form={form} />;
+  } else if (form.kind === 'tokens' && form.text) {
+    body = <TextPredict runId={runId} form={form} />;
   } else if (form.kind === 'tabular' && form.prepared) {
     body = (
       <TabularPredict

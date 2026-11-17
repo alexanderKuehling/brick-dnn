@@ -105,8 +105,9 @@ export const STATUS_LABELS: Record<StepDisplayStatus, string> = {
   },
 };
 
+/** Quiet when all is well: only a failed step gets a colour, so it stands out in a long list. */
 export const STATUS_COLORS: Record<StepDisplayStatus, string> = {
-  ok: 'green',
+  ok: 'gray',
   error: 'red',
   skipped: 'gray',
   disabled: 'gray',

@@ -209,9 +209,13 @@ describe('Shared preparations in the Data tab', () => {
     );
     expect(screen.getByRole('textbox', { name: 'Preparation name' })).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: /Train/ })).not.toBeInTheDocument();
+    // The Export menu offers the downloads only.
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByRole('menuitem', { name: /Prepared data/ });
     expect(
-      screen.queryByRole('button', { name: 'Create training dataset' })
+      screen.queryByRole('menuitem', { name: /Create training dataset/ })
     ).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     // The main table belongs to bob: it is loaded on its own, combining is left to him.
     await waitFor(() => expect(screen.getByText('Tables: bobs customers')).toBeInTheDocument());
     expect(api.data.sources.get).toHaveBeenCalledWith(31, expect.any(AbortSignal));
@@ -226,7 +230,7 @@ describe('Shared preparations in the Data tab', () => {
     expect(api.data.preps.update).not.toHaveBeenCalled();
 
     // Downloads work.
-    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: /Prepared data/ }));
     await waitFor(() => expect(api.data.preps.download).toHaveBeenCalledWith(20, 'csv'));
     expect(api.data.preps.update).not.toHaveBeenCalled();

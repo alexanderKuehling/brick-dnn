@@ -158,7 +158,9 @@ describe('Setting up a classical model', () => {
     expect(screen.queryByText('Advanced settings')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Validation split')).toBeInTheDocument();
     expect(screen.getByText(/fitted on at most 5,000 training rows on this server/)).toBeVisible();
-    expect(screen.getByText(/fitted once with scikit-learn/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'More about “Fitting”' }));
+    expect(await screen.findByText(/fitted once with scikit-learn/)).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
 
     await waitFor(() => expect(startButton()).toBeEnabled());
     await userEvent.click(startButton());

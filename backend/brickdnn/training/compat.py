@@ -78,6 +78,8 @@ class TrainingPlan:
     ``segmentation`` for segmentation, else None: ``{"binary": bool, "ignore_index": 255 |
                 None, "sample_bytes": int, "fixed_bytes": int}`` (the estimated memory of a
                 training step is ``fixed_bytes + batch size × sample_bytes``)
+    ``tokens``  for the built-in text datasets, else None: ``{"dataset": id, "length": L,
+                "vocab_size": V}`` (every sample is L token ids below V, see textsets.py)
     ``hybrid``  for hybrid networks (neural layers that learn the features of a classical
                 model), else None: ``{"boundary", "features", "head_outputs",
                 "feature_training", "neural_params"}``. ``inputs``, ``targets`` and ``image``
@@ -97,6 +99,7 @@ class TrainingPlan:
     classical: dict[str, Any] | None = None
     segmentation: dict[str, Any] | None = None
     hybrid: dict[str, Any] | None = None
+    tokens: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -275,16 +278,18 @@ def _check(
         )
     if result.errors:
         return result
-    if inputs[0]["dtype"] == "long":
-        result.errors.append(
-            "This network expects integer token ids (Input data type 'long'). "
-            "Text models can only be trained on demo data so far."
-        )
-        return result
-
     in_shape = list(analysis.nodes[analysis.inputs[0]].shape or ())
     out_shape = list(analysis.nodes[analysis.outputs[0]].shape or ())
-    if is_segmentation(dataset):
+    if inputs[0]["dtype"] == "long" and dataset.tokens is None:
+        result.errors.append(
+            "This network expects integer token ids (Input data type 'long'). Text models "
+            "train on the built-in text datasets (Sentiment, Key lookup, Topics) or on demo "
+            "data."
+        )
+        return result
+    if dataset.tokens is not None:
+        _check_tokens(result, analysis, dataset, inputs, in_shape, out_shape)
+    elif is_segmentation(dataset):
         _check_segmentation(result, analysis, dataset, inputs, in_shape, out_shape, config)
     elif dataset.kind == "csv":
         _check_csv(result, dataset, inputs, in_shape, out_shape)
@@ -606,6 +611,78 @@ def _check_images(
 
 
 # --------------------------------------------------------------------------- #
+# Texts (token ids)
+# --------------------------------------------------------------------------- #
+
+
+def _check_tokens(
+    result: Compatibility,
+    analysis: Analysis,
+    info: DatasetInfo,
+    inputs: list[dict[str, Any]],
+    in_shape: list[int],
+    out_shape: list[int],
+) -> None:
+    """A built-in text dataset (textsets.py): the Input takes L token ids (data type long),
+    its Embedding knows all V words, and the network outputs one score per class."""
+    builtin = BUILTIN_DATASETS.get(info.builtin or "")
+    tokens = info.tokens or {}
+    if builtin is None or not builtin.is_text:
+        result.errors.append(f"Unknown built-in dataset '{info.builtin}'.")
+        return
+    name = info.name
+    length, vocab = int(tokens.get("length") or 0), int(tokens.get("vocab_size") or 0)
+    if inputs[0]["dtype"] != "long":
+        result.errors.append(
+            f"{name} holds texts as token ids: the network needs an Input with data type long "
+            f"and shape {length}, followed by an Embedding layer (e.g. the Transformer or LSTM "
+            "example)."
+        )
+        return
+    if in_shape != [length]:
+        result.errors.append(
+            f"Every text of {name} has {length} tokens, but the Input expects shape "
+            f"{fmt_shape(tuple(in_shape))}. Set the Input shape to {length}."
+        )
+    known = int(inputs[0].get("vocab") or 0)
+    if known < vocab:
+        result.errors.append(
+            f"{name} has a vocabulary of {vocab} words (token ids 0 to {vocab - 1}), but the "
+            f"Embedding knows only {known}. Set its vocabulary size to {vocab}."
+        )
+    elif known > vocab:
+        result.warnings.append(
+            f"The Embedding has {known:,} entries, but {name} has only {vocab} words: the "
+            f"other {known - vocab:,} are never used. Set its vocabulary size to {vocab}."
+        )
+    k = _check_classes(result, out_shape, info.num_classes or 0, name)
+    if result.errors or k is None:
+        return
+    class_names = list(info.class_names or [])
+    class_names += [f"class {i}" for i in range(len(class_names), k)]
+    sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test texts"
+    result.plan = TrainingPlan(
+        task="classification",
+        summary=(
+            f"Classification into {info.num_classes} classes ({name}, {sizes} of {length} tokens)."
+        ),
+        inputs=inputs,
+        targets=[{"kind": "class", "num_classes": k}],
+        num_classes=k,
+        class_names=class_names,
+        notes=[
+            f"Every text is {length} token ids from a vocabulary of {vocab} words, padded "
+            "with id 0; id 1 stands for unknown words.",
+            f"{name} is generated on the server, nothing is downloaded. Validation data is "
+            f"taken from its {builtin.train_size:,} training texts (validation split); the "
+            f"{builtin.test_size:,} test texts are the test set: the kept weights are "
+            "measured on them once, after training.",
+        ],
+        tokens={"dataset": builtin.id, "length": length, "vocab_size": vocab},
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Segmentation
 # --------------------------------------------------------------------------- #
 
@@ -883,7 +960,10 @@ def suggest_fixes(
       class for classification, 1 for regression. Surplus class outputs are corrected too,
       also when the network fits otherwise (then only a warning explains them);
     - for segmentation datasets instead the last Conv2d or ConvTranspose2d layer:
-      ``out_channels`` = one per class (one channel is kept for two classes).
+      ``out_channels`` = one per class (one channel is kept for two classes);
+    - for the built-in text datasets also the Embedding layers after the Input:
+      ``num_embeddings`` = the size of the vocabulary (the Input gets the sequence length
+      and data type long).
 
     Every suggestion is checked: applied together, the changes make the network fit the data.
     When there is no such change (e.g. a CNN on CSV data, or a Linear layer with a fixed number
@@ -903,6 +983,8 @@ def suggest_fixes(
     classical = analysis.family in ("classical", "hybrid")
     if is_segmentation(dataset) and not classical:
         return _segmentation_fixes(graph, dataset, analysis, result)
+    if dataset.tokens is not None:
+        return [] if classical else _token_fixes(graph, dataset, analysis, result)
     if result is not None and result.ok and (classical or _outputs_fit(analysis, dataset)):
         return []  # nothing to improve
 
@@ -987,6 +1069,49 @@ def _segmentation_fixes(
             continue
         return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
     return []
+
+
+def _token_fixes(
+    graph: dict[str, Any],
+    dataset: DatasetInfo,
+    analysis: Analysis,
+    result: Compatibility | None,
+) -> list[dict[str, Any]]:
+    """Fixes for a built-in text dataset: the Input takes the sequence length as token ids
+    (data type long), the Embedding layers it feeds know the whole vocabulary (no more, no
+    less) and the last Linear layer outputs one score per class."""
+    tokens = dataset.tokens or {}
+    length, vocab = int(tokens.get("length") or 0), int(tokens.get("vocab_size") or 0)
+    input_id = analysis.inputs[0]
+    node = analysis.nodes[input_id]
+    embeddings = [t for t in node.outputs if analysis.nodes[t].type == "Embedding"]
+    if not embeddings:
+        return []  # token ids need an Embedding layer: the errors explain it
+    changes: dict[str, dict[str, Any]] = {}
+    params: dict[str, Any] = {}
+    if list(node.shape or ()) != [length]:
+        params["shape"] = [length]
+    if node.dtype != "long":
+        params["dtype"] = "long"
+    if params:
+        changes[input_id] = params
+    for nid in embeddings:
+        layer = analysis.nodes[nid].layer
+        if layer is not None and layer.p.get("num_embeddings") != vocab:
+            changes[nid] = {"num_embeddings": vocab}
+    trial = analyze(_with_params(graph, changes))
+    if not trial.valid or len(trial.outputs) != 1:
+        return []
+    out_shape = list(trial.nodes[trial.outputs[0]].shape or ())
+    if len(out_shape) == 1 and _wanted_outputs(dataset, out_shape[0]) != out_shape[0]:
+        last = _last_linear(trial)
+        if last is None:
+            return []
+        changes[last] = {"out_features": _wanted_outputs(dataset, out_shape[0])}
+        trial = analyze(_with_params(graph, changes))
+    if not changes or not trial.valid or not _check(trial, dataset).ok:
+        return []
+    return [_describe_fix(analysis, nid, params) for nid, params in changes.items()]
 
 
 def _segmentation_candidates(info: DatasetInfo, current: list[int]) -> list[list[int]]:
@@ -1122,6 +1247,11 @@ def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[
         if "dtype" in params:
             parts.append(f"Input data type {previous['dtype']} → {params['dtype']}")
         summary = ", ".join(parts)
+    elif "num_embeddings" in params:
+        summary = (
+            f"Vocabulary size of the Embedding {previous['num_embeddings']} → "
+            f"{params['num_embeddings']}"
+        )
     elif "out_channels" in params:
         summary = (
             f"Output channels of the last layer {previous['out_channels']} → "
@@ -1246,6 +1376,14 @@ def _check_classical(
         )
     if info.kind == "random":
         result.plan = _classical_demo_plan(layer, inputs, classical)
+        return
+    if info.tokens is not None:
+        result.errors.append(
+            f"{layer.label} is a classical model: it trains on tabular data (a CSV file or a "
+            f"dataset from the Data tab) or on demo data, not on texts like {info.name}. "
+            "Build a neural network with an Embedding layer (e.g. the Transformer example) "
+            "for texts."
+        )
         return
     if info.kind in ("builtin", "images", "segmentation"):
         result.errors.append(
@@ -1453,6 +1591,12 @@ def _check_hybrid(
     classification = layer.task == "classification"
     name = info.name
     target = info.columns[-1] if info.columns else "target"
+    if info.tokens is not None:
+        result.errors.append(
+            f"A hybrid network trains on tables and images, not on texts like {name}. Build "
+            "a neural network with an Embedding layer (e.g. the Transformer example) for texts."
+        )
+        return
     if is_segmentation(info):
         result.errors.append(
             f"{layer.label} predicts one {'class' if classification else 'value'} per sample, "
