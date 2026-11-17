@@ -114,9 +114,7 @@ describe('prepared datasets in the training panel', () => {
     const test = screen.getByRole('switch', { name: /Hold out a test set/ });
     expect(test).toBeChecked();
     expect(test).toBeDisabled();
-    expect(
-      screen.getByText(/brings its own split from the Data tab: 840 \/ 180 \/ 180 rows/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Split from the Data tab: 840 \/ 180 \/ 180 rows/)).toBeInTheDocument();
   });
 
   it('shows no test set when the split has none', () => {

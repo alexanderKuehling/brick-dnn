@@ -186,7 +186,9 @@ describe('sample helpers', () => {
     expect(valueLabel('1', 'boolean')).toBe('true');
     expect(valueLabel('', 'categorical')).toBe('(empty)');
     expect(sampleNote(SAMPLE)).toBe('Based on a random sample of 60 of 1,200 rows.');
-    expect(sampleNote({ ...SAMPLE, n_total: 60 })).toBe('Based on all 60 rows.');
+    // All rows: no note, unless asked for the basis.
+    expect(sampleNote({ ...SAMPLE, n_total: 60 })).toBe('');
+    expect(sampleNote({ ...SAMPLE, n_total: 60 }, true)).toBe('Based on all 60 rows.');
     expect(rowName(SAMPLE, 2)).toBe('Row 41');
   });
 

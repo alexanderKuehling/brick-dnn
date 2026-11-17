@@ -1,3 +1,4 @@
+import { useId, type ReactNode } from 'react';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import {
   Box,
@@ -27,6 +28,7 @@ import type {
   TuningMethod,
   TuningMetric,
 } from '@/api';
+import { HintedLabel, InfoHint } from '@/components/InfoHint';
 import { currentLanguage, currentLocale, i18n, useTranslation } from '@/i18n';
 import { numberSeparators } from '@/i18n/mantine';
 import { formatSetting, formatSplit, splitPercents } from './format';
@@ -70,6 +72,7 @@ import {
   type SettingsErrors,
   type SettingsValues,
 } from './settings';
+import classes from './Training.module.css';
 
 interface SettingsFormProps {
   values: SettingsValues;
@@ -218,9 +221,9 @@ export function SettingsForm({
   const fixedPercents = fixed ? splitPercents(fixed) : null;
   const testEnabled = fixed ? fixed[2] > 0 : builtin || values.test_enabled;
   const validates = hasValidation(values, fixed ? fixed[1] : null);
-  // Without validation data an early stopping setting is an error: show it even when the
-  // advanced settings are folded.
-  const advancedOpen = advanced || Boolean(errors.patience);
+  const advancedId = useId();
+  const lossId = useId();
+  const patienceId = useId();
 
   const nameField = (
     <TextInput
@@ -266,7 +269,7 @@ export function SettingsForm({
               ? t('training.settings.ownSplitRows', { split: formatSplit(fixed) })
               : builtin
                 ? t('training.settings.builtinTest')
-                : t('training.settings.testHint')
+                : undefined
         }
         checked={testEnabled}
         disabled={fixed !== null || builtin}
@@ -302,7 +305,7 @@ export function SettingsForm({
                 model: classical.model,
                 rows: maxRows.toLocaleString(currentLocale()),
               })
-            : t('training.settings.maxSamplesHint')
+            : undefined
           : undefined
       }
       placeholder={
@@ -337,21 +340,32 @@ export function SettingsForm({
   if (classical) {
     const type = classical.type ?? null;
     return (
-      <Stack gap="sm">
+      <Stack gap="xl">
         {nameField}
-        <Text size="xs" c="dimmed">
-          {classical.optimisesKernel
-            ? t('training.settings.classicalNoteKernel', { model: classical.model })
-            : t('training.settings.classicalNote', { model: classical.model })}
-        </Text>
-        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
-          {validationField}
-          {seedField}
-        </SimpleGrid>
-        {testFields}
-        {maxSamplesField}
+        <FormSection
+          title={t('training.settings.sections.fit')}
+          info={
+            classical.optimisesKernel
+              ? t('training.settings.classicalNoteKernel', { model: classical.model })
+              : t('training.settings.classicalNote', { model: classical.model })
+          }
+        >
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+            {maxSamplesField}
+            {seedField}
+          </SimpleGrid>
+        </FormSection>
+        <FormSection
+          title={t('training.settings.sections.split')}
+          info={builtin ? undefined : t('training.settings.testHint')}
+        >
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+            {validationField}
+          </SimpleGrid>
+          {testFields}
+        </FormSection>
         {type && (
-          <div>
+          <FormSection title={t('training.settings.sections.search')}>
             <Switch
               label={t('training.settings.search')}
               description={t('training.settings.searchClassical')}
@@ -368,222 +382,282 @@ export function SettingsForm({
                 metrics={metrics}
               />
             )}
-          </div>
+          </FormSection>
         )}
       </Stack>
     );
   }
 
+  const epochsField = (
+    <NumberInput
+      label={t('training.settings.epochs')}
+      description={
+        frozen
+          ? t('training.settings.epochsFrozen')
+          : values.search && !hybrid
+            ? t('training.settings.perTrial')
+            : undefined
+      }
+      disabled={frozen}
+      value={values.epochs}
+      onChange={setNumber('epochs')}
+      min={LIMITS.epochs.min}
+      max={LIMITS.epochs.max}
+      allowDecimal={false}
+      allowNegative={false}
+      error={errors.epochs}
+    />
+  );
+  const batchSizeField = segmentation ? (
+    <NumberInput
+      label={t('training.settings.batchSize')}
+      description={
+        maxBatch !== null && maxBatch >= 1
+          ? t('training.settings.imagesPerStepMax', {
+              max: maxBatch.toLocaleString(currentLocale()),
+            })
+          : t('training.settings.imagesPerStep')
+      }
+      value={tuned.batch_size ? '' : values.segmentation_batch_size}
+      placeholder={tuned.batch_size ? searchedText() : undefined}
+      disabled={tuned.batch_size || frozen}
+      onChange={setNumber('segmentation_batch_size')}
+      min={LIMITS.batch_size.min}
+      max={LIMITS.batch_size.max}
+      allowDecimal={false}
+      allowNegative={false}
+      error={errors.segmentation_batch_size}
+    />
+  ) : (
+    <NumberInput
+      label={t('training.settings.batchSize')}
+      description={frozen ? notTrained() : undefined}
+      value={tuned.batch_size ? '' : values.batch_size}
+      placeholder={tuned.batch_size ? searchedText() : undefined}
+      disabled={tuned.batch_size || frozen}
+      onChange={setNumber('batch_size')}
+      min={LIMITS.batch_size.min}
+      max={LIMITS.batch_size.max}
+      allowDecimal={false}
+      allowNegative={false}
+      error={errors.batch_size}
+    />
+  );
+  // A hybrid network can search only when the server offers a search of its model.
+  const searchable = !hybrid || Boolean(hybrid.type);
+
   return (
-    <Stack gap="sm">
+    <Stack gap="xl">
       {nameField}
-      {hybrid && (
-        <>
-          <Text size="xs" c="dimmed">
-            {t(
-              hybrid.maxRows !== null
-                ? 'training.settings.hybridNoteMax'
-                : 'training.settings.hybridNote',
-              {
-                features:
-                  hybrid.features !== null
-                    ? t('training.settings.nFeatures', { count: hybrid.features })
-                    : t('training.settings.theFeatures'),
-                model: hybrid.model,
-                rows: hybrid.maxRows?.toLocaleString(currentLocale()) ?? '',
-              }
-            )}
-          </Text>
-          <Select
-            label={t('training.settings.features')}
-            description={frozen ? t('training.settings.frozenHint') : undefined}
-            data={optionsIn(FEATURE_TRAININGS, 'featureTraining')}
-            value={values.feature_training}
-            onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
-            allowDeselect={false}
-          />
-        </>
-      )}
-      <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
-        <NumberInput
-          label={t('training.settings.epochs')}
-          description={
-            frozen
-              ? t('training.settings.epochsFrozen')
-              : values.search && !hybrid
-                ? t('training.settings.perTrial')
-                : t('training.settings.epochsHint')
-          }
-          disabled={frozen}
-          value={values.epochs}
-          onChange={setNumber('epochs')}
-          min={LIMITS.epochs.min}
-          max={LIMITS.epochs.max}
-          allowDecimal={false}
-          allowNegative={false}
-          error={errors.epochs}
-        />
-        {segmentation ? (
-          <NumberInput
-            label={t('training.settings.batchSize')}
-            description={
-              maxBatch !== null && maxBatch >= 1
-                ? t('training.settings.imagesPerStepMax', {
-                    max: maxBatch.toLocaleString(currentLocale()),
-                  })
-                : t('training.settings.imagesPerStep')
-            }
-            value={tuned.batch_size ? '' : values.segmentation_batch_size}
-            placeholder={tuned.batch_size ? searchedText() : undefined}
-            disabled={tuned.batch_size || frozen}
-            onChange={setNumber('segmentation_batch_size')}
-            min={LIMITS.batch_size.min}
-            max={LIMITS.batch_size.max}
-            allowDecimal={false}
-            allowNegative={false}
-            error={errors.segmentation_batch_size}
-          />
-        ) : (
-          <NumberInput
-            label={t('training.settings.batchSize')}
-            description={frozen ? notTrained() : t('training.settings.samplesPerStep')}
-            value={tuned.batch_size ? '' : values.batch_size}
-            placeholder={tuned.batch_size ? searchedText() : undefined}
-            disabled={tuned.batch_size || frozen}
-            onChange={setNumber('batch_size')}
-            min={LIMITS.batch_size.min}
-            max={LIMITS.batch_size.max}
-            allowDecimal={false}
-            allowNegative={false}
-            error={errors.batch_size}
-          />
-        )}
-        <NumberInput
-          label={t('training.settings.learningRate')}
-          description={frozen ? notTrained() : undefined}
-          value={tuned.learning_rate ? '' : values.learning_rate}
-          placeholder={tuned.learning_rate ? searchedText() : undefined}
-          disabled={tuned.learning_rate || frozen}
-          onChange={setNumber('learning_rate')}
-          min={0}
-          max={LIMITS.learning_rate.max}
-          step={0.0001}
-          decimalScale={6}
-          allowNegative={false}
-          error={errors.learning_rate}
-        />
-        <Select
-          label={t('training.settings.optimizer')}
-          description={frozen ? notTrained() : undefined}
-          data={OPTIMIZERS}
-          value={tuned.optimizer ? null : values.optimizer}
-          placeholder={tuned.optimizer ? searchedText() : undefined}
-          disabled={tuned.optimizer || frozen}
-          onChange={(value) => value && set('optimizer')(value as Optimizer)}
-          allowDeselect={false}
-        />
-        <Select
-          label={t('training.settings.device')}
-          data={deviceOptions}
-          value={device}
-          onChange={(value) => value && set('device')(value)}
-          allowDeselect={false}
-        />
-        {validationField}
-        {task && (
-          <Select
-            label={t('training.settings.loss')}
-            description={
-              frozen
-                ? notTrained()
-                : tuned.loss
-                  ? i18n.t('ui.training.SettingsForm.theSearchTriesTheLosses')
-                  : i18n.t('ui.training.SettingsForm.theCurvesAndEarlyStopping', {
-                      value:
-                        LOSS_OPTIONS[task].find((o) => o.value === effectiveLoss(values, task))
-                          ?.help ?? '',
-                    })
-            }
-            data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
-            value={tuned.loss ? null : effectiveLoss(values, task)}
-            placeholder={tuned.loss ? searchedText() : undefined}
-            disabled={tuned.loss || frozen}
-            onChange={(value) => value && set('loss')(value as LossName)}
-            allowDeselect={false}
-          />
-        )}
-      </SimpleGrid>
 
-      {lossScope && !frozen && (
-        <LossFields
-          values={values}
-          onChange={onChange}
-          errors={errors}
-          task={lossScope.task}
-          tuned={tuned}
-          searched={hybrid ? searchesNeural(values) : values.search}
-        />
-      )}
-
-      {testFields}
-
-      {hybrid ? (
-        hybrid.type && (
-          <div>
-            <Switch
-              label={t('training.settings.search')}
-              description={t('training.settings.searchHybrid', { model: hybrid.model })}
-              checked={values.search}
-              onChange={(event) => set('search')(event.currentTarget.checked)}
-            />
-            {values.search && (
-              <ClassicalSearchFields
-                values={values}
-                onChange={onChange}
-                errors={errors}
-                model={hybrid.type}
-                validates={validates}
-                metrics={metrics}
-                hybrid={{ model: hybrid.model, frozen }}
-                task={task}
-              />
-            )}
-          </div>
-        )
-      ) : (
-        <div>
-          <Switch
-            label={t('training.settings.search')}
-            description={t('training.settings.searchNeural')}
-            checked={values.search}
-            onChange={(event) => set('search')(event.currentTarget.checked)}
-          />
-          {values.search && (
-            <SearchFields
-              values={values}
-              onChange={onChange}
-              errors={errors}
-              metrics={metrics}
-              task={task}
-            />
-          )}
-        </div>
-      )}
-
-      <Button
-        variant="subtle"
-        color="gray"
-        size="compact-sm"
-        leftSection={advanced ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-        onClick={toggle}
-        aria-expanded={advancedOpen}
-        style={{ alignSelf: 'flex-start' }}
+      <FormSection
+        title={t('training.settings.sections.model')}
+        info={
+          hybrid
+            ? t(
+                hybrid.maxRows !== null
+                  ? 'training.settings.hybridNoteMax'
+                  : 'training.settings.hybridNote',
+                {
+                  features:
+                    hybrid.features !== null
+                      ? t('training.settings.nFeatures', { count: hybrid.features })
+                      : t('training.settings.theFeatures'),
+                  model: hybrid.model,
+                  rows: hybrid.maxRows?.toLocaleString(currentLocale()) ?? '',
+                }
+              )
+            : undefined
+        }
       >
-        {t('training.settings.advanced')}
-      </Button>
-      <Collapse expanded={advancedOpen}>
-        <Stack gap="sm">
-          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="sm" verticalSpacing="sm">
+        {hybrid && (
+          <>
+            <Select
+              label={t('training.settings.features')}
+              description={frozen ? t('training.settings.frozenHint') : undefined}
+              data={optionsIn(FEATURE_TRAININGS, 'featureTraining')}
+              value={values.feature_training}
+              onChange={(value) => value && set('feature_training')(value as FeatureTraining)}
+              allowDeselect={false}
+            />
+          </>
+        )}
+        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+          <NumberInput
+            label={t('training.settings.learningRate')}
+            description={frozen ? notTrained() : undefined}
+            value={tuned.learning_rate ? '' : values.learning_rate}
+            placeholder={tuned.learning_rate ? searchedText() : undefined}
+            disabled={tuned.learning_rate || frozen}
+            onChange={setNumber('learning_rate')}
+            min={0}
+            max={LIMITS.learning_rate.max}
+            step={0.0001}
+            decimalScale={6}
+            allowNegative={false}
+            error={errors.learning_rate}
+          />
+          <Select
+            label={t('training.settings.optimizer')}
+            description={frozen ? notTrained() : undefined}
+            data={OPTIMIZERS}
+            value={tuned.optimizer ? null : values.optimizer}
+            placeholder={tuned.optimizer ? searchedText() : undefined}
+            disabled={tuned.optimizer || frozen}
+            onChange={(value) => value && set('optimizer')(value as Optimizer)}
+            allowDeselect={false}
+          />
+          {batchSizeField}
+          {task && (
+            <div>
+              <HintedLabel id={lossId} label={t('training.settings.loss')}>
+                {i18n.t('ui.training.SettingsForm.theCurvesAndEarlyStopping', {
+                  value:
+                    LOSS_OPTIONS[task].find((o) => o.value === effectiveLoss(values, task))?.help ??
+                    '',
+                })}
+              </HintedLabel>
+              <Select
+                id={lossId}
+                description={
+                  frozen
+                    ? notTrained()
+                    : tuned.loss
+                      ? i18n.t('ui.training.SettingsForm.theSearchTriesTheLosses')
+                      : undefined
+                }
+                data={LOSS_OPTIONS[task].map(({ value, label }) => ({ value, label }))}
+                value={tuned.loss ? null : effectiveLoss(values, task)}
+                placeholder={tuned.loss ? searchedText() : undefined}
+                disabled={tuned.loss || frozen}
+                onChange={(value) => value && set('loss')(value as LossName)}
+                allowDeselect={false}
+              />
+            </div>
+          )}
+        </SimpleGrid>
+        {lossScope && !frozen && (
+          <LossFields
+            values={values}
+            onChange={onChange}
+            errors={errors}
+            task={lossScope.task}
+            tuned={tuned}
+            searched={hybrid ? searchesNeural(values) : values.search}
+          />
+        )}
+      </FormSection>
+
+      <FormSection title={t('training.settings.sections.schedule')}>
+        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+          {epochsField}
+          <div>
+            <HintedLabel id={patienceId} label={t('training.settings.earlyStopping')}>
+              {t('training.settings.earlyStoppingHint')}
+            </HintedLabel>
+            <NumberInput
+              id={patienceId}
+              description={frozen ? notTrained() : undefined}
+              placeholder={t('common.off')}
+              disabled={frozen}
+              value={values.patience}
+              onChange={setNumber('patience')}
+              min={LIMITS.patience.min}
+              max={LIMITS.patience.max}
+              allowDecimal={false}
+              allowNegative={false}
+              error={errors.patience}
+            />
+          </div>
+        </SimpleGrid>
+        <Checkbox
+          label={t('training.settings.restoreBest')}
+          description={
+            frozen ? notTrained() : validates ? undefined : t('training.settings.restoreBestNoVal')
+          }
+          disabled={!validates || frozen}
+          checked={values.restore_best && validates && !frozen}
+          onChange={(event) => set('restore_best')(event.currentTarget.checked)}
+        />
+      </FormSection>
+
+      <FormSection
+        title={t('training.settings.sections.split')}
+        info={builtin ? undefined : t('training.settings.testHint')}
+      >
+        <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm">
+          {validationField}
+        </SimpleGrid>
+        {testFields}
+      </FormSection>
+
+      {searchable && (
+        <FormSection title={t('training.settings.sections.search')}>
+          {hybrid?.type ? (
+            <div>
+              <Switch
+                label={t('training.settings.search')}
+                description={t('training.settings.searchHybrid', { model: hybrid.model })}
+                checked={values.search}
+                onChange={(event) => set('search')(event.currentTarget.checked)}
+              />
+              {values.search && (
+                <ClassicalSearchFields
+                  values={values}
+                  onChange={onChange}
+                  errors={errors}
+                  model={hybrid.type}
+                  validates={validates}
+                  metrics={metrics}
+                  hybrid={{ model: hybrid.model, frozen }}
+                  task={task}
+                />
+              )}
+            </div>
+          ) : (
+            <div>
+              <Switch
+                label={t('training.settings.search')}
+                description={t('training.settings.searchNeural')}
+                checked={values.search}
+                onChange={(event) => set('search')(event.currentTarget.checked)}
+              />
+              {values.search && (
+                <SearchFields
+                  values={values}
+                  onChange={onChange}
+                  errors={errors}
+                  metrics={metrics}
+                  task={task}
+                />
+              )}
+            </div>
+          )}
+        </FormSection>
+      )}
+
+      <section aria-label={t('training.settings.advanced')}>
+        <Button
+          variant="subtle"
+          color="gray"
+          size="compact-sm"
+          leftSection={advanced ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+          onClick={toggle}
+          aria-expanded={advanced}
+          aria-controls={advancedId}
+          className={classes.advancedToggle}
+        >
+          {t('training.settings.advanced')}
+        </Button>
+        <Collapse expanded={advanced} id={advancedId}>
+          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" verticalSpacing="sm" pt="sm">
+            <Select
+              label={t('training.settings.device')}
+              data={deviceOptions}
+              value={device}
+              onChange={(value) => value && set('device')(value)}
+              allowDeselect={false}
+            />
             <NumberInput
               label={t('training.settings.weightDecay')}
               description={frozen ? notTrained() : undefined}
@@ -601,35 +675,34 @@ export function SettingsForm({
             {maxSamplesField}
             {seedField}
           </SimpleGrid>
-          <NumberInput
-            label={t('training.settings.earlyStopping')}
-            description={frozen ? notTrained() : t('training.settings.earlyStoppingHint')}
-            placeholder={t('common.off')}
-            disabled={frozen}
-            value={values.patience}
-            onChange={setNumber('patience')}
-            min={LIMITS.patience.min}
-            max={LIMITS.patience.max}
-            allowDecimal={false}
-            allowNegative={false}
-            error={errors.patience}
-          />
-          <Checkbox
-            label={t('training.settings.restoreBest')}
-            description={
-              frozen
-                ? notTrained()
-                : validates
-                  ? t('training.settings.restoreBestHint')
-                  : t('training.settings.restoreBestNoVal')
-            }
-            disabled={!validates || frozen}
-            checked={values.restore_best && validates && !frozen}
-            onChange={(event) => set('restore_best')(event.currentTarget.checked)}
-          />
-        </Stack>
-      </Collapse>
+        </Collapse>
+      </section>
     </Stack>
+  );
+}
+
+/** A labelled group of settings (model and optimizer, schedule …). */
+function FormSection({
+  title,
+  info,
+  children,
+}: {
+  title: string;
+  /** An explanation behind an (i) button next to the title. */
+  info?: ReactNode;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id}>
+      <Group gap={4} wrap="nowrap" className={classes.sectionHead}>
+        <Text component="h3" id={id} className={classes.sectionTitle}>
+          {title}
+        </Text>
+        {info && <InfoHint topic={title}>{info}</InfoHint>}
+      </Group>
+      <Stack gap="sm">{children}</Stack>
+    </section>
   );
 }
 
@@ -692,6 +765,7 @@ function LossFields({
   searched: boolean;
 }) {
   useTranslation();
+  const ids = { focal_gamma: useId(), label_smoothing: useId(), huber_delta: useId() };
   const losses = lossesInUse({ ...values, search: searched }, task);
   const uses = (param: LossParam) => losses.some((name) => usesParam(param, name, task));
   const update = (changes: Partial<SettingsValues>) => onChange({ ...values, ...changes });
@@ -736,52 +810,67 @@ function LossFields({
         />
       )}
       {uses('focal_gamma') && (
-        <NumberInput
-          label={i18n.t('ui.training.SettingsForm.focalGamma')}
-          description={i18n.t('ui.training.SettingsForm.howMuchLessWellClassified')}
-          value={tuned.focal_gamma ? '' : values.focal_gamma}
-          placeholder={tuned.focal_gamma ? searchedText() : undefined}
-          disabled={tuned.focal_gamma}
-          onChange={(value) => update({ focal_gamma: value })}
-          min={LIMITS.focal_gamma.min}
-          max={LIMITS.focal_gamma.max}
-          step={0.5}
-          decimalScale={3}
-          allowNegative={false}
-          error={errors.focal_gamma}
-        />
+        <div>
+          <HintedLabel id={ids.focal_gamma} label={i18n.t('ui.training.SettingsForm.focalGamma')}>
+            {i18n.t('ui.training.SettingsForm.howMuchLessWellClassified')}
+          </HintedLabel>
+          <NumberInput
+            id={ids.focal_gamma}
+            value={tuned.focal_gamma ? '' : values.focal_gamma}
+            placeholder={tuned.focal_gamma ? searchedText() : undefined}
+            disabled={tuned.focal_gamma}
+            onChange={(value) => update({ focal_gamma: value })}
+            min={LIMITS.focal_gamma.min}
+            max={LIMITS.focal_gamma.max}
+            step={0.5}
+            decimalScale={3}
+            allowNegative={false}
+            error={errors.focal_gamma}
+          />
+        </div>
       )}
       {uses('label_smoothing') && (
-        <NumberInput
-          label={i18n.t('ui.training.SettingsForm.labelSmoothing')}
-          description={i18n.t('ui.training.SettingsForm.shareOfTheTargetSpread')}
-          value={tuned.label_smoothing ? '' : values.label_smoothing}
-          placeholder={tuned.label_smoothing ? searchedText() : undefined}
-          disabled={tuned.label_smoothing}
-          onChange={(value) => update({ label_smoothing: value })}
-          min={LIMITS.label_smoothing.min}
-          max={LIMITS.label_smoothing.max}
-          step={0.05}
-          decimalScale={3}
-          allowNegative={false}
-          error={errors.label_smoothing}
-        />
+        <div>
+          <HintedLabel
+            id={ids.label_smoothing}
+            label={i18n.t('ui.training.SettingsForm.labelSmoothing')}
+          >
+            {i18n.t('ui.training.SettingsForm.shareOfTheTargetSpread')}
+          </HintedLabel>
+          <NumberInput
+            id={ids.label_smoothing}
+            value={tuned.label_smoothing ? '' : values.label_smoothing}
+            placeholder={tuned.label_smoothing ? searchedText() : undefined}
+            disabled={tuned.label_smoothing}
+            onChange={(value) => update({ label_smoothing: value })}
+            min={LIMITS.label_smoothing.min}
+            max={LIMITS.label_smoothing.max}
+            step={0.05}
+            decimalScale={3}
+            allowNegative={false}
+            error={errors.label_smoothing}
+          />
+        </div>
       )}
       {uses('huber_delta') && (
-        <NumberInput
-          label={i18n.t('ui.training.SettingsForm.huberDelta')}
-          description={i18n.t('ui.training.SettingsForm.whereTheLossTurnsFrom')}
-          value={tuned.huber_delta ? '' : values.huber_delta}
-          placeholder={tuned.huber_delta ? searchedText() : undefined}
-          disabled={tuned.huber_delta}
-          onChange={(value) => update({ huber_delta: value })}
-          min={LIMITS.huber_delta.min}
-          max={LIMITS.huber_delta.max}
-          step={0.25}
-          decimalScale={3}
-          allowNegative={false}
-          error={errors.huber_delta}
-        />
+        <div>
+          <HintedLabel id={ids.huber_delta} label={i18n.t('ui.training.SettingsForm.huberDelta')}>
+            {i18n.t('ui.training.SettingsForm.whereTheLossTurnsFrom')}
+          </HintedLabel>
+          <NumberInput
+            id={ids.huber_delta}
+            value={tuned.huber_delta ? '' : values.huber_delta}
+            placeholder={tuned.huber_delta ? searchedText() : undefined}
+            disabled={tuned.huber_delta}
+            onChange={(value) => update({ huber_delta: value })}
+            min={LIMITS.huber_delta.min}
+            max={LIMITS.huber_delta.max}
+            step={0.25}
+            decimalScale={3}
+            allowNegative={false}
+            error={errors.huber_delta}
+          />
+        </div>
       )}
     </SimpleGrid>
   );

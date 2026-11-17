@@ -51,11 +51,10 @@ beforeEach(() => {
 });
 
 describe('Explanations in the run view', () => {
-  it('offers them in the headline and as a section of a finished run', async () => {
+  it('offers them with the files of the model and as a section of a finished run', async () => {
     methods.mockResolvedValue(methodsFor('image', ['samples', 'image', 'activations', 'weights']));
     show(detail({ status: 'completed', has_weights: true }));
     expect(screen.getByRole('button', { name: 'Explain the model' })).toBeInTheDocument();
-    expect(screen.getByText(/Why it decides as it does/)).toBeInTheDocument();
     expect(section()).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Show where it looks' })).toBeInTheDocument();
     // Nothing is computed until asked for.
@@ -65,7 +64,7 @@ describe('Explanations in the run view', () => {
     expect(section()!.compareDocumentPosition(tryIt)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it('opens the dialog from the headline', async () => {
+  it('opens the dialog from its button', async () => {
     methods.mockResolvedValue(methodsFor('image', ['activations', 'weights']));
     run.mockResolvedValue({ method: 'weights', filters: null, layers: [] });
     show(detail({ status: 'completed', has_weights: true }));

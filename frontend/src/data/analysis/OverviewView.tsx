@@ -158,13 +158,16 @@ export function OverviewView({
         />
       </Stack>
 
-      <Note>
-        {i18n.t('ui.data.OverviewView.columnStatisticsAreExactAll', {
-          n_rows: formatCount(profile.n_rows),
-          lower: lower(analysisNote(profile)),
-          lower2: lower(sampleNote(sample)),
-        })}
-      </Note>
+      {/* What the figures are based on matters only when part of them come from a sample. */}
+      {(analysisNote(profile) || sampleNote(sample)) && (
+        <Note>
+          {i18n.t('ui.data.OverviewView.columnStatisticsAreExactAll', {
+            n_rows: formatCount(profile.n_rows),
+            lower: lower(analysisNote(profile, true)),
+            lower2: lower(sampleNote(sample, true)),
+          })}
+        </Note>
+      )}
     </Stack>
   );
 }

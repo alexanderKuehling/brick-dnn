@@ -8,6 +8,7 @@ export const common: Messages<typeof en> = {
   saving: 'Wird gespeichert …',
   saved: 'Gespeichert',
   close: 'Schließen',
+  moreAbout: 'Mehr zu „{{topic}}“',
   delete: 'Löschen',
   remove: 'Entfernen',
   rename: 'Umbenennen',
