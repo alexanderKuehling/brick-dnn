@@ -192,6 +192,21 @@ predict {run_id, image: "<base64 of a PNG file>"} → classes with shares, mask_
 check_training {graph: <unet>, dataset: {"kind": "builtin", "id": "cells"}} → ok, a warning, fixes [{node: "mask", params: {out_channels: 3}}]
 ```
 
+**Text classification.** Networks of token ids (Input data type `long`, an Embedding,
+e.g. the examples `transformer_classifier` and `lstm_sentiment`) train on the generated
+datasets `sentiment`, `lookup` and `topics` ([training.md](training.md#text-classification)).
+`get_training_options` lists them with `input_kind` `tokens`, `vocab_size` and
+`sequence_length`; `check_training` explains a wrong Input length, a too small (or too
+large) Embedding and the number of outputs, and its `fixes` set them; `predict` takes
+texts as strings (or token ids) and answers with the `tokens` the network read.
+`generate_pytorch_code` embeds the generator of the dataset the network fits (`dataset`
+chooses one).
+
+```text
+check_training {graph: <transformer_classifier>, dataset: {"kind": "builtin", "id": "lookup"}} → errors, fixes [Input shape 64 → 10, Vocabulary size of the Embedding 10000 → 289, Outputs of the last layer 4 → 10]
+predict {run_id, inputs: ["c7 x2 m4 f9 a1 q5 z0 k3 ? x"]} → class "2", tokens
+```
+
 **Classical models.** The same tools work for Gaussian processes, support vector machines and
 gradient boosting
 ([graph-format.md](graph-format.md#classical-models)): the instructions and

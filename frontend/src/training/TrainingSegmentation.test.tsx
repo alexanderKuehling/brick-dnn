@@ -513,10 +513,10 @@ describe('Fitting a network to segmentation data', () => {
       },
     ];
     expect(onlyInputAndOutput(fixes)).toBe(true);
-    expect(describeFixes(fixes, true)).toBe(
+    expect(describeFixes(fixes, 'images')).toBe(
       'Input set to 3×64×64, last layer to 4 output channels'
     );
-    expect(describeFixes([fixes[1]], true)).toBe('Last layer set to 4 output channels');
+    expect(describeFixes([fixes[1]], 'images')).toBe('Last layer set to 4 output channels');
     const transposed = { ...fixes[1], type: 'ConvTranspose2d' };
     expect(onlyInputAndOutput([transposed])).toBe(true);
     // Other parameters of a convolution are never changed without asking.

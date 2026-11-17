@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **Built-in text datasets: Sentiment, Key lookup and Topics.** Generated on the server
+  like Shapes and Cells (nothing to upload or download, the same on every machine), as
+  token ids for networks with an Input of data type `long` and an Embedding layer, which
+  so far could only train on demo data. *Sentiment*: 6,000 + 1,000 short reviews (151
+  words, 24 tokens, positive/negative) where negations flip a word and after "but" the
+  second half decides. *Key lookup*: 12,000 + 2,000 sequences of eight key-value pairs
+  and a question (289 tokens, 10 per text, 10 classes). *Topics*: 3,000 + 1,000 texts
+  about science, sports, cooking or travel (161 words, 64 tokens, 4 classes). After ten
+  CPU epochs the Transformer example reaches about 98 %, 99 % and 98 % test accuracy;
+  an average of the word embeddings stays at 52 % on Sentiment and 33 % on Key lookup,
+  the LSTM example at 38 % on Key lookup. The check of the training explains the sequence
+  length, the vocabulary size of the Embedding and the classes and fixes them (the
+  Transformer example fits Topics as it is). Predictions take typed texts (or token
+  ids), tokenised with the vocabulary of the training, and show the words the network
+  read; the data picker shows test texts. The generated script of a network that fits a
+  dataset embeds its generator (`brickdnn/training/textsets.py`, standard library only)
+  and trains on it (`--train`, `--predict TEXT`). In the REST API, MCP
+  (`get_training_options`, `check_training`, `predict`, `generate_pytorch_code` with
+  `dataset`), the MCP instructions and on the command line (`brickdnn train --example
+  transformer_classifier --data topics`). See docs/training.md.
 - **A second built-in segmentation dataset, Cells.** 400 training and 100 test images of
   96×96 pixels, generated on the server like Shapes (nothing to upload or download), that
   look like fluorescence microscopy: two to seven pink to magenta cells, each with a blue to

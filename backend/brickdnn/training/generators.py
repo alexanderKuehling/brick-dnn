@@ -1,10 +1,11 @@
-"""The generators of the built-in datasets that are generated instead of downloaded.
+"""The generators of the built-in image datasets that are generated instead of downloaded.
 
-Every generated dataset (``BuiltinDataset.generated``) has an entry here under its id: a
+Every generated image dataset (``BuiltinDataset.generated``) has an entry here under its id: a
 module with a function for one image (``sample``) and one for a range of images
 (``arrays``). The training (segdata.py) picks the generator by the dataset's id, so a new
 generated dataset only needs its module, its entry in ``BUILTIN_DATASETS`` and a line here.
-The modules import NumPy only when an image is generated.
+The modules import NumPy only when an image is generated. The generated text datasets
+(Sentiment, Key lookup, Topics) have their own module, textsets.py (see data.text_data).
 """
 
 from __future__ import annotations

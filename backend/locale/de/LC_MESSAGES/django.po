@@ -1163,15 +1163,15 @@ msgstr ""
 
 #: catalog
 msgid ""
-"Token ids → embeddings → bidirectional LSTM → positive/negative sentiment."
+"Token ids → embeddings → bidirectional LSTM → positive/negative sentiment. It trains on the built-in text dataset Sentiment once the check of the training has set its Input to 24 tokens and its Embedding to 151 words."
 msgstr ""
-"Token-IDs → Embeddings → bidirektionales LSTM → positive/negative Stimmung."
+"Token-IDs → Embeddings → bidirektionales LSTM → positive/negative Stimmung. Es trainiert auf dem eingebauten Textdatensatz Sentiment, sobald die Prüfung des Trainings seine Eingabe auf 24 Tokens und sein Embedding auf 151 Wörter gesetzt hat."
 
 #: catalog
 msgid ""
-"A small Transformer encoder with learned positional embeddings and mean pooling."
+"A small Transformer encoder with learned positional embeddings and mean pooling. It trains on the built-in text dataset Topics as it is; the check of the training adapts it to Sentiment and Key lookup (sequence length, vocabulary, classes)."
 msgstr ""
-"Ein kleiner Transformer-Encoder mit gelernten Positions-Embeddings und Mean Pooling."
+"Ein kleiner Transformer-Encoder mit gelernten Positions-Embeddings und Mean Pooling. Er trainiert unverändert auf dem eingebauten Textdatensatz Topics; die Prüfung des Trainings passt ihn an Sentiment und Key lookup an (Sequenzlänge, Vokabular, Klassen)."
 
 #: catalog
 msgid ""
@@ -2918,6 +2918,24 @@ msgstr ""
 "Segmentierung: Zellen mit ihren Zellkernen wie in Fluoreszenzmikroskopie-Bildern, mit einer Klasse für jedes Pixel (die Zellkerne bedecken nur 3 % der Pixel). Generiert, RGB 96×96."
 
 #: catalog
+msgid ""
+"Text: short reviews, positive or negative. Negations (\"not good\") flip a word and after \"but\" the second half decides, so the word order matters. Generated, 151 words, 24 tokens per text."
+msgstr ""
+"Text: kurze Bewertungen, positiv oder negativ. Verneinungen („not good“) kehren ein Wort um, und nach „but“ entscheidet die zweite Hälfte: Die Reihenfolge der Wörter zählt. Generiert, 151 Wörter, 24 Tokens pro Text."
+
+#: catalog
+msgid ""
+"Text: eight key-value pairs and a question (\"c7 x2 m4 … ? x\" → 2). Attention finds the asked pair; an average of the tokens stays near chance. Generated, 289 tokens, 10 per text."
+msgstr ""
+"Text: acht Schlüssel-Wert-Paare und eine Frage („c7 x2 m4 … ? x“ → 2). Attention findet das gefragte Paar; ein Mittelwert der Tokens bleibt nahe am Zufall. Generiert, 289 Tokens, 10 pro Text."
+
+#: catalog
+msgid ""
+"Text: about science, sports, cooking or travel, recognisable by its words in any order. An easy first dataset. Generated, 161 words, 64 tokens per text."
+msgstr ""
+"Text: über Wissenschaft, Sport, Kochen oder Reisen, erkennbar an seinen Wörtern in beliebiger Reihenfolge. Ein leichter erster Datensatz. Generiert, 161 Wörter, 64 Tokens pro Text."
+
+#: catalog
 msgid "loss"
 msgstr "Verlust"
 
@@ -3502,9 +3520,9 @@ msgstr ""
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
-"This network expects integer token ids (Input data type 'long'). Text models can only be trained on demo data so far."
+"This network expects integer token ids (Input data type 'long'). Text models train on the built-in text datasets (Sentiment, Key lookup, Topics) or on demo data."
 msgstr ""
-"Dieses Netz erwartet ganzzahlige Token-IDs (Datentyp der Eingabe 'long'). Textmodelle lassen sich bisher nur auf Demodaten trainieren."
+"Dieses Netz erwartet ganzzahlige Token-IDs (Datentyp 'long' der Eingabe). Textmodelle trainieren auf den eingebauten Textdatensätzen (Sentiment, Key lookup, Topics) oder auf Demodaten."
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -3597,6 +3615,18 @@ msgstr "Klassifikation in {0} Klassen ({1}, {2})."
 
 #: brickdnn
 msgctxt "brickdnn"
+msgid ""
+"Every text of {0} has {1} tokens, but the Input expects shape {2}. Set the Input shape to {3}."
+msgstr ""
+"Jeder Text von {0} hat {1} Tokens, aber die Eingabe erwartet die Form {2}. Setzen Sie die Form der Eingabe auf {3}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Classification into {0} classes ({1}, {2} of {3} tokens)."
+msgstr "Klassifikation in {0} Klassen ({1}, {2} mit {3} Tokens)."
+
+#: brickdnn
+msgctxt "brickdnn"
 msgid "Set the batch size to {0} or less, or make the Input smaller."
 msgstr ""
 "Setzen Sie die Batchgröße auf {0} oder weniger oder verkleinern Sie die Eingabe."
@@ -3636,13 +3666,8 @@ msgstr "Segmentierung in {0} Klassen bei {1} Pixeln ({2}, {3})."
 
 #: brickdnn
 msgctxt "brickdnn"
-msgid "Output channels of the last layer {0} → {1}"
-msgstr "Ausgabekanäle der letzten Schicht {0} → {1}"
-
-#: brickdnn
-msgctxt "brickdnn"
-msgid "Outputs of the last layer {0} → {1}"
-msgstr "Ausgaben der letzten Schicht {0} → {1}"
+msgid "Vocabulary size of the Embedding {0} → {1}"
+msgstr "Vokabulargröße des Embeddings {0} → {1}"
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -3661,6 +3686,13 @@ msgctxt "brickdnn"
 msgid "Demo data: random features and a hidden rule to learn ({0} classes)."
 msgstr ""
 "Demodaten: zufällige Merkmale und eine versteckte Regel zum Lernen ({0} Klassen)."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"A hybrid network trains on tables and images, not on texts like {0}. Build a neural network with an Embedding layer (e.g. the Transformer example) for texts."
+msgstr ""
+"Ein hybrides Netz trainiert auf Tabellen und Bildern, nicht auf Texten wie {0}. Bauen Sie für Texte ein neuronales Netz mit einer Embedding-Schicht (z. B. das Transformer-Beispiel)."
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -3716,6 +3748,20 @@ msgstr "Jedes Bild wird als {0} Zeilen mit {1} Graustufenpixeln eingespeist."
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
+"The Embedding has {0} entries, but {1} has only {2} words: the other {3} are never used. Set its vocabulary size to {4}."
+msgstr ""
+"Das Embedding hat {0} Einträge, aber {1} hat nur {2} Wörter: Die übrigen {3} werden nie benutzt. Setzen Sie seine Vokabulargröße auf {4}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Every text is {0} token ids from a vocabulary of {1} words, padded with id 0; id 1 stands for unknown words."
+msgstr ""
+"Jeder Text besteht aus {0} Token-IDs aus einem Vokabular von {1} Wörtern, mit ID 0 aufgefüllt; ID 1 steht für unbekannte Wörter."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
 "The network outputs {0}×{1} values for an image of {2}×{3} pixels, but segmentation needs one output per pixel: the output must be as high and wide as the Input. {4}"
 msgstr ""
 "Das Netz gibt {0}×{1} Werte für ein Bild mit {2}×{3} Pixeln aus, aber Segmentierung braucht eine Ausgabe pro Pixel: Die Ausgabe muss so hoch und breit sein wie die Eingabe. {4}"
@@ -3738,6 +3784,16 @@ msgstr ""
 msgctxt "brickdnn"
 msgid "Input data type {0} → {1}"
 msgstr "Datentyp der Eingabe {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Output channels of the last layer {0} → {1}"
+msgstr "Ausgabekanäle der letzten Schicht {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Outputs of the last layer {0} → {1}"
+msgstr "Ausgaben der letzten Schicht {0} → {1}"
 
 #: brickdnn
 msgctxt "brickdnn"

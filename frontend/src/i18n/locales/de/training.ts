@@ -52,6 +52,12 @@ export const training: Messages<typeof en> = {
       '{{sizes}} mit Masken · {{count}} Klassen ({{classes}}) · kein Download',
     details_one: '{{sizes}} · {{count}} Klasse · {{mb}} MB Download',
     details_other: '{{sizes}} · {{count}} Klassen · {{mb}} MB Download',
+    textSizes: '{{train}} Trainings- und {{test}} Testtexte',
+    textDetails_one:
+      '{{sizes}} · {{count}} Klasse ({{classes}}) · Vokabular von {{words}}, {{length}} Tokens pro Text · kein Download',
+    textDetails_other:
+      '{{sizes}} · {{count}} Klassen ({{classes}}) · Vokabular von {{words}}, {{length}} Tokens pro Text · kein Download',
+    examples: 'Testtexte',
     dataTab: 'Daten-Tab',
     messyCsv: 'Unaufgeräumte CSV-Datei? Bereinigen, kodieren und analysieren Sie sie im',
   },

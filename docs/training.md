@@ -79,6 +79,7 @@ by default (`BRICKDNN_TRAINING_MAX_RUNS`), and refuses a start while it is busy.
 | **Shapes** | 500 generated 64×64 images of squares, circles and triangles with a class for every pixel (4 classes). Nothing is downloaded. See [Image segmentation](#image-segmentation). | Input `3, H, W` or `1, H, W`; output `4, H, W` |
 | **Cells** | 500 generated 96×96 images like fluorescence microscopy: cells and their nuclei, with a class for every pixel (3 classes: background, cell, nucleus). Nothing is downloaded. See [Image segmentation](#image-segmentation). | Input `3, H, W` or `1, H, W`; output `3, H, W` |
 | **Images with masks** | Upload a `.zip` with the folders `images` and `masks` (same file names), see [Image segmentation](#image-segmentation). | Input `1, H, W` or `3, H, W`; output one channel per class at the same height and width |
+| **Sentiment**, **Key lookup**, **Topics** | Generated texts as token ids, one class per text: reviews where word order matters (2 classes), key-value pairs and a question (10 classes), four topics (4 classes). Nothing is downloaded. See [Text classification](#text-classification). | Input `24`, `10` or `64` with data type `long`, an Embedding of 151, 289 or 161 words; one output per class |
 
 Details:
 
@@ -96,8 +97,9 @@ Details:
   - *Regression*: the target is a number and the network has a single output. Besides the
     loss, the validation and test results are reported as RMSE in the units of the target and
     as R², see [Regression metrics](#regression-metrics).
-- Text models (Input data type `long`) and networks with several inputs or outputs can only be
-  trained on demo data so far.
+- Text models (Input data type `long`) train on the built-in text datasets (see
+  [Text classification](#text-classification)) or on demo data. Networks with several inputs
+  or outputs can only be trained on demo data so far.
 - Uploads are limited to `BRICKDNN_MAX_UPLOAD_MB` (default 500 MB).
 
 ### Adapting the network to the data
@@ -259,6 +261,7 @@ whose split has no validation rows, trains on everything that is not test data. 
   images); explanations and the *Use a sample* rows of the prediction form take test rows
   (without them: training rows) instead of validation rows.
 | Shapes, Cells | `val_split` of its 400 training images | always its 100 test images; `test_split` is not used |
+| Sentiment, Key lookup, Topics | `val_split` of its training texts | always its test texts; `test_split` is not used |
 | Images with masks | `val_split` of the data, or the folder `val` | `test_split` of the data, or the folder `test` (none without it) |
 | Datasets from the *Data* tab | the split made there | the split made there; `val_split` and `test_split` are not used |
 
@@ -688,6 +691,75 @@ The automatic clean-up of old runs keeps the members of an ensemble as long as t
 exists.
 
 An ensemble has no weights, code or explanations of its own: its members have them.
+
+## Text classification
+
+Networks that read **token ids** (an Input with data type `long` followed by an `Embedding`
+layer, like the examples *Transformer text classifier* and *LSTM text classifier*) train on
+three built-in text datasets. They are generated on the server like Shapes and Cells (nothing
+is uploaded or downloaded), the same on every machine, and small enough for a CPU: ten
+epochs of the Transformer example take about a minute.
+
+| Dataset | id | Texts (training + test) | Vocabulary | Tokens per text | Classes | What it tests |
+| ------- | -- | ----------------------- | ---------- | --------------- | ------- | ------------- |
+| **Sentiment** | `sentiment` | 6,000 + 1,000 | 151 words | 24 | 2: negative, positive | Word order: negations and "but" |
+| **Key lookup** | `lookup` | 12,000 + 2,000 | 289 tokens | 10 | 10: the digits 0–9 | Retrieval: attention |
+| **Topics** | `topics` | 3,000 + 1,000 | 161 words | 64 | 4: science, sports, cooking, travel | Words, in any order (easy) |
+
+- **Sentiment**: short reviews like *"the soup was not very tasty but the staff was
+  friendly"* (positive). A negation (*not*, *never*, *hardly*) in front of the adjective flips
+  it, an intensifier (*very*, *really* …) does not; in *"… but …"* the second half decides, in
+  *"… and …"* both halves agree. The same words in another order can mean the opposite, so an
+  average of the word embeddings stays at chance (about 50 %), while a network that reads the
+  order learns it.
+- **Key lookup**: eight pairs, each one token of a letter and a digit, then a question:
+  *"c7 x2 m4 f9 a1 q5 z0 k3 ? x"* is answered by the digit of the pair with the asked key, *2*.
+  Self-attention compares the question with every pair and reads the digit of the one that
+  matches; an average of the embeddings knows which pairs occur, but not which one is asked
+  for, and an LSTM has to remember all eight pairs.
+- **Topics**: 40 to 64 words of filler (*the, and, after, people …*) with topic words
+  (*oven, garlic, sauce …*) and a few words of another topic. Recognising the topic needs no
+  order: a first dataset that every text network learns quickly.
+
+Every text is padded with the token `<pad>` (id 0) to its length; id 1 is `<unk>`, which only
+occurs in texts typed in for predictions (words that are not in the vocabulary). Validation
+data is taken from the training texts (`val_split`), the test texts are the test set, like
+the official test split of the other built-in datasets.
+
+**The network** needs an Input of shape `L` (the tokens per text) with data type `long`, an
+Embedding whose vocabulary size (`num_embeddings`) is the size of the vocabulary, and one
+output per class. The check of the training says what does not fit and offers the fix (see
+[Adapting the network](#adapting-the-network-to-the-data)): choosing *Built-in → Key lookup*
+for the Transformer example sets its Input to 10 tokens, its Embedding to 289 words and its
+last layer to 10 outputs. The Transformer example fits Topics as it is (its Embedding of
+10,000 words gets a warning and a fix: only 161 are used). An empty canvas gets a small
+Transformer for the chosen dataset.
+
+What the examples (with the fixes) reach after ten epochs on a CPU (default settings,
+batch size 64, 20 % validation; test accuracy), next to an average of the word embeddings
+(Embedding → SequencePool *mean* → Linear → ReLU → Linear):
+
+| Dataset | Transformer example | LSTM example | Average of the embeddings | Chance |
+| ------- | ------------------- | ------------ | ------------------------- | ------ |
+| Sentiment | 98 % | 100 % | 52 % | 50 % |
+| Key lookup | 99 % | 38 % | 33 % | 10 % |
+| Topics | 98 % | 98 % | 100 % | 25 % |
+
+**Predictions** in the run view take texts, one per line (or a test text of the dataset):
+they are lower-cased and split into words and punctuation marks, looked up in the vocabulary
+of the training (`preprocessing.vocabulary` of the run) and cut or padded to the length. The
+answer shows the words the network read, unknown words as `<unk>`. The REST API and MCP's
+`predict` take `inputs` as texts (strings) or lists of token ids and return `tokens` and
+`unknown_words` with every prediction. The download's `how_to_use` contains the vocabulary and
+an `encode()` function that turns a text into token ids the same way.
+
+**The generated script** of a network that fits one of the datasets (its Input length, enough
+words in its Embedding, one output per class) contains the generator of the datasets
+(`brickdnn/training/textsets.py`, standard library only) and trains on the same texts:
+`python net.py --train --epochs 10` (80 % of the training texts for training, the rest for
+validation, then the test texts), `python net.py --predict "the soup was not good"`. The
+option `dataset` of the code generation chooses one of them. On the command line,
+`brickdnn train --example transformer_classifier --data topics` trains the example as it is.
 
 ## Image segmentation
 
