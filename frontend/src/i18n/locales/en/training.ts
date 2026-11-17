@@ -48,6 +48,12 @@ export const training = {
       '{{sizes}} with masks · {{count}} classes ({{classes}}) · no download',
     details_one: '{{sizes}} · {{count}} class · {{mb}} MB download',
     details_other: '{{sizes}} · {{count}} classes · {{mb}} MB download',
+    textSizes: '{{train}} training and {{test}} test texts',
+    textDetails_one:
+      '{{sizes}} · {{count}} class ({{classes}}) · vocabulary of {{words}}, {{length}} tokens per text · no download',
+    textDetails_other:
+      '{{sizes}} · {{count}} classes ({{classes}}) · vocabulary of {{words}}, {{length}} tokens per text · no download',
+    examples: 'Test texts',
     dataTab: 'Data tab',
     messyCsv: 'Messy CSV? Clean, encode and analyse it in the',
   },

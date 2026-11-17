@@ -1,7 +1,7 @@
 {
   "id": "lstm_sentiment",
   "name": "LSTM text classifier",
-  "description": "Token ids \u2192 embeddings \u2192 bidirectional LSTM \u2192 positive/negative sentiment.",
+  "description": "Token ids \u2192 embeddings \u2192 bidirectional LSTM \u2192 positive/negative sentiment. It trains on the built-in text dataset Sentiment once the check of the training has set its Input to 24 tokens and its Embedding to 151 words.",
   "order": 5,
   "graph": {
     "version": 1,

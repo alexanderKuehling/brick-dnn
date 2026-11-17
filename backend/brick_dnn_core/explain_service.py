@@ -55,7 +55,8 @@ METHODS: dict[str, dict[str, Any]] = {
     "weights": {
         "label": "Filters and weights",
         "sample": False,
-        "kinds": ("image", "tabular", "demo"),
+        # The weights do not depend on the data: also for the built-in texts (token ids).
+        "kinds": ("image", "tabular", "tokens", "demo"),
     },
 }
 NEURAL_ONLY = ("image", "activations", "weights")
@@ -78,8 +79,8 @@ class Explanation:
 
 
 def run_kind(run: TrainingRun) -> str | None:
-    """``image``, ``tabular`` or ``demo`` (how the run's inputs were prepared), None if
-    unknown."""
+    """``image``, ``tabular``, ``tokens`` or ``demo`` (how the run's inputs were prepared),
+    None if unknown."""
     preprocessing = (training.state_of(run) or {}).get("preprocessing")
     try:
         return inference.kind_of(run.plan, preprocessing)

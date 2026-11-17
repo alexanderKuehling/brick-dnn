@@ -313,14 +313,15 @@ def test_datasets_over_mcp_are_compact(mcp, web, user, training_dir):
     dataset_id = upload(web, "squares.zip", zip_bytes(files), name="Squares").data["id"]
     options, size = answer(mcp, "get_training_options")
     # With the hyperparameter search options (about 1,800 bytes), the losses per task with
-    # their settings (about 560 bytes) and five built-in datasets (Cells adds about 500).
-    assert size < 7700
+    # their settings (about 560 bytes) and eight built-in datasets (Cells adds about 500, the
+    # text datasets about 700 each).
+    assert size < 9900
     assert options["segmentation"]["max_classes"] == 32
     assert options["config_defaults"]["loss"] == "auto"  # cross_entropy for a segmentation
     assert options["losses"]["segmentation"] == (
         "cross_entropy*, cross_entropy_dice, weighted_cross_entropy"
     )
-    shapes, cells = options["builtin_datasets"][-2:]
+    shapes, cells = options["builtin_datasets"][3:5]
     assert (shapes["id"], shapes["task"], shapes["available"]) == ("shapes", "segmentation", True)
     assert (cells["id"], cells["task"], cells["available"]) == ("cells", "segmentation", True)
     assert cells["class_names"] == ["background", "cell", "nucleus"]

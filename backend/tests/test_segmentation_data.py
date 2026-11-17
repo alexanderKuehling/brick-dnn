@@ -42,6 +42,7 @@ from brickdnn.training.segmentation import (  # noqa: E402
     find_pairs,
 )
 from brickdnn.training.shapes import SHAPE_CLASSES, shapes_arrays, shapes_sample  # noqa: E402
+from brickdnn.training.textsets import TEXT_DATASETS  # noqa: E402
 
 from .segmentation_helpers import (  # noqa: E402
     SIZE,
@@ -564,8 +565,11 @@ def test_cells_is_a_built_in_segmentation_dataset():
 
 
 def test_every_generated_dataset_has_a_generator():
-    generated = {d.id for d in BUILTIN_DATASETS.values() if d.generated}
+    generated = {d.id for d in BUILTIN_DATASETS.values() if d.generated and not d.is_text}
     assert generated == set(GENERATORS) == {"shapes", "cells"}
+    # The generated texts come from textsets.py instead.
+    texts = {d.id for d in BUILTIN_DATASETS.values() if d.generated and d.is_text}
+    assert texts == set(TEXT_DATASETS) == {"sentiment", "lookup", "topics"}
     assert generator_for("cells").arrays is cells_arrays
     assert generator_for("shapes").sample is shapes_sample
     assert generator_for("mnist") is None

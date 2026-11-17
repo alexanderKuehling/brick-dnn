@@ -59,6 +59,11 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   wait in a **queue** and a separate worker container trains them, so the site stays
   responsive and nothing is refused because the server is busy. See
   [docs/training.md](docs/training.md).
+- **Text classification**: train the Transformer or LSTM example on generated built-in
+  text datasets: *Sentiment* (negations and "but": word order matters), *Key lookup*
+  (key-value pairs and a question, where attention beats an average of the words) and
+  *Topics*. Predictions take typed texts and show the words the network read. See
+  [docs/training.md](docs/training.md#text-classification).
 - **Image segmentation**: train a U-Net (or any network that keeps the image size) on images
   with one mask each, a ZIP file with the folders `images` and `masks`, or on the built-in
   generated datasets *Shapes* (squares, circles and triangles) and *Cells* (cells and their

@@ -122,6 +122,21 @@ SCRIPT_NAMES = {
     "parser",
     "tensor",
     "i",
+    # Training on a built-in text dataset (the generator of textsets.py is embedded).
+    "random",
+    "re",
+    "DATASET",
+    "TEXT_DATASETS",
+    "text_dataset",
+    "text_sample",
+    "text_vocabulary",
+    "text_examples",
+    "tokenize",
+    "encode",
+    "decode",
+    "load_dataset",
+    "evaluate",
+    "predict_text",
 }
 RESERVED = set(keyword.kwlist) | set(dir(builtins)) | NN_MODULE_ATTRIBUTES | SCRIPT_NAMES
 
@@ -145,6 +160,9 @@ class GeneratorOptions:
     focal_gamma: float = 2.0
     label_smoothing: float = 0.0
     huber_delta: float = 1.0
+    # Networks that read token ids: the built-in text dataset (textsets.py) whose generator
+    # the training code embeds. None: the one the network fits (length, vocabulary, classes).
+    dataset: str | None = None
     # The CSV training loop logs its curves, settings and test numbers to Brick DNN, but only
     # while the environment variable BRICKDNN_TOKEN is set (brickdnn/tracking.py): without it
     # the script runs offline with the same results. ``tracking_url`` is the default server,
@@ -165,6 +183,15 @@ class GeneratorOptions:
         from .training.config import TrainingConfig  # ConfigError is a ValueError
 
         loss = TrainingConfig.from_dict({key: data.get(key) for key in LOSS_OPTIONS})
+        dataset = data.get("dataset")
+        if dataset is not None:
+            from .training.textsets import TEXT_DATASETS
+
+            if dataset not in TEXT_DATASETS:
+                raise ValueError(
+                    f"'{dataset}' is not a built-in text dataset. Possible: "
+                    f"{', '.join(TEXT_DATASETS)}."
+                )
         url = data.get("tracking_url") or SITE_URL
         if not isinstance(url, str) or len(url) > 200 or not TRACKING_URL.match(url):
             raise ValueError(
@@ -180,6 +207,7 @@ class GeneratorOptions:
             include_main=bool(data.get("include_main", True)),
             include_training=bool(data.get("include_training", True)),
             **{key: getattr(loss, key) for key in LOSS_OPTIONS},
+            dataset=dataset,
             log_to_brickdnn=bool(data.get("log_to_brickdnn", True)),
             tracking_url=url.rstrip("/"),
             tracking_project=project,
@@ -273,12 +301,17 @@ class _Generator:
     # -- rendering -------------------------------------------------------- #
 
     def render(self) -> str:
-        training = self.opt.include_main and self.opt.include_training and self._can_train()
-        self.logging = training and self.opt.log_to_brickdnn
+        wanted = self.opt.include_main and self.opt.include_training
+        self.text = self._text_dataset() if wanted else None
+        training = wanted and (self.text is not None or self._can_train())
+        # Only the CSV training loop logs to Brick DNN.
+        self.logging = training and self.text is None and self.opt.log_to_brickdnn
         parts = [self._model_class()]
         if self.opt.include_main:
             parts.append(_COUNT_PARAMETERS)
-            if training:
+            if self.text is not None:
+                parts += [_text_generator(), self._text_training_code()]
+            elif training:
                 parts.append(self._training_code())
             if self.logging:
                 parts.append(self._tracking_code())
@@ -311,7 +344,19 @@ class _Generator:
                 "",
                 "    python this_file.py",
             ]
-        if training:
+        if training and self.text is not None:
+            from .training.datasets import BUILTIN_DATASETS
+
+            name = BUILTIN_DATASETS[self.text].name
+            lines += [
+                "",
+                f"Train it on {name}, a built-in text dataset of Brick DNN (generated below:",
+                "the same texts as in Brick DNN), then classify new texts with the saved model:",
+                "",
+                "    python this_file.py --train --epochs 10",
+                '    python this_file.py --predict "your text"',
+            ]
+        elif training:
             lines += [
                 "",
                 "Train it on a CSV file (every column but the last is a feature,",
@@ -345,7 +390,9 @@ class _Generator:
 
     def _imports(self, training: bool) -> str:
         lines = []
-        if training and self.logging:
+        if training and self.text is not None:
+            lines += ["import argparse", "import random", "import re", ""]
+        elif training and self.logging:
             lines += [
                 "from __future__ import annotations",
                 "",
@@ -435,6 +482,8 @@ class _Generator:
         return lines
 
     def _main(self, training: bool) -> str:
+        if training and self.text is not None:
+            return self._text_main()
         name = self.opt.class_name
         lines = ["def main() -> None:"]
         if training:
@@ -531,7 +580,109 @@ class _Generator:
         lines += ["", "", 'if __name__ == "__main__":', "    main()"]
         return "\n".join(lines)
 
+    def _text_main(self) -> str:
+        name = self.opt.class_name
+        lines = [
+            "def main() -> None:",
+            f'    parser = argparse.ArgumentParser(description="{name} generated with Brick DNN")',
+            "    parser.add_argument(",
+            '        "--train", action="store_true", help=f"train on the built-in dataset {DATASET}"',
+            "    )",
+            '    parser.add_argument("--predict", metavar="TEXT", help="classify this text")',
+            '    parser.add_argument("--epochs", type=int, default=10)',
+            '    parser.add_argument("--batch-size", type=int, default=64)',
+            '    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")',
+            '    parser.add_argument("--seed", type=int, default=0, help="for a repeatable run")',
+            "    parser.add_argument(",
+            '        "--save",',
+            '        default="model.pt",',
+            '        help="the trained model (--train writes it, --predict reads it)",',
+            "    )",
+            "    args = parser.parse_args()",
+            "    torch.manual_seed(args.seed)  # the same initial weights for the same seed",
+            "",
+            f"    model = {name}()",
+            "    if args.predict:",
+            "        predict_text(model, args.save, args.predict)",
+            "        return",
+            "    print(model)",
+            '    print(f"Trainable parameters: {count_parameters(model):,}")',
+            "",
+            "    if args.train:",
+            "        train(model, args.epochs, args.batch_size, args.lr, args.seed)",
+            "        save_model(model, args.save)",
+            "        return",
+            "",
+            *self._sanity_check("    "),
+            "",
+            "",
+            'if __name__ == "__main__":',
+            "    main()",
+        ]
+        return "\n".join(lines)
+
     # -- training --------------------------------------------------------- #
+
+    def _text_dataset(self) -> str | None:
+        """The built-in text dataset the training code embeds, or None. Only for a network
+        with one Input of token ids (rank 1) that only feeds Embedding layers, and one
+        output of K values. ``options.dataset`` must fit it; without it, the first dataset
+        of its length whose words its Embeddings know, with as many classes if possible."""
+        from .training.textsets import TEXT_DATASETS
+
+        if len(self.a.inputs) != 1 or len(self.a.outputs) != 1:
+            return None
+        source = self._node(self.a.inputs[0])
+        target = self._node(self.a.outputs[0])
+        if source.dtype != "long" or source.shape is None or len(source.shape) != 1:
+            return None
+        if target.shape is None or len(target.shape) != 1 or target.shape[0] < 2:
+            return None
+        sizes = [
+            self._node(t).layer.p["num_embeddings"]  # type: ignore[union-attr]
+            for t in source.outputs
+            if self._node(t).type == "Embedding"
+        ]
+        if not sizes or len(sizes) != len(source.outputs):
+            return None
+        outputs = target.shape[0]
+
+        def fits(dataset: str) -> bool:
+            _, vocabulary, length, classes, *_ = TEXT_DATASETS[dataset]
+            return (
+                source.shape == (length,)
+                and outputs >= len(classes)
+                and min(sizes) >= len(vocabulary)
+            )
+
+        wanted = self.opt.dataset
+        if wanted is not None:
+            if not fits(wanted):
+                _, vocabulary, length, classes, *_ = TEXT_DATASETS[wanted]
+                raise ValueError(
+                    f"The network does not fit the built-in dataset '{wanted}': it needs an "
+                    f"Input of {length} token ids, an Embedding with at least "
+                    f"{len(vocabulary)} entries and {len(classes)} outputs."
+                )
+            return wanted
+        fitting = [d for d in TEXT_DATASETS if fits(d)]
+        same = [d for d in fitting if outputs == len(TEXT_DATASETS[d][3])]
+        return (same or fitting or [None])[0]
+
+    def _text_training_code(self) -> str:
+        n_outputs = self._node(self.a.outputs[0]).shape[0]  # type: ignore[index]
+        header = (
+            f'DATASET = "{self.text}"  # the built-in text dataset (see TEXT_DATASETS above)\n'
+            f"NUM_CLASSES = {n_outputs}"
+        )
+        loss = "nn.CrossEntropyLoss()"
+        code = self._classification_loss(n_outputs)
+        if code is not None:
+            header += "\n" + code
+            loss = "make_loss(train_y, device)"
+        return _TEXT_TRAINING_TEMPLATE.replace("[[HEADER]]", header).replace("[[LOSS]]", loss)
+
+    # -- training (CSV) ----------------------------------------------------- #
 
     def _can_train(self) -> bool:
         """CSV training is offered for tabular models: one flat float input, one flat output."""
@@ -705,6 +856,21 @@ class _Generator:
         return "\n".join(lines) + "\n\n\n" + _REGRESSION_LOSS
 
 
+def _text_generator() -> str:
+    """The generator of the built-in text datasets (textsets.py below its imports: only the
+    standard library), so that the script makes the same texts as Brick DNN."""
+    from pathlib import Path
+
+    source = (Path(__file__).parent / "training" / "textsets.py").read_text(encoding="utf-8")
+    body = source[source.index("TEXT_PAD = ") :].strip()
+    return (
+        "# --------------------------------------------------------------------------- #\n"
+        "# The built-in text datasets of Brick DNN (brickdnn/training/textsets.py)\n"
+        "# --------------------------------------------------------------------------- #\n"
+        "\n" + body
+    )
+
+
 def _literal(value: Any) -> str:
     if value is None:
         return "None"
@@ -766,6 +932,119 @@ def make_loss(target: torch.Tensor):
 _COUNT_PARAMETERS = """\
 def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)"""
+
+
+_TEXT_TRAINING_TEMPLATE = '''\
+# --------------------------------------------------------------------------- #
+# Training on the built-in text dataset, and predictions for new texts
+# --------------------------------------------------------------------------- #
+
+[[HEADER]]
+
+
+def load_dataset() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """The token ids and classes of the training texts and of the test texts."""
+    *_, train_size, test_size = TEXT_DATASETS[DATASET]
+    ids, labels = text_dataset(DATASET, 0, train_size + test_size)
+    x, y = torch.tensor(ids), torch.tensor(labels)
+    return x[:train_size], y[:train_size], x[train_size:], y[train_size:]
+
+
+def evaluate(model: nn.Module, loader: DataLoader, loss_fn, device: str) -> tuple[float, float]:
+    """The mean loss and the accuracy on the texts of ``loader``."""
+    model.eval()
+    total, correct, seen = 0.0, 0, 0
+    with torch.no_grad():
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            total += loss_fn(outputs, targets).item() * len(inputs)
+            correct += (outputs.argmax(dim=1) == targets).sum().item()
+            seen += len(inputs)
+    return total / max(seen, 1), correct / max(seen, 1)
+
+
+def train(model: nn.Module, epochs: int, batch_size: int, lr: float, seed: int) -> None:
+    """Train on 80 % of the training texts (the split depends only on ``seed``), validate
+    on the rest after every epoch and measure the test texts once at the end."""
+    x, y, test_x, test_y = load_dataset()
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(len(x), generator=generator)
+    n_val = len(x) // 5
+    val_rows, train_rows = order[:n_val], order[n_val:]
+    train_y = y[train_rows]
+    train_loader = DataLoader(
+        TensorDataset(x[train_rows], train_y),
+        batch_size=batch_size,
+        shuffle=True,
+        generator=generator,
+    )
+    val_loader = DataLoader(TensorDataset(x[val_rows], y[val_rows]), batch_size=256)
+    test_loader = DataLoader(TensorDataset(test_x, test_y), batch_size=256)
+
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    print(
+        f"Training on {device}: {len(train_rows)} texts of {DATASET}, {n_val} for validation, "
+        f"{len(test_x)} for the test"
+    )
+    model.to(device)
+    loss_fn = [[LOSS]]
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        train_loss, seen = 0.0, 0
+        for inputs, targets in train_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            loss = loss_fn(model(inputs), targets)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * len(inputs)
+            seen += len(inputs)
+        val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
+        print(
+            f"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}"
+            f"  val loss {val_loss:.4f}  val acc {val_accuracy:.1%}"
+        )
+    _, test_accuracy = evaluate(model, test_loader, loss_fn, device)
+    print(f"Test accuracy: {test_accuracy:.1%}")
+    model.cpu()
+
+
+def save_model(model: nn.Module, path: str) -> None:
+    """Save the weights together with what predict_text() needs to read new texts."""
+    _, vocabulary, length, class_names, *_ = TEXT_DATASETS[DATASET]
+    preprocessing = {
+        "dataset": DATASET,
+        "vocabulary": list(vocabulary),  # token id i is vocabulary[i]
+        "length": length,  # texts are cut or padded to this many tokens
+        "class_names": list(class_names),
+    }
+    torch.save({"state_dict": model.state_dict(), "preprocessing": preprocessing}, path)
+    print(f"Saved the weights and the vocabulary to {path}")
+
+
+def predict_text(model: nn.Module, path: str, text: str) -> None:
+    """Print the class of a text and the probability of every class."""
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+    preprocessing = checkpoint["preprocessing"]
+    vocabulary = tuple(preprocessing["vocabulary"])
+    ids = encode(tokenize(text), vocabulary, preprocessing["length"])
+    print("Tokens:", " ".join(decode(ids, vocabulary)))
+    with torch.no_grad():
+        probabilities = model(torch.tensor([ids])).softmax(dim=1)[0]
+    names = preprocessing["class_names"]
+    for index in probabilities.argsort(descending=True).tolist():
+        name = names[index] if index < len(names) else f"class {index}"
+        print(f"{name}: {probabilities[index].item():.1%}")'''
 
 
 _TRACKING_HEADER = """\

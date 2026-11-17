@@ -304,4 +304,21 @@ def prediction_form(run: TrainingRun, actor: budgets.Actor) -> dict[str, Any]:
     elif kind == "image":
         c, h, w = (preprocessing[key] for key in ("channels", "height", "width"))
         form["image"] = {"channels": c, "height": h, "width": w}
+    elif kind == "tokens":
+        form["text"] = _text_form(preprocessing)
     return form
+
+
+def _text_form(preprocessing: dict[str, Any]) -> dict[str, Any]:
+    """A network trained on a built-in text dataset: how long its texts are, its
+    vocabulary and a few test texts to try."""
+    from brickdnn.training.textsets import TEXT_DATASETS, text_examples
+
+    dataset = preprocessing.get("dataset")
+    return {
+        "length": preprocessing["length"],
+        "vocab_size": len(preprocessing["vocabulary"]),
+        "vocabulary": preprocessing["vocabulary"],
+        "dataset": dataset,
+        "examples": text_examples(dataset, 4) if dataset in TEXT_DATASETS else [],
+    }

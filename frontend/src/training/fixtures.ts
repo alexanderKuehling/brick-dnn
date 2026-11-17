@@ -782,6 +782,62 @@ export const CELLS_DATASET: BuiltinDataset = {
   available: true,
 };
 
+/** The generated text datasets as the server describes them (`description` in English). */
+export const TEXT_DATASETS: BuiltinDataset[] = [
+  {
+    id: 'sentiment',
+    name: 'Sentiment',
+    description:
+      'Text: short reviews, positive or negative. Negations ("not good") flip a word and ' +
+      'after "but" the second half decides, so the word order matters. Generated, 151 words, ' +
+      '24 tokens per text.',
+    task: 'classification',
+    input_kind: 'tokens',
+    sample_shape: [24],
+    num_classes: 2,
+    class_names: ['negative', 'positive'],
+    train_size: 6000,
+    test_size: 1000,
+    download_mb: 0,
+    available: true,
+    vocab_size: 151,
+    sequence_length: 24,
+    examples: [
+      { text: 'the soup was not very tasty but the staff was friendly', class: 'positive' },
+      { text: 'honestly my phone seemed awful', class: 'negative' },
+    ],
+  },
+  {
+    id: 'lookup',
+    name: 'Key lookup',
+    description:
+      'Text: eight key-value pairs and a question ("c7 x2 m4 … ? x" → 2). Attention finds the ' +
+      'asked pair; an average of the tokens stays near chance. Generated, 289 tokens, 10 per ' +
+      'text.',
+    task: 'classification',
+    input_kind: 'tokens',
+    sample_shape: [10],
+    num_classes: 10,
+    class_names: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+    train_size: 12000,
+    test_size: 2000,
+    download_mb: 0,
+    available: true,
+    vocab_size: 289,
+    sequence_length: 10,
+    examples: [
+      { text: 'g7 f4 i8 l9 t0 h6 u3 k0 ? h', class: '6' },
+      { text: 'm5 n4 f3 e1 b0 s2 c3 p6 ? f', class: '3' },
+    ],
+  },
+];
+
+/** A server with the generated text datasets next to MNIST. */
+export const TEXT_STATUS: TrainingStatus = {
+  ...STATUS,
+  builtin_datasets: [...STATUS.builtin_datasets, ...TEXT_DATASETS],
+};
+
 /** A server with segmentation: the generated datasets Shapes and Cells and the limits. */
 export const SEGMENTATION_STATUS: TrainingStatus = {
   ...STATUS,

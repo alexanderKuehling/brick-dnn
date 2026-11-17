@@ -2758,6 +2758,21 @@ export const ui: Messages<typeof en> = {
       useASample: 'Eine Stichprobe verwenden',
       validationData: 'Validierungsdaten',
     },
+    TextPredict: {
+      all: 'Alle',
+      cannotPredict: 'Vorhersage nicht möglich',
+      example: 'Text {{number}}',
+      howTextsAreRead:
+        'Texte werden kleingeschrieben und in Wörter und Satzzeichen zerlegt. Wörter, die nicht im Vokabular der Trainingstexte ({{words}} Einträge) stehen, werden zu <unk>; das Netz liest höchstens {{length}} Tokens.',
+      noComputeLeft: 'Keine Rechenzeit mehr übrig',
+      oneTextPerLine: 'Ein Text pro Zeile',
+      predict: 'Vorhersagen',
+      testTexts: 'Testtexte:',
+      texts: 'Texte',
+      tokens: 'Tokens',
+      unknownWords: 'Unbekannte Wörter: {{words}}',
+      whatTheNetworkRead: 'Was das Netz gelesen hat',
+    },
     ThresholdAnalysis: {
       aRowIsPredictedWhen:
         'Eine Zeile wird als „{{positive}}“ vorhergesagt, wenn ihre Wahrscheinlichkeit für „{{positive2}}“ mindestens den Schwellenwert erreicht, sonst als „{{negative}}“. Ein niedrigerer Wert findet mehr „{{positive3}}“ (Recall), mit mehr Fehlalarmen (die Präzision sinkt).',
@@ -2850,6 +2865,7 @@ export const ui: Messages<typeof en> = {
       lastLayerSetTo: 'Letzte Schicht auf {{outputText}} gesetzt',
       lastLayerTo: '{{inputText}}, letzte Schicht auf {{outputText}}',
       networkAdapted: 'Netz angepasst',
+      vocabularySetTo: 'Embedding auf {{words}} Wörter gesetzt',
     },
     format: {
       adam: 'Adam',

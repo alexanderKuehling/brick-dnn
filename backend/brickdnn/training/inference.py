@@ -10,7 +10,12 @@ see compat.py) and the ``preprocessing`` that the training wrote into ``state.js
      "target_mean": 3.2, "target_std": 1.1, "class_names": null, ...}
     {"kind": "image", "channels": 1, "height": 28, "width": 28, "layout": "chw",
      "mean": [0.1307], "std": [0.3081], "class_names": ["0", ...], ...}
+    {"kind": "tokens", "dataset": "sentiment", "length": 24, "vocabulary": ["<pad>", ...],
+     "pad_id": 0, "unknown_id": 1, "class_names": ["negative", "positive"]}
     {"kind": "demo"}            # random demo data: inputs are used as they are
+
+Networks trained on a built-in text dataset (``"tokens"``) take token ids or texts, which
+are split into words and looked up in the vocabulary of the training (:func:`_token_inputs`).
 
 A segmentation (``plan["task"]`` "segmentation") takes images like any image network and
 answers with a class for every pixel instead of one for the image (see
@@ -33,7 +38,7 @@ from typing import Any
 
 from .datasets import parse_number
 
-KINDS = ("tabular", "image", "demo")
+KINDS = ("tabular", "image", "tokens", "demo")
 # Limits of one prediction request.
 MAX_SAMPLES = 64
 MAX_VALUES = 250_000  # input numbers of all samples together
@@ -162,6 +167,17 @@ def kind_of(plan: Any, preprocessing: Any) -> str:
         layouts = {"chw": [c, h, w], "hw": [h, w], "flat": [c * h * w]}
         if layouts.get(preprocessing.get("layout")) != inputs[0]["shape"]:
             raise unknown
+    elif kind == "tokens":
+        vocabulary = preprocessing.get("vocabulary")
+        if not (
+            isinstance(vocabulary, list)
+            and len(vocabulary) >= 2
+            and all(isinstance(word, str) for word in vocabulary)
+            and inputs[0].get("dtype") == "long"
+            and inputs[0]["shape"] == [preprocessing.get("length")]
+            and int(inputs[0].get("vocab") or 0) >= len(vocabulary)
+        ):
+            raise unknown
     return kind
 
 
@@ -198,6 +214,15 @@ def describe_inputs(plan: Any, preprocessing: Any) -> str:
             f"One row of {len(columns)} numbers per sample, the feature columns of the CSV file "
             f"in this order: {', '.join(columns)}. They are standardised with the mean and "
             "standard deviation of the training data (x - mean) / std."
+        )
+    if kind == "tokens":
+        length, words = preprocessing["length"], len(preprocessing["vocabulary"])
+        return (
+            f"One text per sample, as a string or as a list of up to {length} token ids (0 to "
+            f"{words - 1}). A text is lower-cased and split into words and punctuation marks; "
+            f"words that are not in the vocabulary of {words} words (preprocessing.vocabulary, "
+            "the words of the training texts) become <unk> (id 1). Texts are cut or padded "
+            f"with <pad> (id 0) to {length} tokens."
         )
     if is_classical(plan) and not is_hybrid(plan):
         n = input_specs(plan)[0]["shape"][0]
@@ -300,6 +325,26 @@ def usage_snippet(
                 f"print((output[:, 0] * {float(std):.6g} + {float(mean):.6g}).tolist())"
                 f"  # predicted {target}"
             )
+    elif kind == "tokens":
+        lines[0] = "import re\n\nimport torch"
+        lines += [
+            *_vocabulary_lines(preprocessing["vocabulary"]),
+            "INDEX = {word: i for i, word in enumerate(VOCABULARY)}",
+            f"LENGTH = {int(preprocessing['length'])}",
+            "",
+            "",
+            "def encode(text):",
+            '    """Token ids of a text, like the training texts: lower-cased words and',
+            '    punctuation marks, unknown words as <unk> (1), padded with <pad> (0)."""',
+            "    words = re.findall(r\"[a-z0-9']+|[^\\sa-z0-9']\", text.lower())",
+            "    ids = [INDEX.get(word, 1) for word in words[:LENGTH]]",
+            "    return ids + [0] * (LENGTH - len(ids))",
+            "",
+            "",
+            f"x = torch.tensor([encode({_example_text(preprocessing)!r})])",
+            "with torch.no_grad():",
+            "    output = model(x)",
+        ]
     elif kind == "image":
         c, h, w = preprocessing["channels"], preprocessing["height"], preprocessing["width"]
         layout = preprocessing["layout"]
@@ -355,6 +400,28 @@ def usage_snippet(
             "print([CLASS_NAMES[i] for i in probabilities.argmax(dim=1).tolist()])",
         ]
     return "\n".join(lines) + "\n"
+
+
+def _vocabulary_lines(vocabulary: list[str]) -> list[str]:
+    """``VOCABULARY = ("<pad> <unk> the …" …).split()``, wrapped at about 88 characters."""
+    lines, line = [], ""
+    for word in vocabulary:
+        if line and len(line) + len(word) > 76:
+            lines.append(f'    "{line}"')
+            line = ""
+        line += word + " "
+    lines.append(f'    "{line.rstrip()}"')
+    return ["VOCABULARY = (  # token id i is VOCABULARY[i]", *lines, ").split()"]
+
+
+def _example_text(preprocessing: dict[str, Any]) -> str:
+    """A text of the run's dataset (its first test text), else the first words."""
+    from .textsets import TEXT_DATASETS, text_examples
+
+    dataset = preprocessing.get("dataset")
+    if dataset in TEXT_DATASETS:
+        return text_examples(dataset, 1)[0]["text"]
+    return " ".join(preprocessing["vocabulary"][2:8])
 
 
 def _classical_snippet(plan: dict[str, Any], preprocessing: dict[str, Any], path: str) -> str:
@@ -471,6 +538,9 @@ class PreparedInputs:
     # them and prepares them like the training images (``image``: how, see image_request).
     files: list[str] | None = None
     image: dict[str, Any] | None = None
+    # Token inputs: what the network reads of every sample, ``{"tokens": [words without
+    # the padding], "unknown": [words that became <unk>]}``.
+    texts: list[dict[str, Any]] | None = None
 
 
 def _dims(value: Any) -> list[int]:
@@ -646,6 +716,58 @@ def _image_inputs(
     return len(samples), values
 
 
+def _token_inputs(
+    preprocessing: dict[str, Any], inputs: Any
+) -> tuple[list[float], list[dict[str, Any]]]:
+    """Texts (strings) or token ids as the network takes them: the token ids of all
+    samples, padded to the length of the training, and what each sample says."""
+    from .textsets import decode, encode, tokenize
+
+    vocabulary = tuple(str(word) for word in preprocessing["vocabulary"])
+    length = int(preprocessing["length"])
+    wanted = f"a text (string) or a list of up to {length} token ids"
+    if isinstance(inputs, str) or (
+        isinstance(inputs, list) and inputs and isinstance(inputs[0], (int, float))
+    ):
+        inputs = [inputs]  # a single sample
+    if not isinstance(inputs, list) or not inputs:
+        raise InvalidInputs(
+            f"'inputs' must be a list of samples (at most {MAX_SAMPLES}), each {wanted}."
+        )
+    if len(inputs) > MAX_SAMPLES:
+        raise InvalidInputs(
+            f"{len(inputs)} samples are too many: predict at most {MAX_SAMPLES} at a time."
+        )
+    values: list[float] = []
+    texts = []
+    for number, sample in enumerate(inputs, start=1):
+        label = _label(number, len(inputs))
+        if isinstance(sample, str):
+            words = tokenize(sample)
+            ids = encode(words, vocabulary, length)
+            known = set(vocabulary)
+            unknown = list(dict.fromkeys(w for w in words[:length] if w not in known))
+        elif isinstance(sample, list):
+            if len(sample) > length:
+                raise InvalidInputs(
+                    f"{label} has {len(sample)} token ids, but the network reads {length}."
+                )
+            numbers = [_number(value, label) for value in sample]
+            if not all(x.is_integer() and 0 <= x < len(vocabulary) for x in numbers):
+                raise InvalidInputs(
+                    f"{label}: token ids must be whole numbers from 0 to {len(vocabulary) - 1}."
+                )
+            ids = [int(x) for x in numbers] + [0] * (length - len(numbers))
+            unknown = []
+        else:
+            raise InvalidInputs(
+                f"{label} is neither a text nor a list of token ids: the network takes {wanted}."
+            )
+        values += ids
+        texts.append({"tokens": decode(ids, vocabulary), "unknown": unknown})
+    return values, texts
+
+
 def _demo_inputs(plan: Any, inputs: Any) -> tuple[int, list[float], str]:
     specs = input_specs(plan)
     if len(specs) != 1:
@@ -688,15 +810,19 @@ def prepare_inputs(
         raise InvalidInputs(f"top_k must be a whole number from 1 to {MAX_TOP_K}.")
     shape = input_specs(plan)[0]["shape"]
     dtype = "float"
+    texts = None
     if kind == "tabular":
         values = _tabular_inputs(preprocessing, inputs, input_scale or "raw")
         count = len(values) // shape[0]
     elif kind == "image":
         count, values = _image_inputs(plan, preprocessing, inputs, input_scale)
+    elif kind == "tokens":
+        values, texts = _token_inputs(preprocessing, inputs)
+        count, dtype = len(texts), "long"
     else:
         count, values, dtype = _demo_inputs(plan, inputs)
     tensor = {"dtype": dtype, "shape": [count, *shape], "values": values}
-    return PreparedInputs(kind, count, [tensor], top_k)
+    return PreparedInputs(kind, count, [tensor], top_k, texts=texts)
 
 
 def image_request(preprocessing: dict[str, Any]) -> dict[str, Any]:

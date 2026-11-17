@@ -15,6 +15,20 @@
   }
 }
 
+/* A test text of a built-in text dataset in the data picker: one line, cut off with an ellipsis. */
+.textExample {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.textExampleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mantine-font-family-monospace);
+}
+
 .row {
   display: block;
   width: 100%;

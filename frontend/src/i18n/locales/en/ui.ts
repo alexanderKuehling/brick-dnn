@@ -2686,6 +2686,21 @@ export const ui = {
       useASample: 'Use a sample',
       validationData: 'validation data',
     },
+    TextPredict: {
+      all: 'All',
+      cannotPredict: 'Cannot predict',
+      example: 'Text {{number}}',
+      howTextsAreRead:
+        'Texts are lower-cased and split into words and punctuation marks. Words that are not in the vocabulary of the training texts ({{words}} entries) become <unk>; the network reads at most {{length}} tokens.',
+      noComputeLeft: 'No compute left',
+      oneTextPerLine: 'One text per line',
+      predict: 'Predict',
+      testTexts: 'Test texts:',
+      texts: 'Texts',
+      tokens: 'Tokens',
+      unknownWords: 'Unknown words: {{words}}',
+      whatTheNetworkRead: 'What the network read',
+    },
     ThresholdAnalysis: {
       aRowIsPredictedWhen:
         'A row is predicted “{{positive}}” when its probability of “{{positive2}}” is at least the threshold, else “{{negative}}”. Lower finds more “{{positive3}}” (recall) with more false alarms (precision falls).',
@@ -2776,6 +2791,7 @@ export const ui = {
       lastLayerSetTo: 'Last layer set to {{outputText}}',
       lastLayerTo: '{{inputText}}, last layer to {{outputText}}',
       networkAdapted: 'Network adapted',
+      vocabularySetTo: 'Embedding set to {{words}} words',
     },
     format: {
       adam: 'Adam',

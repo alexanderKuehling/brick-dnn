@@ -932,7 +932,12 @@ export interface BuiltinDataset {
    * label per image. Missing on older servers.
    */
   task?: 'classification' | 'segmentation';
-  /** Channels, height, width. */
+  /**
+   * `tokens`: texts as token ids for an Input of data type long and an Embedding layer
+   * (Sentiment, Key lookup, Topics: generated on the server). Missing on older servers: images.
+   */
+  input_kind?: 'images' | 'tokens';
+  /** Images: channels, height, width. Tokens: the sequence length. */
   sample_shape: number[];
   num_classes: number;
   class_names: string[];
@@ -942,6 +947,18 @@ export interface BuiltinDataset {
   download_mb: number;
   /** False when torchvision is missing on the server (generated datasets do not need it). */
   available: boolean;
+  /** Tokens: the words of the vocabulary (with `<pad>` and `<unk>`). */
+  vocab_size?: number;
+  /** Tokens: every text is this many token ids (padded). */
+  sequence_length?: number;
+  /** Tokens: the first texts of the test split with their class. */
+  examples?: TextExample[];
+}
+
+/** A text of a built-in text dataset and its class (a class name, not translated). */
+export interface TextExample {
+  text: string;
+  class: string;
 }
 
 /** What a segmentation dataset and training may be on this server. */
@@ -2085,7 +2102,7 @@ export interface PredictionForm {
   available: boolean;
   /** Why the run cannot predict (no weights, unknown preprocessing …). */
   reason: string | null;
-  kind: 'tabular' | 'image' | 'demo' | null;
+  kind: 'tabular' | 'image' | 'tokens' | 'demo' | null;
   task: 'classification' | 'regression' | null;
   class_names: string[] | null;
   /** Rows per request; more rows are sent in several requests. */
@@ -2118,6 +2135,14 @@ export interface PredictionForm {
   /** From a preparation, but exported before raw rows were supported. */
   raw_note?: string;
   image?: { channels: 1 | 3; height: number; width: number };
+  /** Tokens: texts are split into words and looked up in the vocabulary of the training. */
+  text?: {
+    length: number;
+    vocab_size: number;
+    vocabulary: string[];
+    dataset: string | null;
+    examples: TextExample[];
+  };
 }
 
 export interface PredictedClass {
@@ -2138,6 +2163,10 @@ export interface Prediction {
   std?: number | null;
   /** Binary classification: the probability of the positive class, compared with the threshold. */
   positive_probability?: number | null;
+  /** Texts: the words the network read (without the padding); unknown words are `<unk>`. */
+  tokens?: string[];
+  /** Texts: the words that are not in the vocabulary. */
+  unknown_words?: string[];
 }
 
 export interface PredictionRequest {

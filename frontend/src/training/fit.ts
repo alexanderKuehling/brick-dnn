@@ -15,9 +15,14 @@ const AUTOMATIC: Record<string, string[]> = {
   // Segmentation: one output channel per class.
   Conv2d: ['out_channels'],
   ConvTranspose2d: ['out_channels'],
+  // Texts: the Embedding knows every word of the vocabulary.
+  Embedding: ['num_embeddings'],
 };
 
-/** True if the fixes only change the Input's shape or data type and the number of outputs. */
+/**
+ * True if the fixes only change the Input's shape or data type, the number of outputs and, for
+ * texts, the vocabulary size of the Embedding.
+ */
 export function onlyInputAndOutput(fixes: CompatibilityFix[]): boolean {
   return (
     fixes.length > 0 &&
@@ -32,19 +37,26 @@ export function onlyInputAndOutput(fixes: CompatibilityFix[]): boolean {
 const plural = (n: number, word: string) =>
   `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : 's'}`;
 
-/** "4 features", "3,072 values" (flat images), "1×28×28". */
-export function describeShape(shape: number[], images: boolean): string {
+/**
+ * What a flat Input shape counts: pixel values of images, tokens of texts, else the feature
+ * columns of a table.
+ */
+export type InputUnit = 'images' | 'tokens' | 'features';
+
+/** "4 features", "3,072 values" (flat images), "24 tokens" (texts), "1×28×28". */
+export function describeShape(shape: number[], unit: InputUnit): string {
   if (shape.length === 1) {
-    return images ? plural(shape[0], 'value') : plural(shape[0], 'feature');
+    const word = { images: 'value', tokens: 'token', features: 'feature' }[unit];
+    return plural(shape[0], word);
   }
   return shape.join('×');
 }
 
 /**
  * What the fixes change, for a notification: "Input set to 4 features, last layer to
- * 3 outputs". `images`: the data are images (flat Input shapes are pixel values).
+ * 3 outputs". `unit`: what the values of a flat Input are (see InputUnit).
  */
-export function describeFixes(fixes: CompatibilityFix[], images: boolean): string {
+export function describeFixes(fixes: CompatibilityFix[], unit: InputUnit): string {
   const input = fixes.find((fix) => fix.type === 'Input')?.params;
   const channels = fixes.find((fix) => typeof fix.params.out_channels === 'number')?.params
     .out_channels as number | undefined;
@@ -54,7 +66,7 @@ export function describeFixes(fixes: CompatibilityFix[], images: boolean): strin
     input &&
     i18n.t('ui.training.fit.inputSetTo', {
       filter: [
-        Array.isArray(input.shape) ? describeShape(input.shape as number[], images) : null,
+        Array.isArray(input.shape) ? describeShape(input.shape as number[], unit) : null,
         typeof input.dtype === 'string' ? `data type ${input.dtype}` : null,
       ]
         .filter(Boolean)
@@ -66,24 +78,43 @@ export function describeFixes(fixes: CompatibilityFix[], images: boolean): strin
       : outputs === undefined
         ? null
         : plural(outputs, 'output');
-  if (inputText && outputText) {
-    return i18n.t('ui.training.fit.lastLayerTo', { inputText, outputText });
-  }
-  return (
-    inputText ||
-    (outputText
-      ? i18n.t('ui.training.fit.lastLayerSetTo', { outputText })
-      : i18n.t('ui.training.fit.networkAdapted'))
-  );
+  const words = fixes.find((fix) => typeof fix.params.num_embeddings === 'number')?.params
+    .num_embeddings as number | undefined;
+  const text =
+    inputText && outputText
+      ? i18n.t('ui.training.fit.lastLayerTo', { inputText, outputText })
+      : inputText ||
+        (outputText
+          ? i18n.t('ui.training.fit.lastLayerSetTo', { outputText })
+          : words === undefined
+            ? i18n.t('ui.training.fit.networkAdapted')
+            : null);
+  const vocabulary =
+    words === undefined
+      ? null
+      : i18n.t('ui.training.fit.vocabularySetTo', {
+          words: words.toLocaleString(currentLocale()),
+        });
+  return [text, vocabulary].filter(Boolean).join(', ');
+}
+
+/** True if `source` holds texts as token ids (the built-in Sentiment, Key lookup, Topics). */
+export function isTextSource(source: EffectiveSource | null): boolean {
+  return source?.ref?.kind === 'builtin' && source.builtin?.input_kind === 'tokens';
 }
 
 /** True if `source` holds images (built-in datasets, image folders, images with masks). */
 export function isImageSource(source: EffectiveSource): boolean {
   return (
-    source.ref?.kind === 'builtin' ||
+    (source.ref?.kind === 'builtin' && !isTextSource(source)) ||
     source.upload?.kind === 'images' ||
     source.upload?.kind === 'segmentation'
   );
+}
+
+/** What the values of a flat Input are for `source`. */
+export function inputUnit(source: EffectiveSource): InputUnit {
+  return isTextSource(source) ? 'tokens' : isImageSource(source) ? 'images' : 'features';
 }
 
 /**
@@ -111,6 +142,21 @@ function segmentationLayers(shape: number[], classes: number): [string, Params][
   ];
 }
 
+/**
+ * A first text network: token ids → Embedding → a Transformer encoder with learned positions →
+ * the mean over the tokens → one output per class.
+ */
+function textLayers(length: number, words: number, classes: number): [string, Params][] {
+  return [
+    ['Input', { shape: [length], dtype: 'long' }],
+    ['Embedding', { num_embeddings: words, embedding_dim: 64 }],
+    ['PositionalEmbedding', { max_len: length }],
+    ['TransformerEncoder', { nhead: 4, dim_feedforward: 128, num_layers: 2 }],
+    ['SequencePool', { mode: 'mean' }],
+    ['Linear', { out_features: classes }],
+  ];
+}
+
 /** The layers of a first network for `source`, from its known shape and classes. */
 function starterLayers(source: EffectiveSource): [string, Params][] | null {
   const head = (classes: number): [string, Params][] => [
@@ -122,6 +168,9 @@ function starterLayers(source: EffectiveSource): [string, Params][] | null {
     const { sample_shape: shape, num_classes: classes } = source.builtin;
     if (source.builtin.task === 'segmentation') {
       return segmentationLayers(shape, classes);
+    }
+    if (source.builtin.input_kind === 'tokens') {
+      return textLayers(shape[0], source.builtin.vocab_size ?? 2, classes);
     }
     return [['Input', { shape }], ['Flatten', {}], ...head(classes)];
   }
@@ -153,7 +202,8 @@ function starterLayers(source: EffectiveSource): [string, Params][] | null {
 /**
  * A small network that fits `source`, for an empty canvas: Input → (Flatten →) Linear → ReLU →
  * Linear with one output per class (1 for a regression); for segmentation data convolutions
- * that end in one channel per class. Null if the data or a layer type is not known.
+ * that end in one channel per class; for texts a small Transformer. Null if the data or a
+ * layer type is not known.
  */
 export function starterNetwork(
   source: EffectiveSource,
