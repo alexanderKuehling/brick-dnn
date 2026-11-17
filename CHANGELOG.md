@@ -3,6 +3,41 @@
 ## Unreleased
 
 ### Added
+- **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
+  has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
+  `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):
+  data in the volume `brickdnn-db` with checksums, no port on the host, reachable only from
+  backend, worker, realtime and cleanup over a new internal network `database`, a healthcheck
+  the four services wait for (`required: false`, so SQLite and Supabase setups start as
+  before), and on the server one CPU, 1.5 GB and `shared_buffers` 512 MB
+  (`BRICKDNN_DB_MEMORY`, `BRICKDNN_DB_SHARED_BUFFERS`, `BRICKDNN_DB_CPUS`). Its first start
+  (`deploy/postgres/init.sh`) creates the role `brickdnn`, owner of the database `brickdnn` but
+  no superuser, with `BRICKDNN_POSTGRES_PASSWORD` from `.env`, and leaves the superuser without
+  a password. New `manage.py move_database --to URL [--from URL] [--dry-run]` copies Django's
+  tables (`django_tables()`) from one PostgreSQL database into an empty one with
+  `pg_dump`/`pg_restore`, without owners or privileges (nothing of Supabase's roles, schemas or
+  grants), moves the sequences past the highest id, runs `ANALYZE` and `migrate --check`, and
+  verifies row counts and a checksum of every row per table and the sequences against the
+  snapshot the dump used, so a `--dry-run` while the site runs compares like with like; a real
+  move also fails when the source changed meanwhile. It prints a line per table and
+  `RESULT: PASS` or `FAIL`, only reads the source, refuses a target that is not empty (unless
+  `--replace`) or is the source, and takes URLs as `env:NAME` to keep passwords off command
+  lines. The backend image is now based on `python:3.12-slim-trixie` with `postgresql-client-17`,
+  so backups of the `db` service and of Supabase (up to 17) are native `pg_dump` files.
+  `deploy/server/README.md` has the PostgreSQL service and a step-by-step runbook for moving
+  from Supabase (rehearsal, window, verification, switch, smoke checks, going back, deleting
+  the Supabase project); `docs/database.md` both in short. CI runs the PostgreSQL tests with
+  `pg_dump` 17 and switches the Docker Compose smoke test over to the `db` service (native
+  backup, restore and a `move_database` rehearsal).
+- **Hourly backups of the database.** With `BRICKDNN_BACKUP_KEEP_HOURLY` above 0, the cleanup
+  service runs `manage.py backup --hourly` in the 23 hours between two daily backups: the
+  database alone, in `brickdnn-<time>-hourly` in the same backup folder (so offsite copies take
+  them and can keep them for a shorter time), and keeps the newest of each of the last N hours
+  in addition to the daily and weekly backups, which are never replaced by an hourly one.
+  `/api/health/` also reports a failed last hourly backup or a newest backup older than three
+  hours; the daily and hourly runs keep separate status files. The server README has an
+  hourly `rclone` line that keeps hourly backups offsite for three days and leaves unfinished
+  backups out, and a restore drill for `pg_dump` backups on the `db` service.
 - **A second built-in segmentation dataset, Cells.** 400 training and 100 test images of
   96×96 pixels, generated on the server like Shapes (nothing to upload or download), that
   look like fluorescence microscopy: two to seven pink to magenta cells, each with a blue to

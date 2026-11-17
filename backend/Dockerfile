@@ -1,8 +1,17 @@
-FROM python:3.12-slim
+# Debian 13 (trixie): its PostgreSQL client is version 17, the version of the db service in
+# docker-compose.yml and newer than or equal to Supabase's, so that backups use pg_dump
+# (brick_dnn_core/backups.py) and `manage.py move_database` works.
+FROM python:3.12-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    BRICKDNN_DATA_DIR=/data
+    BRICKDNN_DATA_DIR=/data \
+    PATH=/usr/lib/postgresql/17/bin:$PATH
+
+# pg_dump, pg_restore and psql 17 (about 15 MB).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

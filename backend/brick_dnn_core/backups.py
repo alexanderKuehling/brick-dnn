@@ -5,7 +5,7 @@ A backup is a folder ``brickdnn-YYYYMMDDTHHMMSSZ`` in ``BRICKDNN_BACKUP_DIR`` wi
 - the database, as a consistent snapshot:
   - SQLite: a copy made with SQLite's online backup (``database.sqlite3``);
   - PostgreSQL: ``pg_dump`` in its custom format (``database.pgdump``) if ``pg_dump`` is
-    installed and not older than the server; otherwise (the Docker image has no ``pg_dump``)
+    installed and not older than the server (the Docker image has pg_dump 17); otherwise
     Django's ``dumpdata`` inside one read-only transaction (``database.json.gz``), which also
     loads into another database or another PostgreSQL version;
 - the files of the data directory (uploads, datasets, trained weights, the generated secret
@@ -15,9 +15,14 @@ A backup is a folder ``brickdnn-YYYYMMDDTHHMMSSZ`` in ``BRICKDNN_BACKUP_DIR`` wi
   (Hetzner's). ``BRICKDNN_BACKUP_FILES=list`` or ``none`` chooses that up front;
 - ``manifest.json``: when, which version, what is in it.
 
-Old backups are deleted: the newest of each of the last ``BRICKDNN_BACKUP_KEEP_DAILY`` days and
-of each of the last ``BRICKDNN_BACKUP_KEEP_WEEKLY`` weeks are kept. A folder is only renamed to
-its final name when it is complete. The backups hold password hashes and the secret key:
+Hourly backups (``manage.py backup --hourly``, with ``BRICKDNN_BACKUP_KEEP_HOURLY`` above 0) hold
+the database only, in folders ``brickdnn-YYYYMMDDTHHMMSSZ-hourly`` (so that offsite copies can
+keep them for a shorter time than the daily ones).
+
+Old backups are deleted: the newest of each of the last ``BRICKDNN_BACKUP_KEEP_HOURLY`` hours (of
+either kind), and the newest daily backup of each of the last ``BRICKDNN_BACKUP_KEEP_DAILY`` days
+and of each of the last ``BRICKDNN_BACKUP_KEEP_WEEKLY`` weeks are kept. A folder is only renamed
+to its final name when it is complete. The backups hold password hashes and the secret key:
 the folder is readable by its owner only. See deploy/server/README.md, "Backups".
 """
 
@@ -46,9 +51,16 @@ from django.db import connection, transaction
 import brickdnn
 
 PREFIX = "brickdnn-"
-NAME = re.compile(r"^brickdnn-(\d{8}T\d{6}Z)$")
+NAME = re.compile(r"^brickdnn-(\d{8}T\d{6}Z)(-hourly)?$")
 STAMP = "%Y%m%dT%H%M%SZ"
+DAILY = "daily"
+HOURLY = "hourly"
+KINDS = (DAILY, HOURLY)
 STATUS_FILE = ".last-run.json"
+HOURLY_STATUS_FILE = ".last-run-hourly.json"
+# With hourly backups on, /api/health/ reports a failed backup when the newest backup of either
+# kind is older than this.
+HOURLY_MAX_AGE_HOURS = 3
 LOCK_FILE = ".lock"
 MANIFEST = "manifest.json"
 SQLITE_FILE = "database.sqlite3"
@@ -111,6 +123,11 @@ class Backup:
     def name(self) -> str:
         return self.path.name
 
+    @property
+    def kind(self) -> str:
+        """``hourly`` (the database only) or ``daily`` (the database and the files)."""
+        return HOURLY if self.name.endswith("-" + HOURLY) else DAILY
+
     def manifest(self) -> dict[str, Any]:
         try:
             return json.loads((self.path / MANIFEST).read_text(encoding="utf-8"))
@@ -133,23 +150,29 @@ def list_backups(directory: Path) -> list[Backup]:
     return sorted(found, key=lambda backup: backup.created, reverse=True)
 
 
-def to_delete(backups: list[Backup], daily: int, weekly: int) -> list[Backup]:
-    """What rotation removes: all but the newest backup of each of the last ``daily`` days
-    and of each of the last ``weekly`` ISO weeks (the newest backup is always kept)."""
+def to_delete(backups: list[Backup], daily: int, weekly: int, hourly: int = 0) -> list[Backup]:
+    """What rotation removes: all but the newest backup of each of the last ``hourly`` hours,
+    and the newest daily backup of each of the last ``daily`` days and of each of the last
+    ``weekly`` ISO weeks (an hourly one where a day or week has no daily backup). The newest
+    backup is always kept."""
+    newest_first = sorted(backups, key=lambda b: b.created, reverse=True)
     keep: set[Path] = set()
-    days: set[Any] = set()
-    weeks: set[Any] = set()
-    for backup in sorted(backups, key=lambda b: b.created, reverse=True):
-        day = backup.created.date()
-        week = backup.created.isocalendar()[:2]
-        if day not in days and len(days) < daily:
-            days.add(day)
-            keep.add(backup.path)
-        if week not in weeks and len(weeks) < weekly:
-            weeks.add(week)
-            keep.add(backup.path)
-    if backups:
-        keep.add(max(backups, key=lambda b: b.created).path)
+
+    def newest_of(key: Callable[[Backup], Any], count: int, prefer_daily: bool) -> None:
+        groups: dict[Any, list[Backup]] = {}
+        for backup in newest_first:
+            groups.setdefault(key(backup), []).append(backup)
+        for group in list(groups.values())[: max(count, 0)]:
+            chosen = group[0]
+            if prefer_daily:
+                chosen = next((b for b in group if b.kind == DAILY), chosen)
+            keep.add(chosen.path)
+
+    newest_of(lambda b: b.created.replace(minute=0, second=0, microsecond=0), hourly, False)
+    newest_of(lambda b: b.created.date(), daily, True)
+    newest_of(lambda b: b.created.isocalendar()[:2], weekly, True)
+    if newest_first:
+        keep.add(newest_first[0].path)
     return [backup for backup in backups if backup.path not in keep]
 
 
@@ -198,36 +221,68 @@ def _locked(directory: Path) -> Iterator[None]:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def _write_status(directory: Path, **status: Any) -> None:
+def _status_file(kind: str) -> str:
+    return HOURLY_STATUS_FILE if kind == HOURLY else STATUS_FILE
+
+
+def _write_status(directory: Path, kind: str = DAILY, **status: Any) -> None:
     status["time"] = datetime.now(UTC).isoformat()
     with contextlib.suppress(OSError):
-        (directory / STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
+        (directory / _status_file(kind)).write_text(json.dumps(status), encoding="utf-8")
+
+
+def _read_status(directory: Path, kind: str) -> dict[str, Any] | None:
+    try:
+        return json.loads((directory / _status_file(kind)).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _age_hours(backup: Backup | None) -> float | None:
+    if backup is None:
+        return None
+    return (datetime.now(UTC) - backup.created).total_seconds() / 3600
 
 
 def health() -> tuple[bool, dict[str, Any]] | None:
-    """For /api/health/: the last backup worked and is recent. None: backups are off or have
-    not run yet."""
+    """For /api/health/: the last backup worked and the newest daily one is recent; with hourly
+    backups on, also the last hourly run worked and the newest backup is at most
+    ``HOURLY_MAX_AGE_HOURS`` old. None: backups are off or have not run yet."""
     directory = backup_dir()
     if directory is None:
         return None
-    try:
-        status = json.loads((directory / STATUS_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    status = _read_status(directory, DAILY)
+    if status is None:
         return None
     backups = list_backups(directory)
-    newest = backups[0].created if backups else None
-    age_hours = (datetime.now(UTC) - newest).total_seconds() / 3600 if newest else None
+    newest_daily = next((b for b in backups if b.kind == DAILY), None)
+    age_hours = _age_hours(newest_daily)
     passed = bool(status.get("ok")) and age_hours is not None
     passed = passed and age_hours <= settings.BACKUP_MAX_AGE_HOURS
     info: dict[str, Any] = {
         "last_run": status.get("time"),
-        "newest": backups[0].name if backups else None,
+        "newest": newest_daily.name if newest_daily else None,
         "newest_age_hours": round(age_hours, 1) if age_hours is not None else None,
         "max_age_hours": settings.BACKUP_MAX_AGE_HOURS,
         "count": len(backups),
     }
     if status.get("error"):
         info["error"] = str(status["error"])[:300]
+    hourly = _read_status(directory, HOURLY) if settings.BACKUP_KEEP_HOURLY else None
+    if hourly is not None:
+        newest = backups[0] if backups else None
+        newest_age = _age_hours(newest)
+        hourly_ok = bool(hourly.get("ok")) and newest_age is not None
+        hourly_ok = hourly_ok and newest_age <= HOURLY_MAX_AGE_HOURS
+        info["hourly"] = {
+            "last_run": hourly.get("time"),
+            "newest": newest.name if newest else None,
+            "newest_age_hours": round(newest_age, 1) if newest_age is not None else None,
+            "max_age_hours": HOURLY_MAX_AGE_HOURS,
+        }
+        if hourly.get("error"):
+            info["hourly"]["error"] = str(hourly["error"])[:300]
+        passed = passed and hourly_ok
     return passed, info
 
 
@@ -236,10 +291,11 @@ def health() -> tuple[bool, dict[str, Any]] | None:
 # --------------------------------------------------------------------------- #
 
 
-def _pg_conninfo() -> tuple[str, dict[str, str]]:
+def pg_conninfo(db: dict[str, Any] | None = None) -> tuple[str, dict[str, str]]:
     """A libpq connection string for pg_dump / pg_restore, and the environment with the password
-    (not on the command line, where other processes could see it)."""
-    db = connection.settings_dict
+    (not on the command line, where other processes could see it). ``db``: the Django settings
+    of a database (default: the app's)."""
+    db = connection.settings_dict if db is None else db
     parts = {
         "host": db.get("HOST") or "",
         "port": str(db.get("PORT") or ""),
@@ -260,7 +316,8 @@ def _pg_conninfo() -> tuple[str, dict[str, str]]:
     return conninfo, env
 
 
-def _tool_major(tool: str) -> int | None:
+def tool_major(tool: str) -> int | None:
+    """The major version of an installed PostgreSQL program (pg_dump, pg_restore), or None."""
     path = shutil.which(tool)
     if not path:
         return None
@@ -289,7 +346,7 @@ def database_format(requested: str = "auto") -> str:
         if requested == "native":
             raise BackupError(f"No native backup for {connection.vendor}; use json.")
         return "json"
-    tool = _tool_major("pg_dump")
+    tool = tool_major("pg_dump")
     server = _server_major()
     if tool is not None and tool >= server:
         return "pgdump"
@@ -319,7 +376,7 @@ def dump_database(target: Path, fmt: str, log: Log = _quiet) -> str:
             destination.close()
         return SQLITE_FILE
     if fmt == "pgdump":
-        conninfo, env = _pg_conninfo()
+        conninfo, env = pg_conninfo()
         command = [
             "pg_dump",
             "--format=custom",
@@ -394,7 +451,7 @@ def restore_database(backup: Backup, log: Log = _quiet) -> None:
             raise BackupError("This backup was made with pg_dump; it needs a PostgreSQL database.")
         if not shutil.which("pg_restore"):
             raise BackupError("pg_restore is not installed.")
-        conninfo, env = _pg_conninfo()
+        conninfo, env = pg_conninfo()
         connection.close()
         command = [
             "pg_restore",
@@ -527,40 +584,50 @@ def create(
     database: str = "auto",
     keep_daily: int | None = None,
     keep_weekly: int | None = None,
+    keep_hourly: int | None = None,
+    kind: str = DAILY,
     log: Log = _quiet,
     now: datetime | None = None,
 ) -> Backup:
-    """Makes a backup in ``directory`` and deletes old ones. Raises :class:`BackupError`."""
-    files = files or settings.BACKUP_FILES
+    """Makes a backup in ``directory`` and deletes old ones. Raises :class:`BackupError`.
+    ``kind="hourly"``: the database only, in a folder whose name ends in ``-hourly``."""
+    if kind not in KINDS:
+        raise BackupError(f"Unknown kind of backup {kind!r}.")
+    files = "none" if kind == HOURLY else (files or settings.BACKUP_FILES)
     if files not in FILE_MODES:
         raise BackupError(f"BRICKDNN_BACKUP_FILES must be one of {', '.join(FILE_MODES)}.")
     keep_daily = settings.BACKUP_KEEP_DAILY if keep_daily is None else keep_daily
     keep_weekly = settings.BACKUP_KEEP_WEEKLY if keep_weekly is None else keep_weekly
+    keep_hourly = settings.BACKUP_KEEP_HOURLY if keep_hourly is None else keep_hourly
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     with contextlib.suppress(OSError):
         directory.chmod(0o700)
     with _locked(directory):
         try:
-            backup = _create(directory, files, database, now or datetime.now(UTC), log)
+            backup = _create(directory, files, database, now or datetime.now(UTC), log, kind)
         except Exception as exc:
-            _write_status(directory, ok=False, error=f"{type(exc).__name__}: {exc}")
+            _write_status(directory, kind, ok=False, error=f"{type(exc).__name__}: {exc}")
             raise
-        for old in to_delete(list_backups(directory), keep_daily, keep_weekly):
+        for old in to_delete(list_backups(directory), keep_daily, keep_weekly, keep_hourly):
             shutil.rmtree(old.path, ignore_errors=True)
             log(f"Deleted the old backup {old.name}.")
-        _write_status(directory, ok=True, backup=backup.name)
+        _write_status(directory, kind, ok=True, backup=backup.name)
     return backup
 
 
-def _create(directory: Path, files: str, database: str, now: datetime, log: Log) -> Backup:
+def _create(
+    directory: Path, files: str, database: str, now: datetime, log: Log, kind: str = DAILY
+) -> Backup:
     # Left-overs of backups that were interrupted.
     for entry in directory.glob(".partial-*"):
         if time.time() - entry.stat().st_mtime > 3600:
             shutil.rmtree(entry, ignore_errors=True)
     now = now.replace(microsecond=0)
-    while (directory / (PREFIX + now.strftime(STAMP))).exists():
-        now += timedelta(seconds=1)  # two backups within a second
-    name = PREFIX + now.strftime(STAMP)
+    endings = ("", "-" + HOURLY)
+    # Two backups within a second (of either kind: the times stay unique).
+    while any((directory / (PREFIX + now.strftime(STAMP) + end)).exists() for end in endings):
+        now += timedelta(seconds=1)
+    name = PREFIX + now.strftime(STAMP) + ("-" + HOURLY if kind == HOURLY else "")
     final = directory / name
     partial = directory / f".partial-{name}"
     partial.mkdir(mode=0o700)
@@ -578,6 +645,7 @@ def _create(directory: Path, files: str, database: str, now: datetime, log: Log)
             )
         manifest = {
             "created_at": now.isoformat(),
+            "kind": kind,
             "brickdnn_version": brickdnn.__version__,
             "database": {"vendor": connection.vendor, "format": fmt, "file": db_file},
             "migrations": _migrations(),
@@ -617,7 +685,8 @@ def describe(backup: Backup) -> str:
     db = manifest.get("database") or {}
     files = manifest.get("files") or {}
     return (
-        f"{backup.name}: {backup.size() / 1024**2:.1f} MB, database {db.get('vendor')} "
+        f"{backup.name}: {backup.kind}, {backup.size() / 1024**2:.1f} MB, "
+        f"database {db.get('vendor')} "
         f"({db.get('format')}), files {files.get('mode')}"
         + (f" ({files.get('count')})" if files.get("mode") != "none" else "")
         + f", Brick DNN {manifest.get('brickdnn_version', '?')}"

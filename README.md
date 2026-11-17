@@ -441,6 +441,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `CORS_ALLOWED_ORIGINS`         | `http://localhost:5173,…`  | Only if UI and API run on different origins          |
 | `BRICKDNN_DATA_DIR`            | `backend/data` (`/data` in Docker) | Files (datasets, runs), SQLite database, secret key |
 | `DATABASE_URL`                 | – (SQLite)                 | PostgreSQL, e.g. Supabase: [docs/database.md](docs/database.md) |
+| `COMPOSE_PROFILES`, `BRICKDNN_POSTGRES_PASSWORD` | – (off)   | `postgres` and a password: PostgreSQL as the `db` service of Docker Compose ([docs/database.md](docs/database.md#postgresql-in-docker-compose)) |
 | `BRICKDNN_ALLOW_REGISTRATION`  | `true`                     | Set to `false` for a private instance                |
 | `BRICKDNN_NUM_PROXIES`         | `0` (`1` in Docker)        | Reverse proxies in front of Django (for rate limits) |
 | `BRICKDNN_PORT`                | `8080`                     | Port used by Docker Compose                          |
@@ -491,6 +492,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_GRACE_DAYS`   | `7`                        | Days an account keeps its plan after a failed payment |
 | `BRICKDNN_BACKUP_DIR`          | – (off)                    | Folder for `manage.py backup` (database and files; the cleanup service runs it daily), see [deploy/server](deploy/server/README.md#backups) |
 | `BRICKDNN_BACKUP_KEEP_DAILY` / `_WEEKLY` | `7` / `4`        | Backups kept: the newest of each of the last days / weeks |
+| `BRICKDNN_BACKUP_KEEP_HOURLY`  | `0` (off)                  | Hourly backups of the database alone, the newest of each of the last N hours kept |
 | `BRICKDNN_BACKUP_FILES`        | `archive`                  | The data directory's files as tarball (`archive`), `list` or `none` |
 | `BRICKDNN_BACKUP_MAX_FILES_MB` | `2048`                     | Larger file sets are only listed                     |
 | `BRICKDNN_BACKUP_MAX_AGE_HOURS` | `50`                      | `/api/health/` reports a newest backup older than this |

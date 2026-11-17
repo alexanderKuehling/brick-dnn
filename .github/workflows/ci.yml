@@ -74,6 +74,12 @@ jobs:
       - name: Add Supabase's API roles, so the tests check that they are locked out
         run: |
           python -c "import psycopg; c = psycopg.connect('postgresql://postgres:postgres@localhost:5432/postgres', autocommit=True); c.execute('CREATE ROLE anon NOLOGIN'); c.execute('CREATE ROLE authenticated NOLOGIN')"
+      - name: pg_dump 17, so the tests of native backups and of move_database run too
+        run: |
+          sudo apt-get install -y -q postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - name: Tests
         run: pytest
 
@@ -109,7 +115,10 @@ jobs:
           BRICKDNN_BACKEND_CPUS: "0.75"
           BRICKDNN_BACKEND_MEMORY: 1459m
           BRICKDNN_BACKEND_THREADS: "1"
-        run: docker compose -f docker-compose.yml -f deploy/server/compose.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml -f deploy/server/compose.yml config --quiet
+          # With the PostgreSQL service (deploy/server/README.md, "The PostgreSQL service").
+          COMPOSE_PROFILES=postgres docker compose -f docker-compose.yml -f deploy/server/compose.yml config --quiet
       - name: Build and start
         run: docker compose up -d --build
       - name: Wait for the API
@@ -133,7 +142,37 @@ jobs:
           # Data preparation only needs pandas, which is always installed.
           curl -sf http://localhost:8080/api/data/ | grep -q '"available":true'
           curl -sf http://localhost:8080/api/data/steps/ | grep -q '"impute"'
+      - name: Switch to the PostgreSQL service
+        env:
+          COMPOSE_PROFILES: postgres
+          BRICKDNN_POSTGRES_PASSWORD: ci-only-password
+          DATABASE_URL: postgresql://brickdnn:ci-only-password@db:5432/brickdnn
+        run: |
+          docker compose up -d --wait db
+          docker compose up -d
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/api/health/ && break
+            sleep 2
+          done
+          curl -sf http://localhost:8080/api/layers/ | grep -q TransformerEncoder
+          # The backend migrated the db service's database, with pg_dump of the server's version.
+          docker compose exec -T db psql -U postgres -d brickdnn -tAc "SELECT count(*) FROM django_migrations" | grep -qv '^0$'
+          docker compose exec -T backend pg_dump --version | grep -q ' 17\.'
+      - name: Backups and move_database on the PostgreSQL service
+        env:
+          COMPOSE_PROFILES: postgres
+          BRICKDNN_POSTGRES_PASSWORD: ci-only-password
+          DATABASE_URL: postgresql://brickdnn:ci-only-password@db:5432/brickdnn
+          COPY_URL: postgresql://brickdnn:ci-only-password@db:5432/brickdnn_copy
+        run: |
+          docker compose exec -T cleanup python manage.py backup --dir /data/ci-backups --files none --database-format native
+          docker compose exec -T cleanup python manage.py backup --dir /data/ci-backups --hourly --keep-hourly 24 --database-format native
+          docker compose exec -T cleanup python manage.py restore latest --dir /data/ci-backups --database-only --no-input
+          docker compose exec -T db createdb -U postgres -O brickdnn brickdnn_copy
+          docker compose exec -T -e COPY_URL backend python manage.py move_database --to env:COPY_URL --dry-run | tee move.txt
+          grep -q "RESULT: PASS" move.txt
+          curl -sf http://localhost:8080/api/health/
       - name: Shut down
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile postgres down -v
 

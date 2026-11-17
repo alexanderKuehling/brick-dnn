@@ -7,7 +7,7 @@ automatically once all CI checks have passed (`.github/workflows/deploy-server.y
 
 ```text
 GitHub Actions ──ssh deploy@SERVER <commit>──▶ brickdnn-deploy: git checkout, docker compose up
-Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api──▶ Django (backend) ──▶ Supabase / SQLite
+Browser ──HTTPS──▶ Caddy :443 ──▶ nginx (frontend) ──/api──▶ Django (backend) ──▶ PostgreSQL (db) / Supabase / SQLite
                                                    ──/api/ws/──▶ Daphne (realtime) ◀─ Redis ─▶ Django
 Trainings: Django queues them in the database ──▶ worker (manage.py training_worker) trains them
 ```
@@ -49,7 +49,9 @@ The same by hand, on your machine, in the repository:
    At the end it prints the site address and the server's host key.
 
 4. Add the database, if you use PostgreSQL or Supabase (otherwise SQLite in a Docker volume).
-   This copies the line from your local `.env` to the server:
+   PostgreSQL on the server itself: see [The PostgreSQL service](#the-postgresql-service) (three
+   lines in `.env`, before the first deploy). Supabase or another server: this copies the line
+   from your local `.env` to the server:
 
    ```bash
    grep '^DATABASE_URL=' .env | ssh root@SERVER 'cat >> /opt/brick-dnn/.env'
@@ -89,7 +91,8 @@ The same by hand, on your machine, in the repository:
 - The deploy key can do one thing: run `brickdnn-deploy`, which only deploys commits that are
   on `main` of the GitHub repository. It cannot open a shell.
 - `/opt/brick-dnn/.env` (database password) is readable by `root` and `deploy` only and never
-  leaves the server.
+  leaves the server. The [PostgreSQL service](#the-postgresql-service) has no port on the host
+  and is reachable only from the app's containers.
 - Besides the commit, a deploy may set the [settings from GitHub](#settings-from-github) in
   `.env`, and only those (Paddle, e-mail): whoever has the deploy key could, for example, point
   e-mails to another SMTP server or set the Paddle webhook secret. Keep the key in GitHub's
@@ -170,6 +173,7 @@ share of the server:
 | `backend`: Django (API, data preparation, predictions) | a quarter, at least 1 and at most 2; before the worker when both want the CPU | about a third of those 3/4, at least 1 GB and at most 3 GB | 1 CPU, 1 GB |
 | `realtime` (live editing, Daphne) and `redis` | half a CPU; `realtime` before the worker when both want the CPU | 256 MB, 64 MB | the same |
 | `cleanup` (deletes old data once a day, sleeps in between) | half a CPU | 256 MB | the same |
+| `db` (PostgreSQL, only with [the PostgreSQL service](#the-postgresql-service)) | one CPU; before the worker when both want the CPU | 1.5 GB (`BRICKDNN_DB_MEMORY`), `shared_buffers` 512 MB; killed after the worker | lower both on a CX23 |
 | `caddy` and `frontend` (nginx) | the CPU first when it is busy | the rest, shared with the system; killed last | about 350 MB |
 
 The memory limits add up to 3.4 GB on a server with 4 GB (3.75 GB usable), as before the
@@ -244,7 +248,8 @@ newer commit is deployed.
 | Deployed code (a checkout of `main`) | `/opt/brick-dnn` |
 | Settings | `/opt/brick-dnn/.env` |
 | Imprint, privacy policy, terms of use | `/srv/brick-dnn/legal/{imprint,privacy,terms}.md`, else `deploy/sites/<domain>/legal/` of the checkout |
-| Files (datasets, runs; SQLite without `DATABASE_URL`) | Docker volume `brick-dnn_brickdnn-data` |
+| Files (datasets, runs; SQLite without `DATABASE_URL`), backups | Docker volume `brick-dnn_brickdnn-data` |
+| PostgreSQL of the `db` service | Docker volume `brick-dnn_brickdnn-db` |
 | HTTPS certificates | Docker volume `brick-dnn_caddy-data` |
 
 ```bash
@@ -261,6 +266,7 @@ $C exec backend python manage.py purge_old_data --dry-run   # what it would dele
 $C logs -f --tail 100 worker   # what the training worker starts, stops and puts back
 $C exec backend python manage.py training_queue   # who waits, who trains, the last 7 days
 $C logs realtime | grep "Live connection closed"   # why live connections closed (see below)
+$C exec db psql -U postgres brickdnn   # SQL on the PostgreSQL service (if it is on)
 ```
 
 **The training queue** is also in the Django admin, without a shell: `https://DOMAIN/admin/` →
@@ -284,30 +290,79 @@ would otherwise create it, owned by root).
 The server keeps files on its disk and accounts and networks are in the database: see
 [Backups](#backups) for keeping both safe.
 
+## The PostgreSQL service
+
+The database can run on the server itself: the `db` service of `docker-compose.yml`
+(PostgreSQL 17, image `postgres:17.12-trixie`), instead of Supabase or SQLite. The data then
+never leaves the server, queries do not travel to another data centre, and the backups below
+are native `pg_dump` files. It is **off until `.env` turns it on**, so servers with SQLite or
+Supabase are not affected:
+
+| Line in `/opt/brick-dnn/.env` | Does |
+| --- | --- |
+| `COMPOSE_PROFILES=postgres` | starts the `db` service with every `docker compose up`, so with every deploy |
+| `BRICKDNN_POSTGRES_PASSWORD=…` | the password of the database role `brickdnn`, set when the service starts for the first time |
+| `DATABASE_URL=postgresql://brickdnn:…@db:5432/brickdnn` | Brick DNN uses it (the same password) |
+
+Why a Compose profile: Docker Compose reads `COMPOSE_PROFILES` from `.env` by itself, so the
+deploy script needs no change and no new copy on the server, and `docker compose …` by hand
+does the same as a deploy. Backend, worker, realtime and cleanup wait for `db` to be healthy,
+but the dependency is `required: false`: without the profile they start as before. These are
+lines in `.env`, not in `deploy/sites/<domain>/settings.env`, because Compose reads only `.env`
+(the site settings are read by Django) and because two of them hold the password.
+
+- **The password**: `openssl rand -hex 32` (64 characters from `0-9a-f`; base64 would bring
+  `/`, `+` and `=`, which would have to be percent-encoded in `DATABASE_URL`). It is only in
+  `.env` on the server, never in the repository or in GitHub.
+- **Data**: Docker volume `brick-dnn_brickdnn-db`
+  (`/var/lib/docker/volumes/brick-dnn_brickdnn-db/_data`), with data checksums. Copies of it
+  in a running state are not reliable: the backups take the database with `pg_dump`.
+- **Access**: no port on the host. Only backend, worker, realtime and cleanup reach it, over the
+  internal Docker network `database`, which has no way out. The role `brickdnn` owns the
+  database but is no superuser; the superuser `postgres` has no password and logs in only
+  inside the container: `$C exec db psql -U postgres brickdnn`.
+- **Memory and CPU** (`deploy/server/compose.yml`): `shared_buffers` 512 MB, the container at
+  most 1.5 GB and one CPU, before the trainings when both want the CPU, and among the last
+  processes to be killed when memory runs out. On a smaller server set
+  `BRICKDNN_DB_SHARED_BUFFERS=128MB` and `BRICKDNN_DB_MEMORY=512m` in `.env`
+  (`BRICKDNN_DB_CPUS` for the CPUs), then `$C up -d`.
+- **Updates**: a new minor version (17.x) is a new image tag in `docker-compose.yml`, deployed
+  like any commit (the database restarts: a few seconds without it). A new major version (18)
+  cannot just change the tag: it needs a dump and restore (`manage.py move_database` into a new
+  service, or `pg_upgrade`), and the backend image must have `pg_dump` of at least that version
+  for the backups (`backend/Dockerfile`).
+- **A new password**: changing `BRICKDNN_POSTGRES_PASSWORD` alone does nothing (it is used at the
+  first start only). Set the new one in the database (`$C exec db psql -U postgres -c
+  '\password brickdnn'` asks for it twice), then in both lines of `.env`, then `$C up -d`.
+
+Moving an existing site onto it: [Moving the database onto the server](#moving-the-database-onto-the-server).
+
 ## Backups
 
 What is kept where, and what is backed up:
 
 | Data | Where | Backed up by |
 | --- | --- | --- |
-| Accounts, networks, runs, usage (the database) | Supabase (`DATABASE_URL`), else SQLite in the data volume | Supabase: **check your plan** (dashboard → *Database* → *Backups*): paid plans keep daily backups for 7 days, the free plan has none you can restore yourself. And `manage.py backup` (below). |
+| Accounts, networks, runs, usage (the database) | the `db` service, Supabase or another PostgreSQL (`DATABASE_URL`), else SQLite in the data volume | `manage.py backup` (below). Supabase also: **check your plan** (dashboard → *Database* → *Backups*): paid plans keep daily backups for 7 days, the free plan has none you can restore yourself. |
 | Uploads, datasets, trained weights, the generated secret key | Docker volume `brick-dnn_brickdnn-data` on the server's disk | nothing, unless you turn on Hetzner's backups; and `manage.py backup` |
 
 **1. Turn on Hetzner's server backups** (the simplest offsite copy): Hetzner Cloud Console →
 the server → *Backups* → *Enable backups*. One click, about 20 % of the server's price; Hetzner
 copies the whole disk once a day (Docker volumes included) and keeps the last seven. To go
 back, *Backups* → a backup → *Restore* (replaces the disk) or *Convert to image* and create a
-second server from it to take files from. They do not include the Supabase database, which is
-what step 2 is for.
+second server from it to take files from. They do not include a Supabase database, and a copy
+of the disk of a running PostgreSQL is not a reliable backup of it: that is what step 2 is for.
 
 **2. `manage.py backup`, daily.** With `BRICKDNN_BACKUP_DIR` set (brickdnn.com sets
 `/data/backups` in `deploy/sites/brickdnn.com/settings.env`), the cleanup service runs it once a
 day after the clean-up and writes into the data volume a folder `brickdnn-<date and time>`
 with
 
-- the database as of one moment: Django's `dumpdata` in one transaction (`database.json.gz`; it
-  loads into PostgreSQL of any version and into SQLite), `pg_dump` where it is installed (the
-  Docker image has none), or SQLite's own online backup;
+- the database as of one moment: `pg_dump` in its custom format (`database.pgdump`) where the
+  installed `pg_dump` is not older than the server (the Docker image has version 17: the `db`
+  service and Supabase up to 17), else Django's `dumpdata` in one transaction
+  (`database.json.gz`; it loads into PostgreSQL of any version and into SQLite), or SQLite's own
+  online backup;
 - the files of the data volume as `files.tar.gz` (without the cache and the backups). Above
   `BRICKDNN_BACKUP_MAX_FILES_MB`, or when they would not fit on the disk, only a list of them
   (`files.txt`); `BRICKDNN_BACKUP_FILES=list` or `none` chooses that up front, e.g. when
@@ -324,6 +379,16 @@ uptime check opens an issue. **Mind the disk**: every backup on the server's dis
 --list` shows their sizes. Without Hetzner's backups these copies are on the same disk as the
 site: they help after a mistake or a broken database, not after losing the server.
 
+**3. Hourly backups of the database**, with `BRICKDNN_BACKUP_KEEP_HOURLY` above 0 (e.g. `24`,
+in `.env` or the site settings; unset or `0`: none). In the 23 hours between two daily backups
+the cleanup service runs `manage.py backup --hourly` every hour: the database alone, in a folder
+`brickdnn-<date and time>-hourly` in the same backup folder (so the offsite copy below takes it
+too). The newest backup of each of the last 24 hours is kept, in addition to the daily and
+weekly ones; the daily ones are never replaced by an hourly one. Each takes as much space as
+the database's dump (`backup --list` shows the sizes): 24 of them take 24 times that. With
+hourly backups on, `/api/health/` also fails when the last hourly one failed or the newest
+backup is older than three hours.
+
 **Offsite copies** are not built in (the image has no storage client), but `rclone` on the
 server copies the backup folder to any storage it supports: Infomaniak Swiss Backup and other
 OpenStack Swift storage, S3-compatible storage (Hetzner Object Storage, Backblaze B2 …) and
@@ -337,21 +402,33 @@ more. brickdnn.com copies to Swiss Backup this way:
    creates the container.
 3. A first copy, by hand:
    `sudo rclone copy /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups REMOTE:brickdnn-backups -v`.
-4. Every six hours from root's crontab (`sudo crontab -e`), one line:
+4. From root's crontab (`sudo crontab -e`), one line. With daily backups only, every six hours:
 
    ```
    0 */6 * * * rclone copy /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups REMOTE:brickdnn-backups --log-file /var/log/rclone-backup.log && rclone delete REMOTE:brickdnn-backups --min-age 35d --log-file /var/log/rclone-backup.log
    ```
 
+   With hourly backups, every hour at half past (a backup in progress is a hidden folder
+   `.partial-…`, which stays out), keeping the hourly ones offsite for three days and the rest
+   for 35:
+
+   ```
+   30 * * * * rclone copy /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups REMOTE:brickdnn-backups --exclude "/.partial-*/**" --log-file /var/log/rclone-backup.log && rclone delete REMOTE:brickdnn-backups --min-age 35d --log-file /var/log/rclone-backup.log && rclone delete REMOTE:brickdnn-backups --include "/brickdnn-*-hourly/**" --min-age 3d --log-file /var/log/rclone-backup.log
+   ```
+
+   Worth it once hourly backups are on: a lost server then costs at most an hour of the
+   database instead of up to six, and every run only transfers the new folder.
+
 `copy`, not `sync`: a backup deleted on the server (by the rotation, a mistake or an attacker)
 stays in the offsite copy, and `delete --min-age 35d` keeps that store from growing without
-end. Every six hours because the daily backup runs ten minutes after the clean-up service
-starts and then once a day, so its time moves with every deploy; only new files are
-transferred. `sudo tail /var/log/rclone-backup.log` shows the last runs.
+end. At fixed times rather than right after each backup, because the daily backup runs ten
+minutes after the cleanup service starts and then once a day, so its time moves with every
+deploy; only new files are transferred. `sudo tail /var/log/rclone-backup.log` shows the last runs.
 
 ```bash
 $C exec cleanup python manage.py backup --list   # the backups, newest first
 $C exec cleanup python manage.py backup          # one now
+$C exec cleanup python manage.py backup --hourly # an hourly one now (database only)
 ```
 
 **Restore** (replaces the database, and writes the backup's files into the data volume; files
@@ -363,12 +440,28 @@ $C run --rm --no-deps backend python manage.py restore latest   # or a folder na
 $C up -d
 ```
 
-`--database-only` and `--files-only` restore one part. A backup of newer code than the one
-running restores too, but restore with the same commit (`manifest.json` names the version) or
-newer: `restore` runs `migrate` afterwards.
+`--database-only` and `--files-only` restore one part. `latest` is the newest backup of either
+kind; an hourly one has no files (`restore` says so and leaves them alone): for the files take
+the newest daily folder, `restore brickdnn-<date and time> --files-only`. A backup of newer code
+than the one running restores too, but restore with the same commit (`manifest.json` names the
+version) or newer: `restore` runs `migrate` afterwards.
 
-**Restore drill** (once, and after big changes): copy a backup to your computer and restore it
-into an empty SQLite database, which proves it is complete without touching the site:
+**Restore drill** (once, and after big changes). With the `db` service: restore the newest
+backup into a scratch database next to the real one and compare the numbers, without touching
+the site:
+
+```bash
+B="$(ls -1d /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/brickdnn-2* | tail -n 1)"
+$C exec -T db createdb -U postgres drill
+$C exec -T db pg_restore -U postgres --dbname=drill --clean --if-exists --no-owner --exit-on-error < "$B/database.pgdump"
+Q="SELECT (SELECT count(*) FROM auth_user) AS accounts, (SELECT count(*) FROM brick_dnn_core_project) AS networks, (SELECT max(applied) FROM django_migrations) AS last_migration"
+$C exec -T db psql -U postgres -d drill -c "$Q"      # the backup
+$C exec -T db psql -U postgres -d brickdnn -c "$Q"   # the site now: the same or a little more
+$C exec -T db dropdb -U postgres drill
+```
+
+With SQLite or a `database.json.gz`: copy a backup to your computer and restore it into an
+empty SQLite database, which proves it is complete without touching the site:
 
 ```bash
 scp -r root@SERVER:/var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/brickdnn-2026… /tmp/drill-backup
@@ -377,6 +470,165 @@ DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py restore /t
 DATABASE_URL= BRICKDNN_DATA_DIR=/tmp/drill .venv/bin/python manage.py runserver   # log in, look around
 rm -rf /tmp/drill /tmp/drill-backup   # it holds password hashes
 ```
+
+## Moving the database onto the server
+
+From Supabase (or any other PostgreSQL) to the [PostgreSQL service](#the-postgresql-service)
+on the server itself, with `manage.py move_database`. It copies only Brick DNN's tables (none of
+Supabase's own schemas, roles, owners or grants), resets the sequences, runs `migrate --check`
+and verifies the copy: the same row count and a checksum of every row in every table, sequences
+ahead of the highest id. It prints a line per table and `RESULT: PASS` or `FAIL`. It never
+changes the source, which stays as it is for going back. All commands run on the server as
+root, in `/opt/brick-dnn`.
+
+**Expected downtime: about 5 minutes** (the site answers again after 1–3 of them; the rest are
+the checks), on a database of up to some hundred MB. The rehearsal (step 2) prints how long the
+dump and the restore took; the real move takes about as long. Plan a window of 30 minutes at a
+quiet time and tell the users beforehand: during the window the app's API answers with
+errors (the landing pages stay up), live editing reconnects afterwards, and trainings that run
+are put back into the queue and start again after the move. If a check of the uptime workflow
+falls into the window, it opens an outage issue and closes it when the site is back.
+
+### 0. Prerequisites
+
+```bash
+ssh root@SERVER
+cd /opt/brick-dnn
+C="docker compose -f docker-compose.yml -f deploy/server/compose.yml"
+$C exec backend pg_dump --version      # 17.x: the commit with the db service is deployed
+$C exec backend sh -c 'psql "$DATABASE_URL" -tAc "SHOW server_version" -c "SELECT pg_size_pretty(pg_database_size(current_database()))"'
+df -h /var/lib/docker                  # free space: a few times the database's size
+```
+
+- Supabase's version must be **17 or lower** (it is 15 or 17); with 18 the backend's
+  `pg_dump` cannot dump it.
+- `DATABASE_URL` in `.env` points to Supabase's **session pooler** (port 5432), as
+  [docs/database.md](../../docs/database.md#supabase) recommends. The transaction pooler
+  (6543) does not work for `pg_dump`: copy the session pooler's string from the dashboard
+  (*Connect*) first.
+- A fresh backup of Supabase, just in case: `$C exec cleanup python manage.py backup`.
+
+### 1. Switch the PostgreSQL service on (the site keeps running on Supabase)
+
+```bash
+cp -p .env /root/env-before-db-move && chmod 600 /root/env-before-db-move   # for going back
+[ -z "$(tail -c 1 .env)" ] || echo >> .env   # .env ends with a line break
+PW="$(openssl rand -hex 32)"
+printf '%s\n' '# PostgreSQL on this server (deploy/server/README.md, "The PostgreSQL service").' \
+  "COMPOSE_PROFILES=postgres" "BRICKDNN_POSTGRES_PASSWORD=$PW" >> .env
+unset PW
+$C up -d --wait db                     # the first start creates the role and the database
+$C ps db                               # "healthy"
+```
+
+### 2. Rehearse (as often as you like, while the site runs)
+
+```bash
+export LOCAL_DATABASE_URL="postgresql://brickdnn:$(sed -n 's/^BRICKDNN_POSTGRES_PASSWORD=//p' .env)@db:5432/brickdnn"
+$C run --rm --no-deps -e LOCAL_DATABASE_URL backend python manage.py move_database --to env:LOCAL_DATABASE_URL --dry-run
+```
+
+It copies from `DATABASE_URL` (Supabase) into the new database, verifies, prints the report and
+drops the copy again. The numbers are those of one moment of Supabase (a snapshot that the dump
+shares), so writes while it runs do not spoil the comparison. It must end with `RESULT: PASS`.
+`--from` and `--to` take a URL or `env:NAME` (the URL in an environment variable: the password
+stays off the command line); `--keep` leaves the copy to look at (`$C exec db psql -U postgres
+brickdnn`), and the next run then needs `--replace`. Steps 4 and 5 need `C` and
+`LOCAL_DATABASE_URL` of this shell: in a new one, run the first lines of step 0 and step 2 again.
+
+### 3. The window: stop all writes
+
+There is no maintenance mode: stopping the services that write is what makes the copy
+complete. Look first whether a training runs (`$C exec backend python manage.py
+training_queue`); a running one is put back into the queue and starts again after the move.
+
+```bash
+$C stop worker cleanup realtime backend    # the worker takes up to a minute (it puts trainings back)
+$C ps                                      # only db, redis, frontend, caddy run
+```
+
+### 4. Move and verify
+
+```bash
+$C run --rm --no-deps -e LOCAL_DATABASE_URL backend python manage.py move_database --to env:LOCAL_DATABASE_URL 2>&1 | tee /root/db-move.log
+```
+
+The last lines must say `PASS  source unchanged` and `RESULT: PASS`. `FAIL` (or an error)
+means: do not switch. The site is back as before with `$C up -d`; look at the report, fix the
+cause and run step 4 again with `--replace` (it drops the incomplete copy, after asking).
+
+### 5. Switch `DATABASE_URL` and start
+
+```bash
+sed -i '/^DATABASE_URL=/d' .env
+echo "DATABASE_URL=$LOCAL_DATABASE_URL" >> .env
+unset LOCAL_DATABASE_URL
+grep -c '^DATABASE_URL=postgresql://brickdnn:' .env   # 1
+$C up -d
+```
+
+### 6. Smoke checks
+
+```bash
+$C ps                                                    # all running, healthy after a minute
+$C exec backend sh -c 'echo "$DATABASE_URL" | sed "s/:[^:@]*@/:…@/"'   # …@db:5432/brickdnn
+curl -s https://DOMAIN/api/health/                       # "status": "ok"
+$C exec cleanup python manage.py backup                  # "database postgresql (pgdump)"
+```
+
+In the browser: log in, open the list of networks and one network (the editor shows it),
+start a tiny training (a small example with a built-in dataset, one epoch; `$C logs -f worker`
+shows it start and finish), and open a network in two tabs to see live editing. In the Django
+admin, *Training workers* shows the worker's heartbeat. If something is wrong, go back (step 7).
+
+Afterwards:
+
+- Merge the pull request that switches brickdnn.com's privacy policy and settings to the new
+  database (hourly backups, `BRICKDNN_BACKUP_KEEP_HOURLY=24`); the next deploy takes it.
+- Change the rclone line in root's crontab to the hourly one (Backups, step 4 of the offsite
+  copies).
+- Do the restore drill above once with the first backups of the new database.
+
+### 7. Going back to Supabase
+
+Supabase was not changed. Within the window, nothing is lost:
+
+```bash
+$C stop worker cleanup realtime backend
+sed -i '/^DATABASE_URL=/d' .env
+grep '^DATABASE_URL=' /root/env-before-db-move >> .env
+$C up -d
+```
+
+After the site has run on the new database for a while, Supabase lacks what was written since.
+To keep it, copy it back before switching (with the app stopped):
+`$C run --rm --no-deps -e SUPABASE_URL backend python manage.py move_database --from env:LOCAL_DATABASE_URL --to env:SUPABASE_URL --replace`
+(both variables exported first; `--replace` overwrites Brick DNN's tables at Supabase, which
+are protected from its Data API again afterwards).
+
+### 8. After a few days: say goodbye to Supabase
+
+When the site has run well on the new database for a few days (and the daily and hourly
+backups work, `$C exec cleanup python manage.py backup --list`):
+
+1. A last copy of Supabase, kept out of the rotation:
+
+   ```bash
+   export SUPABASE_URL="$(sed -n 's/^DATABASE_URL=//p' /root/env-before-db-move)"
+   $C run --rm --no-deps -e SUPABASE_URL backend sh -c 'pg_dump --format=custom --no-owner --no-privileges --schema=public --file=/data/backups/supabase-final.pgdump "$SUPABASE_URL" && pg_restore --list /data/backups/supabase-final.pgdump | grep -c "TABLE DATA"'
+   unset SUPABASE_URL
+   scp root@SERVER:/var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/supabase-final.pgdump .   # on your computer
+   ```
+
+   It holds password hashes: keep it encrypted, and delete it (on the server:
+   `rm /var/lib/docker/volumes/brick-dnn_brickdnn-data/_data/backups/supabase-final.pgdump`) when
+   you no longer need it; the offsite copy goes after 35 days.
+2. Delete the Supabase project: dashboard → the project → *Project Settings* → *General* →
+   *Delete project*. Then `shred -u /root/env-before-db-move /root/db-move.log`.
+3. Paperwork: note in your records of processing (Art. 30 GDPR) and the list of data
+   processing agreements that the Supabase DPA ended with the deletion on that date (keep the
+   signed copy as evidence), and that the database is now covered by Infomaniak's agreement for
+   the server.
 
 ## Monitoring
 
@@ -403,7 +655,7 @@ What the checks mean:
 
 | Check | Fails when | Look at |
 | --- | --- | --- |
-| `database` (answer `503`, status `error`) | Django cannot run `SELECT 1`: Supabase paused (free projects pause after a week without use) or unreachable, wrong `DATABASE_URL` | the Supabase dashboard; `$C logs backend` |
+| `database` (answer `503`, status `error`) | Django cannot run `SELECT 1`: the `db` service down, Supabase paused (free projects pause after a week without use) or unreachable, wrong `DATABASE_URL` | `$C ps db`, `$C logs db`; the Supabase dashboard; `$C logs backend` |
 | `worker` (status `degraded`) | no training worker sent a heartbeat in the last minute: trainings wait | *Training workers* in the Django admin; `$C ps worker`, `$C logs worker` |
 | `disk` (status `degraded`) | less than 1 GB free in the data volume (`BRICKDNN_HEALTH_MIN_FREE_MB`) | `df -h`, `docker system df`; `docker system prune` removes old images |
 | front page | Caddy, nginx or the server is down, or the certificate fails | `$C ps`, `$C logs caddy`; the Hetzner console |
@@ -449,7 +701,7 @@ What the codes mean:
 | 1000 after about 86400 s | Daphne ends every connection after a day (`--websocket_timeout`) | nothing; the client reconnects |
 | 1001 | the tab was closed or reloaded | nothing |
 | 1006 *connection lost* | network gone (phones, Wi-Fi changes), a tab suspended in the background that no longer answered Daphne's ping (after 30 s of silence plus 30 s), or a proxy closed it | many at the same second: a restart of `frontend`, `realtime` or `caddy` (compare with `$C ps` and the times of deploys) |
-| *closed by the server with 1011: server error* | an error in the consumer, mostly the database (Supabase unreachable, SQLite locked by a training) or Redis | the traceback before the line; `$C logs redis` |
+| *closed by the server with 1011: server error* | an error in the consumer, mostly the database (unreachable, SQLite locked by a training) or Redis | the traceback before the line; `$C logs redis` |
 | *with 4401* | no or an expired login (the client refreshes its token once) | many: the clocks of server and clients, `SIMPLE_JWT` lifetimes |
 | *with 4429: more than 30 messages a second* | a client sent too much (the web app sends at most about 20 a second) | a client bug or abuse |
 | *with 4403 / 4404* | access removed, project deleted | nothing |
