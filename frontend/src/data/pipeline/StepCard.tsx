@@ -331,7 +331,7 @@ export function StepCard({
         )}
         {status === 'ok' && ranReport && (
           <>
-            {ranReport.summary && <Text size="sm">{ranReport.summary}</Text>}
+            {ranReport.summary && <Text size="xs">{ranReport.summary}</Text>}
             <Changes report={ranReport} />
           </>
         )}
@@ -347,7 +347,8 @@ export function StepCard({
               <span>{warning}</span>
             </Text>
           ))}
-        {status === 'ok' && details.length > 0 && (
+        {/* The values per column and the hints are details: shown with the step's settings. */}
+        {expanded && status === 'ok' && details.length > 0 && (
           <ul className={classes.details}>
             {shownDetails.map((detail, i) => (
               <li key={`${detail.column ?? ''}-${i}`}>
@@ -374,7 +375,7 @@ export function StepCard({
         )}
       </div>
 
-      {(spec.fitted || spec.training_only || spec.combine || spec.pre_split) && (
+      {expanded && (spec.fitted || spec.training_only || spec.combine || spec.pre_split) && (
         <Group gap={12} mt={4} className={classes.hints}>
           {spec.fitted && (
             <Tooltip label={FITTED_HINT} multiline w={260} withArrow>

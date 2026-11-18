@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { IconBulb } from '@tabler/icons-react';
-import { Button, Group, Text, type ButtonProps } from '@mantine/core';
+import { Button, type ButtonProps } from '@mantine/core';
 import type { RunDetail } from '@/api';
 import { i18n, useTranslation } from '@/i18n';
 import type { ExplainStart } from './ExplainModal';
@@ -65,18 +65,5 @@ export function ExplainButton({
       </Button>
       <ExplainDialog run={run} start={opened ? start : null} onClose={() => setOpened(false)} />
     </>
-  );
-}
-
-/** The way into the explanations, under the headline of a finished run. */
-export function ExplainHeadline({ run }: { run: RunDetail }) {
-  useTranslation();
-  return (
-    <Group gap="xs" mt="xs" wrap="wrap">
-      <ExplainButton run={run} size="xs" />
-      <Text size="xs" c="dimmed">
-        {i18n.t('ui.explain.ExplainButton.whyItDecidesAsIt')}
-      </Text>
-    </Group>
   );
 }

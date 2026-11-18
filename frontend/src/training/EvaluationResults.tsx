@@ -30,6 +30,7 @@ import type {
 import { ChartFrame, GradientLegend } from '@/components/charts/ChartFrame';
 import { SEQUENTIAL, sequentialColor, textOn, useChartScheme } from '@/components/charts/colors';
 import { ScatterPlot } from '@/components/charts/ScatterPlot';
+import { InfoHint } from '@/components/InfoHint';
 import { currentLocale, i18n, useTranslation } from '@/i18n';
 import { formatMetric, formatPercent } from './format';
 import { ThresholdAnalysis } from './ThresholdAnalysis';
@@ -71,9 +72,9 @@ interface TileValue {
 function SplitTile({ label, values, hint }: { label: string; values: TileValue[]; hint?: string }) {
   return (
     <Paper
-      withBorder
       p="xs"
       radius="sm"
+      className={classes.tile}
       role="group"
       aria-label={label}
       style={values.length > 2 ? { gridColumn: 'span 2' } : undefined}
@@ -443,9 +444,14 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
     );
   return (
     <div>
-      <Text size="sm" fw={600} mb={4}>
-        {i18n.t('ui.training.EvaluationResults.perClass')}
-      </Text>
+      <Group gap={4} wrap="nowrap" mb={4}>
+        <Text size="sm" fw={600}>
+          {i18n.t('ui.training.EvaluationResults.perClass')}
+        </Text>
+        <InfoHint topic={i18n.t('ui.training.EvaluationResults.perClass')}>
+          {i18n.t('ui.training.EvaluationResults.precisionOfTheRowsPredicted')}
+        </InfoHint>
+      </Group>
       <ScrollArea.Autosize mah={400} type="auto">
         <Table
           fz="xs"
@@ -488,9 +494,6 @@ export function PerClassTable({ names, perClass }: { names: string[]; perClass: 
           </Table.Tbody>
         </Table>
       </ScrollArea.Autosize>
-      <Text size="xs" c="dimmed" mt={4}>
-        {i18n.t('ui.training.EvaluationResults.precisionOfTheRowsPredicted')}
-      </Text>
     </div>
   );
 }
@@ -741,7 +744,7 @@ export function EvaluationResults({
       aria-label={i18n.t('ui.training.EvaluationResults.metrics')}
     >
       <Group justify="space-between" gap="xs" align="baseline">
-        <Text size="sm" fw={600}>
+        <Text component="h5" size="sm" fw={600} m={0}>
           {i18n.t('ui.training.EvaluationResults.metrics')}
         </Text>
         <Text size="xs" c="dimmed">

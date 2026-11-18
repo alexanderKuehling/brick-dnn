@@ -1291,14 +1291,8 @@ function PreviewStatus({ prep }: { prep: DataPrepController }) {
       </Group>
     );
   }
-  if (!result) {
-    return null;
-  }
-  return (
-    <Text size="xs" c="dimmed" ml="auto" visibleFrom="sm" style={{ flexShrink: 0 }}>
-      {tableSize(result.profile.n_rows, result.profile.n_columns)}
-    </Text>
-  );
+  // The size of the table is not repeated here: the table and the analysis show it.
+  return null;
 }
 
 function PreviewError({ message, onRetry }: { message: string; onRetry: () => void }) {

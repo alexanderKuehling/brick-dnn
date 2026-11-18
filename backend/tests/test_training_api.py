@@ -320,9 +320,14 @@ def test_capabilities_without_torch(client, training_dir, monkeypatch):
     }
     assert data["losses"]["params"]["label_smoothing"]["max"] == 0.3
     builtin = data["builtin_datasets"]
-    assert [d["id"] for d in builtin] == ["mnist", "fashion_mnist", "cifar10", "shapes", "cells"]
+    assert [d["id"] for d in builtin] == [
+        *("mnist", "fashion_mnist", "cifar10", "shapes", "cells"),
+        *("sentiment", "lookup", "topics"),
+    ]
     assert builtin[0]["num_classes"] == 10 and "available" in builtin[0]
-    cells = builtin[-1]
+    # The generated datasets need no torchvision.
+    assert [d["available"] for d in builtin[3:]] == [True] * 5
+    cells = builtin[4]
     assert (cells["name"], cells["task"], cells["sample_shape"]) == (
         "Cells",
         "segmentation",

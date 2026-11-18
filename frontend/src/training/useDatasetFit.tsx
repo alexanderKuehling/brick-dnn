@@ -27,10 +27,11 @@ import { canStartTraining, trainingFamily } from './classical';
 import {
   describeFixes,
   describeShape,
-  isImageSource,
+  inputUnit,
   onlyInputAndOutput,
   sameParams,
   starterNetwork,
+  type InputUnit,
 } from './fit';
 import { DEFAULT_SOURCE, effectiveSource, type EffectiveSource } from './settings';
 import { useCompatibility, type CompatibilityState } from './useCompatibility';
@@ -146,7 +147,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
 
   // ---------------------------------------------------------------- changes
   /** Set the params of the fixes, with a notification to undo it. */
-  const apply = useCallback((list: CompatibilityFix[], datasetName: string, images: boolean) => {
+  const apply = useCallback((list: CompatibilityFix[], datasetName: string, unit: InputUnit) => {
     const { nodes: current, readOnly: viewOnly, updateNode } = latest.current;
     if (viewOnly) {
       return;
@@ -163,7 +164,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
     if (changes.length === 0) {
       return;
     }
-    showUndo(`${describeFixes(list, images)} from “${datasetName}”.`, () => {
+    showUndo(`${describeFixes(list, unit)} from “${datasetName}”.`, () => {
       // Only layers that were not changed since (e.g. by hand) go back.
       for (const change of changes) {
         const node = latest.current.nodes.find((n) => n.id === change.id);
@@ -175,14 +176,14 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
   }, []);
 
   /** A first network on the empty canvas. */
-  const start = useCallback((network: GraphDocument, datasetName: string, images: boolean) => {
+  const start = useCallback((network: GraphDocument, datasetName: string, unit: InputUnit) => {
     latest.current.startNetwork(network);
     const input = network.nodes[0]?.params?.shape;
     const last = network.nodes[network.nodes.length - 1]?.params;
     // Segmentation networks end in a convolution with one channel per class.
     const channels = last?.out_channels;
     const outputs = channels ?? last?.out_features;
-    const shape = Array.isArray(input) ? describeShape(input as number[], images) : 'the data';
+    const shape = Array.isArray(input) ? describeShape(input as number[], unit) : 'the data';
     showUndo(
       `Started a network for “${datasetName}”: Input ${shape}, ${String(outputs)} ` +
         `output${channels !== undefined ? ' channel' : ''}${outputs === 1 ? '' : 's'}.`,
@@ -222,7 +223,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
       if (canvasReady) {
         const network = starterNetwork(source, specs);
         if (network) {
-          start(network, name, isImageSource(source));
+          start(network, name, inputUnit(source));
         }
         done();
       }
@@ -239,7 +240,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
       return;
     }
     if (fresh && !fresh.ok && onlyInputAndOutput(fixes)) {
-      apply(fixes, name, isImageSource(source));
+      apply(fixes, name, inputUnit(source));
     }
     done();
   }, [
@@ -265,13 +266,13 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
   ]);
 
   // ---------------------------------------------------------------- one click
-  const images = source ? isImageSource(source) : false;
+  const unit: InputUnit = source ? inputUnit(source) : 'features';
   const adapt = useMemo(
     () =>
       editable && name && fixes.length > 0 && onlyInputAndOutput(fixes)
-        ? () => apply(fixes, name, images)
+        ? () => apply(fixes, name, unit)
         : null,
-    [editable, name, fixes, images, apply]
+    [editable, name, fixes, unit, apply]
   );
   const controller = useMemo<DatasetFitController | null>(
     () => (editable ? { compatibility, adapt } : null),
@@ -289,7 +290,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
         datasetName: name,
         matches: false,
         summary: fix.summary,
-        apply: () => apply([fix], name, images),
+        apply: () => apply([fix], name, unit),
       };
     }
     if (fresh.ok && analysis?.inputs.includes(selectedInput)) {
@@ -302,7 +303,7 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
       };
     }
     return null;
-  }, [editable, realData, name, selectedInput, fresh, fixes, analysis, images, apply]);
+  }, [editable, realData, name, selectedInput, fresh, fixes, analysis, unit, apply]);
 
   return { controller, inputFit };
 }

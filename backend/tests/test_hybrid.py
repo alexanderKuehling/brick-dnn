@@ -373,6 +373,31 @@ def test_a_classifier_learns_features_then_fits_the_model(tmp_path):
     assert bundle["class_names"] == ["eggs", "ham", "spam"]
 
 
+def test_without_validation_data(tmp_path):
+    # No validation rows: phase 2 must not feed an empty batch through the layers.
+    path = classification_csv(tmp_path / "mail.csv", n=150)
+    result, reporter = run_job(
+        hybrid_graph(), inspect_csv(path), path, weights=tmp_path / "m.joblib", val_split=0
+    )
+    assert result.status == "completed", result.message
+    assert reporter.info["classical"]["estimator"] == "HistGradientBoostingClassifier"
+    assert (tmp_path / "m.joblib").is_file()
+
+
+def test_no_batches_from_an_empty_source():
+    from brickdnn.training.data import iterate_batches
+
+    class Empty:
+        def __len__(self):
+            return 0
+
+        def batch(self, indices):
+            raise AssertionError("an empty source has no batches")
+
+    assert list(iterate_batches(Empty(), 64)) == []
+    assert list(iterate_batches(Empty(), 64, shuffle=True)) == []
+
+
 def test_a_regressor_and_its_values_in_the_units_of_the_target(tmp_path):
     path = regression_csv(tmp_path / "houses.csv", n=120)
     result, reporter = run_job(

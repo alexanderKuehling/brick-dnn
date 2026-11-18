@@ -704,7 +704,7 @@ export const ui = {
       fixTheProblemListedUnder: 'Fix the problem listed under Readiness first.',
       fixTheProblemsListedUnder: 'Fix the {{errors}} problems listed under Readiness first.',
       importACsvExcelJson:
-        'Import a CSV, Excel, JSON or Parquet file (up to {{maxUploadMb}} MB), drop it here, or import it from a link. Separators, decimal commas, dates and missing values are detected. Then clean and combine the data step by step, see what is in it, and turn it into a training dataset.',
+        'Import a CSV, Excel, JSON or Parquet file (up to {{maxUploadMb}} MB), drop it here, or import it from a link.',
       importCsvExcelOrJson:
         'Import CSV, Excel or JSON files, clean and combine them step by step, see what is in them, and turn them into training data. Your files are stored on the Brick DNN server, so this needs a free account, just like saving and training.',
       importData: 'Import data',
@@ -972,8 +972,7 @@ export const ui = {
       withAPartnerAboveIt: 'With a partner above it',
     },
     PipelineEditor: {
-      addStepsToCleanAnd:
-        'Add steps to clean and transform the data, e.g. fill missing values, clip outliers or encode categories. The column menus of the data table and the Readiness tab suggest steps, too.',
+      addStepsToCleanAnd: 'The column menus of the table and the Readiness tab suggest steps, too.',
       deleted: 'Deleted “{{value}}”.',
       laterStepsDoNotRun: '; later steps do not run.',
       noStepsYet: 'No steps yet',
@@ -1011,6 +1010,7 @@ export const ui = {
         'Create the training dataset and open the training panel with it',
       createTrainingDataset: 'Create training dataset',
       download: 'Download',
+      export: 'Export',
       in: 'in {{projectNames}}',
       listedUnderYourDataIn: 'Listed under “Your data” in the training panel',
       mainTable: 'Main table',
@@ -1022,8 +1022,6 @@ export const ui = {
       preparedDataCsv: 'Prepared data (.csv)',
       pythonScriptPy: 'Python script (.py)',
       recipeJson: 'Recipe (.json)',
-      saveThePreparedDataAs:
-        'Save the prepared data as a training dataset. It is listed under “Your data” in the training panel.',
       saved: 'Saved',
       saving: 'Saving…',
       savingFailed: 'Saving failed.',
@@ -1100,8 +1098,7 @@ export const ui = {
       redundant: 'Redundant',
       regression: 'Regression',
       rows: 'Rows',
-      savesThePreparedDataWith:
-        'Saves the prepared data with its split; it appears in the Train panel under “Your data”.',
+      savesThePreparedDataWith: 'Appears in the training panel under “Your data”, with its split.',
       scales: 'Scales',
       showFewer: 'Show fewer',
       showMore: 'Show {{hidden}} more',
@@ -1115,12 +1112,11 @@ export const ui = {
       targetLeakage: 'Target leakage',
       task: 'Task',
       text1ProblemMustBeFixed: '1 problem must be fixed first.',
-      theDataCanBeUsed: 'The data can be used for training. Have a look at the {{notes}} below.',
-      theDataCanBeUsed2: 'The data can be used for training.',
       theDataCannotBeUsed: 'The data cannot be used for training yet.',
       trainTestOverlap: 'Train/test overlap',
       trainValidationTest: 'train / validation / test',
       worthALook: 'Worth a look',
+      lookAtTheNotesBelow: 'Have a look at the {{notes}} below.',
     },
     RelationshipsView: {
       aClearGapBetweenTwo:
@@ -1424,14 +1420,9 @@ export const ui = {
       noTaskTheTargetColumn: 'No task: the target column is missing.',
       none: '{{label}}: none',
       offRowsAreSplitOne: 'Off: rows are split one by one',
-      predictsAClassForEvery: 'Predicts a class for every row.',
-      predictsANumberForEvery: 'Predicts a number for every row.',
       regression: 'Regression',
       rows: ' · {{prefix}}{{value}} rows',
-      rowsWithTheSameValue:
-        'Rows with the same value (e.g. a person id, or the column of “Find near-duplicate groups”) all go to the same part, so validation and test rows have no twin in training. The column must exist before the split: in the data, from a combine step or from a step that runs before the split.',
       sameClassSharesInEvery: 'Same class shares in every part',
-      sameSeedSameSplit: 'Same seed, same split',
       seed: 'Seed',
       stratify: 'Stratify',
       stratifyingNeedsAClassificationTarget: 'Stratifying needs a classification target.',
@@ -1444,6 +1435,12 @@ export const ui = {
       validation: 'Validation',
       withSeveralRowsTheLargest:
         '{{count}} {{value}} ({{multi}} with several rows, the largest {{largest}} rows); {{value2}}. Training / validation / test hold {{map}} groups.',
+      groupsSummary: 'groups by {{column}}',
+      moreSplitOptions: 'Seed, stratify and groups',
+      noTargetYet: 'No target yet',
+      splitSummary: 'split {{train}} / {{val}} / {{test}} %',
+      groupHint:
+        'Rows with the same value (e.g. a person id) go to the same part, so validation and test rows have no twin in training.',
     },
     TargetView: {
       aLowValueDoesNot: 'A low value does not rule out a non-linear or combined effect.',
@@ -1598,8 +1595,6 @@ export const ui = {
     },
     ExplainButton: {
       explainTheModel: 'Explain the model',
-      whyItDecidesAsIt:
-        'Why it decides as it does: what matters, where it looks, what happens inside.',
     },
     ExplainModal: {
       aRandomInputTheRun: 'A random input (the run trained on demo data, which is not kept).',
@@ -2273,7 +2268,7 @@ export const ui = {
       rowsInTheUnitsOf: '{{value}} rows, in the units of the target',
       rowsOfTheMatrixAnd: 'Rows of the matrix and the table',
       rowsTrueClassColumnsPredicted:
-        'Rows: true class · columns: predicted class · the diagonal is right. Hover a cell for both numbers.',
+        'Rows: true class · columns: predicted class · the diagonal is right.',
       rowsTrueClassColumnsPredicted2: '{{title}}: rows true class, columns predicted class',
       support: 'Support',
       test: 'Test',
@@ -2539,6 +2534,8 @@ export const ui = {
       validationRmse: 'Validation RMSE',
       valuesPerEpoch: 'Values per epoch',
       weightsPt: 'Weights (.pt)',
+      modelAndFiles: 'Model and files',
+      trainingCurves: 'Training curves',
     },
     SegmentationResults: {
       cannotLoadThePredictions: 'Cannot load the predictions',
@@ -2689,6 +2686,21 @@ export const ui = {
       useASample: 'Use a sample',
       validationData: 'validation data',
     },
+    TextPredict: {
+      all: 'All',
+      cannotPredict: 'Cannot predict',
+      example: 'Text {{number}}',
+      howTextsAreRead:
+        'Texts are lower-cased and split into words and punctuation marks. Words that are not in the vocabulary of the training texts ({{words}} entries) become <unk>; the network reads at most {{length}} tokens.',
+      noComputeLeft: 'No compute left',
+      oneTextPerLine: 'One text per line',
+      predict: 'Predict',
+      testTexts: 'Test texts:',
+      texts: 'Texts',
+      tokens: 'Tokens',
+      unknownWords: 'Unknown words: {{words}}',
+      whatTheNetworkRead: 'What the network read',
+    },
     ThresholdAnalysis: {
       aRowIsPredictedWhen:
         'A row is predicted “{{positive}}” when its probability of “{{positive2}}” is at least the threshold, else “{{negative}}”. Lower finds more “{{positive3}}” (recall) with more false alarms (precision falls).',
@@ -2779,6 +2791,7 @@ export const ui = {
       lastLayerSetTo: 'Last layer set to {{outputText}}',
       lastLayerTo: '{{inputText}}, last layer to {{outputText}}',
       networkAdapted: 'Network adapted',
+      vocabularySetTo: 'Embedding set to {{words}} words',
     },
     format: {
       adam: 'Adam',

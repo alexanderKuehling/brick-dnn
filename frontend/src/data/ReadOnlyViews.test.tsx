@@ -48,6 +48,10 @@ describe('read-only views', () => {
     const props = editor(VIEWER);
     expect(screen.queryByRole('button', { name: /Add step/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Actions for step/ })).not.toBeInTheDocument();
+    // Target & split and its split options open to be looked at.
+    await userEvent.click(screen.getByRole('button', { name: /Target & split/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Seed, stratify and groups' }));
+    await screen.findByRole('switch', { name: /Stratify/ });
     expect(screen.getByRole('combobox', { name: 'Target column' })).toHaveAttribute('readonly');
     expect(screen.getByRole('textbox', { name: 'Validation' })).toHaveAttribute('readonly');
     expect(screen.getByRole('switch', { name: /Stratify/ })).toBeDisabled();
