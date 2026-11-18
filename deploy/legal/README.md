@@ -63,8 +63,9 @@ streichen.
 - [ ] **Hosting bei Hetzner** (Server und alle Dateien) – AV-Vertrag in der Hetzner-Konsole
       abschließen; Rechenzentrumsstandort angeben.
 - [ ] **Datenbank bei Supabase**, falls `DATABASE_URL` auf Supabase zeigt: Anbieter, Region,
-      DPA abschließen, Drittlandübermittlung (USA?) und ihre Grundlage prüfen. Sonst: Datenbank
-      liegt auf dem Server.
+      DPA abschließen, Drittlandübermittlung (USA?) und ihre Grundlage prüfen. Sonst (SQLite
+      oder der PostgreSQL-Dienst `db`, deploy/server/README.md): Datenbank liegt auf dem
+      Server, kein weiterer Auftragsverarbeiter.
 - [ ] **Server-Logs:** nginx protokolliert gekürzte IP-Adressen, Zeit, Pfad ohne Parameter,
       Status, Größe, Antwortzeit, User-Agent; Caddy schreibt kein Zugriffsprotokoll, aber
       Fehlermeldungen mit vollständigen IPs. Docker behält je Dienst höchstens 3 × 10 MB

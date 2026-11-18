@@ -72,7 +72,7 @@ export const en: LandingContent = {
       },
       {
         term: 'Where the data lives',
-        html: 'In Europe. The application, uploaded files and training results are on a server in Switzerland, and trainings run there. Accounts and project metadata are in a database in London (United Kingdom). No cookies, no tracking. <a href="#privacy">Data in Europe</a> has the details.',
+        html: 'In Europe. The application, uploaded files and training results are on a server in Switzerland, and trainings run there. Accounts and project metadata are in a database on the same server. No cookies, no tracking. <a href="#privacy">Data in Europe</a> has the details.',
       },
       {
         term: 'Source code',
@@ -240,8 +240,8 @@ export const en: LandingContent = {
         html: 'The application, uploaded files, prepared datasets, trained weights and training results are on a server of Infomaniak in Geneva, Switzerland. Trainings run there; your data does not leave the server for them. The EU recognises Switzerland’s level of data protection as adequate (Art. 45 GDPR).',
       },
       {
-        title: 'Database in London',
-        html: 'Accounts, networks, comments and the details of data and trainings (not the files) are in a PostgreSQL database of Supabase in London, United Kingdom, which also has an adequacy decision of the EU.',
+        title: 'Database on the same server',
+        html: 'Accounts, networks, comments and the details of data and trainings (not the files) are in a PostgreSQL database on the same server in Switzerland; no other provider is involved.',
       },
       {
         title: 'Export and deletion',
@@ -267,7 +267,7 @@ export const en: LandingContent = {
     items: [
       'A free plan with training on the server; no account is needed to build networks and export code.',
       'Exported PyTorch and scikit-learn code runs without Brick DNN, so course material and published results stay usable.',
-      'Data stays in Europe, on servers in Switzerland and in the United Kingdom, without tracking.',
+      'Data stays in Europe, on a server in Switzerland, without tracking.',
       'Open source: a university or institute can run its own instance.',
     ],
     discount: `Discounts for teaching and research are available on request: ${mail}.`,
@@ -316,7 +316,7 @@ export const en: LandingContent = {
       },
       {
         question: 'Where is my data stored and processed?',
-        html: 'In Europe. Uploaded files, trained weights and training results are stored and processed on a server of Infomaniak in Switzerland. Accounts and project metadata are in a database of Supabase in London. There are no cookies and no tracking; the privacy policy lists every provider.',
+        html: 'In Europe. Uploaded files, trained weights and training results are stored and processed on a server of Infomaniak in Switzerland. Accounts and project metadata are in a database on the same server. There are no cookies and no tracking; the privacy policy lists every provider.',
       },
       {
         question: 'Can I train deep-learning models GDPR-compliant with Brick DNN?',

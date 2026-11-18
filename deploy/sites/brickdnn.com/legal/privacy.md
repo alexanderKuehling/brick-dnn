@@ -17,14 +17,14 @@ Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammens
 
 - Es gibt **kein Tracking**, keine Analyse- oder Werbedienste, keine Cookies für die App und keine eingebundenen Inhalte anderer Anbieter (Schriften, Skripte usw. kommen von diesem Server). Einzige Ausnahme: der Bezahlvorgang des Zahlungsanbieters Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10). Technische Fehlerberichte gehen ohne Angaben zu Ihrer Person an den Dienst Sentry (Abschnitt 4).
 - E-Mails versendet die App nur zu Ihrem Konto (z. B. zum Bestätigen Ihrer Adresse oder Zurücksetzen des Passworts), keine Werbung und keine Newsletter (Abschnitt 5).
-- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server, die Datenbank, das E-Mail-Postfach, den E-Mail-Versand bzw. die Fehlerüberwachung für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
+- Ihre Daten werden **nicht verkauft** und nur an die unten genannten Dienstleister weitergegeben, die den Server mit der Datenbank, das E-Mail-Postfach, den E-Mail-Versand bzw. die Fehlerüberwachung für mich betreiben, sowie an Paddle, wenn Sie ein kostenpflichtiges Abo abschließen (Abschnitt 10).
 - Links zu anderen Seiten (z. B. GitHub oder „Buy me a coffee“) werden erst geladen, wenn Sie sie anklicken; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
 
 ## 3. Hosting
 
 **Server:** Die App läuft auf einem Server der Infomaniak Network SA, Rue Eugène-Marziano 25, 1227 Les Acacias (Genf), Schweiz, in einem Rechenzentrum in der Schweiz. Dort liegen auch alle hochgeladenen Dateien und Trainingsergebnisse. Mit Infomaniak besteht ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO. Für die Schweiz hat die EU-Kommission festgestellt, dass dort ein angemessenes Datenschutzniveau besteht (Angemessenheitsbeschluss, Art. 45 DSGVO).
 
-**Datenbank:** Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank des Anbieters Supabase Inc., in der Region London (Vereinigtes Königreich). Mit Supabase besteht ein Vertrag zur Auftragsverarbeitung (Data Processing Addendum) nach Art. 28 DSGVO. Für das Vereinigte Königreich hat die EU-Kommission festgestellt, dass dort ein angemessenes Datenschutzniveau besteht (Angemessenheitsbeschluss, Art. 45 DSGVO). Soweit Supabase oder seine Unterauftragnehmer Daten in andere Drittländer, etwa die USA, übermitteln, geschieht das auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO), die Teil dieses Vertrags sind.
+**Datenbank:** Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank, die auf demselben Server bei Infomaniak in der Schweiz läuft; ein weiterer Anbieter ist daran nicht beteiligt. Es gelten derselbe Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO und derselbe Angemessenheitsbeschluss für die Schweiz (Art. 45 DSGVO) wie für den Server.
 
 Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Dienstes) und lit. f (berechtigtes Interesse an einem sicheren, zuverlässigen Betrieb).
 
@@ -121,7 +121,7 @@ Zweck: Abschluss und Durchführung des Abos, Zuordnung des Tarifs zu Ihrem Konto
 - **Logins** (Erneuerungs-Token) verfallen nach 7 Tagen ohne Nutzung und werden danach gelöscht.
 - **Protokoll der Agentenaktionen** (Abschnitt 9): nach 90 Tagen.
 - **Server-Logs:** siehe Abschnitt 4.
-- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank und der Dateien enthalten sein, bis diese turnusmäßig gelöscht werden: die täglichen Sicherungen auf dem Server nach 7 Tagen, die wöchentlichen nach spätestens 5 Wochen; Sicherungen des Hosters bzw. der Datenbank nach dessen Fristen (in der Regel 7 Tage).
+- **Sicherungen:** Gelöschte Daten können noch in Sicherungskopien der Datenbank und der Dateien enthalten sein, bis diese turnusmäßig gelöscht werden: die stündlichen Sicherungen der Datenbank auf dem Server nach 24 Stunden, die täglichen nach 7 Tagen, die wöchentlichen nach spätestens 5 Wochen; die Kopien dieser Sicherungen im Dienst Swiss Backup von Infomaniak in der Schweiz nach spätestens 35 Tagen; Sicherungen des Hosters nach dessen Fristen (in der Regel 7 Tage).
 
 ## 12. Ihre Rechte
 

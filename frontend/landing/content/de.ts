@@ -77,7 +77,7 @@ export const de: LandingContent = {
       },
       {
         term: 'Wo die Daten liegen',
-        html: 'In Europa. Die Anwendung, hochgeladene Dateien und Trainingsergebnisse liegen auf einem Server in der Schweiz, und dort laufen auch die Trainings. Konten und Projektangaben liegen in einer Datenbank in London (Vereinigtes Königreich). Keine Cookies, kein Tracking. Einzelheiten unter <a href="#privacy">Daten in Europa</a>.',
+        html: 'In Europa. Die Anwendung, hochgeladene Dateien und Trainingsergebnisse liegen auf einem Server in der Schweiz, und dort laufen auch die Trainings. Konten und Projektangaben liegen in einer Datenbank auf demselben Server. Keine Cookies, kein Tracking. Einzelheiten unter <a href="#privacy">Daten in Europa</a>.',
       },
       {
         term: 'Quellcode',
@@ -246,8 +246,8 @@ export const de: LandingContent = {
         html: 'Die Anwendung, hochgeladene Dateien, aufbereitete Datensätze, trainierte Gewichte und Trainingsergebnisse liegen auf einem Server von Infomaniak in Genf, Schweiz. Dort laufen auch die Trainings; Ihre Daten verlassen den Server dafür nicht. Für die Schweiz hat die EU ein angemessenes Datenschutzniveau festgestellt (Art. 45 DSGVO).',
       },
       {
-        title: 'Datenbank in London',
-        html: 'Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank von Supabase in London, Vereinigtes Königreich. Auch dafür gibt es einen Angemessenheitsbeschluss der EU.',
+        title: 'Datenbank auf demselben Server',
+        html: 'Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank auf demselben Server in der Schweiz; ein weiterer Anbieter ist nicht beteiligt.',
       },
       {
         title: 'Export und Löschung',
@@ -273,7 +273,7 @@ export const de: LandingContent = {
     items: [
       'Ein kostenloser Tarif mit Training auf dem Server; zum Bauen von Netzen und für den Code-Export braucht niemand ein Konto.',
       'Der exportierte PyTorch- und scikit-learn-Code läuft ohne Brick DNN. Kursmaterial und veröffentlichte Ergebnisse bleiben so nutzbar.',
-      'Die Daten bleiben in Europa, auf Servern in der Schweiz und im Vereinigten Königreich, ohne Tracking.',
+      'Die Daten bleiben in Europa, auf einem Server in der Schweiz, ohne Tracking.',
       'Open Source: Hochschulen und Institute können eine eigene Instanz betreiben.',
     ],
     discount: `Für Lehre und Forschung gibt es auf Anfrage einen Rabatt: ${mail}.`,
@@ -322,7 +322,7 @@ export const de: LandingContent = {
       },
       {
         question: 'Wo werden meine Daten gespeichert und verarbeitet?',
-        html: 'In Europa. Hochgeladene Dateien, trainierte Gewichte und Trainingsergebnisse werden auf einem Server von Infomaniak in der Schweiz gespeichert und verarbeitet. Konten und Projektangaben liegen in einer Datenbank von Supabase in London. Es gibt keine Cookies und kein Tracking; die Datenschutzerklärung nennt alle Dienstleister.',
+        html: 'In Europa. Hochgeladene Dateien, trainierte Gewichte und Trainingsergebnisse werden auf einem Server von Infomaniak in der Schweiz gespeichert und verarbeitet. Konten und Projektangaben liegen in einer Datenbank auf demselben Server. Es gibt keine Cookies und kein Tracking; die Datenschutzerklärung nennt alle Dienstleister.',
       },
       {
         question: 'Kann ich mit Brick DNN Deep-Learning-Modelle DSGVO-konform trainieren?',

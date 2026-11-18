@@ -386,7 +386,7 @@ const guides: Guide[] = [
         title: 'Was brickdnn.com wo speichert',
         html: `<p>Wenn Sie auf brickdnn.com trainieren, werden Ihre Daten hier gespeichert und verarbeitet. Die <a href="/privacy">Datenschutzerklärung</a> nennt alles mit Zwecken und Speicherfristen.</p><div class="table" role="region" aria-labelledby="wo-caption" tabindex="0"><table><caption id="wo-caption">Wo brickdnn.com Daten speichert und verarbeitet</caption><thead><tr><th scope="col">Daten</th><th scope="col">Wo</th><th scope="col">Anbieter</th></tr></thead><tbody>
 <tr><th scope="row">Hochgeladene Dateien, aufbereitete Datensätze, trainierte Gewichte, Trainingsergebnisse</th><td>Server in Genf, Schweiz; dort laufen auch die Trainings</td><td>Infomaniak</td></tr>
-<tr><th scope="row">Konten, Netze, Kommentare, die Angaben zu Daten und Trainings (nicht die Dateien)</th><td>Datenbank in London, Vereinigtes Königreich</td><td>Supabase</td></tr>
+<tr><th scope="row">Konten, Netze, Kommentare, die Angaben zu Daten und Trainings (nicht die Dateien)</th><td>Datenbank auf demselben Server in Genf, Schweiz</td><td>Infomaniak</td></tr>
 <tr><th scope="row">Technische Fehlerberichte, ohne Benutzername, E-Mail-Adresse, Kontokennung oder hochgeladene Dateien</th><td>EU-Region in Frankfurt am Main</td><td>Sentry</td></tr>
 <tr><th scope="row">E-Mails zu Ihrem Konto</th><td>EU</td><td>Brevo</td></tr>
 <tr><th scope="row">Zahlung, nur wenn Sie einen Tarif buchen</th><td>Vereinigtes Königreich</td><td>Paddle</td></tr>

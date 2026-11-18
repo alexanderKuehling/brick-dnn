@@ -27,7 +27,7 @@ Brick DNN ist ein Werkzeug, mit dem Sie neuronale Netze aus Bausteinen zusammens
 
 [Nur wenn Sie Supabase nutzen:] **Datenbank:** Konten, Netze, Kommentare und die Angaben zu Daten und Trainings (nicht die Dateien selbst) liegen in einer PostgreSQL-Datenbank bei Supabase ([Anbieter und Anschrift laut Supabase-DPA]), Region [z. B. EU Central (Frankfurt)]. Mit Supabase besteht ein Vertrag zur Auftragsverarbeitung (DPA). [Prüfen und beschreiben: Ob Daten in ein Drittland (z. B. USA) übermittelt werden können und auf welcher Grundlage, z. B. EU-Standardvertragsklauseln oder EU-US Data Privacy Framework.]
 
-[Ohne Supabase:] Die Datenbank liegt auf demselben Server bei Hetzner.
+[Ohne Supabase, d. h. mit SQLite oder dem PostgreSQL-Dienst auf dem Server:] Die Datenbank liegt auf demselben Server bei Hetzner; für sie gilt derselbe Vertrag zur Auftragsverarbeitung.
 
 Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Dienstes) und lit. f (berechtigtes Interesse an einem sicheren, zuverlässigen Betrieb).
 
