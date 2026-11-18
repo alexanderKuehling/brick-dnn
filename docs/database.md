@@ -39,6 +39,24 @@ the file. The test suite ignores `.env`.
 - PostgreSQL 14 or newer is needed (Django 5.2). The driver (`psycopg`) is part of
   `requirements.txt`.
 
+## PostgreSQL in Docker Compose
+
+`docker-compose.yml` has a PostgreSQL 17 service, `db`, that is off by default. Three lines in
+`.env` switch it on and make Brick DNN use it:
+
+```bash
+COMPOSE_PROFILES=postgres
+BRICKDNN_POSTGRES_PASSWORD=…   # openssl rand -hex 32
+DATABASE_URL=postgresql://brickdnn:…@db:5432/brickdnn   # the same password
+```
+
+`docker compose up -d` then starts it before the backend, which creates the tables. The first
+start creates the role `brickdnn` (owner of the database `brickdnn`, no superuser) with that
+password; the data is in the volume `brickdnn-db`. The service has no port on the host: only
+the app's containers reach it. The backend image has `pg_dump` 17, so backups are native
+dumps. Running it on a public server, its memory and moving an existing database onto it:
+[deploy/server/README.md](../deploy/server/README.md#the-postgresql-service).
+
 ## Supabase
 
 1. Create a project on [supabase.com](https://supabase.com) and keep the database password.
@@ -124,6 +142,33 @@ rm data/move.json
 Everyone has to log in once more (login tokens are not moved). The files in
 `BRICKDNN_DATA_DIR` stay where they are and keep working, so run the new setup with the same
 data directory.
+
+## Moving between PostgreSQL databases
+
+`manage.py move_database` copies Brick DNN's tables from one PostgreSQL database into another,
+empty one (Supabase to the `db` service, or the other way round) and verifies the copy:
+
+```bash
+export TARGET_URL='postgresql://…'
+.venv/bin/python manage.py move_database --to env:TARGET_URL --dry-run   # rehearse
+.venv/bin/python manage.py move_database --to env:TARGET_URL             # with the app stopped
+```
+
+- `--from` is the source (default: `env:DATABASE_URL`, the app's database), `--to` the target;
+  both take a URL or `env:NAME` for a URL in the environment variable `NAME`. The source is
+  only read.
+- It dumps only Django's tables of the source's schema with `pg_dump` (without owners and
+  privileges, so nothing of Supabase's roles or grants), restores them in one transaction,
+  moves the sequences past the highest id, switches row level security off (on Supabase as the
+  target: the [Data API protection](#the-supabase-data-api)) and runs `ANALYZE`.
+- It then compares every table (rows and a checksum of all rows), the sequences and
+  `migrate --check`, and prints `RESULT: PASS` or `FAIL` (exit code 1). The source's numbers come
+  from the snapshot the dump used, so a rehearsal while the site runs compares like with like;
+  a real move also checks that the source did not change meanwhile.
+- `--dry-run` drops the copy afterwards (`--keep` leaves it); a target that is not empty is
+  refused unless `--replace` (drops its tables after asking); `--dump-file` keeps the dump.
+- It needs `pg_dump` and `pg_restore` at least of the source's version (the Docker image has
+  17) and a target that is not older than the source.
 
 ## Running the tests on PostgreSQL
 

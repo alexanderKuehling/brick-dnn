@@ -246,12 +246,16 @@ HEALTH_MIN_FREE_MB = int(os.environ.get("BRICKDNN_HEALTH_MIN_FREE_MB") or 1024)
 HEALTH_TOKEN = os.environ.get("BRICKDNN_HEALTH_TOKEN", "").strip()
 # Backups with `manage.py backup` (brick_dnn_core.backups; the cleanup service of Docker Compose
 # runs it daily): off unless BRICKDNN_BACKUP_DIR names a folder. Keeps the newest backup of each
-# of the last KEEP_DAILY days and KEEP_WEEKLY weeks. FILES: "archive" (a tarball of the data
+# of the last KEEP_DAILY days and KEEP_WEEKLY weeks. KEEP_HOURLY above 0 adds hourly backups of
+# the database alone (`manage.py backup --hourly`, also run by the cleanup service) and keeps
+# the newest of each of the last KEEP_HOURLY hours. FILES: "archive" (a tarball of the data
 # directory, or a list if it is larger than MAX_FILES_MB), "list" or "none". /api/health/
-# reports "degraded" when the newest backup is older than MAX_AGE_HOURS or the last one failed.
+# reports "degraded" when the newest daily backup is older than MAX_AGE_HOURS (with hourly ones,
+# also when the newest backup is older than 3 hours) or the last one failed.
 BACKUP_DIR = os.environ.get("BRICKDNN_BACKUP_DIR", "").strip()
 BACKUP_KEEP_DAILY = max(1, int(os.environ.get("BRICKDNN_BACKUP_KEEP_DAILY") or 7))
 BACKUP_KEEP_WEEKLY = max(0, int(os.environ.get("BRICKDNN_BACKUP_KEEP_WEEKLY") or 4))
+BACKUP_KEEP_HOURLY = max(0, int(os.environ.get("BRICKDNN_BACKUP_KEEP_HOURLY") or 0))
 BACKUP_FILES = os.environ.get("BRICKDNN_BACKUP_FILES", "").strip().lower() or "archive"
 BACKUP_MAX_FILES_MB = int(os.environ.get("BRICKDNN_BACKUP_MAX_FILES_MB") or 2048)
 BACKUP_MAX_AGE_HOURS = float(os.environ.get("BRICKDNN_BACKUP_MAX_AGE_HOURS") or 50)

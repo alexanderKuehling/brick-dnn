@@ -88,7 +88,8 @@ DJANGO_ALLOWED_HOSTS=$DOMAIN
 DJANGO_CSRF_TRUSTED_ORIGINS=https://$DOMAIN
 # PyTorch (CPU) in the image: training works on this server.
 BRICKDNN_INSTALL_TORCH=true
-# The database: without this line SQLite in the Docker volume. Supabase: docs/database.md
+# The database: without this line SQLite in the Docker volume. PostgreSQL on this server:
+# deploy/server/README.md, "The PostgreSQL service". Supabase: docs/database.md
 # DATABASE_URL=postgresql://…
 EOF
   chown deploy:deploy "$APP/.env"

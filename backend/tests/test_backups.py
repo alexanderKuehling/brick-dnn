@@ -237,3 +237,125 @@ def test_restore_refuses_a_backup_of_another_database(tmp_path, settings):
         pytest.skip("the other way round needs SQLite")
     with pytest.raises(backups.BackupError, match="needs a PostgreSQL database"):
         backups.restore_database(backup)
+
+
+# --------------------------------------------------------------------------- #
+# Hourly backups (the database only)
+# --------------------------------------------------------------------------- #
+
+
+def fake_hourly(when: datetime, tmp_path: Path) -> backups.Backup:
+    name = backups.PREFIX + when.strftime(backups.STAMP) + "-hourly"
+    return backups.Backup(tmp_path / name, when)
+
+
+def test_rotation_keeps_hourly_backups_and_the_daily_ones(tmp_path):
+    start = datetime(2026, 3, 2, 0, 30, tzinfo=UTC)  # a Monday
+    hourly = [fake_hourly(start + timedelta(hours=h), tmp_path) for h in range(24 * 5)]
+    # The daily backup (with the files) at 03:10, between two hourly ones.
+    daily = [fake(start + timedelta(days=d, hours=2, minutes=40), tmp_path) for d in range(5)]
+    everything = [*hourly, *daily]
+    assert {b.kind for b in hourly} == {"hourly"} and {b.kind for b in daily} == {"daily"}
+
+    deleted = {b.path for b in backups.to_delete(everything, daily=3, weekly=1, hourly=24)}
+    kept = [b for b in everything if b.path not in deleted]
+    # The last 24 hours, hour by hour (in the hour of a daily backup the newer hourly one).
+    newest = hourly[-1].created
+    recent = [b for b in kept if newest - b.created < timedelta(hours=24)]
+    assert {b.path for b in hourly[-24:]} <= {b.path for b in recent}
+    # The days before: the daily backup of each day, never an hourly one in its place.
+    older = sorted(
+        (b for b in kept if newest - b.created >= timedelta(hours=24)), key=lambda b: b.created
+    )
+    assert [b.kind for b in older] == ["daily", "daily"]
+    assert [b.created.date() for b in older] == [daily[2].created.date(), daily[3].created.date()]
+    # The daily backup of today counts as today's.
+    assert daily[-1] in kept
+    # Without hourly ones to keep, the hourly backups go except the newest.
+    deleted = {b.path for b in backups.to_delete(everything, daily=3, weekly=1)}
+    assert [b for b in hourly if b.path not in deleted] == [hourly[-1]]
+
+
+def test_a_day_with_only_hourly_backups_keeps_its_newest(tmp_path):
+    start = datetime(2026, 3, 2, 0, 15, tzinfo=UTC)
+    hourly = [fake_hourly(start + timedelta(hours=h), tmp_path) for h in range(48)]
+    deleted = {b.path for b in backups.to_delete(hourly, daily=2, weekly=0, hourly=3)}
+    kept = sorted((b for b in hourly if b.path not in deleted), key=lambda b: b.created)
+    # The newest of yesterday (23:15) and the last three hours.
+    assert kept == [hourly[23], *hourly[-3:]]
+
+
+@pytest.mark.django_db
+def test_hourly_backups_hold_the_database_only(data, settings):
+    assert "Hourly backups are off" in run("backup", "--hourly")
+    assert not Path(settings.BACKUP_DIR).exists()
+
+    settings.BACKUP_KEEP_HOURLY = 24
+    with pytest.raises(CommandError, match="leave out --files"):
+        run("backup", "--hourly", "--files", "archive")
+    output = run("backup", "--hourly", "--database-format", "json")
+    assert "Backup brickdnn-" in output and "-hourly: hourly" in output
+    [backup] = backups.list_backups(Path(settings.BACKUP_DIR))
+    assert backup.kind == "hourly" and backup.name.endswith("-hourly")
+    manifest = backup.manifest()
+    assert manifest["kind"] == "hourly"
+    assert manifest["files"] == {"mode": "none"}
+    assert sorted(p.name for p in backup.path.iterdir()) == ["database.json.gz", "manifest.json"]
+    # Its own status: a failed hourly backup does not hide (or fake) the daily one's.
+    assert (Path(settings.BACKUP_DIR) / backups.HOURLY_STATUS_FILE).is_file()
+    assert not (Path(settings.BACKUP_DIR) / backups.STATUS_FILE).exists()
+
+    assert "hourly" in run("backup", "--list")
+    # The daily backup in the same hour has the database too: the hourly one goes.
+    run("backup", "--database-format", "json")
+    assert [b.kind for b in backups.list_backups(Path(settings.BACKUP_DIR))] == ["daily"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_restore_from_an_hourly_backup(data, settings):
+    settings.BACKUP_KEEP_HOURLY = 24
+    ada = User.objects.create_user("ada", password="correct-horse")
+    Project.objects.create(owner=ada, name="mlp")
+    run("backup", "--hourly")
+    Project.objects.all().delete()
+    User.objects.create_user("eve")
+
+    output = run("restore", "latest", "--no-input")
+    assert "has no copy of the files" in output
+    assert names() == ["ada"]
+    assert Project.objects.get().name == "mlp"
+    User.objects.create_user("bob")  # the ids go on after the restored rows
+
+
+@pytest.mark.django_db
+def test_health_with_hourly_backups(data, settings, monkeypatch):
+    settings.TRAINING_WORKER = False
+    settings.BACKUP_KEEP_HOURLY = 24
+    client = APIClient()
+    run("backup", "--database-format", "json")
+    run("backup", "--hourly", "--database-format", "json")
+    response = client.get("/api/health/")
+    assert response.data["checks"]["backup"] == "ok"
+
+    def broken(*args, **kwargs):
+        raise backups.BackupError("disk full")
+
+    monkeypatch.setattr(backups, "dump_database", broken)
+    with pytest.raises(CommandError, match="disk full"):
+        run("backup", "--hourly", "--database-format", "json")
+    assert client.get("/api/health/").data["checks"]["backup"] == "failed"
+    monkeypatch.undo()
+
+    # Hourly backups that stopped three hours ago fail the check, though the daily one is fine.
+    directory = Path(settings.BACKUP_DIR)
+    for backup in backups.list_backups(directory):
+        import shutil
+
+        shutil.rmtree(backup.path)
+    backups.create(directory, database="json", now=datetime.now(UTC) - timedelta(hours=4))
+    backups.create(
+        directory, kind="hourly", database="json", now=datetime.now(UTC) - timedelta(hours=4)
+    )
+    assert backups.health()[0] is False
+    settings.BACKUP_KEEP_HOURLY = 0  # hourly backups switched off: only the daily one counts
+    assert backups.health()[0] is True

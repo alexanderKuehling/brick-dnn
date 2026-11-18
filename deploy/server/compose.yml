@@ -76,6 +76,18 @@ services:
     mem_limit: 64m
     memswap_limit: 64m
 
+  # PostgreSQL on this server (only with COMPOSE_PROFILES=postgres in .env, see README.md,
+  # "The PostgreSQL service"). Like the backend it gets the CPU before the trainings when both
+  # want it, and it is among the last to be killed when the server runs out of memory: every
+  # request needs it. The defaults fit brickdnn.com's 16 GB (shared_buffers 512 MB); on a
+  # server with 4 GB use BRICKDNN_DB_SHARED_BUFFERS=128MB and BRICKDNN_DB_MEMORY=512m.
+  db:
+    cpus: ${BRICKDNN_DB_CPUS:-1.0}
+    cpu_shares: 2048
+    mem_limit: ${BRICKDNN_DB_MEMORY:-1536m}
+    memswap_limit: ${BRICKDNN_DB_MEMORY:-1536m}
+    oom_score_adj: -500
+
   # Deletes old data once a day (docs/privacy.md); sleeps in between.
   cleanup:
     environment:

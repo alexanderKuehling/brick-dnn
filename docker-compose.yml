@@ -45,12 +45,14 @@ x-training: &training
   BRICKDNN_SEGMENTATION_MEMORY_MB: ${BRICKDNN_SEGMENTATION_MEMORY_MB:-}
 
 # Backups (deploy/server/README.md, "Backups"): the cleanup service runs `manage.py backup`
-# once a day if BRICKDNN_BACKUP_DIR is set (e.g. /data/backups, in the data volume); the
+# once a day if BRICKDNN_BACKUP_DIR is set (e.g. /data/backups, in the data volume), and with
+# BRICKDNN_BACKUP_KEEP_HOURLY above 0 a backup of the database alone every hour in between; the
 # backend reports a failed or old backup in /api/health/.
 x-backup: &backup
   BRICKDNN_BACKUP_DIR: ${BRICKDNN_BACKUP_DIR:-}
   BRICKDNN_BACKUP_KEEP_DAILY: ${BRICKDNN_BACKUP_KEEP_DAILY:-}
   BRICKDNN_BACKUP_KEEP_WEEKLY: ${BRICKDNN_BACKUP_KEEP_WEEKLY:-}
+  BRICKDNN_BACKUP_KEEP_HOURLY: ${BRICKDNN_BACKUP_KEEP_HOURLY:-}
   BRICKDNN_BACKUP_FILES: ${BRICKDNN_BACKUP_FILES:-}
   BRICKDNN_BACKUP_MAX_FILES_MB: ${BRICKDNN_BACKUP_MAX_FILES_MB:-}
   BRICKDNN_BACKUP_MAX_AGE_HOURS: ${BRICKDNN_BACKUP_MAX_AGE_HOURS:-}
@@ -98,6 +100,12 @@ x-sentry: &sentry
   BRICKDNN_SENTRY_RELEASE: ${BRICKDNN_SENTRY_RELEASE:-}
   BRICKDNN_SENTRY_TRACES_SAMPLE_RATE: ${BRICKDNN_SENTRY_TRACES_SAMPLE_RATE:-}
 
+# The services that use the database wait for the db service when it runs: only with
+# COMPOSE_PROFILES=postgres (below); without it (SQLite, Supabase) the dependency is skipped.
+x-db-dependency: &db-dependency
+  condition: service_healthy
+  required: false
+
 services:
   backend:
     build:
@@ -141,8 +149,11 @@ services:
       BRICKDNN_HEALTH_TOKEN: ${BRICKDNN_HEALTH_TOKEN:-}
     volumes:
       - brickdnn-data:/data
+    networks: [default, database]
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      db: *db-dependency
     logging: *logging
     restart: unless-stopped
 
@@ -169,8 +180,11 @@ services:
       BRICKDNN_WORKER_SLOTS: ${BRICKDNN_WORKER_SLOTS:-${BRICKDNN_TRAINING_MAX_RUNS:-}}
     volumes:
       - brickdnn-data:/data
+    networks: [default, database]
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      db: *db-dependency
     healthcheck:
       # The worker touches this file in every round (every two seconds).
       test:
@@ -208,9 +222,13 @@ services:
     volumes:
       # The data volume holds the SQLite database and the generated secret key.
       - brickdnn-data:/data
+    networks: [default, database]
     depends_on:
-      - backend
-      - redis
+      backend:
+        condition: service_started
+      redis:
+        condition: service_started
+      db: *db-dependency
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 2)"]
       interval: 30s
@@ -221,9 +239,11 @@ services:
   # Once a day: deletes old data if BRICKDNN_DELETE_* is set (with e-mail, after warning the
   # owners of inactive accounts), and expired logins; with paid plans (docs/billing.md) it also
   # checks the subscriptions and bills overage, and with BRICKDNN_BACKUP_DIR it makes a backup
-  # (manage.py backup) after both. The same
-  # image; it sleeps most of the time. The first run is ten minutes after a start (the backend
-  # migrates the database first). `docker compose logs cleanup` shows what it did.
+  # (manage.py backup) after both. In the 23 hours in between, `manage.py backup --hourly`
+  # backs up the database alone if BRICKDNN_BACKUP_KEEP_HOURLY is above 0 (else it does
+  # nothing). The same image; it sleeps most of the time. The first run is ten minutes after a
+  # start (the backend migrates the database first). `docker compose logs cleanup` shows what it
+  # did.
   cleanup:
     image: brick-dnn-backend:local
     pull_policy: never
@@ -232,17 +252,70 @@ services:
     command:
       - sh
       - -c
-      - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; python manage.py backup; sleep 86400; done"
+      - "sleep 600; while true; do python manage.py purge_old_data; python manage.py billing_sync; python manage.py backup; for hour in $$(seq 23); do sleep 3600; python manage.py backup --hourly; done; sleep 3600; done"
     environment:
       <<: [*retention, *budgets, *paddle, *email, *backup, *sentry]
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       - brickdnn-data:/data
+    networks: [default, database]
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      db: *db-dependency
     healthcheck:
       disable: true
+    logging: *logging
+    restart: unless-stopped
+
+  # PostgreSQL on this machine, for a server that keeps its database itself (deploy/server/
+  # README.md, "The PostgreSQL service"). Off unless COMPOSE_PROFILES in .env names "postgres";
+  # Brick DNN uses it once DATABASE_URL is
+  #   postgresql://brickdnn:<BRICKDNN_POSTGRES_PASSWORD>@db:5432/brickdnn
+  # The first start creates the role and the database "brickdnn" (deploy/postgres/init.sh). The
+  # data is in the volume brickdnn-db. No port on the host: only the services on the internal
+  # network "database" reach it, and it reaches nothing outside. The major version (17) stays:
+  # a newer one needs a dump and restore (and pg_dump of that version in the backend image, for
+  # the backups); minor updates only need a new tag.
+  db:
+    image: postgres:17.12-trixie
+    profiles: [postgres]
+    environment:
+      # The superuser's password for the first start; init.sh gives it to the role brickdnn and
+      # takes it from the superuser. Empty: the db service refuses to start.
+      POSTGRES_PASSWORD: ${BRICKDNN_POSTGRES_PASSWORD:-}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    # Memory: shared_buffers plus a few MB per connection (about a dozen: gunicorn, Daphne,
+    # worker, cleanup). deploy/server/compose.yml limits the container to BRICKDNN_DB_MEMORY.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${BRICKDNN_DB_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${BRICKDNN_DB_CACHE_SIZE:-2GB}
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+    # Parallel queries use /dev/shm; Docker's default of 64 MB is too small for them.
+    shm_size: 256m
+    volumes:
+      - brickdnn-db:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/brickdnn.sh:ro
+    networks: [database]
+    healthcheck:
+      # Over TCP: while the first start creates the database, the server listens on its socket
+      # only, so the app waits until it is done.
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=brickdnn", "--dbname=brickdnn"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    # A fast shutdown (the image stops with SIGINT) ends with a checkpoint.
+    stop_grace_period: 60s
     logging: *logging
     restart: unless-stopped
 
@@ -278,5 +351,14 @@ secrets:
   sentry_auth_token:
     environment: SENTRY_AUTH_TOKEN
 
+networks:
+  default:
+  # Between the services that use the database and the db service only; internal: no traffic
+  # to or from outside Docker on it (the services reach the internet through "default").
+  database:
+    internal: true
+
 volumes:
   brickdnn-data:
+  # PostgreSQL's data directory (db service, profile "postgres").
+  brickdnn-db:
