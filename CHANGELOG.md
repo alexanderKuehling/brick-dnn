@@ -38,6 +38,26 @@
   hours; the daily and hourly runs keep separate status files. The server README has an
   hourly `rclone` line that keeps hourly backups offsite for three days and leaves unfinished
   backups out, and a restore drill for `pg_dump` backups on the `db` service.
+- **Built-in text datasets: Sentiment, Key lookup and Topics.** Generated on the server
+  like Shapes and Cells (nothing to upload or download, the same on every machine), as
+  token ids for networks with an Input of data type `long` and an Embedding layer, which
+  so far could only train on demo data. *Sentiment*: 6,000 + 1,000 short reviews (151
+  words, 24 tokens, positive/negative) where negations flip a word and after "but" the
+  second half decides. *Key lookup*: 12,000 + 2,000 sequences of eight key-value pairs
+  and a question (289 tokens, 10 per text, 10 classes). *Topics*: 3,000 + 1,000 texts
+  about science, sports, cooking or travel (161 words, 64 tokens, 4 classes). After ten
+  CPU epochs the Transformer example reaches about 98 %, 99 % and 98 % test accuracy;
+  an average of the word embeddings stays at 52 % on Sentiment and 33 % on Key lookup,
+  the LSTM example at 38 % on Key lookup. The check of the training explains the sequence
+  length, the vocabulary size of the Embedding and the classes and fixes them (the
+  Transformer example fits Topics as it is). Predictions take typed texts (or token
+  ids), tokenised with the vocabulary of the training, and show the words the network
+  read; the data picker shows test texts. The generated script of a network that fits a
+  dataset embeds its generator (`brickdnn/training/textsets.py`, standard library only)
+  and trains on it (`--train`, `--predict TEXT`). In the REST API, MCP
+  (`get_training_options`, `check_training`, `predict`, `generate_pytorch_code` with
+  `dataset`), the MCP instructions and on the command line (`brickdnn train --example
+  transformer_classifier --data topics`). See docs/training.md.
 - **Runs that ran elsewhere: logging from the exported script back into Brick DNN.** A
   training of the exported PyTorch script on the user's own machine or GPU logs its curves
   into a run of the new kind `external` (badge *ran elsewhere* in the runs table, the
@@ -433,6 +453,27 @@
   the charts and metrics.
 
 ### Changed
+- **A calmer Data tab and training panel.** Less on screen at once, clearer groups, fewer
+  standing hints. Data tab: *Target & split* folds to a one-line summary (target · task ·
+  split) once a target is chosen and opens by itself while none is set; seed, stratification
+  and groups are folded inside it; a step shows its column details and hints only when it is
+  open; the toolbar is one row with a single *Export* menu (create training dataset and the
+  three downloads) next to *Train with this data*, the table name as quiet text; *Import data*
+  is a light button, step status *OK* is grey (only failures are coloured), and the tab bar
+  no longer repeats the table size. Training panel: the settings are grouped under headings
+  (*Model and optimizer*, *Epochs and early stopping* with early stopping now always visible,
+  *Validation and test data*, *Search*) with device, weight decay, max. samples and seed under
+  the folded *Advanced settings*; *Start training* stays at the bottom of the panel while the
+  settings scroll. The run view reads top-down: status, metric tiles (quiet panels instead of
+  frames), *Training curves*, metrics, then *Model and files* with *Explain the model* among
+  the downloads. Explanations that are not always needed (the target column, keeping groups
+  together, the loss, early stopping, focal gamma, label smoothing, Huber's delta, the
+  two-phase training of hybrid networks, classical fits, the test set, the curves' loss, the
+  per-class metrics and the decision threshold) moved into small (i) popovers
+  (`components/InfoHint.tsx`, keyboard accessible); hints that restated a label were removed
+  and the rest shortened, and "based on all rows" notes appear only when a sample is used.
+  The decision threshold's slider now gives its value text on the slider thumb (axe flagged
+  `aria-valuetext` on an element without a role).
 - **brickdnn.com's pages put deep learning and data in Europe first.** Titles, meta
   descriptions, hero, section headings and FAQ of `/` and `/de/` now say what Brick DNN is for
   in the words people search with: deep learning, hosted in Switzerland, GDPR-compliant
@@ -993,6 +1034,10 @@
   without one keep working.
 
 ### Fixed
+- **Hybrid networks without validation data.** A hybrid training (neural layers before a
+  classical model or ensemble) with a validation share of 0 failed after phase 1 with
+  "cannot reshape tensor of 0 elements": an empty set of rows still gave one empty batch.
+  Empty sets now give no batches.
 - **Dataset list loading forever.** Opening the training panel from the Data tab ("Train with
   this data") could leave the list of datasets on a spinner: the request of the panel was
   dropped when training became available in the same moment, and no new one was made. The

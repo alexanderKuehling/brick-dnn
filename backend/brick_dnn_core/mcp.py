@@ -134,6 +134,15 @@ pixel, or black and white), uploaded with create_upload_link. The
 metrics are mean IoU, Dice and pixel accuracy; use a batch size of 4 to 16 (8 for the example); predict takes an
 image file as base64 (image) and returns the class map as a small PNG.
 
+Text (token ids): networks with an Input of data type long and an Embedding layer, e.g. the
+examples transformer_classifier and lstm_sentiment, train on the generated built-in text
+datasets sentiment (reviews with negations and "but": word order matters, 2 classes),
+lookup (key-value pairs and a question: needs attention, an average of the embeddings stays
+near chance; 10 classes) and topics (4 topics, easy). The Input shape must be the sequence
+length, the Embedding's num_embeddings the vocabulary size and the last layer one output
+per class (get_training_options lists them; the fixes of check_training set them). predict
+takes texts as strings (split into words, unknown words become <unk>) or token ids.
+
 Real tables usually need preparing first (missing values, categories, dates, outliers):
 import_data (the text of a CSV or JSON file, base64 for Excel or Parquet, or a public link),
 create_data_prep with the target column (the column to predict), then repeat
@@ -187,8 +196,9 @@ DATASET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
         'Which data to train on: {"kind": "builtin", "id": "mnist"} (or "shapes" or "cells" '
-        'for segmentation), {"kind": "upload", "id": 3} (one of the user\'s datasets) or '
-        '{"kind": "random"}. See get_training_options.'
+        'for segmentation, "sentiment", "lookup" or "topics" for texts), {"kind": "upload", '
+        '"id": 3} (one of the user\'s datasets) or {"kind": "random"}. See '
+        "get_training_options."
     ),
     "properties": {
         "kind": {"type": "string", "enum": ["builtin", "upload", "random"]},
@@ -349,7 +359,7 @@ def analyze_network(request: Request, args: dict[str, Any]) -> Any:
 def generate_pytorch_code(request: Request, args: dict[str, Any]) -> Any:
     options = {
         key: args[key]
-        for key in ("class_name", "include_main", "include_training", *LOSS_OPTIONS)
+        for key in ("class_name", "include_main", "include_training", "dataset", *LOSS_OPTIONS)
         if args.get(key) is not None
     }
     status_code, payload = service.generate({"graph": args["graph"], "options": options})
@@ -431,7 +441,12 @@ def get_training_options(request: Request, args: dict[str, Any]) -> Any:
         # refuses a start while it is busy.
         "queue": {k: v for k, v in queue.items() if v is not None} if queue else None,
         "devices": capabilities["devices"],
-        "builtin_datasets": capabilities["builtin_datasets"],
+        # Without the example texts of the text datasets (the web app's data picker shows
+        # them; the description has the format).
+        "builtin_datasets": [
+            {key: value for key, value in dataset.items() if key != "examples"}
+            for dataset in capabilities["builtin_datasets"]
+        ],
         # Your own datasets and the ones shared in your projects (see "owner" and "mine"),
         # without their columns (get_dataset).
         "your_datasets": [
@@ -1308,7 +1323,9 @@ TOOLS: dict[str, Tool] = {
             "temporary head, the feature extraction, make_model() and --predict with both "
             "saved files. loss (and class_weights, focal_gamma, label_smoothing, "
             "huber_delta, as in the training config) sets the loss of a network's CSV "
-            "training loop.",
+            "training loop. A network of token ids (Input dtype long, Embedding) that fits a "
+            "built-in text dataset gets its generator (standard library) and a training on "
+            "it instead (--train, --predict TEXT); dataset picks one.",
             generate_pytorch_code,
             {
                 "graph": GRAPH_SCHEMA,
@@ -1320,6 +1337,12 @@ TOOLS: dict[str, Tool] = {
                 "focal_gamma": {"type": "number"},
                 "label_smoothing": {"type": "number"},
                 "huber_delta": {"type": "number"},
+                "dataset": {
+                    "type": "string",
+                    "enum": ["sentiment", "lookup", "topics"],
+                    "description": "Networks of token ids: the built-in text dataset of the "
+                    "training code (default: the one the network fits)",
+                },
             },
             ("graph",),
         ),
@@ -2027,7 +2050,10 @@ TOOLS: dict[str, Tool] = {
             "inputs: an image file (PNG, JPEG …) as base64 text, converted and resized like "
             "the training images. Segmentation: per image the share of the pixels of every "
             "class and the predicted class map as a small PNG (mask_png, a data URL; mask "
-            "'rle' gives run-lengths instead, 'none' only the shares). Runs trained on demo "
+            "'rle' gives run-lengths instead, 'none' only the shares). Runs trained on a "
+            "built-in text dataset: one text per sample as a string (split into words and "
+            "looked up in the vocabulary of the training; unknown words become <unk>) or as a "
+            "list of token ids; the answer lists the tokens the network read. Runs trained on demo "
             "data take arrays of "
             "the Input shape as they are. get_weights_download describes a run's inputs.",
             predict,

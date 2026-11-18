@@ -182,9 +182,7 @@ describe('ReadinessPanel', () => {
   it('lists warnings and suggestions of the sanity checks with their kind and columns', () => {
     setup({ ...READY, issues: [...READY.issues, ...SANITY_ISSUES] });
     expect(
-      screen.getByText(
-        'The data can be used for training. Have a look at the 3 warnings and 4 suggestions below.'
-      )
+      screen.getByText('Have a look at the 3 warnings and 4 suggestions below.')
     ).toBeInTheDocument();
     const warnings = screen.getByRole('heading', { name: 'Worth a look' }).parentElement!;
     const leak = within(warnings).getAllByRole('listitem')[1];

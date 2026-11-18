@@ -64,21 +64,21 @@ describe('fixes', () => {
   });
 
   it('describes what changes', () => {
-    expect(describeFixes([INPUT_FIX], false)).toBe('Input set to 4 features');
-    expect(describeFixes([INPUT_FIX, OUTPUT_FIX], false)).toBe(
+    expect(describeFixes([INPUT_FIX], 'features')).toBe('Input set to 4 features');
+    expect(describeFixes([INPUT_FIX, OUTPUT_FIX], 'features')).toBe(
       'Input set to 4 features, last layer to 3 outputs'
     );
-    expect(describeFixes([OUTPUT_FIX], true)).toBe('Last layer set to 3 outputs');
-    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [3072] } }], true)).toBe(
+    expect(describeFixes([OUTPUT_FIX], 'images')).toBe('Last layer set to 3 outputs');
+    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [3072] } }], 'images')).toBe(
       'Input set to 3,072 values'
     );
-    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [1, 28, 28] } }], true)).toBe(
+    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [1, 28, 28] } }], 'images')).toBe(
       'Input set to 1×28×28'
     );
-    expect(describeFixes([{ ...OUTPUT_FIX, params: { out_features: 1 } }], false)).toBe(
+    expect(describeFixes([{ ...OUTPUT_FIX, params: { out_features: 1 } }], 'features')).toBe(
       'Last layer set to 1 output'
     );
-    expect(describeShape([1], false)).toBe('1 feature');
+    expect(describeShape([1], 'features')).toBe('1 feature');
   });
 
   it('compares parameters by value', () => {

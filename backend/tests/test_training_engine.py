@@ -398,7 +398,7 @@ def test_device_helpers():
 def test_incompatible_job_fails_with_first_error(tmp_path):
     result, _ = run_job(EXAMPLES["lstm_sentiment"]["graph"], builtin_info("mnist"), tmp_path)
     assert result.status == "failed"
-    assert "Text models can only be trained on demo data" in result.message
+    assert "Text models train on the built-in text datasets" in result.message
 
 
 def test_unexpected_errors_are_reported(tmp_path, monkeypatch, capsys):

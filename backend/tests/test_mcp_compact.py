@@ -144,10 +144,11 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
         "reference": {"kind": "upload", "id": dataset.pk},
     }
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
-    # Five built-in datasets with their class names (Cells, the fifth, adds about 500 bytes),
-    # the limits and the defaults, what a hyperparameter search can rank by and vary (about
-    # 1,800 bytes of it), and the losses per task with their settings (about 560 bytes).
-    assert sizes["get_training_options"] < 7700 < full
+    # Eight built-in datasets with their class names (Cells adds about 500 bytes, the three
+    # text datasets about 700 each, without their example texts), the limits and the
+    # defaults, what a hyperparameter search can rank by and vary (about 1,800 bytes of it),
+    # and the losses per task with their settings (about 560 bytes).
+    assert sizes["get_training_options"] < 9900 < full
     tuning = options["classical"]["tuning"]
     assert tuning["models"]["SVC"] == "C*, gamma*, kernel, class_weight"
     assert tuning["params"]["C"] == "number > 0, log; e.g. 0.1:100"

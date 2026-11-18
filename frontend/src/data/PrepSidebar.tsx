@@ -66,8 +66,14 @@ export function PrepSidebar(props: PrepSidebarProps) {
 
   return (
     <>
-      <Group p="sm" pb={4} wrap="nowrap">
-        <Button fullWidth leftSection={<IconFileImport size={16} />} onClick={props.onImport}>
+      <Group p="sm" pb="xs" wrap="nowrap">
+        {/* Light: the main action of the page is training with the open preparation. */}
+        <Button
+          fullWidth
+          variant="light"
+          leftSection={<IconFileImport size={16} />}
+          onClick={props.onImport}
+        >
           {i18n.t('ui.data.PrepSidebar.importData')}
         </Button>
       </Group>

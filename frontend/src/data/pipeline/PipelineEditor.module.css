@@ -10,6 +10,48 @@
   padding-top: 26px;
 }
 
+/* The heading of Target & split: a button that folds the card to its summary. */
+.cardToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  font: inherit;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.cardSummary {
+  margin: 2px 0 0 48px;
+  overflow-wrap: anywhere;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    margin-left: 0;
+  }
+}
+
+/* "More split options": a quiet toggle inside the card. */
+.moreToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding-right: 4px;
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
 /* ---- split bar ---------------------------------------------------------- */
 
 .splitBar {
@@ -61,7 +103,7 @@
 .stepList {
   display: flex;
   flex-direction: column;
-  gap: var(--mantine-spacing-xs);
+  gap: var(--mantine-spacing-sm);
   margin: 0;
   padding: 0;
   list-style: none;

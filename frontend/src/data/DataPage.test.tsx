@@ -211,6 +211,12 @@ afterEach(() => {
   window.matchMedia = originalMatchMedia;
 });
 
+/** "Create training dataset" is in the Export menu of the toolbar. */
+async function createDataset() {
+  await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+  await userEvent.click(await screen.findByRole('menuitem', { name: /^Create training dataset/ }));
+}
+
 describe('DataPage', () => {
   it('asks visitors to log in and brings them back afterwards', async () => {
     vi.mocked(useAuth).mockReturnValue({
@@ -671,7 +677,7 @@ describe('DataPage', () => {
     renderPage();
     await opened();
     const tab = screen.getByRole('tab', { name: 'Readiness, 4 problems' });
-    await userEvent.click(screen.getByRole('button', { name: 'Create training dataset' }));
+    await createDataset();
     expect(api.data.preps.export).not.toHaveBeenCalled();
     expect(tab).toHaveAttribute('aria-selected', 'true');
     expect(notifications.show).toHaveBeenCalledWith(
@@ -699,7 +705,7 @@ describe('DataPage', () => {
     vi.mocked(api.data.preps.export).mockResolvedValue(DATASET);
     renderPage();
     await opened();
-    await userEvent.click(screen.getByRole('button', { name: 'Create training dataset' }));
+    await createDataset();
     await waitFor(() => expect(api.data.preps.export).toHaveBeenCalledWith(10));
     expect(notifications.show).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Training dataset created', color: 'green' })
@@ -767,7 +773,7 @@ describe('DataPage', () => {
     vi.mocked(api.data.preps.download).mockResolvedValue({ blob, filename: null });
     renderPage();
     await opened();
-    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: /Python script \(\.py\)/ }));
     await waitFor(() =>
       expect(downloadBlob).toHaveBeenCalledWith('churn_model_data_prepare.py', blob)

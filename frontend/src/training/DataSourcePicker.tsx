@@ -115,6 +115,7 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
                     <Text size="xs" c="dimmed">
                       {builtinDetails(dataset)}
                     </Text>
+                    {dataset.id === choice.builtin && <TextExamples dataset={dataset} />}
                   </div>
                 </Group>
               </Radio.Card>
@@ -128,12 +129,45 @@ export function DataSourcePicker(props: DataSourcePickerProps) {
   );
 }
 
+/** The first test texts of a built-in text dataset with their class (nothing for images). */
+function TextExamples({ dataset }: { dataset: BuiltinDataset }) {
+  const { t } = useTranslation();
+  if (dataset.input_kind !== 'tokens' || !dataset.examples?.length) {
+    return null;
+  }
+  return (
+    <Stack gap={2} mt={6} aria-label={t('training.source.examples')}>
+      <Text size="xs" fw={600}>
+        {t('training.source.examples')}
+      </Text>
+      {dataset.examples.map((example) => (
+        <Text key={example.text} size="xs" className={classes.textExample}>
+          <span className={classes.textExampleText}>{example.text}</span>
+          {' → '}
+          <b>{example.class}</b>
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+
 /** "60,000 training and 10,000 test images · 10 classes · 12 MB download". */
 function builtinDetails(dataset: BuiltinDataset): string {
-  const sizes = i18n.t('training.source.sizes', {
+  const numbers = {
     train: dataset.train_size.toLocaleString(currentLocale()),
     test: dataset.test_size.toLocaleString(currentLocale()),
-  });
+  };
+  if (dataset.input_kind === 'tokens') {
+    // Generated on the server: texts as token ids, one class per text.
+    return i18n.t('training.source.textDetails', {
+      sizes: i18n.t('training.source.textSizes', numbers),
+      count: dataset.num_classes,
+      classes: dataset.class_names.join(', '),
+      words: (dataset.vocab_size ?? 0).toLocaleString(currentLocale()),
+      length: dataset.sequence_length ?? dataset.sample_shape[0],
+    });
+  }
+  const sizes = i18n.t('training.source.sizes', numbers);
   if (dataset.task === 'segmentation') {
     // Generated on the server: a class for every pixel.
     const classes = dataset.class_names.join(', ');

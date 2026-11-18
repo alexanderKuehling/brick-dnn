@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -8,7 +8,7 @@ import {
   IconUsers,
   IconWand,
 } from '@tabler/icons-react';
-import { Alert, Button, Divider, Group, List, Loader, Paper, Stack, Text } from '@mantine/core';
+import { Alert, Button, Group, List, Loader, Paper, Stack, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -47,6 +47,7 @@ import { SettingsForm, type ClassicalSettings, type HybridSettings } from './Set
 import { useCompatibility, type CompatibilityState } from './useCompatibility';
 import type { DatasetFitController } from './useDatasetFit';
 import type { DataController } from './useDatasets';
+import classes from './Training.module.css';
 
 interface SetupViewProps {
   status: TrainingStatus;
@@ -117,6 +118,7 @@ export function SetupView({
   const [runName, setRunName] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<StartError | null>(null);
+  const dataHeading = useId();
   const { source: choice, datasets, reloadDatasets } = data;
 
   // Refresh the list whenever the view is shown (it is kept while the panel is closed).
@@ -332,7 +334,7 @@ export function SetupView({
   };
 
   return (
-    <Stack gap="md">
+    <Stack gap="xl">
       {empty && (
         <Alert color="gray" icon={<IconInfoCircle size={18} />}>
           {t('training.setup.empty')}
@@ -363,33 +365,40 @@ export function SetupView({
         </Alert>
       )}
 
-      <Divider label={t('training.setup.data')} labelPosition="left" />
-      <DataSourcePicker
-        status={status}
-        choice={effective}
-        onChange={choose}
-        datasets={datasets}
-        datasetsError={data.datasetsError}
-        onReloadDatasets={reloadDatasets}
-        uploading={data.uploading}
-        uploadProgress={data.uploadProgress}
-        uploadError={data.uploadError}
-        onDismissUploadError={data.dismissUploadError}
-        onUpload={data.upload}
-        onCancelUpload={data.cancelUpload}
-        onDelete={deleteDataset}
-      />
+      <section aria-labelledby={dataHeading}>
+        <div className={classes.sectionHead}>
+          <Text component="h3" id={dataHeading} className={classes.sectionTitle}>
+            {t('training.setup.data')}
+          </Text>
+        </div>
+        <Stack gap="md">
+          <DataSourcePicker
+            status={status}
+            choice={effective}
+            onChange={choose}
+            datasets={datasets}
+            datasetsError={data.datasetsError}
+            onReloadDatasets={reloadDatasets}
+            uploading={data.uploading}
+            uploadProgress={data.uploadProgress}
+            uploadError={data.uploadError}
+            onDismissUploadError={data.dismissUploadError}
+            onUpload={data.upload}
+            onCancelUpload={data.cancelUpload}
+            onDelete={deleteDataset}
+          />
 
-      {networkValid && ref && (
-        <CheckResult
-          {...compatibility}
-          datasetName={datasetName}
-          canAdapt={fit !== null}
-          onAdapt={fit?.adapt ?? null}
-        />
-      )}
+          {networkValid && ref && (
+            <CheckResult
+              {...compatibility}
+              datasetName={datasetName}
+              canAdapt={fit !== null}
+              onAdapt={fit?.adapt ?? null}
+            />
+          )}
+        </Stack>
+      </section>
 
-      <Divider label={t('training.setup.settings')} labelPosition="left" />
       <SettingsForm
         values={settings}
         onChange={changeSettings}
@@ -408,9 +417,11 @@ export function SetupView({
         loss={lossScope}
       />
 
-      {networkValid && ref && check?.ok && settingsValid && <CostEstimate state={cost} />}
-      {networkValid && ref && check?.ok && settingsValid && cost.fresh && (
-        <QueueHint queue={cost.queue} />
+      {networkValid && ref && check?.ok && settingsValid && (
+        <Stack gap="xs">
+          <CostEstimate state={cost} />
+          {cost.fresh && <QueueHint queue={cost.queue} />}
+        </Stack>
       )}
 
       {startError && (
@@ -450,7 +461,8 @@ export function SetupView({
         </Alert>
       )}
 
-      <Group justify="flex-end" gap="sm">
+      {/* Stays at the bottom of the panel while the settings above it scroll. */}
+      <Group justify="flex-end" gap="sm" className={classes.startBar}>
         {project?.shared && (
           <Group gap={6} wrap="nowrap" mr="auto">
             <IconUsers size={14} color="var(--mantine-color-dimmed)" aria-hidden />

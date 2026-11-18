@@ -48,6 +48,12 @@ export const training = {
       '{{sizes}} with masks · {{count}} classes ({{classes}}) · no download',
     details_one: '{{sizes}} · {{count}} class · {{mb}} MB download',
     details_other: '{{sizes}} · {{count}} classes · {{mb}} MB download',
+    textSizes: '{{train}} training and {{test}} test texts',
+    textDetails_one:
+      '{{sizes}} · {{count}} class ({{classes}}) · vocabulary of {{words}}, {{length}} tokens per text · no download',
+    textDetails_other:
+      '{{sizes}} · {{count}} classes ({{classes}}) · vocabulary of {{words}}, {{length}} tokens per text · no download',
+    examples: 'Test texts',
     dataTab: 'Data tab',
     messyCsv: 'Messy CSV? Clean, encode and analyse it in the',
   },
@@ -79,7 +85,6 @@ export const training = {
       '“{{name}}” (started by {{user}}) is still training. You can start a new one when it has finished.',
     showIt: 'Show it',
     data: 'Data',
-    settings: 'Settings',
     tooMany: 'Too many trainings are waiting',
     another: 'Another training is running',
     cannotStart: 'Cannot start the training',
@@ -117,18 +122,16 @@ export const training = {
     officialTest: 'Test on the official test images',
     holdOut: 'Hold out a test set',
     ownSplitImages:
-      'This dataset brings its own split, the folders train, val and test: {{split}} images for training, validation and test. Training uses it as it is.',
+      'Split by the folders train, val and test: {{split}} images; training uses it as it is.',
     ownSplitRows:
-      'This dataset brings its own split from the Data tab: {{split}} rows for training, validation and test. Training uses it as it is; change it in the Data tab.',
-    builtinTest:
-      'Always on for built-in datasets: the official test images are never trained on and not used to choose the weights; the kept weights are measured on them once, after training. The validation split is taken from the training images.',
+      'Split from the Data tab: {{split}} rows for training, validation and test; change it there.',
+    builtinTest: 'Built-in datasets are always tested on their official test images.',
     testHint:
       'Never trained on and not used to compare settings: the final model is measured on it once, after training.',
     testSplit: 'Test split',
     maxSamples: 'Max. samples',
     maxRowsHint:
       '{{model}} is fitted on at most {{rows}} training rows on this server; larger training sets are subsampled.',
-    maxSamplesHint: 'Training rows to fit on (empty: all).',
     allUpTo: 'All, up to {{rows}}',
     all: 'All',
     seed: 'Seed',
@@ -138,12 +141,10 @@ export const training = {
     classicalNoteKernel:
       '{{model}} is fitted once with scikit-learn, on the CPU: only the split, the number of rows and the seed apply; the fit optimises the kernel hyperparameters itself.',
     search: 'Hyperparameter search',
-    searchClassical:
-      'Fits the model several times with other values of its parameters and keeps the best one.',
+    searchClassical: 'Fits the model several times with other parameter values and keeps the best.',
     searchHybrid:
-      'Fits {{model}} several times with other values of its parameters on the features, and can learn the features again with other training settings in every trial; keeps the best trial.',
-    searchNeural:
-      'Trains the network several times with different settings and keeps the best one (by default the one with the lowest validation loss).',
+      'Fits {{model}} several times with other parameter values and keeps the best trial.',
+    searchNeural: 'Trains the network several times with other settings and keeps the best.',
     hybridNote:
       'Two phases: the neural layers learn {{features}} with a temporary linear head on the target (the settings below), then {{model}} is fitted on the features of the training rows.',
     hybridNoteMax:
@@ -152,16 +153,13 @@ export const training = {
     nFeatures_other: '{{count}} features',
     theFeatures: 'the features',
     features: 'Features',
-    frozenHint:
-      'The neural layers keep their random initial weights: nothing is trained, so the training settings (epochs, batch size, learning rate, optimizer, weight decay, early stopping) are not used.',
+    frozenHint: 'Nothing is trained: the training settings below are not used.',
     epochs: 'Epochs',
     epochsFrozen: 'Not used: the features stay random',
     perTrial: 'Per trial of the search',
-    epochsHint: 'Passes over the training data',
     batchSize: 'Batch size',
-    imagesPerStepMax: 'Images per optimizer step; up to {{max}} fit into memory',
-    imagesPerStep: 'Images per optimizer step (4 to 16 is usual for segmentation)',
-    samplesPerStep: 'Samples per optimizer step',
+    imagesPerStepMax: 'Up to {{max}} fit into memory',
+    imagesPerStep: '4 to 16 is usual for segmentation',
     learningRate: 'Learning rate',
     optimizer: 'Optimizer',
     device: 'Device',
@@ -172,8 +170,6 @@ export const training = {
     earlyStopping: 'Early stopping',
     earlyStoppingHint: 'Stop when the validation loss has not improved for this many epochs',
     restoreBest: 'Keep the weights of the best epoch',
-    restoreBestHint:
-      'Test and save the weights with the lowest validation loss, not those of the last epoch.',
     restoreBestNoVal: 'Not used without validation data: the weights of the last epoch are kept.',
     options: {
       featureTraining: {
@@ -184,6 +180,13 @@ export const training = {
         cross_entropy: 'Cross-entropy',
         cross_entropy_dice: 'Cross-entropy + Dice',
       },
+    },
+    sections: {
+      model: 'Model and optimizer',
+      schedule: 'Epochs and early stopping',
+      split: 'Validation and test data',
+      search: 'Search',
+      fit: 'Fitting',
     },
   },
 };

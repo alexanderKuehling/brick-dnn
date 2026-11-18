@@ -44,6 +44,46 @@ function Harness({
 }
 
 describe('SettingsForm', () => {
+  it('groups the settings under headings and folds the advanced ones', async () => {
+    render(<Harness />);
+    for (const name of [
+      'Model and optimizer',
+      'Epochs and early stopping',
+      'Validation and test data',
+      'Search',
+    ]) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument();
+    }
+    // Early stopping is part of the schedule, not of the folded settings.
+    expect(screen.getByLabelText('Early stopping')).toBeVisible();
+    const advanced = screen.getByRole('button', { name: 'Advanced settings' });
+    expect(advanced).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('combobox', { name: 'Device' })).not.toBeInTheDocument();
+
+    advanced.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(advanced).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('combobox', { name: 'Device' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Weight decay')).toBeVisible());
+    expect(screen.getByLabelText('Seed')).toBeVisible();
+
+    await userEvent.keyboard(' ');
+    expect(advanced).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('explains early stopping on demand', async () => {
+    render(<Harness />);
+    expect(screen.queryByText(/has not improved for this many epochs/)).not.toBeInTheDocument();
+    const info = screen.getByRole('button', { name: 'More about “Early stopping”' });
+    info.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByText(/has not improved for this many epochs/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByText(/has not improved for this many epochs/)).not.toBeInTheDocument()
+    );
+  });
+
   it('keeps unfinished decimals while the learning rate is edited', async () => {
     render(<Harness />);
     const input = screen.getByLabelText('Learning rate') as HTMLInputElement;
@@ -84,7 +124,6 @@ describe('SettingsForm', () => {
     expect(validateSettings(latest)).toEqual({});
     expect(input).toHaveAccessibleDescription(/No validation data: the last epoch is kept/);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
     await waitFor(() => expect(screen.getByLabelText('Early stopping')).toBeVisible());
     const keepBest = screen.getByRole('checkbox', { name: 'Keep the weights of the best epoch' });
     expect(keepBest).toBeDisabled();
@@ -139,7 +178,7 @@ describe('SettingsForm', () => {
     // test set: the switch is on and cannot be changed, and there is no test share.
     expect(screen.getByLabelText('Validation split')).toBeInTheDocument();
     const test = screen.getByRole('switch', { name: /official test images/ });
-    expect(test).toHaveAccessibleDescription(/validation split is taken from the training images/);
+    expect(test).toHaveAccessibleDescription(/always tested on their official test images/);
     expect(test).toBeChecked();
     expect(test).toBeDisabled();
     expect(screen.queryByLabelText('Test split')).not.toBeInTheDocument();
@@ -148,7 +187,6 @@ describe('SettingsForm', () => {
 
   it('offers early stopping and the choice of the kept weights', async () => {
     render(<Harness />);
-    await userEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
     // Wait until the section has opened: before that its fields are hidden (display: none)
     // and typing into them can get lost while it opens.
     await waitFor(() => expect(screen.getByLabelText('Early stopping')).toBeVisible());

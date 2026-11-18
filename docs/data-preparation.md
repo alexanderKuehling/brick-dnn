@@ -20,7 +20,9 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
    If the detection is wrong, set the options under **Import options** or fix the type later
    with a *Change type* step.
 2. A **preparation** is created for the file. Choose the **target** (the column to predict)
-   and the task (*automatic*, classification or regression) in the *Target & split* card.
+   and the task (*automatic*, classification or regression) in the *Target & split* card. Once
+   a target is chosen the card folds to a one-line summary; click it to change the settings
+   (seed, stratification and groups are under *Seed, stratify and groups*).
 3. Add **steps** (below). After every change the preview runs again: each step reports what
    it did ("Filled 132 missing values in 2 columns with the median."), the **Data** view shows
    a random sample of the rows, and **Analysis** shows charts and statistics. *Preview after
@@ -29,8 +31,8 @@ of `requirements.txt`); PyTorch is not needed to prepare data, only to train on 
    text features, a missing target …), each with a button that adds the fitting step, and
    the [sanity checks](#readiness-and-sanity-checks) that point out target leakage,
    duplicates, rare classes and more.
-5. **Create training dataset** (or **Train with this data**, which also opens the training
-   panel in the builder). The dataset appears under *Your data* in the training panel, marked
+5. **Train with this data** creates the training dataset and opens the training panel in the
+   builder; **Export → Create training dataset** only creates it. The dataset appears under *Your data* in the training panel, marked
    *Prepared*.
 
 Preparations are saved automatically. Several preparations can use the same file.
@@ -530,7 +532,10 @@ After *Balance classes* (oversampling), duplicate rows are expected and not repo
 
 ## Export
 
-| Download | Contents |
+Everything below is in the **Export** menu of the toolbar (*Train with this data* next to it
+creates the training dataset and opens the training panel).
+
+| Export | Contents |
 | -------- | -------- |
 | **Training dataset** | Stored on the server, appears in the training panel. Numeric features plus the target as last column; class labels are kept as class names. |
 | **Prepared data (.csv)** | The prepared table with a `split` column (train/val/test). |
