@@ -34,7 +34,7 @@ from rest_framework.views import APIView
 
 import brickdnn
 from brickdnn import service
-from brickdnn.codegen import LOSS_OPTIONS
+from brickdnn.codegen import LOSS_OPTIONS, TRACKING_URL
 from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, inference
 from brickdnn.training import losses as training_losses
 from brickdnn.training.config import TrainingConfig
@@ -49,7 +49,7 @@ from .accounts import usage_data
 from .agent_activity import record_tool_call
 from .api_tokens import uses_api_token
 from .models import ApiToken, DataPrep, DataSource, Project, TrainingRun
-from .oauth import McpAuthentication
+from .oauth import McpAuthentication, site_url
 from .parsers import SafeJSONParser
 from .projects import (
     VersionConflict,
@@ -357,11 +357,19 @@ def analyze_network(request: Request, args: dict[str, Any]) -> Any:
 
 
 def generate_pytorch_code(request: Request, args: dict[str, Any]) -> Any:
-    options = {
-        key: args[key]
-        for key in ("class_name", "include_main", "include_training", "dataset", *LOSS_OPTIONS)
-        if args.get(key) is not None
-    }
+    names = (
+        "class_name",
+        "include_main",
+        "include_training",
+        "dataset",
+        "log_to_brickdnn",
+        "tracking_project",
+        *LOSS_OPTIONS,
+    )
+    options = {key: args[key] for key in names if args.get(key) is not None}
+    here = site_url(request)
+    if TRACKING_URL.match(here):  # a script that logs, logs to this server (as in the UI)
+        options["tracking_url"] = here
     status_code, payload = service.generate({"graph": args["graph"], "options": options})
     if status_code != 200:
         errors = payload.get("analysis", {}).get("errors", [])
@@ -1325,7 +1333,13 @@ TOOLS: dict[str, Tool] = {
             "huber_delta, as in the training config) sets the loss of a network's CSV "
             "training loop. A network of token ids (Input dtype long, Embedding) that fits a "
             "built-in text dataset gets its generator (standard library) and a training on "
-            "it instead (--train, --predict TEXT); dataset picks one.",
+            "it instead (--train, --predict TEXT); dataset picks one. Every training of a script "
+            "(the CSV loop, a text dataset, a classical fit, both phases of a hybrid network) "
+            "logs its curves, settings and final numbers to this Brick DNN as a run that ran "
+            "elsewhere, but only with the environment variable BRICKDNN_TOKEN (an API token; "
+            "never written into the script): without it the script runs offline with the same "
+            "results. log_to_brickdnn false leaves the client out; tracking_project names the "
+            "saved network the runs belong to.",
             generate_pytorch_code,
             {
                 "graph": GRAPH_SCHEMA,
@@ -1342,6 +1356,14 @@ TOOLS: dict[str, Tool] = {
                     "enum": ["sentiment", "lookup", "topics"],
                     "description": "Networks of token ids: the built-in text dataset of the "
                     "training code (default: the one the network fits)",
+                },
+                "log_to_brickdnn": {
+                    "type": "boolean",
+                    "description": "Default: true (inert without BRICKDNN_TOKEN)",
+                },
+                "tracking_project": {
+                    "type": "integer",
+                    "description": "Id of the saved network the logged runs belong to",
                 },
             },
             ("graph",),

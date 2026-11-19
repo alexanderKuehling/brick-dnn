@@ -114,6 +114,8 @@ SCRIPT_NAMES = {
     "summary",
     "squared",
     "test_rows",
+    "scores",
+    "model_settings",
     "x",
     "model",
     "out",
@@ -163,11 +165,13 @@ class GeneratorOptions:
     # Networks that read token ids: the built-in text dataset (textsets.py) whose generator
     # the training code embeds. None: the one the network fits (length, vocabulary, classes).
     dataset: str | None = None
-    # The CSV training loop logs its curves, settings and test numbers to Brick DNN, but only
-    # while the environment variable BRICKDNN_TOKEN is set (brickdnn/tracking.py): without it
-    # the script runs offline with the same results. ``tracking_url`` is the default server,
-    # ``tracking_project`` the saved network the runs belong to (both overridable with
-    # BRICKDNN_URL and BRICKDNN_PROJECT). The token is never written into the script.
+    # The training of the script (the CSV loop, the training on a built-in text dataset, the
+    # fit of a classical model, both phases of a hybrid network) logs its curves, settings and
+    # final numbers to Brick DNN, but only while the environment variable BRICKDNN_TOKEN is
+    # set (brickdnn/tracking.py): without it the script runs offline with the same results.
+    # ``tracking_url`` is the default server, ``tracking_project`` the saved network the runs
+    # belong to (both overridable with BRICKDNN_URL and BRICKDNN_PROJECT). The token is never
+    # written into the script.
     log_to_brickdnn: bool = True
     tracking_url: str = SITE_URL
     tracking_project: int | None = None
@@ -304,8 +308,8 @@ class _Generator:
         wanted = self.opt.include_main and self.opt.include_training
         self.text = self._text_dataset() if wanted else None
         training = wanted and (self.text is not None or self._can_train())
-        # Only the CSV training loop logs to Brick DNN.
-        self.logging = training and self.text is None and self.opt.log_to_brickdnn
+        # The CSV loop and the training on a text dataset log to Brick DNN.
+        self.logging = training and self.opt.log_to_brickdnn
         parts = [self._model_class()]
         if self.opt.include_main:
             parts.append(_COUNT_PARAMETERS)
@@ -314,7 +318,7 @@ class _Generator:
             elif training:
                 parts.append(self._training_code())
             if self.logging:
-                parts.append(self._tracking_code())
+                parts.append(tracking_code(self.opt))
             parts.append(self._main(training))
         header = BANNER + "\n" + self._docstring(training) + "\n\n" + self._imports(training)
         # PEP 8: two blank lines between top-level definitions.
@@ -368,47 +372,29 @@ class _Generator:
                 "--test-split 0.2 holds out a fifth of the rows and measures the model on them",
                 "once at the end.",
             ]
-        if training and self.opt.log_to_brickdnn:
-            lines += [
-                "",
-                "Log the training to Brick DNN, to see its curves next to the runs trained there",
-                "(the runs page): create an API token on the page API tokens (one that may only",
-                "log runs is enough) and set it in the environment before you train:",
-                "",
-                "    export BRICKDNN_TOKEN=<your token>",
-                "    python this_file.py --csv data.csv --epochs 20",
-                "",
-                "It sends the loss and the metrics of every epoch, the settings, the name of the",
-                "CSV file and the test results to BRICKDNN_URL (default "
-                + self.opt.tracking_url
-                + "). Without",
-                "BRICKDNN_TOKEN nothing is sent and the script runs offline with the same results;",
-                "a network error never stops the training. The token is never stored in this file.",
-            ]
+        if self.logging and self.text is not None:
+            lines += tracking_docstring(
+                self.opt,
+                "python this_file.py --train --epochs 10",
+                "It sends the loss and the accuracy of every epoch, the settings, the name of the "
+                "dataset and the test accuracy",
+            )
+        elif self.logging:
+            lines += tracking_docstring(
+                self.opt,
+                "python this_file.py --csv data.csv --epochs 20",
+                "It sends the loss and the metrics of every epoch, the settings, the name of the "
+                "CSV file and the test results",
+            )
         lines.append('"""')
         return "\n".join(lines)
 
     def _imports(self, training: bool) -> str:
         lines = []
         if training and self.text is not None:
-            lines += ["import argparse", "import random", "import re", ""]
-        elif training and self.logging:
-            lines += [
-                "from __future__ import annotations",
-                "",
-                "import argparse",
-                "import csv",
-                "import json",
-                "import math",
-                "import os",
-                "import sys",
-                "import time",
-                "import urllib.error",
-                "import urllib.request",
-                "",
-            ]
+            lines += stdlib_imports(["argparse", "random", "re"], self.logging)
         elif training:
-            lines += ["import argparse", "import csv", ""]
+            lines += stdlib_imports(["argparse", "csv"], self.logging)
         lines += ["import torch", "import torch.nn as nn"]
         if training:
             lines.append("from torch.utils.data import DataLoader, TensorDataset")
@@ -521,28 +507,22 @@ class _Generator:
         ]
         if training and self.logging:
             task = "classification" if self._classification() else "regression"
+            config = [
+                '"epochs": args.epochs',
+                '"batch_size": args.batch_size',
+                '"learning_rate": args.lr',
+                '"optimizer": "adam"',
+                '"seed": args.seed',
+                f'"loss": "{self._loss_name(task)}"',
+                '"val_split": 0.2',
+                '"test_split": args.test_split',
+            ]
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
-                "        # Logged to Brick DNN only with the environment variable BRICKDNN_TOKEN.",
-                "        with BrickDNNRun.start(",
-                f'            name="{name}",',
-                "            config={",
-                '                "epochs": args.epochs,',
-                '                "batch_size": args.batch_size,',
-                '                "learning_rate": args.lr,',
-                '                "optimizer": "adam",',
-                '                "seed": args.seed,',
-                f'                "loss": "{self._loss_name(task)}",',
-                '                "val_split": 0.2,',
-                '                "test_split": args.test_split,',
-                "            },",
-                "            project=BRICKDNN_PROJECT,",
-                "            dataset=os.path.basename(args.csv),",
-                f'            task="{task}",',
-                "            epochs=args.epochs,",
-                "            url=BRICKDNN_URL,",
-                "        ) as run:",
+                *tracking_start(
+                    name, config, task, "os.path.basename(args.csv)", "args.epochs", "        "
+                ),
                 "            mean, std = train(",
                 "                model,",
                 "                features,",
@@ -608,11 +588,7 @@ class _Generator:
             "    print(model)",
             '    print(f"Trainable parameters: {count_parameters(model):,}")',
             "",
-            "    if args.train:",
-            "        train(model, args.epochs, args.batch_size, args.lr, args.seed)",
-            "        save_model(model, args.save)",
-            "        return",
-            "",
+            *self._text_train_call(),
             *self._sanity_check("    "),
             "",
             "",
@@ -620,6 +596,38 @@ class _Generator:
             "    main()",
         ]
         return "\n".join(lines)
+
+    def _text_train_call(self) -> list[str]:
+        if not self.logging:
+            return [
+                "    if args.train:",
+                "        train(model, args.epochs, args.batch_size, args.lr, args.seed)",
+                "        save_model(model, args.save)",
+                "        return",
+                "",
+            ]
+        from .training.datasets import BUILTIN_DATASETS
+
+        config = [
+            '"epochs": args.epochs',
+            '"batch_size": args.batch_size',
+            '"learning_rate": args.lr',
+            '"optimizer": "adam"',
+            '"seed": args.seed',
+            f'"loss": "{self._loss_name("classification")}"',
+            '"val_split": 0.2',
+        ]
+        dataset = f'"{BUILTIN_DATASETS[self.text].name}"'  # type: ignore[index]
+        return [
+            "    if args.train:",
+            *tracking_start(
+                self.opt.class_name, config, "classification", dataset, "args.epochs", "        "
+            ),
+            "            train(model, args.epochs, args.batch_size, args.lr, args.seed, run)",
+            "        save_model(model, args.save)",
+            "        return",
+            "",
+        ]
 
     # -- training --------------------------------------------------------- #
 
@@ -680,7 +688,49 @@ class _Generator:
         if code is not None:
             header += "\n" + code
             loss = "make_loss(train_y, device)"
-        return _TEXT_TRAINING_TEMPLATE.replace("[[HEADER]]", header).replace("[[LOSS]]", loss)
+        if self.logging:
+            signature = (
+                "def train(\n"
+                "    model: nn.Module,\n"
+                "    epochs: int,\n"
+                "    batch_size: int,\n"
+                "    lr: float,\n"
+                "    seed: int,\n"
+                "    run: BrickDNNRun | None = None,\n"
+                ") -> None:"
+            )
+            log_init = "    summary: dict[str, float] = {}\n"
+            log_epoch = (
+                "        summary = {\n"
+                '            "train_loss": train_loss / max(seen, 1),\n'
+                '            "val_loss": val_loss,\n'
+                '            "val_accuracy": val_accuracy,\n'
+                "        }\n"
+                "        if run is not None:\n"
+                "            run.log(epoch=epoch, **summary)\n"
+            )
+            test_loss = "test_loss"
+            log_end = (
+                "    if run is not None:\n"
+                "        summary.update(test_loss=test_loss, test_accuracy=test_accuracy)\n"
+                "        run.finish(summary=summary)\n"
+            )
+        else:
+            signature = (
+                "def train(model: nn.Module, epochs: int, batch_size: int, lr: float, seed: int) "
+                "-> None:"
+            )
+            log_init = log_epoch = log_end = ""
+            test_loss = "_"
+        return (
+            _TEXT_TRAINING_TEMPLATE.replace("[[HEADER]]", header)
+            .replace("[[LOSS]]", loss)
+            .replace("[[SIGNATURE]]", signature)
+            .replace("[[LOG_INIT]]", log_init)
+            .replace("[[LOG_EPOCH]]", log_epoch)
+            .replace("[[TEST_LOSS]]", test_loss)
+            .replace("[[LOG_END]]", log_end)
+        )
 
     # -- training (CSV) ----------------------------------------------------- #
 
@@ -700,20 +750,6 @@ class _Generator:
 
     def _classification(self) -> bool:
         return self._node(self.a.outputs[0]).shape[0] > 1  # type: ignore[index]
-
-    def _tracking_code(self) -> str:
-        import inspect
-
-        from .tracking import BrickDNNRun
-
-        project = str(self.opt.tracking_project) if self.opt.tracking_project else "None"
-        return (
-            _TRACKING_HEADER.replace("[[URL]]", self.opt.tracking_url).replace(
-                "[[PROJECT]]", project
-            )
-            + "\n\n\n"
-            + inspect.getsource(BrickDNNRun).rstrip()
-        )
 
     def _training_code(self) -> str:
         n_features = self._node(self.a.inputs[0]).shape[0]  # type: ignore[index]
@@ -856,6 +892,91 @@ class _Generator:
         return "\n".join(lines) + "\n\n\n" + _REGRESSION_LOSS
 
 
+# --------------------------------------------------------------------------- #
+# Logging to Brick DNN: shared by every script that trains (also classical.py, hybrid.py)
+# --------------------------------------------------------------------------- #
+
+# The standard library modules of the embedded client (brickdnn/tracking.py).
+TRACKING_MODULES = ("json", "math", "os", "sys", "time", "urllib.error", "urllib.request")
+
+
+def stdlib_imports(modules: list[str], logging: bool) -> list[str]:
+    """The ``import`` lines of a script's standard library modules (with those of the
+    embedded client when it logs, which also needs postponed annotations), sorted, and a
+    blank line after them."""
+    names = sorted(set(modules) | (set(TRACKING_MODULES) if logging else set()))
+    future = ["from __future__ import annotations", ""] if logging else []
+    return [*future, *(f"import {name}" for name in names), ""]
+
+
+def tracking_code(options: GeneratorOptions) -> str:
+    """The client of brickdnn/tracking.py (one copy per script), with the server and the
+    saved network the runs belong to."""
+    import inspect
+
+    from .tracking import BrickDNNRun
+
+    project = str(options.tracking_project) if options.tracking_project else "None"
+    return (
+        _TRACKING_HEADER.replace("[[URL]]", options.tracking_url).replace("[[PROJECT]]", project)
+        + "\n\n\n"
+        + inspect.getsource(BrickDNNRun).rstrip()
+    )
+
+
+def tracking_docstring(
+    options: GeneratorOptions,
+    command: str,
+    sends: str,
+    intro: str = "Log the training to Brick DNN, to see its curves",
+) -> list[str]:
+    """The paragraph of a script's docstring that says how it logs to Brick DNN:
+    ``command`` trains, ``sends`` says what it sends (without the full stop)."""
+    import textwrap
+
+    text = (
+        f"{intro} next to the runs trained there (the runs page): create an API token on the "
+        "page API tokens (one that may only log runs is enough) and set it in the "
+        "environment before you train:"
+    )
+    rest = (
+        f"{sends} to BRICKDNN_URL (default {options.tracking_url}). Without BRICKDNN_TOKEN "
+        "nothing is sent and the script runs offline with the same results; a network error "
+        "never stops the training. The token is never stored in this file."
+    )
+    return [
+        "",
+        *textwrap.wrap(text, width=88),
+        "",
+        "    export BRICKDNN_TOKEN=<your token>",
+        f"    {command}",
+        "",
+        *textwrap.wrap(rest, width=88, break_long_words=False, break_on_hyphens=False),
+    ]
+
+
+def tracking_start(
+    name: str, config: list[str], task: str, dataset: str, epochs: str | None, indent: str
+) -> list[str]:
+    """``with BrickDNNRun.start(...) as run:`` of a script's main(), at ``indent``: the
+    run's name, the entries of its config (code: ``'"seed": args.seed'``), its task, the
+    code of the dataset's name and of the number of epochs (None: no epochs)."""
+    return [
+        f"{indent}# Logged to Brick DNN only with the environment variable BRICKDNN_TOKEN.",
+        f"{indent}with BrickDNNRun.start(",
+        f'{indent}    name="{name}",',
+        f"{indent}    config={{",
+        *[f"{indent}        {entry}," for entry in config],
+        f"{indent}    }},",
+        f"{indent}    project=BRICKDNN_PROJECT,",
+        f"{indent}    dataset={dataset},",
+        f'{indent}    task="{task}",',
+        *([f"{indent}    epochs={epochs},"] if epochs is not None else []),
+        f"{indent}    url=BRICKDNN_URL,",
+        f"{indent}) as run:",
+    ]
+
+
 def _text_generator() -> str:
     """The generator of the built-in text datasets (textsets.py below its imports: only the
     standard library), so that the script makes the same texts as Brick DNN."""
@@ -964,7 +1085,7 @@ def evaluate(model: nn.Module, loader: DataLoader, loss_fn, device: str) -> tupl
     return total / max(seen, 1), correct / max(seen, 1)
 
 
-def train(model: nn.Module, epochs: int, batch_size: int, lr: float, seed: int) -> None:
+[[SIGNATURE]]
     """Train on 80 % of the training texts (the split depends only on ``seed``), validate
     on the rest after every epoch and measure the test texts once at the end."""
     x, y, test_x, test_y = load_dataset()
@@ -996,7 +1117,7 @@ def train(model: nn.Module, epochs: int, batch_size: int, lr: float, seed: int) 
     loss_fn = [[LOSS]]
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    for epoch in range(1, epochs + 1):
+[[LOG_INIT]]    for epoch in range(1, epochs + 1):
         model.train()
         train_loss, seen = 0.0, 0
         for inputs, targets in train_loader:
@@ -1012,9 +1133,9 @@ def train(model: nn.Module, epochs: int, batch_size: int, lr: float, seed: int) 
             f"Epoch {epoch:3d}/{epochs}  train loss {train_loss / max(seen, 1):.4f}"
             f"  val loss {val_loss:.4f}  val acc {val_accuracy:.1%}"
         )
-    _, test_accuracy = evaluate(model, test_loader, loss_fn, device)
+[[LOG_EPOCH]]    [[TEST_LOSS]], test_accuracy = evaluate(model, test_loader, loss_fn, device)
     print(f"Test accuracy: {test_accuracy:.1%}")
-    model.cpu()
+[[LOG_END]]    model.cpu()
 
 
 def save_model(model: nn.Module, path: str) -> None:

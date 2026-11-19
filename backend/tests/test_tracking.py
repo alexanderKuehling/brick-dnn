@@ -399,6 +399,29 @@ def test_logged_runs_are_not_trainings_of_the_server(ada, script):
 # --------------------------------------------------------------------------- #
 
 
+def test_the_final_numbers_win_over_the_last_point(ada, script):
+    """A script whose result is not its last epoch (a classical model fitted on learned
+    features) reports it at the end: those numbers are the run's metrics and its row."""
+    run_id = start(script, task="classification", epochs=2).json()["id"]
+    log(script, run_id, points(2))  # the temporary head: val. accuracy 0.5
+    summary = {"val_accuracy": 0.9, "val_balanced_accuracy": 0.88, "fit_seconds": 1.25}
+    finished = script.post(
+        f"/api/tracking/runs/{run_id}/finish/",
+        {"status": "completed", "summary": summary},
+        format="json",
+    )
+    assert finished.status_code == 200
+    run = TrainingRun.objects.get(pk=run_id)
+    assert run.metrics["val_accuracy"] == 0.9
+    assert run.metrics["val_loss"] == pytest.approx(0.6)  # not reported: the last point's
+    assert "fit_seconds" not in run.metrics and "val_balanced_accuracy" not in run.metrics
+    web = APIClient()
+    web.force_authenticate(ada)
+    row = web.get("/api/training/runs/table/").json()["results"][0]
+    assert row["metrics"]["val_accuracy"] == 0.9
+    assert row["metrics"]["val_balanced_accuracy"] == 0.88 and row["metrics"]["fit_seconds"] == 1.25
+
+
 def mcp_call(client, tool, **arguments):
     response = client.post(
         "/api/mcp/",

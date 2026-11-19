@@ -255,6 +255,12 @@ reports it, from its `config`, whose other loss settings are left out). The loss
 history and the trials are that loss. `generate_pytorch_code` takes `loss` and its settings
 for the CSV training loop of the script.
 
+**Logging from the script.** Every training in a script of `generate_pytorch_code` (the CSV
+loop, a built-in text dataset, a classical fit, both phases of a hybrid network) logs to this
+Brick DNN as a run that ran elsewhere, but only with `BRICKDNN_TOKEN` set where it runs
+([experiments.md](experiments.md#runs-that-ran-elsewhere)); `log_to_brickdnn: false` leaves
+the client out, `tracking_project` names the saved network the runs belong to.
+
 An unknown parameter, a bad range, a grid of more than 100 combinations or a metric the data
 does not have are tool errors (`check_training`: `ok: false` for the metric) with a message
 that names the problem and what is possible. The activity log summarises a started search
