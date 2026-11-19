@@ -153,7 +153,14 @@ export interface Guide {
   title: string;
   description: string;
   h1: string;
-  /** One sentence for the list of guides (HTML). */
+  /**
+   * A short title for the card of the guides' overview, e.g. “Imbalanced classes”; a guide
+   * without one shows its h1 there.
+   */
+  short?: string;
+  /** The topic shown above the title on that card, e.g. “Tabular data” (none: no such line). */
+  topic?: string;
+  /** One sentence for the list of guides (HTML, without links: the card is one link). */
   summary: string;
   /** The opening paragraph (HTML). */
   lead: string;
@@ -171,7 +178,7 @@ export interface GuideIndex {
   title: string;
   description: string;
   h1: string;
-  /** HTML. */
+  /** One sentence above the cards (HTML). */
   intro: string;
 }
 
