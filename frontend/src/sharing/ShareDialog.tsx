@@ -40,6 +40,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { useReturnFocus } from '@/components/useReturnFocus';
 import { i18n, useTranslation } from '@/i18n';
+import { BadgeSnippet } from './BadgeSnippet';
 import { ProjectDataPanel } from './ProjectDataPanel';
 import { MEMBER_ROLE_OPTIONS, ROLE_LABELS, shareUrl } from './roles';
 import classes from './Sharing.module.css';
@@ -449,6 +450,7 @@ export function ShareDialog({
                       </Group>
                     </div>
                   )}
+                  <BadgeSnippet url={url} />
                 </>
               )}
             </>

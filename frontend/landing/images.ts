@@ -1,7 +1,8 @@
 /**
  * The images of the landing pages (frontend/landing/images/): screenshots of the app made by
  * screenshots/shoot.mjs as `<id>-<width>.webp` (German ones, once the app is translated, as
- * `<id>.de-<width>.webp`), the Open Graph image and the PNG logo.
+ * `<id>.de-<width>.webp`), and the Open Graph image and the PNG logo, which
+ * scripts/brand-images.mjs draws.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

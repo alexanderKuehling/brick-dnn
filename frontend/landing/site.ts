@@ -33,19 +33,60 @@ export const GUIDES_PATHS: Record<Lang, string> = { en: '/guides/', de: '/de/anl
  * plans are bought), so the English landing page links there.
  */
 export const PRICING_DE_PATH = '/de/preise/';
+/**
+ * Pages about Brick DNN itself (content/info.<lang>.ts): for lecturers, who is behind it, and
+ * how accounts and data are protected.
+ */
+export const TEACHING_PATHS: Record<Lang, string> = { en: '/teaching/', de: '/de/lehre/' };
+export const ABOUT_PATHS: Record<Lang, string> = { en: '/about/', de: '/de/ueber/' };
+export const SECURITY_PATHS: Record<Lang, string> = { en: '/security/', de: '/de/sicherheit/' };
+/** The fact sheet for data-protection officers, below the page for lecturers. */
+export const DATA_PROTECTION_PATHS: Record<Lang, string> = {
+  en: '/teaching/data-protection/',
+  de: '/de/lehre/datenschutz/',
+};
 /** The folders of the content pages (nginx.conf has a location for exactly these). */
 export const CONTENT_FOLDERS = [
   EXAMPLES_PATHS.en,
   GUIDES_PATHS.en,
+  TEACHING_PATHS.en,
+  ABOUT_PATHS.en,
+  SECURITY_PATHS.en,
   EXAMPLES_PATHS.de,
   GUIDES_PATHS.de,
   PRICING_DE_PATH,
+  TEACHING_PATHS.de,
+  ABOUT_PATHS.de,
+  SECURITY_PATHS.de,
 ] as const;
 
 /** Where each language's visitors find the prices. */
 export function pricingPath(lang: Lang): string {
   return lang === 'de' ? PRICING_DE_PATH : '/pricing';
 }
+
+/** What changed and when: the proof that the project is alive. */
+export const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
+/**
+ * Status: the check that runs every 15 minutes (.github/workflows/uptime.yml) and the issues
+ * it opens while the site is down.
+ */
+export const UPTIME_URL = `${REPOSITORY_URL}/actions/workflows/uptime.yml`;
+export const OUTAGES_URL = `${REPOSITORY_URL}/issues?q=label%3Aoutage`;
+/** Where a security problem is reported in private (SECURITY.md). */
+export const SECURITY_ADVISORY_URL = `${REPOSITORY_URL}/security/advisories/new`;
+/** The latest release, as CITATION.cff in the repository has it (landing.test.ts compares). */
+export const RELEASE = { version: '1.1.0', date: '2026-11-09' };
+/**
+ * The "Open in Brick DNN" badge (public/badge/, docs/badge.md), by the language of its text.
+ * The files keep their names: READMEs and course pages elsewhere point at them.
+ */
+export const BADGE_PATHS: Record<Lang, string> = {
+  en: '/badge/open-in-brick-dnn.svg',
+  de: '/badge/open-in-brick-dnn.de.svg',
+};
+/** Reporting contact for security researchers (RFC 9116), made at build time. */
+export const SECURITY_TXT_PATH = '/.well-known/security.txt';
 
 /** The author of the guides and example pages (JSON-LD). */
 export const AUTHOR = { name: 'Alexander Kühling', url: 'https://github.com/alexanderKuehling' };

@@ -221,7 +221,7 @@ class _HybridGenerator:
             "training rows."
         )
         lines = [
-            f'"""{layer.label} on learned features: generated with Brick DNN.',
+            f'"""{layer.label} on learned features: generated with Brick DNN (https://brickdnn.com).',
             "",
             *textwrap.wrap(about, width=LINE_LENGTH - 8),
         ]

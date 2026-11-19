@@ -1,9 +1,10 @@
-import { render, screen, userEvent, waitFor, within } from '@test-utils';
+import { axeViolations, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { beforeEach, vi } from 'vitest';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type ProjectData, type ProjectMember, type ProjectMembers } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
 import { PREP } from '@/data/fixtures';
+import { i18n } from '@/i18n';
 import { dataset } from '@/training/fixtures';
 import { ShareDialog, type ShareTab, type ShareTarget } from './ShareDialog';
 
@@ -376,5 +377,43 @@ describe('ShareDialog, data of the network', () => {
         expect.objectContaining({ title: 'Could not share it' })
       )
     );
+  });
+});
+
+describe('the badge of a share link', () => {
+  const LINKED: ShareTarget = { ...PROJECT, link_access: 'view', share_token: 'tok1' };
+  const url = `${window.location.origin}/share/tok1`;
+
+  it('is not offered while the link is off', async () => {
+    renderDialog();
+    await screen.findByRole('listitem', { name: 'maria' });
+    expect(screen.queryByText('Badge for a README or a course page')).not.toBeInTheDocument();
+  });
+
+  it('shows the badge and copies it as Markdown and as HTML', async () => {
+    const user = userEvent.setup(); // With a stub of the clipboard.
+    renderDialog(LINKED);
+    expect(await screen.findByText('Badge for a README or a course page')).toBeInTheDocument();
+    const badge = `${window.location.origin}/badge/open-in-brick-dnn.svg`;
+    expect(screen.getByRole('img', { name: 'Open in Brick DNN' })).toHaveAttribute('src', badge);
+
+    await user.click(screen.getByRole('button', { name: 'Copy Markdown' }));
+    expect(await navigator.clipboard.readText()).toBe(`[![Open in Brick DNN](${badge})](${url})`);
+    await user.click(screen.getByRole('button', { name: 'Copy HTML' }));
+    expect(await navigator.clipboard.readText()).toBe(
+      `<a href="${url}"><img src="${badge}" alt="Open in Brick DNN" height="28"></a>`
+    );
+  });
+
+  it('is the German badge in German', async () => {
+    await i18n.changeLanguage('de');
+    const user = userEvent.setup();
+    renderDialog(LINKED);
+    expect(await screen.findByText('Badge für ein README oder eine Kursseite')).toBeInTheDocument();
+    const badge = `${window.location.origin}/badge/open-in-brick-dnn.de.svg`;
+    expect(screen.getByRole('img', { name: 'In Brick DNN öffnen' })).toHaveAttribute('src', badge);
+    await user.click(screen.getByRole('button', { name: 'Markdown kopieren' }));
+    expect(await navigator.clipboard.readText()).toBe(`[![In Brick DNN öffnen](${badge})](${url})`);
+    expect(await axeViolations()).toEqual([]);
   });
 });

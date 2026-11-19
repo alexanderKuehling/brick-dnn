@@ -5,7 +5,18 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { allPages, type PageMeta } from './pages.ts';
-import { absolute, INLINE_SCRIPT, PAGE_PATHS, SITE_URL, type Lang } from './site.ts';
+import {
+  absolute,
+  INLINE_SCRIPT,
+  PAGE_PATHS,
+  SECURITY_TXT_PATH,
+  SITE_URL,
+  type Lang,
+} from './site.ts';
+
+/** The server-side include in the app's page that nginx fills for shared links (index.html). */
+export const LINK_PREVIEW_INCLUDE =
+  '<!--# include virtual="/api/link-preview/$preview_kind/$preview_token/" stub="preview" -->';
 
 /** The @types of a page's JSON-LD (its @graph), or null if there is none or it is invalid. */
 export function jsonLdTypes(html: string): string[] | null {
@@ -137,9 +148,28 @@ export function checkDist(dir: string, pages: PageMeta[] = allPages()): string[]
       }
     }
   }
-  for (const file of ['app.html', 'robots.txt', 'sitemap.xml', 'llms.txt']) {
+  for (const file of [
+    'app.html',
+    'robots.txt',
+    'sitemap.xml',
+    'llms.txt',
+    SECURITY_TXT_PATH.slice(1),
+  ]) {
     if (!existsSync(join(dir, file))) {
       problems.push(`${file} is missing`);
+    }
+  }
+  // Shared links get their link preview through this include (nginx.conf): the build must
+  // keep it, and the preview image the app's page names must be there.
+  if (existsSync(join(dir, 'app.html'))) {
+    const app = readFileSync(join(dir, 'app.html'), 'utf8');
+    if (!app.includes(LINK_PREVIEW_INCLUDE)) {
+      problems.push('app.html lacks the include for the link preview of shared links');
+    }
+    for (const [, path] of app.matchAll(/content="https:\/\/[^/"]+(\/[^"]+\.png)"/g)) {
+      if (!existsSync(join(dir, path))) {
+        problems.push(`app.html: ${path} is missing`);
+      }
     }
   }
   if (existsSync(join(dir, 'sitemap.xml'))) {

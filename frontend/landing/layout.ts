@@ -9,6 +9,7 @@ import { en } from './content/en.ts';
 import type { LandingContent } from './content/types.ts';
 import { escapeHtml } from './html.ts';
 import {
+  ABOUT_PATHS,
   absolute,
   CONTACT_EMAIL,
   EDITOR_PATH,
@@ -17,13 +18,15 @@ import {
   PAGE_PATHS,
   pricingPath,
   REPOSITORY_URL,
+  SECURITY_PATHS,
+  TEACHING_PATHS,
   type Lang,
 } from './site.ts';
 
 const LANDING: Record<Lang, LandingContent> = { en, de };
 
 /** The part of the site a page belongs to, marked in the navigation. */
-export type Area = 'home' | 'examples' | 'guides' | 'pricing';
+export type Area = 'home' | 'examples' | 'guides' | 'pricing' | 'info';
 
 export interface Chrome {
   lang: Lang;
@@ -105,6 +108,7 @@ export function siteFooter(chrome: Chrome): string {
 ${siteLinks(chrome.lang)
   .map((link) => `<li><a href="${link.href}">${escapeHtml(link.label)}</a></li>`)
   .join('\n')}
+<li><a href="${TEACHING_PATHS[chrome.lang]}">${escapeHtml(t.nav.teaching)}</a></li>
 <li><a href="${EDITOR_PATH}">${escapeHtml(t.nav.editor)}</a></li>
 </ul></nav>
 <nav aria-label="${escapeHtml(c.footer.legalLabel)}"><ul>
@@ -115,6 +119,8 @@ ${siteLinks(chrome.lang)
 <li><a href="/accessibility">${escapeHtml(legal.accessibility)}</a></li>
 </ul>${c.footer.legalNote ? `<p class="note">${escapeHtml(c.footer.legalNote)}</p>` : ''}</nav>
 <div class="links"><ul>
+<li><a href="${ABOUT_PATHS[chrome.lang]}">${escapeHtml(t.nav.about)}</a></li>
+<li><a href="${SECURITY_PATHS[chrome.lang]}">${escapeHtml(t.nav.security)}</a></li>
 <li><a href="${REPOSITORY_URL}">${escapeHtml(c.footer.source)}</a></li>
 <li><a href="mailto:${CONTACT_EMAIL}">${escapeHtml(c.footer.contact)}: ${CONTACT_EMAIL}</a></li>
 </ul>

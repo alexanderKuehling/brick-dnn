@@ -2,6 +2,7 @@
  * The landing pages and the files for crawlers (robots.txt, sitemap.xml, llms.txt) as text.
  * Pure functions: plugin.ts writes their output into the build and serves it in development.
  */
+import { COMMON } from './content/common.ts';
 import { de } from './content/de.ts';
 import { en } from './content/en.ts';
 import type { Item, LandingContent } from './content/types.ts';
@@ -28,7 +29,11 @@ import {
   PLANS,
   pricingPath,
   REPOSITORY_URL,
+  SECURITY_ADVISORY_URL,
+  SECURITY_PATHS,
+  SECURITY_TXT_PATH,
   SITE_URL,
+  TEACHING_PATHS,
   type Lang,
 } from './site.ts';
 
@@ -237,7 +242,8 @@ ${section(
   'teaching',
   c.teaching.title,
   `<ul class="checks">${c.teaching.items.map((item) => `<li>${escapeHtml(item)}</li>`).join('\n')}</ul>
-<p class="discount">${c.teaching.discount}</p>`,
+<p class="discount">${c.teaching.discount}</p>
+<p class="more"><a href="${TEACHING_PATHS[c.lang]}">${escapeHtml(COMMON[c.lang].nav.teachingMore)}</a></p>`,
   'tinted'
 )}
 
@@ -282,12 +288,13 @@ ${body(c, assets)}
 }
 
 export function renderRobots(): string {
+  // Shared links (/share/, /compare/) may be read, so that they unfold in chats; nginx.conf
+  // tells search engines not to index them (X-Robots-Tag).
   return `# Brick DNN (frontend/landing/render.ts)
 User-agent: *
 Disallow: /api/
 Disallow: /admin/
 Disallow: /oauth/
-Disallow: /share/
 Disallow: /account
 Disallow: /tokens
 Disallow: /activity
@@ -295,6 +302,23 @@ Disallow: /reset-password
 Disallow: /verify-email
 
 Sitemap: ${absolute('/sitemap.xml')}
+`;
+}
+
+/**
+ * /.well-known/security.txt (RFC 9116): where to report a security problem. Made with every
+ * build, so the date it expires on, a year later, moves with every deploy.
+ */
+export function renderSecurityTxt(now: Date = new Date()): string {
+  const expires = new Date(now);
+  expires.setUTCFullYear(expires.getUTCFullYear() + 1);
+  return `# Brick DNN (frontend/landing/render.ts)
+Contact: mailto:${CONTACT_EMAIL}
+Contact: ${SECURITY_ADVISORY_URL}
+Expires: ${expires.toISOString().slice(0, 10)}T00:00:00.000Z
+Preferred-Languages: en, de
+Canonical: ${absolute(SECURITY_TXT_PATH)}
+Policy: ${absolute(SECURITY_PATHS.en)}
 `;
 }
 

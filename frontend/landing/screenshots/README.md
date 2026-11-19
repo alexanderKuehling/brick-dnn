@@ -14,8 +14,11 @@ taken with Playwright from a Brick DNN running locally with real data and result
   to keep (in CSS pixels), and the width the landing page shows it at.
 - `shoot.mjs` runs the setup, takes the screenshots at a device scale factor of 2 and writes
   each as WebP in a phone width, the width on the page and twice that
-  (`<id>-<width>.webp`), plus the Open Graph image (`og-image.jpg`). Chromium encodes the
-  images itself, so no image library is needed.
+  (`<id>-<width>.webp`). Chromium encodes the images itself, so no image library is needed.
+
+The Open Graph image (`og-image.jpg`) and the PNG logo (`logo-512.png`) are drawn, not
+photographed: `node scripts/brand-images.mjs` makes them, together with the preview image of
+shared links and the repository's social preview.
 
 The landing pages pick the files up at the next build (`npm run build`); `landing.test.ts`
 checks that every screenshot a page names exists in at least two widths of the same
@@ -51,7 +54,6 @@ The first run takes about 15 minutes, most of it for the trainings (CPU). Option
 - `--raw <dir>`: also keep the full-resolution PNG files there;
 - `--out <dir>`: write somewhere else than `images/` (e.g. to try a crop);
 - `--app <url>`: another address of the app (default `http://127.0.0.1:4173`);
-- `--no-og`: leave the Open Graph image as it is.
 
 Look at the results before committing them: crops are fixed rectangles, so a change of the
 app's layout can move things out of them.

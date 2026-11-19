@@ -3,6 +3,7 @@ import type { en } from '../en';
 import type { Messages } from '../types';
 import { a11y } from './a11y';
 import { auth, legal } from './auth';
+import { brand } from './brand';
 import { builder } from './builder';
 import { common } from './common';
 import { data } from './data';
@@ -24,4 +25,5 @@ export const de: Messages<typeof en> = {
   data,
   experiments,
   a11y,
+  brand,
 };

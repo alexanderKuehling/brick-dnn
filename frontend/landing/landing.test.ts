@@ -2,7 +2,15 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { checkDist, checkLandingHtml, checkPageHtml, hreflangs, jsonLdTypes } from './check.ts';
+import {
+  checkDist,
+  checkLandingHtml,
+  checkPageHtml,
+  hreflangs,
+  jsonLdTypes,
+  LINK_PREVIEW_INCLUDE,
+} from './check.ts';
+import { BADGE_MARKDOWN, CITATION_BIBTEX, CITATION_TEXT } from './content/info.en.ts';
 import { EXAMPLES, EXAMPLES_FILE, type ExampleData } from './examples/data.ts';
 import { titleLines } from './examples/diagram.ts';
 import { IMAGE_DIR, imageSize, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
@@ -13,6 +21,7 @@ import {
   EXAMPLE_COPY,
   examplePath,
   GUIDE_COPY,
+  INFO_COPY,
 } from './pages.ts';
 import { minifyCss, renderStatic, staticPage } from './plugin.ts';
 import {
@@ -21,13 +30,18 @@ import {
   renderLlms,
   renderPage,
   renderRobots,
+  renderSecurityTxt,
   renderSitemap,
   shotIds,
   type Assets,
 } from './render.ts';
 import {
+  ABOUT_PATHS,
   APP_PAGES,
+  BADGE_PATHS,
+  CHANGELOG_URL,
   CONTENT_FOLDERS,
+  DATA_PROTECTION_PATHS,
   EDITOR_PATH,
   EXAMPLES_PATHS,
   GUIDES_PATHS,
@@ -36,7 +50,12 @@ import {
   OVERAGE_PRICE,
   PLANS,
   pricingPath,
+  RELEASE,
+  REPOSITORY_URL,
   SECTION_IDS,
+  SECURITY_PATHS,
+  SECURITY_TXT_PATH,
+  TEACHING_PATHS,
 } from './site.ts';
 
 const FRONTEND = join(import.meta.dirname, '..');
@@ -313,6 +332,11 @@ describe('the inline script', () => {
 
 describe('the build check', () => {
   let dir: string;
+  /** The app's page as the build writes it: index.html with the address of the site. */
+  const APP_HTML = readFileSync(join(FRONTEND, 'index.html'), 'utf8').replaceAll(
+    '%SITE_URL%',
+    'https://brickdnn.com'
+  );
 
   function write(path: string, content: string | Buffer = '') {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -324,13 +348,17 @@ describe('the build check', () => {
     for (const page of allPages()) {
       write(page.file, renderStatic(page, ASSETS));
     }
-    write('app.html', '<!doctype html><div id="root"></div>');
+    write('app.html', APP_HTML);
     write('robots.txt', renderRobots());
     write('sitemap.xml', renderSitemap());
     write('llms.txt', renderLlms());
+    write(SECURITY_TXT_PATH.slice(1), renderSecurityTxt());
     for (const path of [
       ASSETS.css,
       ASSETS.favicon,
+      BADGE_PATHS.en,
+      BADGE_PATHS.de,
+      '/brand/link-preview.png',
       ASSETS.logo.src,
       ASSETS.ogImage.src,
       ...Object.values(ASSETS.images).flatMap((image) => image.sources.map((s) => s.src)),
@@ -383,6 +411,17 @@ describe('the build check', () => {
       renderPage('en', ASSETS).replace(/<script type="application\/ld\+json">/, '<script>')
     );
     expect(checkDist(dir)).toContain('en: valid JSON-LD');
+  });
+
+  test('finds an app page without the link preview of shared links, or without its image', () => {
+    write('app.html', APP_HTML.replace(LINK_PREVIEW_INCLUDE, ''));
+    rmSync(join(dir, 'brand/link-preview.png'));
+    expect(checkDist(dir)).toEqual([
+      'app.html lacks the include for the link preview of shared links',
+      'app.html: /brand/link-preview.png is missing',
+    ]);
+    rmSync(join(dir, SECURITY_TXT_PATH.slice(1)));
+    expect(checkDist(dir)).toContain('.well-known/security.txt is missing');
   });
 });
 
@@ -459,7 +498,12 @@ test('the Open Graph image and the logo', () => {
 
 const PAGES = contentPages();
 const RENDERED = new Map(PAGES.map((page) => [page.path, renderStatic(page, ASSETS)]));
-const KNOWN_PATHS = new Set([...allPages().map((page) => page.path), EDITOR_PATH, ...APP_PAGES]);
+const KNOWN_PATHS = new Set([
+  ...allPages().map((page) => page.path),
+  EDITOR_PATH,
+  ...APP_PAGES,
+  SECURITY_TXT_PATH,
+]);
 
 describe.each(PAGES.map((page) => [page.path, page] as const))('content page %s', (_, page) => {
   const html = RENDERED.get(page.path)!;
@@ -747,4 +791,269 @@ test('long type names in the diagram wrap at their capitals', () => {
     'Classifier',
   ]);
   expect(titleLines('AdaptiveAvgPool2d')).toEqual(['AdaptiveAvg', 'Pool2d']);
+});
+
+// ------------------------------------------------------- branding: previews, badge, trust
+
+test('every page has the meta tags of a link preview, with the preview image', () => {
+  for (const page of allPages()) {
+    const doc = parse(renderStatic(page, ASSETS));
+    const meta = (name: string) =>
+      doc.querySelector(`meta[property="${name}"], meta[name="${name}"]`)?.getAttribute('content');
+    expect(meta('og:title'), page.path).toBe(page.title);
+    expect(meta('og:description'), page.path).toBe(page.description);
+    expect(meta('og:url'), page.path).toBe(`https://brickdnn.com${page.path}`);
+    expect(meta('og:site_name'), page.path).toBe('Brick DNN');
+    expect(meta('og:image'), page.path).toBe(`https://brickdnn.com${ASSETS.ogImage.src}`);
+    expect(meta('og:image:width'), page.path).toBe('1200');
+    expect(meta('og:image:height'), page.path).toBe('630');
+    expect(meta('og:image:alt')!.length, page.path).toBeGreaterThan(20);
+    expect(meta('twitter:card'), page.path).toBe('summary_large_image');
+    expect(meta('twitter:title'), page.path).toBe(page.title);
+    expect(meta('twitter:image'), page.path).toBe(meta('og:image'));
+  }
+});
+
+test('one line about Brick DNN: the same tagline on the landing page, the app and the README', () => {
+  const tagline = 'See every shape. Keep the code.';
+  expect(CONTENT.en.hero.title).toBe(tagline);
+  expect(CONTENT.de.hero.title).toBe('Jede Form im Blick. Der Code gehört Ihnen.');
+  const app = readFileSync(join(FRONTEND, 'index.html'), 'utf8');
+  expect(app).toContain(`<title>Brick DNN · ${tagline}</title>`);
+  expect(readFileSync(join(REPO, 'README.md'), 'utf8')).toContain(tagline);
+  expect(readFileSync(join(FRONTEND, 'scripts/brand-images.mjs'), 'utf8')).toContain(tagline);
+  // Deep learning stays in what search engines read.
+  for (const lang of LANGS) {
+    expect(`${CONTENT[lang].title} ${CONTENT[lang].description}`).toMatch(/deep[- ]learning/i);
+    expect(CONTENT[lang].title).toContain('PyTorch');
+  }
+  // No claim that somebody uses it: there is nobody to name yet.
+  const texts = allPages().map((page) => plainText(renderStatic(page, ASSETS)));
+  for (const text of texts) {
+    expect(text).not.toMatch(/is used (for|in) teaching|wird in der Lehre eingesetzt/i);
+  }
+});
+
+test('the logo is flat and the drawn images have their sizes', () => {
+  const logo = readFileSync(join(FRONTEND, 'public/favicon.svg'), 'utf8');
+  expect(logo).not.toMatch(/ellipse|polygon/);
+  expect(new Set(logo.match(/#[0-9a-f]{3,6}/gi))).toEqual(new Set(['#3d36db', '#fff']));
+  expect(readImage(LOGO).size).toEqual({ width: 512, height: 512 });
+  const size = (path: string) => imageSize(readFileSync(join(REPO, path)));
+  expect(size('frontend/public/brand/link-preview.png')).toEqual({ width: 1200, height: 630 });
+  expect(size('docs/images/social-preview.png')).toEqual({ width: 1280, height: 640 });
+  for (const file of ['frontend/public/brand/link-preview.png', 'docs/images/social-preview.png']) {
+    expect(readFileSync(join(REPO, file)).length, file).toBeLessThan(300_000);
+  }
+});
+
+describe('the pages about Brick DNN', () => {
+  const pages = PAGES.filter((page) => page.kind === 'info');
+  const html = (path: string) => RENDERED.get(path)!;
+  const text = (path: string) => parse(html(path)).querySelector('main')!.textContent!;
+
+  test('exist in both languages, in the sitemap, and every page links to them', () => {
+    expect(pages.map((page) => page.path).sort()).toEqual(
+      [TEACHING_PATHS, ABOUT_PATHS, SECURITY_PATHS, DATA_PROTECTION_PATHS]
+        .flatMap((paths) => [paths.en, paths.de])
+        .sort()
+    );
+    expect(INFO_COPY.en.map((page) => page.id)).toEqual(INFO_COPY.de.map((page) => page.id));
+    const sitemap = renderSitemap();
+    for (const page of pages) {
+      expect(sitemap).toContain(`<loc>https://brickdnn.com${page.path}</loc>`);
+      expect(page.alternates[page.lang]).toBe(page.path);
+    }
+    for (const page of allPages()) {
+      const footer = parse(renderStatic(page, ASSETS)).querySelector('footer')!;
+      const hrefs = [...footer.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+      for (const paths of [TEACHING_PATHS, ABOUT_PATHS, SECURITY_PATHS]) {
+        expect(hrefs, page.path).toContain(paths[page.lang]);
+      }
+    }
+    for (const lang of LANGS) {
+      const home = parse(renderPage(lang, ASSETS));
+      expect(home.querySelector('#teaching a[href^="/"]')!.getAttribute('href')).toBe(
+        TEACHING_PATHS[lang]
+      );
+    }
+    expect(renderLlms()).toContain(`https://brickdnn.com${TEACHING_PATHS.en}`);
+  });
+
+  test('teaching: what a course relies on, the badge, the discount and the citation', () => {
+    for (const lang of LANGS) {
+      const page = text(TEACHING_PATHS[lang]);
+      for (const dataset of ['MNIST', 'Sentiment', 'Key lookup', 'Topics', 'Shapes', 'Cells']) {
+        expect(page).toContain(dataset);
+      }
+      expect(page).toMatch(/Docker Compose/);
+      expect(page).toMatch(lang === 'en' ? /Geneva/ : /Genf/);
+      expect(page).toContain('alexander.kuehling@brickdnn.com');
+      expect(page).toContain(CITATION_TEXT);
+      expect(page).toContain(CITATION_BIBTEX);
+      // The discount in the words of the landing page.
+      expect(html(TEACHING_PATHS[lang])).toContain(CONTENT[lang].teaching.discount);
+      const doc = parse(html(TEACHING_PATHS[lang]));
+      expect(doc.querySelector('main img')!.getAttribute('src')).toBe(BADGE_PATHS[lang]);
+      expect(doc.querySelector('.cta a')!.getAttribute('href')).toBe(EDITOR_PATH);
+    }
+    expect(text(TEACHING_PATHS.en)).toContain(BADGE_MARKDOWN);
+    // The same snippet in the docs and the README.
+    expect(readFileSync(join(REPO, 'docs/badge.md'), 'utf8')).toContain(BADGE_MARKDOWN);
+    expect(readFileSync(join(REPO, 'README.md'), 'utf8')).toContain(BADGE_MARKDOWN);
+    expect(readFileSync(join(REPO, 'docs/badge.md'), 'utf8')).toContain(CITATION_TEXT);
+  });
+
+  test('the citation is the one of CITATION.cff and of the released version', () => {
+    const cff = readFileSync(join(REPO, 'CITATION.cff'), 'utf8');
+    expect(cff).toContain(`version: "${RELEASE.version}"`);
+    expect(cff).toContain(`date-released: "${RELEASE.date}"`);
+    expect(cff).toContain(`repository-code: "${REPOSITORY_URL}"`);
+    expect(cff).toMatch(/family-names: "Kühling"\n\s+given-names: "Alexander"/);
+    expect(readFileSync(join(REPO, 'backend/pyproject.toml'), 'utf8')).toContain(
+      `version = "${RELEASE.version}"`
+    );
+    expect(readFileSync(join(REPO, 'CHANGELOG.md'), 'utf8')).toContain(
+      `## ${RELEASE.version} (${RELEASE.date})`
+    );
+    expect(CITATION_TEXT).toContain(RELEASE.version);
+  });
+
+  test('about: one person, the repository, the changelog, and what happens if it ends', () => {
+    for (const lang of LANGS) {
+      const doc = parse(html(ABOUT_PATHS[lang]));
+      const page = text(ABOUT_PATHS[lang]);
+      expect(page).toMatch(lang === 'en' ? /one person/ : /einer Person/);
+      expect(page).toContain('Alexander Kühling');
+      expect(page).toMatch(lang === 'en' ? /Geneva, Switzerland/ : /Genf, Schweiz/);
+      const hrefs = [...doc.querySelectorAll('main a')].map((a) => a.getAttribute('href'));
+      expect(hrefs).toEqual(
+        expect.arrayContaining([
+          REPOSITORY_URL,
+          `${REPOSITORY_URL}/blob/main/LICENSE`,
+          CHANGELOG_URL,
+          '/imprint',
+          '/privacy',
+          '/refund',
+          '/terms',
+          SECURITY_PATHS[lang],
+          'mailto:alexander.kuehling@brickdnn.com',
+        ])
+      );
+      // No postal address: that is the imprint's.
+      expect(page).not.toMatch(/\b\d{5}\b|straße|strasse|street/i);
+      const end = doc.querySelector(lang === 'en' ? '#continuity' : '#fortbestand')!.textContent!;
+      expect(end).toMatch(/90/);
+      expect(end).toMatch(/Apache/);
+      expect(end).toMatch(lang === 'en' ? /refunded in proportion/ : /erstatte ich anteilig/);
+    }
+    // English visitors are told that the legal texts are in German.
+    const about = html(ABOUT_PATHS.en);
+    for (const page of ['imprint', 'privacy', 'terms']) {
+      expect(about).toMatch(new RegExp(`href="/${page}">[^<]+</a> \\(in German\\)`));
+    }
+    // The German pricing page has the commitments too.
+    expect(text('/de/preise/')).toMatch(/mindestens 90 Tage/);
+  });
+
+  test('security: what is in place, how to report, and security.txt', () => {
+    for (const lang of LANGS) {
+      const doc = parse(html(SECURITY_PATHS[lang]));
+      const page = text(SECURITY_PATHS[lang]);
+      for (const fact of ['HTTPS', 'HSTS', 'Swiss Backup', '35', 'ZIP']) {
+        expect(page).toContain(fact);
+      }
+      const hrefs = [...doc.querySelectorAll('main a')].map((a) => a.getAttribute('href'));
+      expect(hrefs).toEqual(
+        expect.arrayContaining([
+          `${REPOSITORY_URL}/security/advisories/new`,
+          'mailto:alexander.kuehling@brickdnn.com',
+          SECURITY_TXT_PATH,
+          `${REPOSITORY_URL}/actions/workflows/uptime.yml`,
+        ])
+      );
+    }
+    const txt = renderSecurityTxt(new Date('2026-11-19T10:00:00Z'));
+    expect(txt).toContain('Contact: mailto:alexander.kuehling@brickdnn.com\n');
+    expect(txt).toContain(`Contact: ${REPOSITORY_URL}/security/advisories/new\n`);
+    expect(txt).toContain('Expires: 2027-11-19T00:00:00.000Z\n');
+    expect(txt).toContain('Canonical: https://brickdnn.com/.well-known/security.txt\n');
+    expect(txt).toContain(`Policy: https://brickdnn.com${SECURITY_PATHS.en}\n`);
+    // What the page says is what SECURITY.md says.
+    const policy = readFileSync(join(REPO, 'SECURITY.md'), 'utf8');
+    expect(policy).toContain(`${REPOSITORY_URL}/security/advisories/new`);
+    expect(policy).toContain('never from Python supplied by users');
+    const nginx = readFileSync(join(FRONTEND, 'nginx.conf'), 'utf8');
+    expect(nginx).toContain('\\.well-known/security\\.txt)$');
+  });
+
+  test('the fact sheet says what a course without accounts leaves on the server', () => {
+    for (const lang of LANGS) {
+      const page = text(DATA_PROTECTION_PATHS[lang]);
+      for (const fact of ['Sentry', 'Brevo', 'Infomaniak', 'Paddle', '180', '35', 'Art. 28']) {
+        expect(page).toContain(fact);
+      }
+      expect(page).toMatch(lang === 'en' ? /not stored/ : /nicht gespeichert/);
+      expect(page).toMatch(lang === 'en' ? /No cookies/ : /Keine Cookies/);
+      const crumbs = [...parse(html(DATA_PROTECTION_PATHS[lang])).querySelectorAll('.crumbs a')];
+      expect(crumbs.map((a) => a.getAttribute('href'))).toEqual([
+        lang === 'en' ? '/' : '/de/',
+        TEACHING_PATHS[lang],
+        DATA_PROTECTION_PATHS[lang],
+      ]);
+      expect(html(TEACHING_PATHS[lang])).toContain(`href="${DATA_PROTECTION_PATHS[lang]}"`);
+    }
+  });
+});
+
+test('the badge files are small SVG images with their text as the accessible name', () => {
+  for (const [lang, alt] of [
+    ['en', 'Open in Brick DNN'],
+    ['de', 'In Brick DNN öffnen'],
+  ] as const) {
+    const svg = readFileSync(join(FRONTEND, 'public', BADGE_PATHS[lang].slice(1)), 'utf8');
+    expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+    expect(svg).toContain(`role="img" aria-label="${alt}"`);
+    expect(svg).toContain(`<title>${alt}</title>`);
+    expect(svg).toContain('height="28"');
+    // Nothing that loads or runs: GitHub and other sites show it through an image proxy.
+    expect(svg).not.toMatch(/<script|href=|<image|<style|@import|url\(http/);
+    expect(svg.length).toBeLessThan(1500);
+  }
+});
+
+test('shared links: the app page has general tags and the include, nginx fills it', () => {
+  const app = readFileSync(join(FRONTEND, 'index.html'), 'utf8');
+  // The block is what every other page gets; the include follows it and names it.
+  const block = app.split('<!--# block name="preview" -->')[1].split('<!--# endblock -->')[0];
+  for (const tag of ['<title>', 'name="description"', 'og:title', 'og:image', 'twitter:card']) {
+    expect(block).toContain(tag);
+  }
+  expect(block).toContain('content="%SITE_URL%/brand/link-preview.png"');
+  expect(app.split('<!--# endblock -->')[1].trimStart().startsWith(LINK_PREVIEW_INCLUDE)).toBe(
+    true
+  );
+  // Nothing else in the page is a server-side include.
+  expect(app.match(/<!--#/g)).toHaveLength(3);
+
+  const nginx = readFileSync(join(FRONTEND, 'nginx.conf'), 'utf8');
+  const shared = nginx
+    .split('location ~ ^/(?<preview_kind>share|compare)/(?<preview_token>[A-Za-z0-9_-]+)/?$ {')[1]
+    .split('\n    }')[0];
+  for (const line of [
+    'ssi on;',
+    'ssi_silent_errors on;',
+    `add_header Content-Security-Policy "frame-ancestors 'none'";`,
+    'add_header X-Robots-Tag "noindex";',
+    'try_files /app.html =404;',
+  ]) {
+    expect(shared).toContain(line);
+  }
+  const include = nginx.split('location ^~ /api/link-preview/ {')[1].split('\n    }')[0];
+  for (const line of ['internal;', 'proxy_intercept_errors on;', 'proxy_read_timeout 3s;']) {
+    expect(include).toContain(line);
+  }
+  expect(include).toMatch(/error_page [\d ]*\b404\b[\d ]*\b500\b[\d ]* = @no_link_preview;/);
+  // Crawlers may read shared links (previews need that); the header keeps them out of indexes.
+  expect(renderRobots()).not.toMatch(/Disallow: \/(share|compare)/);
 });

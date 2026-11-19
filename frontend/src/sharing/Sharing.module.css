@@ -69,6 +69,16 @@
   }
 }
 
+/* The "Open in Brick DNN" badge for the share link, with its snippets to copy. */
+.badge {
+  margin-top: var(--mantine-spacing-lg);
+}
+
+.badgeImage {
+  display: block;
+  margin-right: var(--mantine-spacing-xs);
+}
+
 /* An inline confirmation (stacked dialogs fight over the focus). */
 .confirm {
   margin-top: var(--mantine-spacing-sm);

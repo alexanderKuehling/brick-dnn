@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use Brick DNN in teaching material or in research, please cite it as below."
+type: software
+title: "Brick DNN"
+abstract: >-
+  A browser-based editor for neural networks and classical machine-learning models: networks
+  are built from layers, the shape of every tensor is inferred while building, models are
+  trained on the server and exported as readable PyTorch or scikit-learn code.
+authors:
+  - family-names: "Kühling"
+    given-names: "Alexander"
+version: "1.1.0"
+date-released: "2026-11-09"
+license: Apache-2.0
+repository-code: "https://github.com/alexanderKuehling/brick-dnn"
+url: "https://brickdnn.com"
+keywords:
+  - deep learning
+  - neural networks
+  - PyTorch
+  - code generation
+  - teaching

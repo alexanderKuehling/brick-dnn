@@ -330,7 +330,7 @@ class _Generator:
 
     def _docstring(self, training: bool) -> str:
         name = self.opt.class_name
-        lines = [f'"""{name}: generated with Brick DNN.', ""]
+        lines = [f'"""{name}: generated with Brick DNN (https://brickdnn.com).', ""]
         for label, ids in (("Input", self.a.inputs), ("Output", self.a.outputs)):
             for nid in ids:
                 suffix = f" {self.var[nid]}" if len(ids) > 1 else ""

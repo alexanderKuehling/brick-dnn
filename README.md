@@ -1,37 +1,54 @@
 <p align="center">
-  <img src="frontend/public/favicon.svg" width="96" alt="Brick DNN logo" />
+  <img src="frontend/public/favicon.svg" width="88" alt="Brick DNN logo" />
 </p>
 
 <h1 align="center">Brick DNN</h1>
 
 <p align="center">
-  <b>Build neural networks from bricks. Train them locally. Export clean, runnable PyTorch code.</b>
+  <b>See every shape. Keep the code.</b><br />
+  The deep-learning lab for courses: build neural networks from bricks, see every tensor shape
+  and keep the readable PyTorch code.
 </p>
 
 <p align="center">
-  <a href="https://brickdnn.com"><b>▶LIVE VERSION</b></a>
-  &nbsp;·&nbsp;
-  <a href="#quick-start">Run it locally</a>
+  <a href="https://brickdnn.com/app?example=unet"><img src="https://brickdnn.com/badge/open-in-brick-dnn.svg" alt="Open in Brick DNN" height="28" /></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml"><img src="https://github.com/alexanderKuehling/brick-dnn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 license" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" />
-  <img src="https://img.shields.io/badge/PyTorch-code%20generator-ee4c2c" alt="PyTorch" />
-  <a href="https://buymeacoffee.com/alexanderkzw"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
 </p>
 
-![Brick DNN editor with a CNN for MNIST](docs/images/builder.png)
+<p align="center">
+  <a href="https://brickdnn.com">brickdnn.com</a>
+  &nbsp;·&nbsp;
+  <a href="https://brickdnn.com/teaching/">For lecturers</a>
+  &nbsp;·&nbsp;
+  <a href="#quick-start">Run it yourself</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+![The Brick DNN editor: a convolutional network for MNIST on the canvas, every brick with its output shape and number of parameters](docs/images/builder.png)
 
 Sketching a network architecture is easy; getting every tensor shape right is not.
 Brick DNN lets you snap layers together on a canvas, **shows the shape of every tensor while you
-build**, points at mistakes before you run anything, **trains the network on your own machine**
-with live loss and accuracy curves, and exports a self-contained PyTorch script that you can
-read, run, train and modify.
+build**, points at mistakes before you run anything, **trains the network on the server** (your
+own machine, or brickdnn.com in Switzerland) with live loss and accuracy curves, and exports a
+self-contained PyTorch script that you can read, run, train and modify.
 
-It is meant for students learning how architectures fit together, teachers who want to
-demonstrate them, and practitioners who want a correct starting point in seconds.
+It is made for students learning how architectures fit together, lecturers who want to
+demonstrate them in a course, and practitioners who want a correct starting point in seconds.
+
+Link to a network from a README, a notebook or course material with the badge
+([docs/badge.md](docs/badge.md)):
+
+```markdown
+[![Open in Brick DNN](https://brickdnn.com/badge/open-in-brick-dnn.svg)](https://brickdnn.com/app?example=unet)
+```
+
+Using Brick DNN in teaching or research? [CITATION.cff](CITATION.cff) says how to cite it.
 
 ## Features
 

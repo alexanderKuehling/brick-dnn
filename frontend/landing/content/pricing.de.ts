@@ -3,7 +3,14 @@
  * brickdnn.com), die Bedingungen aus den Nutzungsbedingungen und der Erstattungsregel
  * (deploy/sites/brickdnn.com/legal/) und aus docs/billing.md. Gebucht wird auf /pricing in der App.
  */
-import { CONTACT_EMAIL, OVERAGE_PRICE, PLANS, type PlanFacts } from '../site.ts';
+import {
+  ABOUT_PATHS,
+  CONTACT_EMAIL,
+  OVERAGE_PRICE,
+  PLANS,
+  TEACHING_PATHS,
+  type PlanFacts,
+} from '../site.ts';
 import type { PricingPageContent } from './types.ts';
 
 function number(value: number): string {
@@ -86,9 +93,14 @@ export const pricingDe: PricingPageContent = {
       html: '<p>Alle Preise enthalten die Umsatzsteuer. Verkäufer der Tarife ist Paddle.com Market Ltd (Paddle) als Händler (Merchant of Record): Paddle zeigt den Bezahlvorgang, nimmt die Zahlung an, berechnet und führt die Umsatzsteuer Ihres Landes ab und stellt die Rechnung aus. Ihre Zahlungsdaten geben Sie nur bei Paddle ein; Brick DNN erfährt lediglich, welches Abo Ihr Konto hat. Zahlungsmethode und Rechnungen finden Sie im Kundenportal von Paddle, das <strong>Account</strong> verlinkt.</p>',
     },
     {
+      id: 'fortbestand',
+      title: 'Wenn der Dienst endet',
+      html: `<p>Brick DNN wird von einer Person betrieben; die Frage ist also berechtigt. Sollte der gehostete Dienst einmal enden müssen, kündige ich das mindestens 90 Tage vorher an, per E-Mail an jedes Konto und auf dieser Website. Bis zum letzten Tag funktionieren alle Exporte, bezahlte Zeit nach dem Ende erstatte ich anteilig, und der Quellcode bleibt unter der Apache-Lizenz 2.0 verfügbar. Die Zusagen im Einzelnen: <a href="${ABOUT_PATHS.de}#fortbestand">Wenn der Dienst endet</a>.</p>`,
+    },
+    {
       id: 'lehre',
       title: 'Lehre und Forschung',
-      html: `<p>Studierende bauen und exportieren Netze ohne Konto, und der kostenlose Tarif reicht für kleine Trainings. Für Lehrveranstaltungen und Forschungsgruppen gibt es auf Anfrage einen Rabatt: ${mail}.</p>`,
+      html: `<p>Studierende bauen und exportieren Netze ohne Konto, und der kostenlose Tarif reicht für kleine Trainings. Für Lehrveranstaltungen und Forschungsgruppen gibt es auf Anfrage einen Rabatt: ${mail}. Was ein Kurs sonst braucht, steht auf der Seite <a href="${TEACHING_PATHS.de}">Brick DNN in der Lehre</a>.</p>`,
     },
   ],
   faq: {

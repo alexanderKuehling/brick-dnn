@@ -23,11 +23,12 @@ import {
   renderLlms,
   renderPage,
   renderRobots,
+  renderSecurityTxt,
   renderSitemap,
   shotIds,
   type Assets,
 } from './render.ts';
-import { EDITOR_PATH, type Lang } from './site.ts';
+import { EDITOR_PATH, SECURITY_TXT_PATH, SITE_URL, type Lang } from './site.ts';
 
 const CSS_FILE = join(import.meta.dirname, 'landing.css');
 /** Where development serves the stylesheet and images (the build hashes them instead). */
@@ -73,6 +74,7 @@ const TEXT_FILES: Record<string, { type: string; render: () => string }> = {
   'robots.txt': { type: 'text/plain', render: renderRobots },
   'sitemap.xml': { type: 'application/xml', render: renderSitemap },
   'llms.txt': { type: 'text/plain', render: renderLlms },
+  [SECURITY_TXT_PATH.slice(1)]: { type: 'text/plain', render: () => renderSecurityTxt() },
 };
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -140,6 +142,9 @@ export function landingPages(): Plugin {
   return {
     name: 'brickdnn:landing',
     enforce: 'post',
+
+    // The app's page (index.html) names its preview image with the address of the site.
+    transformIndexHtml: (html) => html.replaceAll('%SITE_URL%', SITE_URL),
 
     configureServer(server) {
       // Before Vite's own middlewares, so that / is not the app's index.html.

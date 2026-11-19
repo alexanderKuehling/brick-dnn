@@ -24,9 +24,9 @@ const mail = `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`;
 export const en: LandingContent = {
   lang: 'en',
   locale: 'en_US',
-  title: 'Brick DNN – deep learning hosted in Europe, with PyTorch code export',
+  title: 'Brick DNN – the deep-learning lab for courses, with readable PyTorch code',
   description:
-    'Build deep-learning models from layers in the browser, train them GDPR-compliant on a server in Switzerland and export readable PyTorch code. Free plan available.',
+    'See every tensor shape while you build neural networks from bricks, and keep the PyTorch code. A deep-learning lab in the browser, made for courses. Free plan.',
   languageName: 'English',
   skipLink: 'Skip to content',
   nav: {
@@ -38,8 +38,8 @@ export const en: LandingContent = {
     editor: 'Open the editor',
   },
   hero: {
-    title: 'Deep learning in Europe: build networks from layers, export the PyTorch code.',
-    lead: 'Brick DNN is a browser-based editor for deep learning and classical machine learning. You connect layers on a canvas, see the shape of every tensor while you build, train on a server in Switzerland and take away a readable PyTorch or scikit-learn script. It is made for universities, researchers and companies that want their training data to stay in Europe.',
+    title: 'See every shape. Keep the code.',
+    lead: 'Build neural networks from bricks and read the PyTorch code they become. Brick DNN is a deep-learning lab in the browser, made for courses: students connect layers on a canvas, see the shape of every tensor and the parameters of every layer, and leave with a PyTorch or scikit-learn script they can read. Small and medium models train on a server in Switzerland; the exported code runs anywhere.',
     primary: 'Open the editor',
     secondary: 'Pricing',
     facts: [
@@ -83,7 +83,7 @@ export const en: LandingContent = {
   useCases: {
     title: 'Deep learning for teaching, research and practice',
     intro:
-      'Brick DNN is used for teaching, for research with tabular and image data, and for getting from an architecture sketch to working code.',
+      'Brick DNN is made for teaching, for research with tabular and image data, and for getting from an architecture sketch to working code.',
     items: [
       {
         title: 'Teaching deep learning',
@@ -296,6 +296,7 @@ export const en: LandingContent = {
     notes: [
       `Paid plans can add compute beyond the allowance at ${euro(OVERAGE_PRICE)} per CPU hour, only if you switch it on.`,
       'Monthly subscriptions, cancellable at the end of each month. Payment and invoices are handled by Paddle.',
+      'Within 14 days of your first purchase of a plan you get the full amount back on request, without giving a reason. The refund policy has the details.',
     ],
     more: 'All details on the pricing page',
   },
@@ -341,7 +342,7 @@ export const en: LandingContent = {
     ],
   },
   footer: {
-    tagline: 'Deep learning from bricks, hosted in Switzerland, with readable PyTorch code.',
+    tagline: 'The deep-learning lab for courses: see every shape, keep the PyTorch code.',
     legalLabel: 'Legal',
     legal: {
       imprint: 'Imprint',
@@ -369,5 +370,6 @@ export const en: LandingContent = {
     'Live collaboration on shared networks',
     'MCP server for AI assistants and REST API',
   ],
-  ogImageAlt: 'Brick DNN: the editor with a convolutional network and the shape of every layer.',
+  ogImageAlt:
+    'Brick DNN: See every shape. Keep the code. Next to it a small convolutional network as bricks, each with its output shape.',
 };

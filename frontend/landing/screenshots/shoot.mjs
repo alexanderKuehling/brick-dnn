@@ -6,7 +6,7 @@
  *   node landing/screenshots/shoot.mjs [--app http://127.0.0.1:4173] [--lang en|de]
  *        [--only editor,data-prep] [--raw /tmp/raw] [--out ../images]
  */
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { setup } from './setup.mjs';
@@ -21,7 +21,6 @@ const { values: args } = parseArgs({
     only: { type: 'string' },
     raw: { type: 'string' },
     out: { type: 'string', default: join(import.meta.dirname, '..', 'images') },
-    'no-og': { type: 'boolean', default: false },
   },
 });
 
@@ -182,42 +181,7 @@ async function main() {
     }
   }
 
-  // The Open Graph image: the editor next to the name of the site, 1200 × 630.
-  if (!args['no-og'] && raws.editor && args.lang === 'en') {
-    const og = await browser.newPage({ viewport: { width: 1200, height: 630 } });
-    const logo = await readFile(join(import.meta.dirname, '..', '..', 'public', 'favicon.svg'));
-    await og.setContent(ogHtml(raws.editor.toString('base64'), logo.toString('base64')));
-    await og.waitForTimeout(300);
-    const png = await og.screenshot();
-    const [jpeg] = await encode(encoder, png, [1200], 'image/jpeg', 0.88);
-    await writeFile(join(OUT, 'og-image.jpg'), Buffer.from(jpeg.data, 'base64'));
-    console.log('  og-image.jpg');
-  }
   await browser.close();
-}
-
-function ogHtml(editor, logo) {
-  return `<!doctype html><html><head><style>
-  body { margin: 0; width: 1200px; height: 630px; overflow: hidden; position: relative; background: #fff;
-    color: #212529; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-  .text { position: absolute; left: 72px; top: 72px; width: 520px; }
-  .brand { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800;
-    letter-spacing: -0.02em; }
-  .brand img { width: 48px; height: 48px; }
-  h1 { margin: 56px 0 0; font-size: 50px; line-height: 1.1; letter-spacing: -0.028em; }
-  p { margin: 28px 0 0; font-size: 23px; line-height: 1.45; color: #495057; }
-  .url { position: absolute; left: 72px; bottom: 64px; font-size: 22px; font-weight: 600; color: #2f29c2; }
-  .shot { position: absolute; left: 650px; top: 72px; width: 760px; height: 520px; border: 1px solid #dee2e6;
-    border-radius: 14px; overflow: hidden; box-shadow: 0 20px 50px -24px rgba(16, 24, 40, .35); }
-  .shot img { width: 1440px; margin-left: -255px; margin-top: -175px; }
-  .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: #3d36db; }
-  </style></head><body>
-  <div class="text"><div class="brand"><img src="data:image/svg+xml;base64,${logo}" alt="">Brick DNN</div>
-  <h1>Build neural networks from layers. Export the PyTorch code.</h1>
-  <p>Live shape checks, training on servers in Switzerland, readable PyTorch and scikit-learn code.</p></div>
-  <div class="url">brickdnn.com</div>
-  <div class="shot"><img src="data:image/png;base64,${editor}" alt=""></div><div class="bar"></div>
-  </body></html>`;
 }
 
 await main();

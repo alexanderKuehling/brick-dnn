@@ -106,7 +106,7 @@ def test_first_line_links_to_brick_dnn():
         code = generate_code(EXAMPLES["mlp_mnist"]["graph"], options)
         first, second = code.splitlines()[:2]
         assert first == "# Built with Brick DNN: https://brickdnn.com, " + PROJECT_URL
-        assert second.startswith('"""NeuralNetwork: generated with Brick DNN.')
+        assert second.startswith('"""NeuralNetwork: generated with Brick DNN (https://brickdnn.com).')
 
 
 def test_without_main():

@@ -22,11 +22,36 @@
         document.querySelector('meta[name="viewport"]').content += ', maximum-scale=1';
       }
     </script>
+    <!-- Title, description and link preview (Open Graph, Twitter card). For a shared link
+         (/share/…, /compare/…) nginx puts the tags of that link here instead, which the
+         backend makes (frontend/nginx.conf, backend/brick_dnn_core/link_previews.py): the
+         three comments below that start with a hash sign are its server-side includes.
+         Everywhere else they are plain comments, and the block between them is what the page
+         has: every other page of the app, and a shared link whose tags the server cannot give.
+         The address of the site in the image links is filled in by landing/plugin.ts. -->
+    <!--# block name="preview" -->
+    <title>Brick DNN · See every shape. Keep the code.</title>
     <meta
       name="description"
-      content="Build neural networks with drag and drop and export clean, runnable PyTorch code."
+      content="The deep-learning lab for courses: build neural networks from bricks, see every tensor shape and keep the readable PyTorch code."
     />
-    <title>Brick DNN · visual PyTorch model builder</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Brick DNN" />
+    <meta property="og:title" content="Brick DNN · See every shape. Keep the code." />
+    <meta
+      property="og:description"
+      content="The deep-learning lab for courses: build neural networks from bricks, see every tensor shape and keep the readable PyTorch code."
+    />
+    <meta property="og:image" content="%SITE_URL%/brand/link-preview.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Brick DNN: See every shape. Keep the code. Next to it a small convolutional network as bricks." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="%SITE_URL%/brand/link-preview.png" />
+    <meta name="twitter:image:alt" content="Brick DNN: See every shape. Keep the code. Next to it a small convolutional network as bricks." />
+    <!--# endblock -->
+    <!--# include virtual="/api/link-preview/$preview_kind/$preview_token/" stub="preview" -->
   </head>
   <body>
     <div id="root"></div>

@@ -16,6 +16,13 @@ export interface CommonTexts {
     guides: string;
     pricing: string;
     editor: string;
+    /** The pages about Brick DNN itself (info.<lang>.ts), in the footer and the breadcrumbs. */
+    teaching: string;
+    about: string;
+    security: string;
+    dataProtection: string;
+    /** The link from the landing page's section for universities to the page for lecturers. */
+    teachingMore: string;
   };
   skipLink: string;
   /** "Updated 16 November 2026". */
@@ -114,6 +121,11 @@ export const COMMON: Record<Lang, CommonTexts> = {
       guides: 'Guides',
       pricing: 'Pricing',
       editor: 'Editor',
+      teaching: 'Teaching',
+      about: 'About',
+      security: 'Security',
+      dataProtection: 'Data protection',
+      teachingMore: 'Brick DNN in a course: the page for lecturers',
     },
     skipLink: 'Skip to content',
     date: (iso) => {
@@ -195,6 +207,11 @@ export const COMMON: Record<Lang, CommonTexts> = {
       guides: 'Anleitungen',
       pricing: 'Preise',
       editor: 'Editor',
+      teaching: 'Lehre',
+      about: 'Über Brick DNN',
+      security: 'Sicherheit',
+      dataProtection: 'Datenschutz',
+      teachingMore: 'Brick DNN im Kurs: die Seite für Lehrende',
     },
     skipLink: 'Zum Inhalt springen',
     date: (iso) => {

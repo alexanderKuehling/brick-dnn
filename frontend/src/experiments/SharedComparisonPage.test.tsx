@@ -100,3 +100,39 @@ describe.each(['en', 'de'] as const)('in %s', (language) => {
     expect(await axeViolations()).toEqual([]);
   });
 });
+
+describe.each(['en', 'de'] as const)('the "made with" block in %s', (language) => {
+  it('says what Brick DNN is, with one link into the editor', async () => {
+    await i18n.changeLanguage(language);
+    renderAt();
+    const about = await screen.findByRole('region', {
+      name: language === 'de' ? 'Über Brick DNN' : 'About Brick DNN',
+    });
+    expect(
+      within(about).getByText(language === 'de' ? 'Erstellt mit Brick DNN' : 'Made with Brick DNN')
+    ).toBeInTheDocument();
+    expect(
+      within(about).getByText(
+        language === 'de'
+          ? /ist ein Editor für neuronale Netze im Browser/
+          : /is an editor for neural networks in the browser/
+      )
+    ).toBeVisible();
+    const links = within(about).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName(
+      language === 'de' ? 'Eigenes Netz bauen' : 'Build your own network'
+    );
+    expect(links[0]).toHaveAttribute('href', '/app');
+    // The logo is decoration: the words next to it name it.
+    expect(about.querySelector('img')).toHaveAttribute('alt', '');
+    expect(await axeViolations()).toEqual([]);
+  });
+});
+
+it('shows no "made with" block for a link that was turned off', async () => {
+  vi.mocked(api.training.comparisons.shared).mockRejectedValue(new ApiError(404, 'Not found'));
+  renderAt();
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'About Brick DNN' })).not.toBeInTheDocument();
+});

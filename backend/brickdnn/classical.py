@@ -219,7 +219,7 @@ class _ClassicalGenerator:
                 "the scaler keeps the saved model in the format of the other classical models."
             )
         lines = [
-            f'"""{layer.label}: generated with Brick DNN.',
+            f'"""{layer.label}: generated with Brick DNN (https://brickdnn.com).',
             "",
             *textwrap.wrap(about, width=LINE_LENGTH - 8),
         ]

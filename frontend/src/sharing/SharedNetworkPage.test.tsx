@@ -1,11 +1,12 @@
-import { render, screen, userEvent, waitFor } from '@test-utils';
+import { axeViolations, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, vi } from 'vitest';
 import { ModalsProvider } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { api, ApiError, type Project, type SharedNetwork } from '@/api';
 import { useAuth } from '@/auth/AuthContext';
-import { loadDraft } from '@/builder/draft';
+import { loadDraft, saveDraft } from '@/builder/draft';
+import { i18n } from '@/i18n';
 import { SharedNetworkPage } from './SharedNetworkPage';
 
 vi.mock('@/api', async (importOriginal) => {
@@ -158,5 +159,56 @@ describe('SharedNetworkPage', () => {
     expect(await screen.findByText('Cannot reach it.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('heading', { name: 'Small CNN' })).toBeInTheDocument();
+  });
+});
+
+describe('SharedNetworkPage for a stranger', () => {
+  it('says what Brick DNN is and opens a copy in the editor without an account', async () => {
+    renderPage();
+    const about = await screen.findByRole('region', { name: 'About Brick DNN' });
+    expect(within(about).getByText('Made with Brick DNN')).toBeInTheDocument();
+    expect(
+      within(about).getByText(/is an editor for neural networks in the browser/)
+    ).toBeVisible();
+    // One action in the block.
+    expect(within(about).getAllByRole('button')).toHaveLength(1);
+    expect(within(about).queryByRole('link')).not.toBeInTheDocument();
+
+    await userEvent.click(within(about).getByRole('button', { name: 'Open a copy in the editor' }));
+    // A working copy in this browser: no login, nothing saved on the server.
+    expect(api.shared.duplicate).not.toHaveBeenCalled();
+    expect(notifications.show).not.toHaveBeenCalled();
+    expect(loadDraft()).toMatchObject({ name: 'Small CNN', projectId: null, doc: NETWORK.graph });
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+  });
+
+  it('asks before replacing unsaved work in the editor', async () => {
+    saveDraft({
+      doc: { ...NETWORK.graph, nodes: [...NETWORK.graph.nodes] },
+      name: 'Mine',
+      projectId: null,
+    });
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Open a copy in the editor' }));
+    expect(loadDraft()).toMatchObject({ name: 'Mine' });
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Mine');
+  });
+
+  it('is there for logged-in visitors too, with nothing about the owner in it', async () => {
+    loggedIn(true);
+    renderPage();
+    const about = await screen.findByRole('region', { name: 'About Brick DNN' });
+    expect(about).not.toHaveTextContent('alex');
+    expect(within(about).getByRole('button', { name: 'Open a copy in the editor' })).toBeEnabled();
+  });
+
+  it('has the block in German, and axe finds nothing serious', async () => {
+    await i18n.changeLanguage('de');
+    renderPage();
+    const about = await screen.findByRole('region', { name: 'Über Brick DNN' });
+    expect(within(about).getByText('Erstellt mit Brick DNN')).toBeInTheDocument();
+    expect(within(about).getByText(/ist ein Editor für neuronale Netze im Browser/)).toBeVisible();
+    expect(within(about).getByRole('button', { name: 'Kopie im Editor öffnen' })).toBeVisible();
+    expect(await axeViolations()).toEqual([]);
   });
 });

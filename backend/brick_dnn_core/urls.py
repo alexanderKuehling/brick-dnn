@@ -11,6 +11,7 @@ from . import (
     experiments_views,
     explain_views,
     legal,
+    link_previews,
     mcp,
     oauth,
     projects,
@@ -153,6 +154,13 @@ urlpatterns = [
         "shared/<str:token>/duplicate/",
         projects.SharedProjectDuplicateView.as_view(),
         name="shared-project-duplicate",
+    ),
+    # The meta tags of a shared link, which nginx includes into the app's page so that the
+    # link unfolds in chats (link_previews.py).
+    re_path(
+        r"^link-preview/(?P<kind>share|compare)/(?P<token>[A-Za-z0-9_-]+)/$",
+        link_previews.link_preview,
+        name="link-preview",
     ),
     # MCP server for AI assistants (log in with an API token). Both spellings: MCP clients
     # POST to the URL as given, and Django cannot redirect a POST to add the slash.

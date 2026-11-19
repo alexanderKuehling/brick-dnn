@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Alert, Center, Container, Loader, Stack, Text, Title } from '@mantine/core';
+import { Link, useParams } from 'react-router-dom';
+import { Alert, Button, Center, Container, Loader, Stack, Text, Title } from '@mantine/core';
 import { api, ApiError, type ComparisonOptions, type RunRow, type SharedComparison } from '@/api';
+import { MadeWith } from '@/components/MadeWith';
+import { EDITOR_PATH } from '@/components/RedirectToEditor';
 import { useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 import { columnById, shownColumns, type Column } from './columns';
@@ -133,6 +135,12 @@ export function SharedComparisonPage() {
           </>
         )}
       </Stack>
+      {/* For people who have never seen the app: what it is, and the way into the editor. */}
+      <MadeWith>
+        <Button component={Link} to={EDITOR_PATH}>
+          {t('brand.madeWith.buildYourOwn')}
+        </Button>
+      </MadeWith>
     </Container>
   );
 }

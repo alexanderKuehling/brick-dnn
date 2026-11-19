@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { IconCode, IconCopyPlus, IconEye, IconLinkOff } from '@tabler/icons-react';
+import { IconCode, IconCopyPlus, IconEye, IconLinkOff, IconPencil } from '@tabler/icons-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Badge,
@@ -22,6 +22,7 @@ import { slugify } from '@/builder/graph';
 import { NetworkViewer } from '@/builder/NetworkViewer';
 import { useOpenInBuilder } from '@/builder/useOpenInBuilder';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
+import { MadeWith } from '@/components/MadeWith';
 import { i18n, useTranslation } from '@/i18n';
 import { formatDate } from '@/training/format';
 import classes from './Sharing.module.css';
@@ -101,6 +102,14 @@ export function SharedNetworkPage() {
       });
     } finally {
       setDuplicating(false);
+    }
+  };
+
+  // A copy in the editor needs no account: it is a working copy in this browser, like
+  // every network that was not saved yet.
+  const openCopy = () => {
+    if (network) {
+      openInBuilder({ doc: network.graph, name: network.name, projectId: null });
     }
   };
 
@@ -186,6 +195,7 @@ export function SharedNetworkPage() {
             {i18n.t('ui.sharing.SharedNetworkPage.viewCode')}
           </Button>
           <Button
+            variant={user ? 'filled' : 'default'}
             leftSection={<IconCopyPlus size={16} />}
             loading={duplicating}
             onClick={() => void duplicate()}
@@ -200,6 +210,16 @@ export function SharedNetworkPage() {
         )}
       </div>
       <NetworkViewer key={token} doc={network.graph} />
+      {/* For people who have never seen the app: what it is, and the way into the editor. */}
+      <MadeWith variant="bar">
+        <Button
+          variant={user ? 'light' : 'filled'}
+          leftSection={<IconPencil size={16} />}
+          onClick={openCopy}
+        >
+          {i18n.t('brand.madeWith.openCopy')}
+        </Button>
+      </MadeWith>
       {codeOpened && (
         <Suspense fallback={null}>
           <CodeModal

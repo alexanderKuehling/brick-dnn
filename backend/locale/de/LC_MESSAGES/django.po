@@ -162,6 +162,30 @@ msgstr "Erklärung zur Barrierefreiheit"
 msgid "This page has not been set up on this server."
 msgstr "Diese Seite ist auf diesem Server nicht eingerichtet."
 
+#: brick_dnn_core/link_previews.py:72
+msgid ""
+"Training runs compared side by side in Brick DNN: their settings, results and curves, read-only."
+msgstr ""
+"Trainingsläufe im Vergleich in Brick DNN: Einstellungen, Ergebnisse und Kurven nebeneinander, nur zum Ansehen."
+
+#: brick_dnn_core/link_previews.py:88
+msgid "Brick DNN: neural networks built from layers."
+msgstr "Brick DNN: neuronale Netze, aus Schichten gebaut."
+
+#: brick_dnn_core/link_previews.py:65
+msgid ""
+"A neural network shared with Brick DNN. See its layers and the shape of every tensor, read the PyTorch code, or open a copy in the editor."
+msgstr ""
+"Ein neuronales Netz, geteilt mit Brick DNN. Sehen Sie sich die Schichten und die Form jedes Tensors an, lesen Sie den PyTorch-Code oder öffnen Sie eine Kopie im Editor."
+
+#: brick_dnn_core/link_previews.py:71
+msgid "%(name)s – training runs compared in Brick DNN"
+msgstr "%(name)s – Trainingsläufe im Vergleich in Brick DNN"
+
+#: brick_dnn_core/link_previews.py:64
+msgid "%(name)s – a network built with Brick DNN"
+msgstr "%(name)s – ein Netz, gebaut mit Brick DNN"
+
 #: brick_dnn_core/mail.py:84
 msgid "Hello,"
 msgstr "Hallo,"

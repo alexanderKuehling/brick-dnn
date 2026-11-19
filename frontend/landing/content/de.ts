@@ -29,9 +29,9 @@ const mail = `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`;
 export const de: LandingContent = {
   lang: 'de',
   locale: 'de_DE',
-  title: 'Brick DNN – Deep Learning in Europa, DSGVO-konform, mit PyTorch-Export',
+  title: 'Brick DNN – das Deep-Learning-Praktikum für Kurse, mit PyTorch-Code',
   description:
-    'Deep-Learning-Modelle im Browser aus Schichten bauen, DSGVO-konform auf einem Server in der Schweiz trainieren und lesbaren PyTorch-Code exportieren. Kostenloser Tarif.',
+    'Jede Tensorform sehen, während Sie neuronale Netze aus Bausteinen bauen, und den PyTorch-Code behalten. Ein Deep-Learning-Praktikum im Browser für Lehrveranstaltungen.',
   languageName: 'Deutsch',
   skipLink: 'Zum Inhalt springen',
   nav: {
@@ -43,8 +43,8 @@ export const de: LandingContent = {
     editor: 'Editor öffnen',
   },
   hero: {
-    title: 'Deep Learning in Europa: Netze aus Schichten bauen, PyTorch-Code exportieren.',
-    lead: 'Brick DNN ist ein Editor im Browser für Deep Learning und klassisches maschinelles Lernen. Sie verbinden Schichten auf einer Arbeitsfläche, sehen schon beim Bauen die Form jedes Tensors, trainieren auf einem Server in der Schweiz und erhalten ein lesbares Skript für PyTorch oder scikit-learn. Gemacht für Hochschulen, Forschende und Unternehmen, deren Trainingsdaten in Europa bleiben sollen.',
+    title: 'Jede Form im Blick. Der Code gehört Ihnen.',
+    lead: 'Neuronale Netze aus Bausteinen bauen und als lesbaren PyTorch-Code mitnehmen. Brick DNN ist ein Deep-Learning-Praktikum im Browser, gemacht für Lehrveranstaltungen: Studierende verbinden Schichten auf einer Arbeitsfläche, sehen die Form jedes Tensors und die Parameter jeder Schicht und nehmen ein lesbares Skript für PyTorch oder scikit-learn mit. Kleine und mittlere Modelle trainieren auf einem Server in der Schweiz; der exportierte Code läuft überall.',
     primary: 'Editor öffnen',
     secondary: 'Preise',
     facts: [
@@ -88,7 +88,7 @@ export const de: LandingContent = {
   useCases: {
     title: 'Deep Learning in Lehre, Forschung und Praxis',
     intro:
-      'Brick DNN wird in der Lehre eingesetzt, in der Forschung mit Tabellen und Bildern und überall dort, wo aus einer Architekturskizze lauffähiger Code werden soll.',
+      'Brick DNN ist für die Lehre gemacht, für die Forschung mit Tabellen und Bildern und für alle, die aus einer Architekturskizze lauffähigen Code machen wollen.',
     items: [
       {
         title: 'Deep Learning unterrichten',
@@ -302,6 +302,7 @@ export const de: LandingContent = {
     notes: [
       `In den kostenpflichtigen Tarifen ist zusätzliche Rechenzeit über das Kontingent hinaus für ${euro(OVERAGE_PRICE)} je CPU-Stunde möglich, nur wenn Sie sie selbst einschalten.`,
       'Monatliche Abos, zum Monatsende kündbar. Zahlung und Rechnung übernimmt Paddle.',
+      'Innerhalb von 14 Tagen nach dem ersten Kauf eines Tarifs erhalten Sie auf Anfrage den vollen Betrag zurück, ohne Angabe von Gründen. Die Einzelheiten stehen in der Erstattungsregel.',
     ],
     more: 'Alle Details auf der Preisseite',
   },
@@ -347,7 +348,8 @@ export const de: LandingContent = {
     ],
   },
   footer: {
-    tagline: 'Deep Learning aus Bausteinen, in der Schweiz gehostet, mit lesbarem PyTorch-Code.',
+    tagline:
+      'Das Deep-Learning-Praktikum für Kurse: jede Form im Blick, der PyTorch-Code gehört Ihnen.',
     legalLabel: 'Rechtliches',
     legal: {
       imprint: 'Impressum',
@@ -375,5 +377,6 @@ export const de: LandingContent = {
     'Gemeinsames Bearbeiten geteilter Netze in Echtzeit',
     'MCP-Server für KI-Assistenten und REST-API',
   ],
-  ogImageAlt: 'Brick DNN: der Editor mit einem Faltungsnetz und der Form jeder Schicht.',
+  ogImageAlt:
+    'Brick DNN: See every shape. Keep the code. Daneben ein kleines Faltungsnetz aus Bausteinen, jeder mit seiner Ausgabeform.',
 };

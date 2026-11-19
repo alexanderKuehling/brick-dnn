@@ -6,7 +6,9 @@
  *   diagram, its layers with shapes and parameter counts and the generated code, all from
  *   examples/examples.json (made by the backend from the real example graphs and generator);
  * - the guides (/guides/, /de/anleitungen/);
- * - the German pricing page (/de/preise/). English has none: /pricing is the app's page.
+ * - the German pricing page (/de/preise/). English has none: /pricing is the app's page;
+ * - the pages about Brick DNN itself: for lecturers (/teaching/, /de/lehre/), who is behind
+ *   it (/about/, /de/ueber/) and security (/security/, /de/sicherheit/).
  *
  * Like the landing pages they are plain HTML and CSS without any script, and load nothing from
  * elsewhere.
@@ -18,12 +20,15 @@ import { examplesDe } from './content/examples.de.ts';
 import { examplesEn } from './content/examples.en.ts';
 import { guidesDe } from './content/guides.de.ts';
 import { guidesEn } from './content/guides.en.ts';
+import { infoDe } from './content/info.de.ts';
+import { infoEn } from './content/info.en.ts';
 import { pricingDe } from './content/pricing.de.ts';
 import type {
   ExampleCopy,
   ExampleGallery,
   Guide,
   GuideIndex,
+  InfoPage,
   LandingContent,
 } from './content/types.ts';
 import {
@@ -55,8 +60,10 @@ import {
   type Crumb,
 } from './layout.ts';
 import {
+  ABOUT_PATHS,
   absolute,
   AUTHOR,
+  DATA_PROTECTION_PATHS,
   EDITOR_PATH,
   editorExampleUrl,
   EXAMPLES_PATHS,
@@ -65,6 +72,8 @@ import {
   PAGE_PATHS,
   PLANS,
   PRICING_DE_PATH,
+  SECURITY_PATHS,
+  TEACHING_PATHS,
   type Lang,
 } from './site.ts';
 
@@ -78,12 +87,19 @@ export const GUIDE_COPY: Record<Lang, { index: GuideIndex; guides: Guide[] }> = 
   en: guidesEn,
   de: guidesDe,
 };
+export const INFO_COPY: Record<Lang, InfoPage[]> = { en: infoEn, de: infoDe };
+const INFO_PATHS: Record<InfoPage['id'], Record<Lang, string>> = {
+  teaching: TEACHING_PATHS,
+  about: ABOUT_PATHS,
+  security: SECURITY_PATHS,
+  dataProtection: DATA_PROTECTION_PATHS,
+};
 const LOCALES: Record<Lang, string> = { en: 'en_US', de: 'de_DE' };
 
 /** When the example pages were written (their JSON-LD); the facts follow examples.json. */
 export const EXAMPLES_DATE = '2026-11-16';
 
-export type PageKind = 'home' | 'examples' | 'example' | 'guides' | 'guide' | 'pricing';
+export type PageKind = 'home' | 'examples' | 'example' | 'guides' | 'guide' | 'pricing' | 'info';
 
 /** A page of the site: what the sitemap, llms.txt, the build check and the tests need. */
 export interface PageMeta {
@@ -98,7 +114,7 @@ export interface PageMeta {
   types: string[];
   /** The file in dist/. */
   file: string;
-  /** The example or guide it shows. */
+  /** The example, guide or page about Brick DNN it shows. */
   id?: string;
 }
 
@@ -189,6 +205,22 @@ export function contentPages(): PageMeta[] {
             : ['Article', 'BreadcrumbList'],
         file: fileOf(path),
         id: entry.id,
+      });
+    }
+  }
+  for (const lang of LANGS) {
+    for (const info of INFO_COPY[lang]) {
+      const path = INFO_PATHS[info.id][lang];
+      pages.push({
+        kind: 'info',
+        path,
+        lang,
+        title: info.title,
+        description: info.description,
+        alternates: INFO_PATHS[info.id],
+        types: [info.id === 'about' ? 'AboutPage' : 'WebPage', 'BreadcrumbList'],
+        file: fileOf(path),
+        id: info.id,
       });
     }
   }
@@ -746,6 +778,44 @@ ${section(
   return shell(page, assets, 'pricing', main, graph, 'website', { en: '/#pricing' });
 }
 
+// ------------------------------------------------------------------------------ about Brick DNN
+
+function renderInfo(page: PageMeta, assets: Assets): string {
+  const lang = page.lang;
+  const info = INFO_COPY[lang].find((candidate) => candidate.id === page.id)!;
+  const crumbs: Crumb[] = [
+    homeCrumb(lang),
+    // The fact sheet belongs to the page for lecturers.
+    ...(info.id === 'dataProtection'
+      ? [{ name: COMMON[lang].nav.teaching, path: TEACHING_PATHS[lang] }]
+      : []),
+    { name: COMMON[lang].nav[info.id], path: page.path },
+  ];
+  const main = `${breadcrumbs(lang, crumbs)}
+<article class="doc">
+<header class="page-head">
+<p class="kicker">${escapeHtml(info.kicker)}</p>
+<h1>${escapeHtml(info.h1)}</h1>
+<p class="lead">${info.lead}</p>${
+    info.action
+      ? `\n<p class="cta"><a class="button" href="${info.action.href}">${escapeHtml(info.action.label)}</a></p>`
+      : ''
+  }
+</header>
+${info.sections.map((part) => section(part.id, part.title, part.html)).join('\n')}
+</article>`;
+  const graph = [
+    webPage(page, info.id === 'about' ? 'AboutPage' : 'WebPage', {
+      about: { '@id': info.id === 'about' ? ORGANIZATION_ID : SOFTWARE_ID },
+      ...(info.id === 'teaching'
+        ? { audience: { '@type': 'EducationalAudience', educationalRole: 'teacher' } }
+        : {}),
+    }),
+    breadcrumbList(crumbs),
+  ];
+  return shell(page, assets, 'info', main, graph, 'website');
+}
+
 /** The HTML of a content page. */
 export function renderContentPage(page: PageMeta, assets: Assets): string {
   switch (page.kind) {
@@ -759,6 +829,8 @@ export function renderContentPage(page: PageMeta, assets: Assets): string {
       return renderGuideIndex(page, assets);
     case 'pricing':
       return renderPricing(page, assets);
+    case 'info':
+      return renderInfo(page, assets);
     default:
       throw new Error(`${page.path} is not a content page`);
   }
@@ -773,7 +845,14 @@ export function llmsSections(): string {
   const guides = GUIDE_COPY.en.guides.map(
     (entry) => `- [${entry.h1}](${absolute(guidePath('en', entry))}): ${plainText(entry.summary)}`
   );
+  const info = INFO_COPY.en.map(
+    (entry) => `- [${entry.h1}](${absolute(INFO_PATHS[entry.id].en)}): ${entry.description}`
+  );
   const german = [
+    ...INFO_COPY.de.map(
+      (entry) =>
+        `- [${entry.h1}](${absolute(INFO_PATHS[entry.id].de)}): the page “${COMMON.en.nav[entry.id]}” in German`
+    ),
     `- [Beispiele](${absolute(EXAMPLES_PATHS.de)}): the example gallery in German`,
     `- [Anleitungen](${absolute(GUIDES_PATHS.de)}): the guides in German`,
     `- [Preise](${absolute(PRICING_DE_PATH)}): plans, limits and billing in German`,
@@ -787,6 +866,10 @@ ${examples.join('\n')}
 ## Guides
 
 ${guides.join('\n')}
+
+## About Brick DNN
+
+${info.join('\n')}
 
 ## Pages in German
 

@@ -175,6 +175,25 @@ export interface GuideIndex {
   intro: string;
 }
 
+/**
+ * A page about Brick DNN itself (info.<lang>.ts): for lecturers, who is behind it, security.
+ * The same `id` in both languages makes the pair.
+ */
+export interface InfoPage {
+  id: 'teaching' | 'about' | 'security' | 'dataProtection';
+  title: string;
+  description: string;
+  /** A short line above the heading. */
+  kicker: string;
+  h1: string;
+  /** The opening paragraph (HTML). */
+  lead: string;
+  /** The one button under the opening paragraph. */
+  action?: { label: string; href: string };
+  /** HTML written by hand: paragraphs in `.prose`, lists, `dl.glance`, snippets. */
+  sections: { id: string; title: string; html: string }[];
+}
+
 /** The German pricing page (pricing.de.ts). */
 export interface PricingPageContent {
   title: string;
