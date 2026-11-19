@@ -3,6 +3,29 @@
 ## Unreleased
 
 ### Added
+- **Predict a file.** The prediction panel of a run trained on a table (neural networks,
+  classical models, hybrid networks, ensembles of runs) has **Predict a file**: choose or drop
+  a CSV file, the browser uploads it as it is, the server predicts every row and gives a
+  result file back, e.g. the submission for a competition. The options appear once a file is
+  chosen: all columns of the file or only chosen ones (typically an id) plus the prediction,
+  the name of the prediction column, and for classifiers the class (by the run's decision
+  threshold), the probability of one class or the probabilities of all classes; regressions
+  write the value in the units of the target. Columns are matched by name, other columns are
+  ignored by the model but can be kept, a run on a dataset from the Data tab takes the columns
+  of the source table and applies its data preparation, delimiter and encoding are detected.
+  The rows keep their order; a row that cannot be predicted keeps its place with an empty
+  prediction and is counted and listed with the reason. The panel shows the first 20 rows of
+  the result, the rows per class or the range of the values, and the metrics if the file has
+  the target column. `POST /api/training/runs/<id>/predict-file/` (multipart) and `GET
+  …/predict-file/<result id>/` in [docs/api.md](docs/api.md#predicting-a-file); a process of
+  its own (`brickdnn.training.predict_file`) loads the model once and reads the file in chunks.
+  Limits `BRICKDNN_PREDICT_FILE_MAX_MB` (200), `BRICKDNN_PREDICT_FILE_MAX_ROWS` (1,000,000) and
+  `BRICKDNN_PREDICT_FILE_TIMEOUT` (270 s); the CPU time counts as a prediction. Both files are
+  temporary: the upload is deleted when the prediction ends, the result with its download and
+  at the latest after `BRICKDNN_PREDICT_FILE_KEEP_MINUTES` (60); backups leave them out.
+  nginx gets a location for the upload. The text field for pasted CSV rows now takes 300 rows
+  (it was 500, also from a file read into the field, which made the page slow) and points to
+  **Predict a file**.
 - **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
   has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
   `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):
