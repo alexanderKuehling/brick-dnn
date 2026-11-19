@@ -171,21 +171,164 @@ it('overlays the curves of the selected runs and warns about different losses', 
   expect(screen.getByText(/Smoothed with a moving average/)).toBeInTheDocument();
 });
 
-it('compares at most 10 runs', async () => {
-  const many = Array.from({ length: 11 }, (_, i) => ({
+/** `count` runs "Run 0", "Run 1", … (ids r0, r1, …), each with its own learning rate. */
+function manyRuns(count: number, from = 0) {
+  return Array.from({ length: count }, (_, i) => ({
     ...ROWS[0],
-    id: `r${i}`,
-    name: `Run ${i}`,
+    id: `r${from + i}`,
+    name: `Run ${from + i}`,
+    settings: { ...ROWS[0].settings, learning_rate: 0.001 * (from + i + 1) },
   }));
-  vi.mocked(api.training.runs.table).mockResolvedValue(table(many));
-  vi.mocked(api.training.runs.curves).mockResolvedValue({ runs: [], missing: [] });
+}
+
+it('selects and deselects all runs of the page with the checkbox in the header', async () => {
   renderPage();
   await tableRows();
-  for (let i = 0; i < 10; i += 1) {
-    await userEvent.click(screen.getByRole('checkbox', { name: `Compare “Run ${i}”` }));
-  }
-  expect(screen.getByRole('checkbox', { name: 'Compare “Run 10”' })).toBeDisabled();
-  expect(screen.getByText(/10 of 10 selected/)).toBeInTheDocument();
+  const all = screen.getByRole('checkbox', { name: 'Select all runs on this page' });
+  const runs = () => screen.getAllByRole('checkbox', { name: /^Compare “/ });
+  expect(all).not.toBeChecked();
+  expect(all).not.toHaveAttribute('aria-checked');
+  expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+
+  // Some of them: indeterminate.
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Compare “SGD 1e-2”' }));
+  expect(all).toBePartiallyChecked();
+  expect(all).toHaveAttribute('aria-checked', 'mixed');
+  expect(screen.getByText('4 runs · 1 selected')).toBeInTheDocument();
+
+  // All of them, with the keyboard; the run selected before stays the first.
+  all.focus();
+  await userEvent.keyboard(' ');
+  expect(all).toBeChecked();
+  expect(all).not.toBePartiallyChecked();
+  expect(all).not.toHaveAttribute('aria-checked');
+  runs().forEach((box) => expect(box).toBeChecked());
+  expect(screen.getByText('4 runs · 4 selected')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(api.training.runs.curves).toHaveBeenLastCalledWith(
+      ['b2', 'a1', 'c3', 'd4'],
+      expect.anything()
+    )
+  );
+  expect(screen.queryByText(/The charts show the first/)).not.toBeInTheDocument();
+
+  // One less: indeterminate again; the header then selects the rest.
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Compare “Focal”' }));
+  expect(all).toBePartiallyChecked();
+  await userEvent.click(all);
+  expect(all).toBeChecked();
+  expect(screen.getByText('4 runs · 4 selected')).toBeInTheDocument();
+
+  // None of them.
+  await userEvent.click(all);
+  expect(all).not.toBeChecked();
+  runs().forEach((box) => expect(box).not.toBeChecked());
+  expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Select runs in the table/)).toBeInTheDocument();
+
+  // "Clear" next to the count.
+  await userEvent.click(all);
+  const clear = screen.getByRole('button', { name: 'Clear the selection' });
+  expect(clear).toHaveTextContent('Clear');
+  await userEvent.click(clear);
+  expect(all).not.toBeChecked();
+  expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+});
+
+it('keeps the runs selected on another page', async () => {
+  vi.mocked(api.training.runs.table).mockImplementation(async (query) =>
+    query?.page === 2
+      ? table(manyRuns(2, 3), { count: 5, page: 2, pages: 2 })
+      : table(manyRuns(3), { count: 5, pages: 2 })
+  );
+  renderPage();
+  await tableRows();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Select all runs on this page' }));
+  expect(screen.getByText('5 runs · 3 selected')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+  await screen.findByRole('checkbox', { name: 'Compare “Run 4”' });
+  const all = screen.getByRole('checkbox', { name: 'Select all runs on this page' });
+  expect(all).not.toBeChecked();
+  expect(all).not.toBePartiallyChecked();
+  await userEvent.click(all);
+  expect(screen.getByText('5 runs · 5 selected')).toBeInTheDocument();
+  await userEvent.click(all);
+  expect(screen.getByText('5 runs · 3 selected')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(api.training.runs.curves).toHaveBeenLastCalledWith(['r0', 'r1', 'r2'], expect.anything())
+  );
+});
+
+it('draws the curves of the first 10 selected runs, the other charts take all', async () => {
+  vi.mocked(api.training.runs.table).mockResolvedValue(table(manyRuns(12)));
+  vi.mocked(api.training.runs.curves).mockImplementation(async (ids) => ({
+    runs: ids.map((id) => curve(id, `Run ${id.slice(1)}`)),
+    missing: [],
+  }));
+  vi.mocked(api.training.comparisons.create).mockResolvedValue({
+    id: 6,
+    name: 'Sweep',
+    token: 'tok-abcdef',
+    runs: [],
+    columns: [],
+    options: {},
+    include_notes: false,
+    created_at: '2026-11-17T10:00:00Z',
+  });
+  renderPage();
+  await tableRows();
+  const all = screen.getByRole('checkbox', { name: 'Select all runs on this page' });
+  await userEvent.click(all);
+  expect(screen.getByText('12 runs · 12 selected')).toBeInTheDocument();
+  screen
+    .getAllByRole('checkbox', { name: /^Compare “/ })
+    .forEach((box) => expect(box).toBeEnabled());
+
+  // Curves: the first ten, and one line that says so.
+  const firstTen = Array.from({ length: 10 }, (_, i) => `r${i}`);
+  await waitFor(() =>
+    expect(api.training.runs.curves).toHaveBeenLastCalledWith(firstTen, expect.anything())
+  );
+  expect(
+    await screen.findByText('The charts show the first 10 of 12 selected runs.')
+  ).toBeInTheDocument();
+  await screen.findByRole('slider', { name: /^Loss: use the arrow keys/ });
+  const legend = within(screen.getAllByRole('list', { name: 'Legend' })[0]);
+  expect(legend.getAllByRole('listitem')).toHaveLength(10);
+  expect(legend.getByText('Run 9')).toBeInTheDocument();
+  expect(legend.queryByText('Run 10')).not.toBeInTheDocument();
+
+  // Without the eleventh and twelfth run the same curves stay; nothing is loaded again.
+  const calls = vi.mocked(api.training.runs.curves).mock.calls.length;
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Compare “Run 11”' }));
+  expect(screen.getByText('The charts show the first 10 of 11 selected runs.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Compare “Run 10”' }));
+  expect(screen.queryByText(/The charts show the first/)).not.toBeInTheDocument();
+  expect(api.training.runs.curves).toHaveBeenCalledTimes(calls);
+  await userEvent.click(all);
+  expect(screen.getByText('12 runs · 12 selected')).toBeInTheDocument();
+
+  // The scatter plot and the parallel coordinates: all twelve.
+  await userEvent.click(screen.getByRole('tab', { name: 'Settings vs. result' }));
+  expect(await screen.findByText(/^12 runs with both values/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('tab', { name: 'Parallel coordinates' }));
+  expect(
+    await screen.findByRole('slider', { name: /Settings and results: use the arrow keys/ })
+  ).toHaveAttribute('aria-valuemax', '12');
+
+  // A shared link keeps its limit: the same ten runs.
+  await userEvent.click(screen.getByRole('button', { name: 'Share comparison…' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Share a comparison' });
+  expect(
+    within(dialog).getByText(
+      /^A read-only link to these 10 runs\..* They are the first 10 of the 12 selected runs\.$/
+    )
+  ).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Create the link' }));
+  expect(api.training.comparisons.create).toHaveBeenCalledWith(
+    expect.objectContaining({ runs: firstTen })
+  );
 });
 
 it('plots a setting against a result, and parallel coordinates', async () => {
@@ -301,21 +444,77 @@ it('expands the trials of a search', async () => {
 });
 
 describe.each(['en', 'de'] as const)('in %s', (language) => {
+  const de = language === 'de';
+  const selectAll = de ? 'Alle Läufe dieser Seite auswählen' : 'Select all runs on this page';
+
   beforeEach(async () => {
     await i18n.changeLanguage(language);
   });
 
   it('finds nothing serious with axe, with runs compared', async () => {
     renderPage();
-    await screen.findByRole('table', { name: language === 'de' ? 'Läufe' : 'Runs' });
-    const name = language === 'de' ? '„Adam 1e-3“ vergleichen' : 'Compare “Adam 1e-3”';
+    await screen.findByRole('table', { name: de ? 'Läufe' : 'Runs' });
+    const name = de ? '„Adam 1e-3“ vergleichen' : 'Compare “Adam 1e-3”';
     await userEvent.click(screen.getByRole('checkbox', { name }));
     await screen.findAllByRole('slider');
+    // Some runs are selected: the header's checkbox is indeterminate.
+    expect(screen.getByRole('checkbox', { name: selectAll })).toHaveAttribute(
+      'aria-checked',
+      'mixed'
+    );
     expect(await axeViolations()).toEqual([]);
-    if (language === 'de') {
+    if (de) {
       expect(screen.getByRole('heading', { name: 'Läufe' })).toBeInTheDocument();
       expect(screen.getByRole('columnheader', { name: /Lernrate/ })).toBeInTheDocument();
       expect(screen.getAllByText(/^90,0\s%$/).length).toBeGreaterThan(0);
+      expect(screen.getByText('4 Läufe · 1 ausgewählt')).toBeInTheDocument();
     }
+  });
+
+  it('finds nothing serious with axe, with more runs selected than the charts take', async () => {
+    vi.mocked(api.training.runs.table).mockResolvedValue(table(manyRuns(12)));
+    vi.mocked(api.training.runs.curves).mockImplementation(async (ids) => ({
+      runs: ids.map((id) => curve(id, `Run ${id.slice(1)}`)),
+      missing: [],
+    }));
+    renderPage();
+    await screen.findByRole('table', { name: de ? 'Läufe' : 'Runs' });
+    const all = screen.getByRole('checkbox', { name: selectAll });
+    await userEvent.click(all);
+    expect(all).toBeChecked();
+    expect(
+      screen.getByText(de ? '12 Läufe · 12 ausgewählt' : '12 runs · 12 selected')
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        de
+          ? 'Die Diagramme zeigen die ersten 10 von 12 ausgewählten Läufen.'
+          : 'The charts show the first 10 of 12 selected runs.'
+      )
+    ).toBeInTheDocument();
+    await screen.findAllByRole('slider');
+    expect(await axeViolations()).toEqual([]);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: de ? 'Vergleich teilen …' : 'Share comparison…' })
+    );
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        de
+          ? /Es sind die ersten 10 der 12 ausgewählten Läufe\.$/
+          : /They are the first 10 of the 12 selected runs\.$/
+      )
+    ).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const clear = screen.getByRole('button', {
+      name: de ? 'Auswahl aufheben' : 'Clear the selection',
+    });
+    expect(clear).toHaveTextContent(de ? 'Aufheben' : 'Clear');
+    await userEvent.click(clear);
+    expect(all).not.toBeChecked();
+    expect(screen.getByText(de ? '12 Läufe' : '12 runs')).toBeInTheDocument();
   });
 });

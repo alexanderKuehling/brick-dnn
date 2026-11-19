@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
+  of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
+  selected); runs selected on other pages stay. The line above the table counts them
+  (*12 selected*) with *Clear* next to it. The selection is no longer limited to ten runs:
+  the scatter plot and the parallel coordinates take all selected runs, the curve charts
+  show the first ten (in the order they were selected) and say so in one line, and a shared
+  comparison keeps its limit and takes the same first ten, which its dialog says.
 - **Predict a file.** The prediction panel of a run trained on a table (neural networks,
   classical models, hybrid networks, ensembles of runs) has **Predict a file**: choose or drop
   a CSV file, the browser uploads it as it is, the server predicts every row and gives a
