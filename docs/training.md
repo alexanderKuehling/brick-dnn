@@ -568,11 +568,11 @@ who can see the run can use it, also viewers of a shared project:
   (numbers, a list of the known categories, a date picker for dates, true/false). **Use a
   sample** fills in a row of the validation data (of the dataset for uploaded CSV files, whose
   split is not stored) and shows its actual value next to the prediction. **Paste CSV rows**
-  takes a header line and up to 500 rows (pasted or from a file; `,` or `;` separated), sent in
-  requests of 64 rows; the results table can be downloaded as a CSV file with the inputs and
-  the predictions. Classification shows the class, its probability and the top 3 classes;
-  regression the value in the units of the target, a Gaussian process with ± its standard
-  deviation.
+  takes a header line and up to 300 rows (`,` or `;` separated), sent in requests of 64 rows;
+  the results table can be downloaded as a CSV file with the inputs and the predictions. More
+  rows are predicted from a file (below). Classification shows the class, its probability and
+  the top 3 classes; regression the value in the units of the target, a Gaussian process with
+  ± its standard deviation.
 - **Images** (built-in sets, image folders): drop or choose an image file; it is resized to
   the training size (and turned grayscale for one channel) in the browser, then normalised by
   the server like the training images. Grayscale sets of at most 64×64 pixels (MNIST,
@@ -583,6 +583,57 @@ who can see the run can use it, also viewers of a shared project:
 
 Errors of the server appear next to the field they are about. Predictions use compute; when a
 budget is used up, the panel says so and the server refuses them.
+
+### Predicting a file
+
+**Predict a file** in the same panel takes a whole CSV file, e.g. the test file of a
+competition: every run trained on a table can (neural networks, classical models, hybrid
+networks, ensembles of runs). The browser uploads the file as it is, the server predicts
+every row and keeps a result file to download. Once a file is chosen, the options of the
+result appear:
+
+- **Columns of the result**: all columns of the file (default) or only chosen ones, typically
+  an id, each followed by the prediction.
+- **Name of the prediction column** (`prediction`; the name of the target column when the
+  file does not have it).
+- Classifiers, **what is written**: the class, the probability of one class (for metrics such
+  as AUC or log loss; the second class of a binary classification by default) or the
+  probabilities of all classes, one column per class named like the class. The class follows
+  the run's decision threshold. Regressions write the value in the units of the target.
+
+The columns are matched by name; their order does not matter, and other columns (an id, a
+name …) are ignored by the model but can be kept in the result. A run trained on a dataset
+from the Data tab takes the columns of the imported source table and applies its data
+preparation with the values it learned (so missing values are filled as in the training,
+[raw rows](#raw-rows-for-datasets-from-the-data-tab)); a file with the prepared feature columns
+works too. Delimiter (`,` `;` tab `|`) and text encoding (UTF-8, UTF-16, Windows-1252) are
+detected like at the import, a file with `;` usually has decimal commas, and a file without a
+header line is read by position like a training file without one. A file without one of the
+model's columns is refused with the names of the missing columns.
+
+The result has the same rows in the same order (empty lines are no rows). A row that cannot
+be predicted (a value that is not a number, too few values, no value in a feature after the
+preparation) keeps its place with an empty prediction; the summary counts these rows and lists
+the first 20 with the reason. The panel shows the first 20 rows of the result, how many rows
+each class got (or the range of the values), warnings of the preparation (e.g. categories the
+training never saw) and, **if the file has the target column**, the metrics on it: accuracy,
+log loss and for two classes the ROC AUC, or RMSE, MAE and R². They are left out for a
+regression when the data preparation changes the target column, because the file's values are
+then in other units than the predictions.
+
+*A submission for a competition:* choose the test file, **Only chosen** with the id column,
+name the prediction column like the sample submission does, for a metric on probabilities
+choose the probability of the positive class, predict, download.
+
+Limits: a file may have `BRICKDNN_PREDICT_FILE_MAX_MB` (200 MB, and never more than a dataset
+upload, `BRICKDNN_MAX_UPLOAD_MB`) and `BRICKDNN_PREDICT_FILE_MAX_ROWS` (1,000,000) rows, and
+predicting it may take `BRICKDNN_PREDICT_FILE_TIMEOUT` (270) seconds; one file is predicted at
+a time per `BRICKDNN_MAX_PREDICTIONS`, in a process of its own that reads the file in chunks
+of 2,000 rows, so its memory does not grow with the file. The CPU time counts as a prediction
+against the budgets of who asks, like single predictions, and a used-up budget refuses the
+file. **Both files are temporary**: the uploaded file is deleted as soon as the prediction
+has ended, the result with its download, and at the latest
+`BRICKDNN_PREDICT_FILE_KEEP_MINUTES` (60) after it was made. They do not count as storage.
 
 ### Raw rows for datasets from the Data tab
 
@@ -1588,6 +1639,10 @@ limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
 | `BRICKDNN_UPLOAD_RATE` | `60/hour` | Rate limit for uploads |
 | `BRICKDNN_MAX_PREDICTIONS` | `1` | Predictions running at the same time (all users) |
 | `BRICKDNN_PREDICT_RATE` | `120/hour` | Rate limit for predictions |
+| `BRICKDNN_PREDICT_FILE_MAX_MB` | `200` | Largest CSV file for [Predict a file](#predicting-a-file) (never more than `BRICKDNN_MAX_UPLOAD_MB`) |
+| `BRICKDNN_PREDICT_FILE_MAX_ROWS` | `1000000` | Most rows of such a file |
+| `BRICKDNN_PREDICT_FILE_TIMEOUT` | `270` | Seconds predicting a file may take (below gunicorn's 300) |
+| `BRICKDNN_PREDICT_FILE_KEEP_MINUTES` | `60` | Minutes a result that is not downloaded is kept |
 | `BRICKDNN_MCP_UPLOAD_MB` | `5` | Largest CSV file AI assistants can upload over MCP |
 | `BRICKDNN_INSTALL_TORCH` | `false` | Docker build: install PyTorch (CPU) into the backend image |
 | `BRICKDNN_GP_MAX_ROWS` | `5000` | Training rows a Gaussian process regression is fitted on at most (more are subsampled) |

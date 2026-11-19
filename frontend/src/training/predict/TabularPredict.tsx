@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { IconArrowsShuffle, IconFileUpload, IconWand } from '@tabler/icons-react';
+import { IconArrowsShuffle, IconWand } from '@tabler/icons-react';
 import {
   Autocomplete,
   Button,
-  FileButton,
+  Divider,
   Group,
   Progress,
   SegmentedControl,
@@ -18,12 +18,14 @@ import {
 import type { Prediction, PredictionForm, PredictionResult, PredictionSample } from '@/api';
 import { downloadText } from '@/builder/download';
 import { i18n, useTranslation } from '@/i18n';
+import { FilePredict } from './FilePredict';
 import { MemberResults, Messages, ResultCard, ResultsTable } from './PredictionResults';
 import { isProblem, predictAll, type PredictionProblem } from './requests';
 import {
   cellText,
   cellValue,
   csvRows,
+  hasMoreLines,
   parseMessage,
   resultsCsv,
   type CsvRows,
@@ -128,7 +130,10 @@ function Field({
   );
 }
 
-/** The prediction form of a run trained on a table: one row by hand, or many from CSV text. */
+/**
+ * The prediction form of a run trained on a table: one row by hand, a few hundred from CSV
+ * text, or every row of a file (FilePredict).
+ */
 export function TabularPredict({ runId, form, fileBase, ensemble = false }: TabularPredictProps) {
   useTranslation();
   const [mode, setMode] = useState<Mode>(form.raw ? 'raw' : 'prepared');
@@ -378,7 +383,21 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
             minRows={3}
             maxRows={10}
             value={csvText}
-            onChange={(event) => setCsvText(event.currentTarget.value)}
+            onChange={(event) => {
+              const text = event.currentTarget.value;
+              // The header line and the rows; a long file would make the page slow.
+              if (hasMoreLines(text, form.max_form_rows + 1)) {
+                setProblem({
+                  message: i18n.t('ui.training.TabularPredict.tooManyRowsForTheField', {
+                    max_form_rows: form.max_form_rows,
+                  }),
+                  errors: [],
+                  budget: false,
+                });
+                return;
+              }
+              setCsvText(text);
+            }}
             styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
           />
           <Group gap="xs">
@@ -390,25 +409,6 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
             >
               {i18n.t('ui.training.TabularPredict.predictRows')}
             </Button>
-            <FileButton
-              accept=".csv,.tsv,.txt,text/csv,text/plain"
-              onChange={(file) => {
-                if (file) {
-                  void file.text().then(setCsvText);
-                }
-              }}
-            >
-              {(props) => (
-                <Button
-                  {...props}
-                  size="xs"
-                  variant="default"
-                  leftSection={<IconFileUpload size={14} />}
-                >
-                  {i18n.t('ui.training.TabularPredict.uploadACsvFile')}
-                </Button>
-              )}
-            </FileButton>
           </Group>
           {progress !== null && many === null && (
             <Progress
@@ -464,6 +464,12 @@ export function TabularPredict({ runId, form, fileBase, ensemble = false }: Tabu
         title={i18n.t('ui.training.TabularPredict.note')}
         messages={warnings}
       />
+      {form.file && (
+        <>
+          <Divider />
+          <FilePredict runId={runId} form={form} />
+        </>
+      )}
     </Stack>
   );
 }

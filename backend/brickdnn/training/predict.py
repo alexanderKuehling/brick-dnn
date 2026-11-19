@@ -49,6 +49,7 @@ import math
 import os
 import sys
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -86,19 +87,28 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
 
     Raises :class:`PredictionError`.
     """
-    run_dir = Path(run_dir)
     if isinstance(request, dict) and "explain" in request:  # see explain/__init__.py
         from .explain import run as run_explanation
 
-        return run_explanation(run_dir, request["explain"])
+        return run_explanation(Path(run_dir), request["explain"])
+    return load(run_dir)(request)
+
+
+def load(run_dir: str | Path) -> Callable[[Any], dict[str, Any]]:
+    """Load the trained model of ``run_dir`` once. The function it returns answers a request
+    like :func:`predict`, as often as needed (predict_file.py predicts a file in chunks).
+
+    Raises :class:`PredictionError`, and so does the returned function.
+    """
+    run_dir = Path(run_dir)
     job = read_job(run_dir)
     if job is None or not isinstance(job.get("graph"), dict):
         raise PredictionError("The network of this run is missing.")
     family = graph_family(job["graph"])
     if family == "classical":
-        return _predict_classical(run_dir, request)
+        return _load_classical(run_dir)
     if family == "hybrid":
-        return _predict_hybrid(run_dir, job["graph"], request)
+        return _load_hybrid(run_dir, job["graph"])
     try:
         import torch
 
@@ -125,29 +135,32 @@ def predict(run_dir: str | Path, request: Any) -> dict[str, Any]:
         ) from exc
     model.eval()
 
-    if isinstance(request, dict) and request.get("images") is not None:
-        inputs = [_image_tensor(request["images"], request.get("image"), torch)]
-    else:
-        specs = request.get("inputs") if isinstance(request, dict) else None
-        if not isinstance(specs, list) or not specs:
-            raise PredictionError("No inputs were given.")
-        inputs = [_tensor(spec, torch) for spec in specs]
-    try:
-        with torch.no_grad():
-            output = model(*inputs)
-    except Exception as exc:
-        raise PredictionError(
-            f"The network could not process the inputs: {short_error(exc)}"
-        ) from exc
-    outputs = output if isinstance(output, (tuple, list)) else (output,)
-    if isinstance(request.get("segmentation"), dict):
-        return {"masks": _masks(outputs[0], request["segmentation"], torch)}
-    if sum(o.numel() for o in outputs) > MAX_OUTPUT_VALUES:
-        raise PredictionError(
-            f"The outputs are too large to return (more than {MAX_OUTPUT_VALUES:,} numbers). "
-            "Predict fewer samples at a time."
-        )
-    return {"outputs": [finite(o.detach().float().cpu().tolist()) for o in outputs]}
+    def answer(request: Any) -> dict[str, Any]:
+        if isinstance(request, dict) and request.get("images") is not None:
+            inputs = [_image_tensor(request["images"], request.get("image"), torch)]
+        else:
+            specs = request.get("inputs") if isinstance(request, dict) else None
+            if not isinstance(specs, list) or not specs:
+                raise PredictionError("No inputs were given.")
+            inputs = [_tensor(spec, torch) for spec in specs]
+        try:
+            with torch.no_grad():
+                output = model(*inputs)
+        except Exception as exc:
+            raise PredictionError(
+                f"The network could not process the inputs: {short_error(exc)}"
+            ) from exc
+        outputs = output if isinstance(output, (tuple, list)) else (output,)
+        if isinstance(request.get("segmentation"), dict):
+            return {"masks": _masks(outputs[0], request["segmentation"], torch)}
+        if sum(o.numel() for o in outputs) > MAX_OUTPUT_VALUES:
+            raise PredictionError(
+                f"The outputs are too large to return (more than {MAX_OUTPUT_VALUES:,} "
+                "numbers). Predict fewer samples at a time."
+            )
+        return {"outputs": [finite(o.detach().float().cpu().tolist()) for o in outputs]}
+
+    return answer
 
 
 def _image_tensor(files: Any, image: Any, torch: Any) -> Any:
@@ -256,7 +269,7 @@ def _masks(output: Any, options: dict[str, Any], torch: Any) -> list[dict[str, A
     return masks
 
 
-def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
+def _load_classical(run_dir: Path) -> Callable[[Any], dict[str, Any]]:
     """Predict with the fitted scikit-learn pipeline of a classical model."""
     try:
         import joblib
@@ -274,18 +287,21 @@ def _predict_classical(run_dir: Path, request: Any) -> dict[str, Any]:
     except Exception as exc:
         raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
 
-    specs = request.get("inputs") if isinstance(request, dict) else None
-    if not isinstance(specs, list) or len(specs) != 1 or not isinstance(specs[0], dict):
-        raise PredictionError("A classical model takes exactly one input.")
-    shape, values = specs[0].get("shape"), specs[0].get("values")
-    if not isinstance(shape, list) or not isinstance(values, list) or len(shape) != 2:
-        raise PredictionError("The inputs are invalid.")
-    if math.prod(shape) != len(values):
-        raise PredictionError("The inputs do not have the shape they claim.")
-    x = np.asarray(values, dtype=np.float64).reshape(shape)
-    # Standardised inputs skip the pipeline's StandardScaler, which would do the same.
-    model = pipeline[1:] if request.get("kind") == "tabular" else pipeline
-    return _classical_outputs(bundle, pipeline, model, x)
+    def answer(request: Any) -> dict[str, Any]:
+        specs = request.get("inputs") if isinstance(request, dict) else None
+        if not isinstance(specs, list) or len(specs) != 1 or not isinstance(specs[0], dict):
+            raise PredictionError("A classical model takes exactly one input.")
+        shape, values = specs[0].get("shape"), specs[0].get("values")
+        if not isinstance(shape, list) or not isinstance(values, list) or len(shape) != 2:
+            raise PredictionError("The inputs are invalid.")
+        if math.prod(shape) != len(values):
+            raise PredictionError("The inputs do not have the shape they claim.")
+        x = np.asarray(values, dtype=np.float64).reshape(shape)
+        # Standardised inputs skip the pipeline's StandardScaler, which would do the same.
+        model = pipeline[1:] if request.get("kind") == "tabular" else pipeline
+        return _classical_outputs(bundle, pipeline, model, x)
+
+    return answer
 
 
 def _classical_outputs(bundle: dict[str, Any], pipeline: Any, model: Any, x: Any) -> dict:
@@ -318,7 +334,7 @@ def _classical_outputs(bundle: dict[str, Any], pipeline: Any, model: Any, x: Any
     return {"outputs": [finite(np.asarray(predicted).reshape(-1, 1).tolist())]}
 
 
-def _predict_hybrid(run_dir: Path, graph: dict[str, Any], request: Any) -> dict[str, Any]:
+def _load_hybrid(run_dir: Path, graph: dict[str, Any]) -> Callable[[Any], dict[str, Any]]:
     """A hybrid network: the neural layers (``weights.pt``) compute the features of the
     prepared inputs, the classical model (``model.joblib``) predicts from them. Takes
     tensors or image files like a neural network, answers like a classical model."""
@@ -347,21 +363,25 @@ def _predict_hybrid(run_dir: Path, graph: dict[str, Any], request: Any) -> dict[
         pipeline = bundle["model"]
     except Exception as exc:
         raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
-    if isinstance(request, dict) and request.get("images") is not None:
-        inputs = [_image_tensor(request["images"], request.get("image"), torch)]
-    else:
-        specs = request.get("inputs") if isinstance(request, dict) else None
-        if not isinstance(specs, list) or len(specs) != 1:
-            raise PredictionError("A hybrid network takes exactly one input.")
-        inputs = [_tensor(specs[0], torch)]
-    try:
-        features = features_of(extractor, inputs)
-    except Exception as exc:
-        raise PredictionError(
-            f"The network could not process the inputs: {short_error(exc)}"
-        ) from exc
-    # The features are not standardised yet: the whole pipeline predicts.
-    return _classical_outputs(bundle, pipeline, pipeline, features)
+
+    def answer(request: Any) -> dict[str, Any]:
+        if isinstance(request, dict) and request.get("images") is not None:
+            inputs = [_image_tensor(request["images"], request.get("image"), torch)]
+        else:
+            specs = request.get("inputs") if isinstance(request, dict) else None
+            if not isinstance(specs, list) or len(specs) != 1:
+                raise PredictionError("A hybrid network takes exactly one input.")
+            inputs = [_tensor(specs[0], torch)]
+        try:
+            features = features_of(extractor, inputs)
+        except Exception as exc:
+            raise PredictionError(
+                f"The network could not process the inputs: {short_error(exc)}"
+            ) from exc
+        # The features are not standardised yet: the whole pipeline predicts.
+        return _classical_outputs(bundle, pipeline, pipeline, features)
+
+    return answer
 
 
 @contextlib.contextmanager
