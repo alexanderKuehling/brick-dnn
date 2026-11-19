@@ -194,6 +194,11 @@ export interface User {
   date_joined: string;
   /** The language saved on the account ("en", "de"); "" or missing: none chosen yet. */
   language?: string;
+  /**
+   * Whether the account wants learning tips (true unless switched off). Missing on older
+   * servers: the choice kept in the browser holds.
+   */
+  learning_tips?: boolean;
 }
 
 export interface Tokens {

@@ -222,6 +222,8 @@ ENDPOINTS = [
     ("post", "/api/auth/account/password/"),
     ("get", "/api/auth/account/export/"),
     ("post", "/api/auth/account/delete/"),
+    ("get", "/api/auth/account/preferences/"),
+    ("patch", "/api/auth/account/preferences/"),
 ]
 
 
@@ -267,6 +269,47 @@ def test_account_info(dirs, ada, ada_client):
     assert data["stored"]["projects"] == 1
     assert data["stored"]["data_sources"] == 1
     assert data["stored"]["upload_bytes"] == len(churn_csv())
+
+
+def test_learning_tips_are_on_until_switched_off(ada, ada_client, mallory):
+    url = "/api/auth/account/preferences/"
+    assert ada_client.get(url).data == {"learning_tips": True}
+    assert ada_client.get("/api/auth/me/").data["learning_tips"] is True
+    assert ada_client.get("/api/auth/account/").data["learning_tips"] is True
+
+    response = ada_client.patch(url, {"learning_tips": False}, format="json")
+    assert response.status_code == 200
+    assert response.data == {"learning_tips": False}
+    assert ada_client.get("/api/auth/me/").data["learning_tips"] is False
+    assert ada_client.get("/api/auth/account/").data["learning_tips"] is False
+    assert UserProfile.objects.get(user=ada).preferences == {"learning_tips": False}
+    # Per account.
+    other = APIClient()
+    other.force_authenticate(mallory)
+    assert other.get(url).data == {"learning_tips": True}
+
+    for bad in ({}, {"learning_tips": "sometimes"}, {"learning_tips": None}):
+        assert ada_client.patch(url, bad, format="json").status_code == 400
+    assert ada_client.get(url).data == {"learning_tips": False}
+
+    # Back on: nothing is stored, and other preferences are kept either way.
+    assert ada_client.patch(url, {"learning_tips": True}, format="json").data == {
+        "learning_tips": True
+    }
+    assert UserProfile.objects.get(user=ada).preferences is None
+    columns = {"columns": ["name", "status"]}
+    assert (
+        ada_client.put("/api/training/runs/preferences/", columns, format="json").status_code == 200
+    )
+    ada_client.patch(url, {"learning_tips": False}, format="json")
+    assert UserProfile.objects.get(user=ada).preferences == {
+        "runs_columns": ["name", "status"],
+        "learning_tips": False,
+    }
+    ada_client.put("/api/training/runs/preferences/", {"columns": None}, format="json")
+    assert ada_client.get(url).data == {"learning_tips": False}
+    ada_client.patch(url, {"learning_tips": True}, format="json")
+    assert UserProfile.objects.get(user=ada).preferences is None
 
 
 def test_change_email(ada, ada_client, mallory):

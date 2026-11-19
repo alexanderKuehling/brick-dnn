@@ -66,6 +66,12 @@ urlpatterns = [
     path("auth/account/password/", accounts.PasswordView.as_view(), name="account-password"),
     # The language of the app and of e-mails (languages.py).
     path("auth/account/language/", accounts.LanguageView.as_view(), name="account-language"),
+    # Settings of the app kept on the account, e.g. whether it shows learning tips.
+    path(
+        "auth/account/preferences/",
+        accounts.PreferencesView.as_view(),
+        name="account-preferences",
+    ),
     path("auth/account/export/", accounts.ExportView.as_view(), name="account-export"),
     path("auth/account/delete/", accounts.DeleteAccountView.as_view(), name="account-delete"),
     # Confirming the e-mail address with the link from the e-mail, sending the link again.

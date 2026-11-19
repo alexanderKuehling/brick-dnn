@@ -176,6 +176,13 @@ const serverApi = {
         body: { language },
         auth: true,
       }),
+    /** Settings of the app kept on the account: whether it shows learning tips (tips/). */
+    setPreferences: (preferences: { learning_tips: boolean }) =>
+      request<{ learning_tips: boolean }>('/api/auth/account/preferences/', {
+        method: 'PATCH',
+        body: preferences,
+        auth: true,
+      }),
     changeEmail: (email: string) =>
       request<Account>('/api/auth/account/', { method: 'PATCH', body: { email }, auth: true }),
     /** Ends all other logins; the answer holds new tokens for this one. */

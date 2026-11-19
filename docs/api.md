@@ -135,7 +135,7 @@ The MCP server always answers in English. See [translations.md](translations.md)
 | POST   | `/api/auth/token/`         | `{username, password}`             | `{access, refresh}`, or a two-factor challenge (below) |
 | POST   | `/api/auth/token/refresh/` | `{refresh}`                        | `{access, refresh}` (rotated) |
 | POST   | `/api/auth/logout/`        | `{refresh}`                        | blacklists the refresh token |
-| GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined, language}`; `language` is `"en"`, `"de"` or `""` (none chosen yet) |
+| GET    | `/api/auth/me/`            | –                                  | `{id, username, email, date_joined, language, learning_tips}`; `language` is `"en"`, `"de"` or `""` (none chosen yet); `learning_tips`: whether the app shows its learning tips (true unless switched off) |
 
 Send the access token as `Authorization: Bearer <access>`. Access tokens live 30 minutes,
 refresh tokens 7 days. The e-mail address is required for new accounts and can be used by one
@@ -188,6 +188,7 @@ deletion share a rate limit (`BRICKDNN_ACCOUNT_RATE`, 30/hour).
 | GET    | `/api/auth/account/`          | –                                     | `Account`                   |
 | PATCH  | `/api/auth/account/`          | `{email}`                             | `Account`                   |
 | PATCH  | `/api/auth/account/language/` | `{language}` (`"en"` or `"de"`)       | `{language}`: the language of the app and of e-mails, saved on the account ([translations.md](translations.md)) |
+| GET, PATCH | `/api/auth/account/preferences/` | PATCH: `{learning_tips}` (`true` or `false`) | `{learning_tips}`: whether the app shows its learning tips (a short hint with a link to a guide where a network or a run suggests one; on by default), saved on the account |
 | POST   | `/api/auth/account/password/` | `{current_password, new_password}`    | `{access, refresh}`; all other logins end |
 | GET    | `/api/auth/account/export/`   | –                                     | a ZIP file with everything stored about the account |
 | POST   | `/api/auth/account/delete/`   | `{password, username}`                | `204`: the account and everything it owns are deleted |

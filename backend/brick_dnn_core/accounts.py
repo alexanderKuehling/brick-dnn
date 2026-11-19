@@ -224,6 +224,28 @@ def _json(archive: ZipFile, name: str, data: Any) -> None:
     archive.writestr(name, text + "\n", compress_type=ZIP_DEFLATED)
 
 
+def learning_tips(user, profile: UserProfile | None = None) -> bool:
+    """Whether the app shows the account its learning tips (short hints with a link to a
+    guide, e.g. in the training panel). On unless switched off: only ``False`` is stored, as
+    ``UserProfile.preferences["learning_tips"]``."""
+    if profile is None:
+        profile = UserProfile.objects.filter(user=user).first()
+    prefs = profile.preferences if profile and isinstance(profile.preferences, dict) else {}
+    return prefs.get("learning_tips") is not False
+
+
+def set_learning_tips(user, on: bool) -> bool:
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    prefs = dict(profile.preferences) if isinstance(profile.preferences, dict) else {}
+    if on:
+        prefs.pop("learning_tips", None)
+    else:
+        prefs["learning_tips"] = False
+    profile.preferences = prefs or None
+    profile.save(update_fields=["preferences"])
+    return on
+
+
 def _account(user) -> dict[str, Any]:
     from . import recovery, two_factor
 
@@ -242,6 +264,7 @@ def _account(user) -> dict[str, Any]:
         "terms_version": (profile.terms_version or None) if profile else None,
         "privacy_version": (profile.privacy_version or None) if profile else None,
         "language": (profile.language or None) if profile else None,
+        "learning_tips": learning_tips(user, profile),
         # Whether it is on, since when and how many recovery codes are left; never the secret.
         "two_factor": two_factor.state(user),
     }
@@ -634,6 +657,27 @@ class LanguageView(APIView):
         serializer.is_valid(raise_exception=True)
         languages.save_language(request.user, serializer.validated_data["language"])
         return Response({"language": languages.saved_language(request.user) or ""})
+
+
+class PreferencesSerializer(serializers.Serializer):
+    learning_tips = serializers.BooleanField()
+
+
+class PreferencesView(APIView):
+    """``GET``, ``PATCH {"learning_tips": false}``: settings of the app that follow the account
+    from browser to browser. ``learning_tips``: whether the app shows its learning tips (on by
+    default). Any login of the website."""
+
+    permission_classes = [WebsiteLogin]
+
+    def get(self, request: Request) -> Response:
+        return Response({"learning_tips": learning_tips(request.user)})
+
+    def patch(self, request: Request) -> Response:
+        serializer = PreferencesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        set_learning_tips(request.user, serializer.validated_data["learning_tips"])
+        return Response({"learning_tips": learning_tips(request.user)})
 
 
 class PasswordSerializer(serializers.Serializer):

@@ -46,13 +46,20 @@ class ProjectSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     # The language saved on the account ("en", "de"; "" if none was chosen yet).
     language = serializers.SerializerMethodField()
+    # Whether the app shows its learning tips (on unless the account switched them off).
+    learning_tips = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "date_joined", "language"]
+        fields = ["id", "username", "email", "date_joined", "language", "learning_tips"]
 
     def get_language(self, obj) -> str:
         return languages.saved_language(obj) or ""
+
+    def get_learning_tips(self, obj) -> bool:
+        from .accounts import learning_tips
+
+        return learning_tips(obj)
 
 
 class LanguageSerializer(serializers.Serializer):

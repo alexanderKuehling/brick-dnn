@@ -7,26 +7,26 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: brick_dnn_core/accounts.py:645
+#: brick_dnn_core/accounts.py:689
 msgid "The current password is wrong."
 msgstr "Das aktuelle Passwort ist falsch."
 
-#: brick_dnn_core/accounts.py:738
+#: brick_dnn_core/accounts.py:782
 msgid "Your plan has no compute beyond its monthly allowance."
 msgstr ""
 "Ihr Tarif enthält keine Rechenzeit über das monatliche Kontingent hinaus."
 
-#: brick_dnn_core/accounts.py:742
+#: brick_dnn_core/accounts.py:786
 msgid ""
 "Compute beyond the allowance needs a subscription that is paid and not cancelled."
 msgstr ""
 "Rechenzeit über das Kontingent hinaus erfordert ein bezahltes, nicht gekündigtes Abonnement."
 
-#: brick_dnn_core/accounts.py:785
+#: brick_dnn_core/accounts.py:829
 msgid "The password is wrong."
 msgstr "Das Passwort ist falsch."
 
-#: brick_dnn_core/accounts.py:790
+#: brick_dnn_core/accounts.py:834
 msgid "Type your username exactly to confirm."
 msgstr "Geben Sie zur Bestätigung Ihren Benutzernamen genau so ein."
 
@@ -358,19 +358,19 @@ msgstr "Ihre E-Mail-Adresse ist bereits bestätigt."
 msgid "We sent a link to %(email)s."
 msgstr "Wir haben einen Link an %(email)s geschickt."
 
-#: brick_dnn_core/serializers.py:81
+#: brick_dnn_core/serializers.py:88
 msgid "An account with this e-mail address exists already."
 msgstr "Es gibt bereits ein Konto mit dieser E-Mail-Adresse."
 
-#: brick_dnn_core/serializers.py:67
+#: brick_dnn_core/serializers.py:74
 msgid "Enter your e-mail address."
 msgstr "Geben Sie Ihre E-Mail-Adresse ein."
 
-#: brick_dnn_core/serializers.py:106
+#: brick_dnn_core/serializers.py:113
 msgid "A user with that username already exists."
 msgstr "Dieser Benutzername ist bereits vergeben."
 
-#: brick_dnn_core/serializers.py:113
+#: brick_dnn_core/serializers.py:120
 msgid "Please agree to the terms of use to create an account."
 msgstr ""
 "Bitte stimmen Sie den Nutzungsbedingungen zu, um ein Konto zu erstellen."

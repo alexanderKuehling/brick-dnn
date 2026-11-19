@@ -676,8 +676,9 @@ class UserProfile(models.Model):
         choices=[("en", "English"), ("de", "Deutsch")],
         help_text="Language of the app and of e-mails. Empty: not chosen (English e-mails).",
     )
-    # Settings of the app that follow the user from browser to browser, e.g. the columns of
-    # the runs table (``{"runs_columns": [...]}``, see experiments.py). Null: the defaults.
+    # Settings of the app that follow the user from browser to browser: the columns of the
+    # runs table (``{"runs_columns": [...]}``, see experiments.py) and learning tips switched
+    # off (``{"learning_tips": false}``, see accounts.py). Null: the defaults.
     preferences = models.JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
