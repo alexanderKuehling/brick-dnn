@@ -9,6 +9,7 @@ const REPOSITORY = 'https://github.com/alexanderKuehling/brick-dnn';
 const DOCS = `${REPOSITORY}/blob/main/docs`;
 const DATE = '2026-11-16';
 const GDPR_DATE = '2026-11-17';
+const BASICS_DATE = '2026-11-18';
 
 const index: GuideIndex = {
   title: 'Anleitungen: Deep Learning, Tabellendaten, Segmentierung, DSGVO – Brick DNN',
@@ -409,6 +410,190 @@ const guides: Guide[] = [
       },
     ],
     examples: ['tabular_regression', 'cnn_mnist', 'gradient_boosting_classifier'],
+  },
+  {
+    id: 'activations',
+    slug: 'aktivierungsfunktionen',
+    title: 'Welche Aktivierungsfunktion wann? ReLU, GELU, Sigmoid, Softmax',
+    description:
+      'Aktivierungsfunktionen im Deep Learning: was ReLU, LeakyReLU, GELU, SiLU, Tanh, Sigmoid und Softmax tun und welche in verdeckte Schichten und an die Ausgabe gehört.',
+    h1: 'Welche Aktivierungsfunktion wann? ReLU, GELU, Sigmoid, Softmax und die anderen',
+    summary:
+      'ReLU für die meisten verdeckten Schichten und an der Ausgabe das, was die Verlustfunktion erwartet, also meist nichts: die Gründe, die Ausnahmen und der klassische Fehler.',
+    lead: 'Im Deep Learning entscheidet die Aktivierungsfunktion der verdeckten Schichten selten darüber, ob ein Netz funktioniert: ReLU ist ein solider Standard, und GELU oder SiLU sind in tieferen Netzen einen Versuch wert. An der Ausgabe ist das anders. Dort folgt die Wahl aus der Aufgabe und der Verlustfunktion, und eine falsche kostet Genauigkeit, ohne dass es eine Fehlermeldung gibt.',
+    published: BASICS_DATE,
+    modified: BASICS_DATE,
+    type: 'Article',
+    sections: [
+      {
+        id: 'kurz',
+        title: 'Die kurze Antwort',
+        html: '<ul class="checks"><li><strong>Verdeckte Schichten:</strong> ReLU. In Transformern GELU, in neueren Faltungsnetzen oft SiLU. Bleiben in einem ReLU-Netz viele Einheiten auf null, LeakyReLU oder ELU.</li><li><strong>Ausgabe einer Regression:</strong> keine Aktivierung. Die letzte Schicht ist eine Linear-Schicht mit einer Ausgabe je vorhergesagter Zahl.</li><li><strong>Ausgabe einer Klassifikation:</strong> ebenfalls keine, solange die Verlustfunktion <code>CrossEntropyLoss</code> oder <code>BCEWithLogitsLoss</code> von PyTorch ist. Beide wenden den Softmax oder das Sigmoid selbst an.</li><li><strong>Sigmoid und Tanh in verdeckten Schichten:</strong> nur in flachen Netzen oder dort, wo eine Schicht begrenzte Werte braucht. In tiefen Stapeln bremsen sie die ersten Schichten aus.</li></ul>',
+      },
+      {
+        id: 'wozu',
+        title: 'Wozu eine Aktivierungsfunktion da ist',
+        html: '<p>Eine Linear-Schicht bildet gewichtete Summen. Zwei davon hintereinander ergeben wieder nur eine gewichtete Summe. Ohne etwas Nichtlineares dazwischen kann ein Netz beliebiger Tiefe deshalb nicht mehr darstellen als eine einzige Linear-Schicht. Dieses Nichtlineare ist die Aktivierungsfunktion. Sie wird auf jeden Wert einzeln angewendet, hat keine Gewichte zu lernen (PReLU ist die Ausnahme) und lässt die Form des Tensors, wie sie ist.</p><p>Wichtig ist vor allem ihre Steigung, denn mit ihr wird der Gradient auf dem Rückweg durch das Netz multipliziert. Eine Funktion, die über weite Bereiche flach ist, reicht den Schichten davor kaum Gradienten weiter. Die meisten Unterschiede weiter unten gehen darauf zurück.</p>',
+      },
+      {
+        id: 'verdeckt',
+        title: 'Verdeckte Schichten: die Kandidaten',
+        html: `<div class="table" role="region" aria-labelledby="verdeckt-caption" tabindex="0"><table><caption id="verdeckt-caption">Aktivierungsfunktionen für verdeckte Schichten</caption><thead><tr><th scope="col">Funktion</th><th scope="col">Was sie berechnet</th><th scope="col">Typischer Einsatz</th><th scope="col">Schwachstelle</th></tr></thead><tbody>
+<tr><th scope="row">ReLU</th><td><code>max(0, x)</code>: Negative Werte werden zu 0</td><td>Der Standard für MLPs und Faltungsnetze; billig zu berechnen</td><td>Einheiten können für jede Eingabe bei 0 landen (siehe unten)</td></tr>
+<tr><th scope="row">LeakyReLU, PReLU</th><td>Wie ReLU, aber negative Werte behalten eine kleine Steigung: bei LeakyReLU standardmäßig 0,01, bei PReLU eine gelernte</td><td>Wenn ReLU-Einheiten absterben</td><td>Eine Einstellung oder ein Parameter mehr; sonst selten besser als ReLU</td></tr>
+<tr><th scope="row">ELU, SELU</th><td>Negative Werte laufen glatt gegen eine negative Konstante; SELU ist eine ELU mit zwei festen Skalierungsfaktoren</td><td>ELU als glattere ReLU; SELU für reine vollständig verbundene Netze ohne Normalisierungsschichten</td><td>SELU hält die Aktivierungen nur mit passender Gewichtsinitialisierung und einer eigenen Dropout-Variante stabil</td></tr>
+<tr><th scope="row">GELU</th><td><code>x</code> mal dem Anteil einer Standardnormalverteilung, der unter <code>x</code> liegt: glatt, knapp unter 0 leicht negativ</td><td>Der Standard in Transformern (BERT, die GPT-Modelle, Vision Transformer)</td><td>Etwas teurer zu berechnen</td></tr>
+<tr><th scope="row">SiLU (Swish)</th><td><code>x · sigmoid(x)</code>, eine Kurve ganz ähnlich der GELU</td><td>Neuere Faltungsnetze wie EfficientNet</td><td>Ebenso</td></tr>
+<tr><th scope="row">Tanh</th><td>Staucht auf −1 … 1, um 0 zentriert</td><td>In rekurrenten Schichten (RNN, LSTM, GRU); kleine Netze</td><td>Flach bei großen Eingaben: verschwindende Gradienten in tiefen Stapeln</td></tr>
+<tr><th scope="row">Sigmoid</th><td>Staucht auf 0 … 1</td><td>Gates in LSTM und GRU; Ausgaben, die Wahrscheinlichkeiten sind</td><td>Ebenso, und die Steigung liegt nie über 0,25</td></tr>
+</tbody></table></div><p>Mish und Softplus gehören zur selben glatten Familie wie GELU und SiLU und werden seltener verwendet. Bei Tabellen und kleinen Bildaufgaben ist der Unterschied zwischen ReLU, GELU und SiLU meist klein gegenüber dem, was die Lernrate oder die Größe des Netzes ausmacht. Stimmen Sie also diese zuerst ab.</p>`,
+      },
+      {
+        id: 'sterbende-relu',
+        title: 'Sterbende ReLU-Einheiten (Dying ReLU)',
+        html: '<p>Eine ReLU-Einheit mit negativer Eingabe gibt 0 aus und hat die Steigung 0; durch sie fließt also kein Gradient. Werden ihre Gewichte so weit verschoben, dass ihre Eingabe für jede Stichprobe der Trainingsdaten negativ ist (eine zu hohe Lernrate schafft das in einem einzigen Schritt), bekommt sie von da an keinen Gradienten mehr und bleibt für immer bei 0. Einzelne tote Einheiten schaden nicht. Ist ein großer Teil einer Schicht tot, fehlt dem Netz diese Kapazität, und der Verlust verbessert sich schon früh nicht mehr.</p><p>In Brick DNN sehen Sie das unter <strong>Das Modell erklären</strong> bei einem abgeschlossenen Lauf, im Teil <em>Im Inneren des Netzes</em>: Er zeigt für jede Schicht den Anteil der Nullen in der Ausgabe für eine Stichprobe. Eine ReLU setzt für jede einzelne Stichprobe einen guten Teil ihrer Werte auf 0; so arbeitet sie. Ist fast alles 0 und bleibt es bei anderen Stichproben dabei, ist der größte Teil der Schicht tot.</p><p>Was hilft:</p><ul class="checks"><li>eine niedrigere Lernrate, das häufigste Gegenmittel;</li><li>LeakyReLU, ELU oder GELU statt ReLU, die auch für negative Eingaben eine Steigung behalten;</li><li>eine Normalisierungsschicht (BatchNorm oder LayerNorm) vor der Aktivierung, die deren Eingaben um 0 zentriert hält.</li></ul>',
+      },
+      {
+        id: 'verschwindende-gradienten',
+        title: 'Verschwindende Gradienten bei Sigmoid und Tanh',
+        html: '<p>Die Steigung des Sigmoids beträgt höchstens 0,25, bei x = 0, und fällt nach beiden Seiten gegen 0. Die Backpropagation multipliziert den Gradienten je Schicht mit einer solchen Steigung. Nach vier Sigmoid-Schichten ist das ein Faktor von höchstens 0,25⁴, rund 0,004, noch ohne die Gewichte, und in der Praxis weniger, weil kaum eine Einheit genau bei x = 0 liegt. Die ersten Schichten bekommen dann fast keinen Gradienten und lernen sehr langsam, während die letzten normal trainieren.</p><p>Tanh ist besser: Seine Steigung erreicht bei x = 0 den Wert 1, und seine Ausgabe ist um 0 zentriert. Für große Eingaben ist es aber genauso flach, sodass gesättigte Einheiten ebenfalls fast nichts zurückgeben. Das ist der Hauptgrund, warum ReLU beide in tiefen Netzen abgelöst hat: Ihre Steigung ist für jede positive Eingabe genau 1, wie tief der Stapel auch ist.</p><p>Geblieben sind beide in rekurrenten Schichten. LSTM und GRU verwenden Sigmoid und Tanh im Inneren als Gates und sind so gebaut, dass der Gradient einen Weg an ihnen vorbei hat; diese Aktivierungen fügen Sie nicht selbst hinzu. Wenn Sie Sigmoid oder Tanh zwischen eigenen Schichten möchten, halten Sie den Stapel flach, nehmen Sie eher Tanh, oder setzen Sie Normalisierungsschichten oder Skip-Verbindungen ein.</p>',
+      },
+      {
+        id: 'ausgabe',
+        title: 'Die Ausgabeschicht richtet sich nach der Aufgabe',
+        html: `<p>Die letzte Schicht ist keine Geschmacksfrage. Sie muss liefern, was die Verlustfunktion erwartet, und die meistgenutzten Verlustfunktionen von PyTorch erwarten rohe Scores (Logits), keine Wahrscheinlichkeiten.</p><div class="table" role="region" aria-labelledby="ausgabe-caption" tabindex="0"><table><caption id="ausgabe-caption">Letzte Schicht, Aktivierung und Verlustfunktion je Aufgabe, in PyTorch</caption><thead><tr><th scope="col">Aufgabe</th><th scope="col">Letzte Schicht</th><th scope="col">Aktivierung danach</th><th scope="col">Verlustfunktion</th></tr></thead><tbody>
+<tr><th scope="row">Regression</th><td>Linear, eine Ausgabe je vorhergesagter Zahl</td><td>Keine</td><td><code>MSELoss</code>, <code>L1Loss</code>, <code>HuberLoss</code></td></tr>
+<tr><th scope="row">Zwei Klassen</th><td>Linear, 1 Ausgabe</td><td>Keine</td><td><code>BCEWithLogitsLoss</code>, wendet das Sigmoid an</td></tr>
+<tr><th scope="row">Mehrere Klassen, genau eine trifft zu</th><td>Linear, eine Ausgabe je Klasse (geht auch bei zwei)</td><td>Keine</td><td><code>CrossEntropyLoss</code>, wendet den Softmax an</td></tr>
+<tr><th scope="row">Mehrere Labels können zugleich zutreffen</th><td>Linear, eine Ausgabe je Label</td><td>Keine</td><td><code>BCEWithLogitsLoss</code></td></tr>
+<tr><th scope="row">Eine Klasse für jedes Pixel</th><td>Faltung, ein Kanal je Klasse</td><td>Keine</td><td><code>CrossEntropyLoss</code></td></tr>
+<tr><th scope="row">Eine Zahl in einem festen Bereich, z. B. 0 … 1</th><td>Linear</td><td>Sigmoid (Tanh für −1 … 1)</td><td><code>MSELoss</code></td></tr>
+</tbody></table></div><p>Wahrscheinlichkeiten erhalten Sie von einem trainierten Klassifikator, indem Sie die Funktion bei der Vorhersage auf seine Ausgabe anwenden, außerhalb von Netz und Verlustfunktion: <code>torch.softmax(logits, dim=1)</code> für Klassen, <code>torch.sigmoid(logits)</code> für einen einzelnen Score. Die vorhergesagte Klasse ist in beiden Fällen dieselbe: die mit dem größten Score.</p><p>Brick DNN trainiert jede Klassifikation mit einer Ausgabe je Klasse und einer Verlustfunktion auf rohen Scores (der Kreuzentropie, wenn Sie keine andere wählen), auch bei zwei Klassen. Eine Regression hat eine Ausgabe und keine Aktivierung danach; die Zielgröße wird für das Training standardisiert, eine ReLU oder ein Sigmoid am Ende würde also einen Teil ihres Wertebereichs abschneiden.</p>`,
+      },
+      {
+        id: 'softmax-fehler',
+        title: 'Der klassische Fehler: Softmax vor CrossEntropyLoss',
+        html: '<p><code>nn.CrossEntropyLoss</code> ist ein Log-Softmax, gefolgt von der negativen Log-Likelihood. Endet das Netz bereits mit <code>nn.Softmax</code>, wird der Softmax zweimal angewendet. Es stürzt nichts ab: Die Formen passen, der Verlust sinkt, die Genauigkeit steigt. Es funktioniert nur schlechter, als es sollte.</p><p>Die Verlustfunktion sieht jetzt Werte zwischen 0 und 1 statt Scores beliebiger Größe, und daraus kann der zweite Softmax keine sichere Vorhersage machen. Bei zehn Klassen gibt selbst eine perfekte Ausgabe, 1 für die richtige Klasse und 0 für alle anderen, der richtigen Klasse nur eine Wahrscheinlichkeit von e / (e + 9), rund 0,23. Der Verlust fällt deshalb nie unter etwa 1,46, während bloßes Raten 2,30 ergibt. Entsprechend klein sind die Gradienten, und das Training ist langsam.</p><p>Dasselbe passiert mit <code>nn.Sigmoid</code> vor <code>BCEWithLogitsLoss</code>. Zusammen gehören diese Paare:</p><ul class="checks"><li>rohe Scores mit <code>CrossEntropyLoss</code> oder <code>BCEWithLogitsLoss</code>, die übliche und numerisch stabilste Wahl;</li><li><code>nn.LogSoftmax</code> mit <code>NLLLoss</code>;</li><li><code>nn.Sigmoid</code> mit <code>BCELoss</code>.</li></ul><p>In Brick DNN erwartet die Verlustfunktion einer Klassifikation immer rohe Scores, das Netz sollte also mit seiner letzten Linear-Schicht enden. Endet es stattdessen mit Softmax oder Sigmoid, weist das Trainingsfenster vor dem Start darauf hin.</p>',
+      },
+      {
+        id: 'architekturen',
+        title: 'Was CNNs und Transformer üblicherweise verwenden',
+        html: '<p><strong>Faltungsnetze.</strong> Der klassische Block ist eine Faltung mit anschließender ReLU, oft mit einer BatchNorm-Schicht dazwischen. So sind VGG und ResNet gebaut, und ebenso das <a href="/de/beispiele/cnn-mnist/">CNN</a>, der <a href="/de/beispiele/resnet-block/">ResNet-Block</a> und das <a href="/de/beispiele/unet/">U-Net</a> unter den Beispielen hier. Spätere Familien haben das Muster behalten und die Funktion getauscht: EfficientNet verwendet SiLU, ConvNeXt GELU.</p><p><strong>Transformer.</strong> Der Feed-Forward-Teil jedes Blocks hat eine Aktivierung. Der ursprüngliche Transformer verwendete ReLU; BERT, die GPT-Modelle und Vision Transformer verwenden GELU. <code>nn.TransformerEncoderLayer</code> von PyTorch nimmt standardmäßig ReLU, und das erzeugt auch die Schicht <code>TransformerEncoder</code> von Brick DNN. Der Softmax in der Attention gehört zur Schicht und ist nichts, was Sie hinzufügen.</p><p><strong>Rekurrente Netze.</strong> LSTM und GRU bringen Tanh und Sigmoid mit. Danach folgt meist eine Linear-Schicht ohne Aktivierung dazwischen, wie im <a href="/de/beispiele/lstm-sentiment/">LSTM-Beispiel</a>.</p><p><strong>MLPs auf Tabellen.</strong> ReLU. Ist das Netz klein und das Ergebnis enttäuschend, liegt es selten an der Aktivierung; der Vergleich mit <a href="/de/anleitungen/gradient-boosting-oder-mlp/">Gradient Boosting</a> ist der bessere nächste Schritt.</p>',
+      },
+      {
+        id: 'tabelle',
+        title: 'Eine kleine Entscheidungstabelle',
+        html: `<div class="table" role="region" aria-labelledby="entscheidung-caption" tabindex="0"><table><caption id="entscheidung-caption">Welche Aktivierungsfunktion in welcher Lage</caption><thead><tr><th scope="col">Lage</th><th scope="col">Wahl</th></tr></thead><tbody>
+<tr><th scope="row">Verdeckte Schichten eines MLP oder CNN, nichts Besonderes</th><td>ReLU</td></tr>
+<tr><th scope="row">Ein Transformer oder ein tiefes Netz, bei dem es auf das letzte bisschen Genauigkeit ankommt</th><td>GELU oder SiLU</td></tr>
+<tr><th scope="row">Der Verlust stockt früh, und die meisten Ausgaben einer Schicht sind 0</th><td>Zuerst eine niedrigere Lernrate, dann LeakyReLU oder ELU</td></tr>
+<tr><th scope="row">Ein tiefes vollständig verbundenes Netz ohne Normalisierungsschichten</th><td>BatchNorm mit ReLU; SELU nur, wenn Sie ihre Regeln einhalten</td></tr>
+<tr><th scope="row">Verdeckte Werte, die zwischen −1 und 1 bleiben müssen</th><td>Tanh, in einem flachen Stapel</td></tr>
+<tr><th scope="row">Ausgabe: eine Zahl</th><td>Keine</td></tr>
+<tr><th scope="row">Ausgabe: Klassen, mit <code>CrossEntropyLoss</code> oder <code>BCEWithLogitsLoss</code></th><td>Keine</td></tr>
+<tr><th scope="row">Ausgabe: ein Wert zwischen 0 und 1, mit <code>MSELoss</code> oder <code>BCELoss</code></th><td>Sigmoid</td></tr>
+<tr><th scope="row">Wahrscheinlichkeiten bei der Vorhersage</th><td>Softmax oder Sigmoid auf die Ausgabe anwenden, außerhalb des Netzes</td></tr>
+</tbody></table></div>`,
+      },
+      {
+        id: 'ausprobieren',
+        title: 'In Brick DNN ausprobieren',
+        html: '<p>Die Schicht heißt <code>Activation</code>. Ihre Einstellung <strong>Funktion</strong> bietet ReLU, LeakyReLU (mit der Steigung 0,01), GELU, ELU, SELU, SiLU, Mish, Sigmoid, Tanh, Softplus, Softmax und LogSoftmax. PReLU ist nicht dabei; im exportierten PyTorch-Code ist das eine geänderte Zeile. Ein Vergleich dauert wenige Minuten:</p>',
+        steps: [
+          {
+            title: 'Ein Beispiel öffnen',
+            html: 'Öffnen Sie das <a href="/app?example=mlp_mnist">MLP für MNIST im Editor</a>: 784 Eingaben, zwei verdeckte Schichten mit 256 und 128 Einheiten, jeweils gefolgt von ReLU, und eine letzte Linear-Schicht mit 10 Ausgaben ohne Aktivierung danach.',
+          },
+          {
+            title: 'Einmal trainieren',
+            html: 'Klicken Sie auf <strong>Trainieren</strong> und wählen Sie <strong>Eingebaut → MNIST</strong>. Legen Sie unter <em>Erweiterte Einstellungen</em> einen <em>Seed</em> fest, damit sich der nächste Lauf nur in der Aktivierung unterscheidet, und trainieren Sie einige Epochen. Das Training braucht ein kostenloses Konto.',
+          },
+          {
+            title: 'Die Funktion ändern',
+            html: 'Wählen Sie nacheinander die beiden <code>Activation</code>-Schichten aus und stellen Sie <em>Funktion</em> auf GELU, oder auf Sigmoid, wenn der Unterschied deutlicher sein soll. Das Netz behält seine 235.146 Parameter: Aktivierungen haben keine.',
+          },
+          {
+            title: 'Noch einmal trainieren und vergleichen',
+            html: 'Starten Sie einen zweiten Lauf mit denselben Einstellungen. Der Reiter <strong>Läufe</strong> im Trainingsfenster behält beide, jeden mit genau dem Netz, das trainiert wurde, und die Seite <em>Läufe</em> zeigt ihre Kurven in einem Diagramm. Bei zwei verdeckten Schichten sind die Unterschiede klein. Mit der Tiefe werden sie meist größer: Fügen Sie drei oder vier Linear-Schichten mit Sigmoid hinzu und beobachten Sie die ersten Epochen.',
+          },
+        ],
+      },
+    ],
+    examples: ['mlp_mnist', 'cnn_mnist', 'transformer_classifier'],
+  },
+  {
+    id: 'parameters',
+    slug: 'parameter-merkmale-datenpunkte',
+    title: 'Parameter, Merkmale, Datenpunkte: Wie groß darf ein Netz sein?',
+    description:
+      'Wie viele Parameter ein Deep-Learning-Modell hat und woher sie kommen, wie sie mit Merkmalen und Trainingszeilen zusammenhängen und woran Sie Überanpassung erkennen.',
+    h1: 'Parameter, Merkmale und Datenpunkte: Wie groß darf ein neuronales Netz sein?',
+    summary:
+      'Woher die Parameter eines Netzes kommen, was sie mit der Zahl der Merkmale und der Zeilen zu tun haben und was hilft, wenn die Kurven Überanpassung zeigen.',
+    lead: 'Ein Netz hat 2.817 Parameter, die Tabelle 300 Zeilen: Ist das zu viel? Eine Formel dafür gibt es nicht, und die Faustregeln, die eine sein wollen, taugen im Deep Learning nur begrenzt. Was hilft: wissen, woher die Parameter kommen, die Kurven lesen und ein paar Gegenmittel kennen.',
+    published: BASICS_DATE,
+    modified: BASICS_DATE,
+    type: 'Article',
+    sections: [
+      {
+        id: 'begriffe',
+        title: 'Drei Zahlen, die leicht verwechselt werden',
+        html: '<ul class="checks"><li><strong>Merkmale</strong> (Features) sind das, was das Modell je Stichprobe bekommt: die Spalten einer Tabelle ohne die Zielgröße oder die Pixel eines Bildes mal seinen Kanälen. Eine Tabelle mit 8 Spalten für die Vorhersage hat 8 Merkmale, ein Graustufenbild mit 28 × 28 Pixeln 784.</li><li><strong>Datenpunkte</strong> sind die Stichproben: Zeilen, Bilder, Texte. Für das Lernen zählen die Trainingszeilen, also was bleibt, wenn Validierungs- und Testzeilen beiseitegelegt sind.</li><li><strong>Parameter</strong> sind die Gewichte und Bias-Werte, die das Training anpasst. Ihre Zahl folgt aus den Schichten, die Sie gewählt haben.</li></ul><p>Die Merkmale legen die Größe der ersten Schicht fest, die Aufgabe die der letzten. Alles dazwischen entscheiden Sie, und damit auch die Zahl der Parameter. Lernrate, Batchgröße und Ähnliches sind <em>Hyper</em>parameter: Einstellungen des Trainings, kein Teil des Modells.</p>',
+      },
+      {
+        id: 'zaehlen',
+        title: 'Woher die Parameter kommen',
+        html: `<p>Brick DNN zeigt die Zahl für jede Schicht an. Es lohnt sich trotzdem, sie von Hand nachrechnen zu können, denn die Formeln zeigen, welche Schichten teuer sind.</p><div class="table" role="region" aria-labelledby="zaehlen-caption" tabindex="0"><table><caption id="zaehlen-caption">Parameter gängiger Schichten</caption><thead><tr><th scope="col">Schicht</th><th scope="col">Parameter</th><th scope="col">Beispiel</th></tr></thead><tbody>
+<tr><th scope="row">Linear</th><td>Eingaben × Ausgaben, dazu ein Bias-Wert je Ausgabe</td><td>8 → 64: 8 · 64 + 64 = 576</td></tr>
+<tr><th scope="row">Conv2d</th><td>Filter × Eingangskanäle × Kernelhöhe × Kernelbreite, dazu ein Bias-Wert je Filter</td><td>32 Filter mit 3 × 3 auf 1 Kanal: 32 · 1 · 9 + 32 = 320</td></tr>
+<tr><th scope="row">Embedding</th><td>Vokabulargröße × Embedding-Größe</td><td>10.000 Tokens × 128 = 1.280.000</td></tr>
+<tr><th scope="row">BatchNorm</th><td>2 je Kanal: eine Skalierung und eine Verschiebung</td><td>64 Kanäle: 128</td></tr>
+<tr><th scope="row">Activation, Pooling, Dropout, Flatten</th><td>0</td><td>–</td></tr>
+</tbody></table></div><p>Daraus folgt dreierlei:</p><ul class="checks"><li><strong>Eine Linear-Schicht kostet das Produkt ihrer beiden Seiten.</strong> Das <a href="/de/beispiele/tabular-regression/">Tabellen-Beispiel</a> hat 8 Merkmale und Schichten mit 64, 32 und 1 Einheiten: 576 + 2.080 + 33 Parameter, dazu 128 in seiner BatchNorm-Schicht, zusammen 2.817. Mit verdeckten Schichten von 128 und 64 Einheiten wären es 9.729.</li><li><strong>Einer Faltung ist die Bildgröße gleich.</strong> Ihre Parameterzahl hängt nur von den Kanälen und vom Kernel ab. Teuer ist in einem kleinen CNN die erste Linear-Schicht nach <code>Flatten</code>: Im <a href="/de/beispiele/cnn-mnist/">CNN-Beispiel</a> sind 64 Kanäle mit je 7 × 7 Werten 3.136 Eingaben, und die Linear-Schicht von dort auf 128 Einheiten hat 401.536 Parameter, 95 % der 421.642 des ganzen Netzes.</li><li><strong>Ein Embedding wächst mit dem Vokabular.</strong> Im <a href="/de/beispiele/transformer-classifier/">Transformer-Beispiel</a> enthält die Tabelle aus 10.000 × 128 Werten 1.280.000 der 1.611.268 Parameter, und jede ihrer Zeilen lernt nur aus den Stichproben, in denen ihr Token vorkommt.</li></ul>`,
+      },
+      {
+        id: 'zusammenhang',
+        title: 'Wie die drei zusammenhängen',
+        html: '<p><strong>Merkmale und Parameter.</strong> Jedes Merkmal bringt ein Gewicht je Einheit der ersten Schicht mit. Bei 784 Pixeln und 256 Einheiten hat allein die erste Schicht des <a href="/de/beispiele/mlp-mnist/">MLP-Beispiels</a> 200.960 seiner 235.146 Parameter. Mehr Merkmale bedeuten auch mehr Möglichkeiten, in den Trainingszeilen ein Muster zu finden, das es in neuen Daten nicht gibt. Eine Spalte ohne Information ist also nicht umsonst.</p><p><strong>Zeilen und Parameter.</strong> Jede Trainingszeile ist ein Hinweis darauf, wie die Parameter aussehen sollten. Ein Modell mit weit mehr einstellbaren Zahlen als Hinweisen kann die Trainingszeilen exakt wiedergeben, samt Rauschen, und zwar auf viele verschiedene Arten, und nichts in diesen Zeilen sagt, welche davon für neue Daten stimmt. Das ist Überanpassung (Overfitting). Hat das Modell weit weniger Parameter, als die Aufgabe braucht, kann es nicht einmal die Trainingszeilen wiedergeben. Das ist Unteranpassung (Underfitting).</p><p><strong>Zeilen und Merkmale.</strong> Je mehr Merkmale es gibt, desto mehr Zeilen braucht es, um ihre Kombinationen abzudecken. Zehn Ja/Nein-Merkmale erlauben schon 1.024 verschiedene Zeilen.</p>',
+      },
+      {
+        id: 'faustregeln',
+        title: 'Faustregeln und wo sie enden',
+        html: '<p>Die Statistik kennt Regeln wie „zehn Beobachtungen je Koeffizient“. Sie stammen aus der linearen und der logistischen Regression, wo jeder Parameter ein Koeffizient mit eigener Bedeutung ist, und dort sind sie sinnvoll.</p><p>Neuronale Netze brechen sie ständig. Das <a href="/de/beispiele/cnn-mnist/">CNN-Beispiel</a> hat 421.642 Parameter und lernt aus 48.000 MNIST-Bildern, fast neun Parameter je Bild, und erkennt trotzdem etwa 99 % der 10.000 Testbilder richtig. Netze mit mehr Parametern als Trainingsstichproben können gut verallgemeinern, wenn es für die Schwierigkeit der Aufgabe genug Daten gibt, wenn die Architektur zu den Daten passt (eine Faltung verwendet dieselben wenigen Gewichte an jeder Position) und wenn das Training regularisiert ist: durch Dropout, durch Weight Decay oder schlicht durch rechtzeitiges Aufhören. Ein Verhältnis von Parametern zu Zeilen kann Ihnen deshalb nicht sagen, dass ein Netz zu groß ist. Es kann Ihnen sagen, wo Sie genauer hinsehen sollten.</p><p>Was sich ohne falsche Genauigkeit sagen lässt:</p><ul class="checks"><li><strong>Eine Tabelle mit wenigen hundert Zeilen:</strong> Nehmen Sie ein kleines Netz, ein oder zwei verdeckte Schichten mit 8 bis 32 Einheiten, oder ein klassisches Modell. Gradient Boosting, ein Gauß-Prozess oder eine Support Vector Machine ist hier oft die bessere Wahl und braucht weniger Abstimmung; siehe <a href="/de/anleitungen/gradient-boosting-oder-mlp/">Gradient Boosting oder MLP</a>.</li><li><strong>Eine Tabelle mit Tausenden Zeilen oder mehr:</strong> Ein MLP mit einigen tausend bis einigen zehntausend Parametern ist ein vernünftiger Anfang. Vergrößern Sie es nur, solange das Validierungsergebnis besser wird.</li><li><strong>Bilder und Text:</strong> Die Parameterzahl sagt wenig. Wichtiger ist, wie viele Stichproben es je Klasse gibt, wie unterschiedlich sie sind und wie gut die Architektur passt.</li><li><strong>In jedem Fall:</strong> Halten Sie Validierungszeilen zurück, und glauben Sie den Kurven eher als dem Verhältnis.</li></ul><p>Genau so verwendet Brick DNN das Verhältnis. Hat ein Netz mehr als zehnmal so viele Parameter, wie seine Tabelle Trainingszeilen hat, zeigt das Trainingsfenster einen kurzen Tipp. Er ist ein Anlass, auf die Kurven zu sehen und ein Vergleichsmodell zu probieren, kein Fehler.</p>',
+      },
+      {
+        id: 'kurven',
+        title: 'Was die Kurven zeigen',
+        html: `<p>Nach jeder Epoche misst Brick DNN den Verlust auf den Trainingszeilen und auf den Validierungszeilen, aus denen das Netz nie lernt. Beide Kurven zusammen sagen mehr als jede Zählung.</p><div class="table" role="region" aria-labelledby="kurven-caption" tabindex="0"><table><caption id="kurven-caption">Trainings- und Validierungsverlust lesen</caption><thead><tr><th scope="col">Was Sie sehen</th><th scope="col">Was es bedeutet</th><th scope="col">Was Sie zuerst versuchen</th></tr></thead><tbody>
+<tr><th scope="row">Beide fallen und fallen am Ende noch</th><td>Das Training ist nicht fertig</td><td>Mehr Epochen</td></tr>
+<tr><th scope="row">Der Trainingsverlust fällt weiter, der Validierungsverlust wird flach oder steigt wieder</th><td>Überanpassung: Das Netz lernt die Trainingszeilen auswendig</td><td>Die beste Epoche behalten, dann weniger Kapazität oder mehr Regularisierung</td></tr>
+<tr><th scope="row">Beide bleiben hoch und dicht beieinander</th><td>Unteranpassung oder eine unpassende Lernrate</td><td>Ein größeres Netz, eine andere Lernrate, bessere Merkmale</td></tr>
+<tr><th scope="row">Der Validierungsverlust springt von Epoche zu Epoche</th><td>Zu wenige Validierungszeilen oder eine zu hohe Lernrate</td><td>Mehr Validierungszeilen, eine niedrigere Lernrate</td></tr>
+</tbody></table></div><p>Ein Abstand zwischen den beiden Kurven ist normal, denn die Trainingszeilen hat das Netz gesehen. Entscheidend ist die Richtung der Validierungskurve. Bei wenigen Zeilen ist Vorsicht angebracht: Bei 40 Validierungszeilen macht eine einzige Zeile 2,5 Prozentpunkte Genauigkeit aus.</p>`,
+        image: {
+          id: 'training-curves',
+          alt: 'Verlust und Genauigkeit je Epoche eines kleinen CNN auf MNIST: Der Trainingsverlust fällt weiter, der Validierungsverlust bleibt ab der dritten Epoche etwa gleich.',
+          caption:
+            'Ab Epoche 3 fällt der Trainingsverlust noch, der Validierungsverlust nicht mehr: Weitere Epochen würden diesem Netz nicht helfen.',
+        },
+      },
+      {
+        id: 'ueberanpassung',
+        title: 'Was gegen Überanpassung hilft',
+        html: '<p>Ungefähr nach Aufwand geordnet:</p><ol class="numbered"><li><strong>Die beste Epoche behalten und früh stoppen.</strong> Brick DNN behält die Gewichte der Epoche mit dem niedrigsten Validierungsverlust, solange Sie das nicht abschalten; ein Lauf, der erst spät überanpasst, schadet also nicht. <em>Early Stopping</em> in den Trainingseinstellungen beendet einen Lauf, wenn sich der Validierungsverlust so viele Epochen lang nicht verbessert hat, wie Sie angeben.</li><li><strong>Weniger Kapazität.</strong> Entfernen Sie eine Schicht oder halbieren Sie die verdeckten Schichten und trainieren Sie erneut. Bleibt das Validierungsergebnis gleich, ist das kleinere Netz das bessere.</li><li><strong>Dropout.</strong> Eine <code>Dropout</code>-Schicht nach einer verdeckten Aktivierung setzt in jedem Trainingsschritt einen zufälligen Anteil der Werte auf 0. Das hindert Einheiten daran, sich aufeinander zu verlassen. Üblich sind Anteile zwischen 0,1 und 0,5.</li><li><strong>Weight Decay.</strong> Es steht unter <em>Erweiterte Einstellungen</em> und zieht die Gewichte in jedem Schritt ein wenig gegen 0. Probieren Sie Werte zwischen 0,0001 und 0,01, am besten mit dem Optimierer AdamW, oder lassen Sie eine Hyperparametersuche einen Wert wählen.</li><li><strong>Mehr Daten.</strong> Mehr Zeilen helfen mehr als alles davor, wenn sie zu bekommen sind. Weniger und bessere Merkmale helfen ebenfalls: Lassen Sie Spalten weg, die keine Rolle spielen können.</li><li><strong>Ein klassisches Vergleichsmodell.</strong> Trainieren Sie ein <a href="/de/beispiele/gradient-boosting-classifier/">Gradient Boosting</a> auf demselben Split. Ist es auf einer kleinen Tabelle besser, nehmen Sie es.</li></ol><p>Unteranpassung ist der einfachere Fall: mehr Einheiten oder Schichten, mehr Epochen, ein Blick auf die Lernrate und weniger Dropout oder Weight Decay, falls Sie welches eingesetzt hatten.</p>',
+      },
+      {
+        id: 'wo',
+        title: 'Wo Brick DNN die Zahlen zeigt',
+        html: '<ul class="checks"><li><strong>Parameter:</strong> Jede Schicht auf der Arbeitsfläche zeigt ihre eigene Zahl. Ist keine Schicht ausgewählt, zeigt der Inspektor die <em>Trainierbaren Parameter</em> des ganzen Netzes, und ein Lauf zeigt sie in der Kachel <em>Parameter</em>.</li><li><strong>Merkmale und Zeilen:</strong> Die Liste Ihrer Datensätze im Trainingsfenster nennt beides für jeden Datensatz, und die Prüfung wiederholt es, sobald Sie einen wählen, zum Beispiel „Klassifikation in 2 Klassen aus 18 Merkmalen (900 Zeilen)“. Bei einem Datensatz aus dem Bereich Daten sagt sie außerdem, wie viele Zeilen in Training, Validierung und Test liegen.</li><li><strong>Kurven:</strong> <em>Trainingskurven</em> in der Ansicht eines Laufs, mit den Zahlen jeder Epoche unter <em>Werte pro Epoche</em> und der Epoche, deren Gewichte behalten wurden.</li></ul>',
+        image: {
+          id: 'training-setup',
+          alt: 'Das Trainingsfenster mit einem aufbereiteten Datensatz aus 900 Zeilen und 18 Merkmalen, aufgeteilt in 630 Trainings-, 135 Validierungs- und 135 Testzeilen, und der Prüfung „Ready to train“.',
+          caption: 'Der Datensatz und die Prüfung nennen Zeilen, Merkmale und Split.',
+        },
+      },
+    ],
+    examples: ['tabular_regression', 'mlp_mnist', 'gradient_boosting_classifier'],
   },
 ];
 

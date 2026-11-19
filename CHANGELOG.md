@@ -3,6 +3,19 @@
 ## Unreleased
 
 ### Added
+- **Two guides on brickdnn.com: activation functions, and parameters vs. data.** *Which
+  activation function when* (`/guides/activation-functions/`,
+  `/de/anleitungen/aktivierungsfunktionen/`): ReLU, LeakyReLU/PReLU, ELU/SELU, GELU, SiLU, Tanh
+  and Sigmoid in hidden layers, dying ReLU, vanishing gradients, the output layer per task and
+  loss (with the Softmax before `CrossEntropyLoss` mistake and why it caps the loss), what
+  CNNs and Transformers use, a decision table, and how to compare two functions with the
+  `Activation` layer on the MLP example. *Parameters, features, data points*
+  (`/guides/parameters-features-data-points/`,
+  `/de/anleitungen/parameter-merkmale-datenpunkte/`): where the parameters of Linear, Conv2d and
+  Embedding layers come from (with the numbers of the examples), how they relate to features
+  and training rows, what rules of thumb can and cannot say, reading the curves for over- and
+  underfitting, the remedies, and where the app shows parameters and rows. Both in English and
+  German, with hreflang pairs, and in the sitemap and `llms.txt` like the other guides.
 - **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
   has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
   `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):
