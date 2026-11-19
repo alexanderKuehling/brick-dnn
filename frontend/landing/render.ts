@@ -128,6 +128,10 @@ ${alternateLinks(PAGE_PATHS)}
 </head>`;
 }
 
+/** The check mark in front of each fact under the hero's buttons (drawn by landing.css). */
+const TICK =
+  '<svg class="tick" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+
 function section(id: string, title: string, body: string, extraClass = ''): string {
   const cls = extraClass ? ` class="${extraClass}"` : '';
   return `<section id="${id}" aria-labelledby="${id}-title"${cls}><div class="wrap">
@@ -193,7 +197,7 @@ ${siteHeader(chrome, [
 <h1 id="hero-title">${escapeHtml(c.hero.title)}</h1>
 <p class="lead">${escapeHtml(c.hero.lead)}</p>
 <p class="cta"><a class="button" href="${EDITOR_PATH}">${escapeHtml(c.hero.primary)}</a> <a class="button secondary" href="${pricingPath(c.lang)}">${escapeHtml(c.hero.secondary)}</a></p>
-<ul class="facts">${c.hero.facts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join('')}</ul>
+<ul class="facts">${c.hero.facts.map((fact) => `<li>${TICK}<span>${escapeHtml(fact)}</span></li>`).join('')}</ul>
 <figure class="shot">
 ${picture(assets.images[c.hero.image.id], c.hero.image.alt, 'hero', 1280, true)}
 <figcaption>${escapeHtml(c.hero.caption)}</figcaption>

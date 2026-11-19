@@ -476,6 +476,30 @@
   the charts and metrics.
 
 ### Changed
+- **brickdnn.com: the guides' overview as cards, calmer guide pages, the facts under the hero
+  as pills, and German screenshots on the German pages.** `/guides/` and `/de/anleitungen/` were
+  a heading, a long paragraph and a list of long titles. They now open with one sentence and
+  show a card per guide: a small drawing of the topic (inline SVG without text,
+  `frontend/landing/guideArt.ts`), the topic, a short title (`short` and `topic` in
+  `guides.<lang>.ts`), the one-sentence summary and the reading time worked out from the
+  guide's text. One column on a phone, two on a tablet, three on a desktop, where the first
+  cards take half a row whenever three do not divide the number, so every row is full. The
+  title is the card's only link and covers the whole card, so a card is one link named by its
+  title, with the focus ring around the card; the drawings and “Read guide →” are hidden from
+  screen readers. The cards follow the list of guides: a new guide needs nothing but its entry
+  (without `short` its h1 is shown, and a guide no drawing was made for gets one by a word of
+  its id or a general one). Titles, descriptions, canonical and hreflang links and the JSON-LD
+  are unchanged. A guide's page sets its text in a column of about 75 characters at 17 px,
+  separates its sections by space instead of rules, shows the contents beside the text on wide
+  screens (they stay in view while reading), and has quieter tables (smaller, a tinted head,
+  the caption below) and code blocks. On `/` and `/de/` the facts under the buttons (free plan,
+  no account needed, open source, hosted in Switzerland) are larger and semibold with a check
+  mark each, as pills in a row from tablet width and one under the other on a phone. The
+  German pages (`/de/` and the German guides) now show screenshots of the German app
+  (`<id>.de-<width>.webp`, 15 screenshots): `shoot.mjs --lang de` sets the language on the
+  accounts too (it wins over the browser's once somebody is logged in), `shots.mjs` has the
+  German texts the shots look for, and the German alt texts and the one quoted button name say
+  what the German pictures show. The English pages keep their screenshots.
 - **A calmer Data tab and training panel.** Less on screen at once, clearer groups, fewer
   standing hints. Data tab: *Target & split* folds to a one-line summary (target · task ·
   split) once a target is chosen and opens by itself while none is set; seed, stratification

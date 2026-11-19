@@ -15,7 +15,7 @@ const index: GuideIndex = {
     'Practical deep-learning guides: a neural network without code exported to PyTorch, gradient boosting vs. MLP, U-Net segmentation, rare classes and the GDPR.',
   h1: 'Guides',
   intro:
-    'Step-by-step guides to building, training and judging deep-learning models with Brick DNN, and to the decisions along the way: which model for a table, how to segment images, what to do when one class is rare, and how to train with data that falls under the GDPR.',
+    'Practical guides to building, training and judging deep-learning models with Brick DNN, from the first network to data that falls under the GDPR.',
 };
 
 const guides: Guide[] = [
@@ -26,6 +26,8 @@ const guides: Guide[] = [
     description:
       'No-code deep learning: build a neural network in the browser from layers, check every tensor shape and download clean PyTorch code that runs without Brick DNN.',
     h1: 'Build a neural network without code and export it to PyTorch',
+    short: 'Build a neural network without code',
+    topic: 'Getting started',
     summary:
       'Connect layers on a canvas, let Brick DNN check every shape, and download a PyTorch script that runs on its own.',
     lead: 'You can design a neural network by connecting layers on a canvas, and still end up with ordinary PyTorch code. This guide builds a small convolutional network for 28×28 images, checks it and exports it, without an account.',
@@ -116,6 +118,8 @@ const guides: Guide[] = [
     description:
       'Gradient boosting or a neural network for tabular data? How both see a table, what each needs, and how to compare them fairly on the same split.',
     h1: 'Tabular data: gradient boosting vs. MLP, and when to use which',
+    short: 'Gradient boosting vs. MLP for tabular data',
+    topic: 'Tabular data',
     summary:
       'How trees and neural networks see a table, what each needs, and how to compare them fairly on the same split.',
     lead: 'For a table of rows and columns, gradient-boosted trees are usually the stronger first model, and a multi-layer perceptron (MLP) is the more flexible one. Which one wins depends on your data, so the useful question is how to find out quickly and fairly.',
@@ -217,6 +221,8 @@ const guides: Guide[] = [
     description:
       'Deep learning for image segmentation: train a U-Net, prepare images and masks, check the network, choose batch size and loss, and read mean IoU and Dice.',
     h1: 'Image segmentation with a U-Net: from masks to a trained model',
+    short: 'Image segmentation with a U-Net',
+    topic: 'Images',
     summary:
       'From a ZIP file of images and masks to a trained U-Net, with mean IoU, Dice and the predicted masks.',
     lead: 'Segmentation gives every pixel a class: background, road, cell, defect. This guide trains a U-Net in Brick DNN, first on the built-in Shapes data, then on your own images and masks, and explains how to read the results.',
@@ -289,6 +295,8 @@ const guides: Guide[] = [
     description:
       'When one class is rare: why accuracy misleads, and when to use class weights, focal loss, oversampling or a different decision threshold. With examples.',
     h1: 'Imbalanced classes: class weights, focal loss, oversampling and the decision threshold',
+    short: 'Imbalanced classes',
+    topic: 'Classification',
     summary:
       'Why accuracy misleads when one class is rare, and the four levers against it: weights, focal loss, oversampling and the threshold.',
     lead: 'When 2 % of the rows are fraud, a model that never predicts fraud is 98 % accurate and useless. This guide shows how to see the problem in the metrics and which of the four levers to pull first.',
@@ -356,6 +364,8 @@ const guides: Guide[] = [
     description:
       'Training deep-learning models under the GDPR: personal or anonymised data, where Brick DNN stores and trains in Switzerland, export, deletion and self-hosting.',
     h1: 'GDPR-compliant deep learning: training neural networks with data in Europe',
+    short: 'GDPR-compliant deep learning',
+    topic: 'Data protection',
     summary:
       'Which data needs care under the GDPR, where brickdnn.com stores and trains in Switzerland, and what to do with data that has to stay personal.',
     lead: 'The GDPR does not forbid training neural networks. It asks what the data is, where it goes and who processes it. This guide answers these questions for Brick DNN: which data needs care, where brickdnn.com stores data and trains in Switzerland, and how to work with data that must not leave your institution.',
