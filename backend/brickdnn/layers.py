@@ -1657,6 +1657,9 @@ class ClassicalModel(Layer):
     module: ClassVar[str]  # where it is imported from
     takes_kernel: ClassVar[bool] = False
     scale: ClassVar[str]  # gaussian_process | svm | gradient_boosting | ensemble
+    # XGBoost, LightGBM and CatBoost: the import name of the library (BOOSTING_LIBRARIES);
+    # None for the models of scikit-learn.
+    library: ClassVar[str | None] = None
     # Which row limit applies (brickdnn.training.config.CLASSICAL_MAX_ROWS)
     limit: ClassVar[str]
 
@@ -2112,6 +2115,439 @@ class HistGradientBoostingClassifier(_GradientBoosting):
 
 
 # --------------------------------------------------------------------------- #
+# Gradient boosting libraries: XGBoost, LightGBM, CatBoost (scikit-learn API)
+# --------------------------------------------------------------------------- #
+
+# The import name of each library and how it is called.
+BOOSTING_LIBRARIES = {"xgboost": "XGBoost", "lightgbm": "LightGBM", "catboost": "CatBoost"}
+
+
+def _trees(name: str, default: int) -> Param:
+    return Param(
+        name,
+        "Max. trees",
+        "int",
+        default=default,
+        minimum=1,
+        maximum=20_000,
+        help="Boosting rounds: one tree each (a classifier with more than two classes may fit "
+        "one tree per class and round). Early stopping usually ends sooner.",
+    )
+
+
+def _library_learning_rate(default: float) -> Param:
+    return Param(
+        "learning_rate",
+        "Learning rate",
+        "float",
+        default=default,
+        help="How much each tree corrects the trees before it. Smaller values need more trees "
+        "but often generalise better.",
+    )
+
+
+def _sample(name: str, label: str, what: str) -> Param:
+    return Param(
+        name,
+        label,
+        "float",
+        default=1.0,
+        minimum=0.0,
+        maximum=1.0,
+        help=f"Each tree sees this share of the {what} (1: all). Values such as 0.8 add "
+        "randomness and often generalise better.",
+    )
+
+
+def _penalty(name: str, label: str, default: float, what: str) -> Param:
+    return Param(name, label, "float", default=default, minimum=0.0, help=what)
+
+
+_EARLY_STOPPING_ROUNDS = Param(
+    "early_stopping_rounds",
+    "Early stopping rounds",
+    "int",
+    default=50,
+    minimum=0,
+    maximum=10_000,
+    help="Stop adding trees when the loss on the validation rows has not improved for this "
+    "many rounds, and keep the best round (0: off, all trees). Not used without validation "
+    "rows, in an ensemble or in a cross-validated search.",
+)
+
+_LIBRARY_SEED = Param(
+    "random_state",
+    "Random state",
+    "int",
+    default=0,
+    minimum=0,
+    help="Seed for the random choices of the fit (row and column samples). The same seed "
+    "gives the same model.",
+)
+
+
+class _BoostingLibrary(ClassicalModel):
+    """Gradient boosting from XGBoost, LightGBM or CatBoost, through their scikit-learn
+    estimators. The libraries are only imported by the generated code (and so by the
+    training): the analysis works without them."""
+
+    scale = "gradient_boosting"
+    limit = "gradient_boosting"
+    library: ClassVar[str]  # the import name, a key of BOOSTING_LIBRARIES
+    trees_param: ClassVar[str] = "n_estimators"
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        if self.p["learning_rate"] <= 0:
+            raise LayerError("Learning rate must be greater than 0.")
+        for param in self.params:
+            if param.name in ("subsample", "colsample_bytree") and self.p[param.name] <= 0:
+                raise LayerError(f"{param.label} must be greater than 0.")
+
+    @property
+    def library_label(self) -> str:
+        return BOOSTING_LIBRARIES[self.library]
+
+    @property
+    def max_trees(self) -> int:
+        return int(self.p[self.trees_param])
+
+    @property
+    def early_stopping_rounds(self) -> int:
+        return int(self.p["early_stopping_rounds"])
+
+    def _stopping(self) -> list[str]:
+        rounds = self.early_stopping_rounds
+        return [f"early_stopping_rounds={rounds}"] if rounds else []
+
+
+def _xgboost_params() -> tuple[Param, ...]:
+    return (
+        _trees("n_estimators", 500),
+        _library_learning_rate(0.05),
+        Param(
+            "max_depth",
+            "Max. depth",
+            "int",
+            default=6,
+            minimum=1,
+            maximum=30,
+            help="Every tree is at most this deep. Deeper trees capture more interactions "
+            "between the features.",
+        ),
+        Param(
+            "min_child_weight",
+            "Min. child weight",
+            "float",
+            default=1.0,
+            minimum=0.0,
+            help="A split needs at least this much weight (for squared errors: rows) on both "
+            "sides. Larger values regularise more.",
+        ),
+        _sample("subsample", "Row sample", "training rows"),
+        _sample("colsample_bytree", "Column sample", "features"),
+        _penalty("reg_alpha", "L1 regularisation", 0.0, "Penalises leaf values (0: none)."),
+        _penalty("reg_lambda", "L2 regularisation", 1.0, "Penalises large leaf values."),
+        _EARLY_STOPPING_ROUNDS,
+    )
+
+
+class _XGBoost(_BoostingLibrary):
+    module = "xgboost"
+    library = "xgboost"
+    name_prefix = "xgb"
+
+    def xgboost_args(self) -> list[str]:
+        p = self.p
+        return [
+            f"n_estimators={p['n_estimators']}",
+            f"learning_rate={fmt_float(p['learning_rate'])}",
+            f"max_depth={p['max_depth']}",
+            f"min_child_weight={fmt_float(p['min_child_weight'])}",
+            f"subsample={fmt_float(p['subsample'])}",
+            f"colsample_bytree={fmt_float(p['colsample_bytree'])}",
+            f"reg_alpha={fmt_float(p['reg_alpha'])}",
+            f"reg_lambda={fmt_float(p['reg_lambda'])}",
+            *self._stopping(),
+        ]
+
+
+@register
+class XGBRegressor(_XGBoost):
+    type = "XGBRegressor"
+    label = "XGBoost regression"
+    description = (
+        "Predicts a number with XGBoost's gradient-boosted trees: a favourite of tabular "
+        "competitions. Connect the Input (features). Early stopping on the validation rows "
+        "picks the number of trees. Needs the xgboost package on the server."
+    )
+    task = "regression"
+    estimator = "XGBRegressor"
+    params = (*_xgboost_params(), _LIBRARY_SEED)
+
+    def estimator_args(self) -> list[str]:
+        return [*self.xgboost_args(), f"random_state={self.p['random_state']}"]
+
+
+@register
+class XGBClassifier(_XGBoost):
+    type = "XGBClassifier"
+    label = "XGBoost classification"
+    description = (
+        "Classifies with XGBoost's gradient-boosted trees, with class probabilities: a "
+        "favourite of tabular competitions. Connect the Input (features); the classes come "
+        "from the data. For a rare class of two, raise Positive class weight. Needs the "
+        "xgboost package on the server."
+    )
+    task = "classification"
+    estimator = "XGBClassifier"
+    params = (
+        *_xgboost_params(),
+        Param(
+            "scale_pos_weight",
+            "Positive class weight",
+            "float",
+            default=1.0,
+            help="Two classes only: weight of the rows of the second class (in sorted order), "
+            "e.g. negatives / positives (19 for 5 % positives) for a rare positive class. "
+            "1: no weighting.",
+        ),
+        _LIBRARY_SEED,
+    )
+
+    def __init__(self, raw_params: dict[str, Any] | None = None):
+        super().__init__(raw_params)
+        if self.p["scale_pos_weight"] <= 0:
+            raise LayerError("Positive class weight must be greater than 0.")
+
+    def estimator_args(self) -> list[str]:
+        args = self.xgboost_args()
+        if self.p["scale_pos_weight"] != 1:
+            args.append(f"scale_pos_weight={fmt_float(self.p['scale_pos_weight'])}")
+        return [*args, f"random_state={self.p['random_state']}"]
+
+
+def _lightgbm_params() -> tuple[Param, ...]:
+    return (
+        _trees("n_estimators", 500),
+        _library_learning_rate(0.05),
+        Param(
+            "num_leaves",
+            "Max. leaves per tree",
+            "int",
+            default=31,
+            minimum=2,
+            maximum=131_072,
+            help="LightGBM grows its trees leaf by leaf: this limits their size. More leaves "
+            "capture more interactions between the features.",
+        ),
+        Param(
+            "max_depth",
+            "Max. depth",
+            "int",
+            default=None,
+            minimum=1,
+            maximum=100,
+            auto=True,
+            help="Empty: no limit (Max. leaves per tree limits the trees instead).",
+        ),
+        Param(
+            "min_child_samples",
+            "Min. rows per leaf",
+            "int",
+            default=20,
+            minimum=1,
+            maximum=1_000_000,
+            help="Every leaf holds at least this many training rows. Larger values regularise "
+            "more.",
+        ),
+        _sample("subsample", "Row sample", "training rows"),
+        _sample("colsample_bytree", "Column sample", "features"),
+        _penalty("reg_alpha", "L1 regularisation", 0.0, "Penalises leaf values (0: none)."),
+        _penalty("reg_lambda", "L2 regularisation", 0.0, "Penalises large leaf values (0: none)."),
+        _EARLY_STOPPING_ROUNDS,
+    )
+
+
+class _LightGBM(_BoostingLibrary):
+    module = "lightgbm"
+    library = "lightgbm"
+    name_prefix = "lgbm"
+
+    def lightgbm_args(self) -> list[str]:
+        p = self.p
+        args = [
+            f"n_estimators={p['n_estimators']}",
+            f"learning_rate={fmt_float(p['learning_rate'])}",
+            f"num_leaves={p['num_leaves']}",
+            f"max_depth={p['max_depth'] if p['max_depth'] is not None else -1}",
+            f"min_child_samples={p['min_child_samples']}",
+            f"subsample={fmt_float(p['subsample'])}",
+        ]
+        if p["subsample"] < 1:
+            args.append("subsample_freq=1")  # LightGBM only samples rows with a frequency
+        return [
+            *args,
+            f"colsample_bytree={fmt_float(p['colsample_bytree'])}",
+            f"reg_alpha={fmt_float(p['reg_alpha'])}",
+            f"reg_lambda={fmt_float(p['reg_lambda'])}",
+            *self._stopping(),
+        ]
+
+    def _end_args(self) -> list[str]:
+        # verbose=-1: no log lines for every fit.
+        return [f"random_state={self.p['random_state']}", "verbose=-1"]
+
+
+@register
+class LGBMRegressor(_LightGBM):
+    type = "LGBMRegressor"
+    label = "LightGBM regression"
+    description = (
+        "Predicts a number with LightGBM's gradient-boosted trees (grown leaf by leaf): fast "
+        "on large tables. Connect the Input (features). Early stopping on the validation "
+        "rows picks the number of trees. Needs the lightgbm package on the server."
+    )
+    task = "regression"
+    estimator = "LGBMRegressor"
+    params = (*_lightgbm_params(), _LIBRARY_SEED)
+
+    def estimator_args(self) -> list[str]:
+        return [*self.lightgbm_args(), *self._end_args()]
+
+
+@register
+class LGBMClassifier(_LightGBM):
+    type = "LGBMClassifier"
+    label = "LightGBM classification"
+    description = (
+        "Classifies with LightGBM's gradient-boosted trees (grown leaf by leaf), with class "
+        "probabilities: fast on large tables. Connect the Input (features); the classes come "
+        "from the data. For rare classes, set Class weights to balanced. Needs the lightgbm "
+        "package on the server."
+    )
+    task = "classification"
+    estimator = "LGBMClassifier"
+    params = (
+        *_lightgbm_params(),
+        Param(
+            "class_weight",
+            "Class weights",
+            "select",
+            default="none",
+            options=("none", "balanced"),
+            help="balanced: weight the classes inversely to their frequency (for imbalanced "
+            "data, e.g. a few percent of positives).",
+        ),
+        _LIBRARY_SEED,
+    )
+
+    def estimator_args(self) -> list[str]:
+        args = self.lightgbm_args()
+        if self.p["class_weight"] == "balanced":
+            args.append('class_weight="balanced"')
+        return [*args, *self._end_args()]
+
+
+def _catboost_params() -> tuple[Param, ...]:
+    return (
+        _trees("iterations", 1000),
+        _library_learning_rate(0.05),
+        Param(
+            "depth",
+            "Depth",
+            "int",
+            default=6,
+            minimum=1,
+            maximum=16,
+            help="Depth of every tree (CatBoost grows symmetric trees: the same split on each "
+            "level). 4 to 10 is the usual range.",
+        ),
+        _penalty(
+            "l2_leaf_reg",
+            "L2 regularisation",
+            3.0,
+            "Penalises large leaf values. Larger values regularise more.",
+        ),
+        _EARLY_STOPPING_ROUNDS,
+    )
+
+
+class _CatBoost(_BoostingLibrary):
+    module = "catboost"
+    library = "catboost"
+    name_prefix = "cat"
+    trees_param = "iterations"
+
+    def catboost_args(self) -> list[str]:
+        p = self.p
+        return [
+            f"iterations={p['iterations']}",
+            f"learning_rate={fmt_float(p['learning_rate'])}",
+            f"depth={p['depth']}",
+            f"l2_leaf_reg={fmt_float(p['l2_leaf_reg'])}",
+            *self._stopping(),
+        ]
+
+    def _end_args(self) -> list[str]:
+        # No log lines for every fit, and no catboost_info folder with training logs.
+        return [f"random_seed={self.p['random_state']}", "verbose=0", "allow_writing_files=False"]
+
+
+@register
+class CatBoostRegressor(_CatBoost):
+    type = "CatBoostRegressor"
+    label = "CatBoost regression"
+    description = (
+        "Predicts a number with CatBoost's gradient-boosted symmetric trees: robust with "
+        "little tuning. Connect the Input (features). Early stopping on the validation rows "
+        "keeps the best number of trees. Needs the catboost package on the server."
+    )
+    task = "regression"
+    estimator = "CatBoostRegressor"
+    params = (*_catboost_params(), _LIBRARY_SEED)
+
+    def estimator_args(self) -> list[str]:
+        return [*self.catboost_args(), *self._end_args()]
+
+
+CATBOOST_CLASS_WEIGHTS = ("none", "Balanced", "SqrtBalanced")
+
+
+@register
+class CatBoostClassifier(_CatBoost):
+    type = "CatBoostClassifier"
+    label = "CatBoost classification"
+    description = (
+        "Classifies with CatBoost's gradient-boosted symmetric trees, with class "
+        "probabilities: robust with little tuning. Connect the Input (features); the classes "
+        "come from the data. For rare classes, set Class weights to Balanced. Needs the "
+        "catboost package on the server."
+    )
+    task = "classification"
+    estimator = "CatBoostClassifier"
+    params = (
+        *_catboost_params(),
+        Param(
+            "auto_class_weights",
+            "Class weights",
+            "select",
+            default="none",
+            options=CATBOOST_CLASS_WEIGHTS,
+            help="Balanced: weight the classes inversely to their frequency; SqrtBalanced: by "
+            "the square root of that (milder). For imbalanced data.",
+        ),
+        _LIBRARY_SEED,
+    )
+
+    def estimator_args(self) -> list[str]:
+        args = self.catboost_args()
+        if self.p["auto_class_weights"] != "none":
+            args.append(f"auto_class_weights={fmt_str(self.p['auto_class_weights'])}")
+        return [*args, *self._end_args()]
+
+
+# --------------------------------------------------------------------------- #
 # Ensembles of classical models (scikit-learn)
 # --------------------------------------------------------------------------- #
 
@@ -2239,6 +2675,17 @@ class VotingClassifier(_Voting):
     @property
     def probabilities(self) -> bool:
         return self.p["voting"] == "soft"
+
+    def check_members(self) -> None:
+        super().check_members()
+        if self.p["voting"] == "hard":
+            for member in self.members:
+                if member.layer.type == "CatBoostClassifier":
+                    raise LayerError(
+                        f"Hard voting counts the classes the models predict, but "
+                        f"{member.layer.label} ({member.name}) predicts them in a shape "
+                        "scikit-learn cannot count. Choose soft voting."
+                    )
 
     def estimator_args(self) -> list[str]:
         return [f"voting={fmt_str(self.p['voting'])}", *self._weights()]

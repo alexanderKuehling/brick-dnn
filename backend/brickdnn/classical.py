@@ -23,7 +23,7 @@ import textwrap
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from .layers import ClassicalModel, Ensemble, KernelExpr, Member
+from .layers import BOOSTING_LIBRARIES, ClassicalModel, Ensemble, KernelExpr, Member
 from .links import BANNER
 
 if TYPE_CHECKING:
@@ -72,6 +72,91 @@ def boosted(layer: ClassicalModel) -> bool:
 def calibrated(layer: ClassicalModel) -> bool:
     """SVC gets its class probabilities from Platt scaling (CalibratedClassifierCV)."""
     return layer.type == "SVC"
+
+
+def stops_early(layer: ClassicalModel) -> bool:
+    """XGBoost, LightGBM or CatBoost with early stopping on the validation rows: its fit gets
+    them (an ensemble does not pass them on, so its models are written without it)."""
+    return layer.library is not None and bool(layer.p["early_stopping_rounds"])
+
+
+def encodes_labels(layer: ClassicalModel) -> bool:
+    """XGBClassifier learns class indices 0, 1, …, not labels (scikit-learn's ensembles
+    encode the labels for their models themselves)."""
+    return layer.type == "XGBClassifier"
+
+
+# The fit on the training rows in the scripts (classical and hybrid), and the fit with the
+# validation rows for early stopping that replaces it.
+FIT_LINE = "    model.fit(features[train_rows], target[train_rows])"
+_EVAL_ARGS = {
+    "xgboost": ["model__eval_set=[(watch, target[val_rows])]", "model__verbose=False"],
+    "lightgbm": ["model__eval_X=watch", "model__eval_y=target[val_rows]"],
+    "catboost": ["model__eval_set=(watch, target[val_rows])"],
+}
+
+
+def stopping_fit(layer: ClassicalModel) -> str:
+    """FIT_LINE with the validation rows for early stopping, standardised like the training
+    rows (``model[:-1]`` is the scaler of the pipeline; the fit learns the same again)."""
+    assert layer.library is not None
+    name = BOOSTING_LIBRARIES[layer.library]
+    args = ["features[train_rows]", "target[train_rows]", *_EVAL_ARGS[layer.library]]
+    return "\n".join(
+        [
+            f"    # Early stopping: {name} watches the loss on the validation rows (standardised",
+            "    # like the training rows) and keeps the trees up to its best round.",
+            "    watch = model[:-1].fit(features[train_rows]).transform(features[val_rows])",
+            "    model.fit(",
+            *[f"        {arg}," for arg in args],
+            "    )",
+        ]
+    )
+
+
+def demo_without_stopping(layer: ClassicalModel) -> list[str]:
+    """Lines before the demo's fit: it has no validation rows, which early stopping of
+    XGBoost and LightGBM needs (CatBoost then simply fits all trees)."""
+    if not stops_early(layer) or layer.library == "catboost":
+        return []
+    return [
+        "    # The demo sets no validation rows aside, which early stopping needs.",
+        "    model.set_params(model__early_stopping_rounds=None)",
+    ]
+
+
+# XGBClassifier: the CSV training turns the labels into class indices, and save_model()
+# keeps the names of the classes.
+ENCODE_LABELS = [
+    "        # XGBoost learns the classes as indices 0, 1, …: save_model() names them again.",
+    "        class_names, target = np.unique(target, return_inverse=True)",
+]
+CLASS_NAMES = '        "class_names": [str(name) for name in model.classes_],'
+NAMED_CLASSES = '        "class_names": [str(class_names[i]) for i in model.classes_],'
+
+
+def library_report(layer: ClassicalModel) -> str:
+    """What the fit of XGBoost, LightGBM or CatBoost reports: the trees it kept."""
+    if layer.library == "catboost":
+        used, most = "boosting.tree_count_", 'boosting.get_params()["iterations"]'
+    else:
+        most = "boosting.n_estimators"
+        used = (
+            "boosting.best_iteration + 1"
+            if layer.library == "xgboost"
+            else "boosting.best_iteration_"
+        )
+    lines = ["", '    boosting = model.named_steps["model"]']
+    if stops_early(layer):
+        lines += [
+            "    # Early stopping keeps the trees up to the best round on the validation rows.",
+            f'    print(f"Trees: {{{used}}} of at most {{{most}}}")',
+        ]
+    elif layer.library == "catboost":
+        lines.append('    print(f"Trees: {boosting.tree_count_}")')
+    else:
+        lines.append(f'    print(f"Trees: {{{most}}}")')
+    return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -218,6 +303,11 @@ class _ClassicalGenerator:
                 " The trees do not need standardised features (their splits stay the same); "
                 "the scaler keeps the saved model in the format of the other classical models."
             )
+        if stops_early(layer):
+            about += (
+                " Early stopping: the fit to a CSV file stops adding trees when the loss on the "
+                f"validation rows has not improved for {layer.p['early_stopping_rounds']} rounds."
+            )
         lines = [
             f'"""{layer.label}: generated with Brick DNN.',
             "",
@@ -350,7 +440,8 @@ class _ClassicalGenerator:
 
         for member in self.members:
             model, name = member.layer, member.name
-            args = model.estimator_args()
+            # The ensemble fits its models without validation rows: no early stopping.
+            args = [a for a in model.estimator_args() if not a.startswith("early_stopping_")]
             if model.kernel is not None:
                 kernel = free(f"{name}_kernel")
                 lines += kernel_lines(model.kernel, kernel, f"{name}_", taken)
@@ -387,7 +478,8 @@ class _ClassicalGenerator:
         return _LOAD_CSV.replace("[[TARGET]]", target)
 
     def _fit(self) -> str:
-        return _FIT.replace("[[REPORT]]", self._report())
+        code = _FIT.replace("[[REPORT]]", self._report())
+        return code.replace(FIT_LINE, stopping_fit(self.layer)) if stops_early(self.layer) else code
 
     def _report(self) -> str:
         """What the fitted ``model`` did on ``features[val_rows]`` and what it learned."""
@@ -400,6 +492,8 @@ class _ClassicalGenerator:
             report += _GP_REPORT
         elif calibrated(self.layer):
             report += _SVC_REPORT
+        elif self.layer.library is not None:
+            report += library_report(self.layer)
         elif boosted(self.layer):
             report += _BOOSTING_REPORT
         else:
@@ -415,7 +509,13 @@ class _ClassicalGenerator:
             )
         else:
             task = '        "task": "regression",\n        "class_names": None,'
-        return _SAVE_MODEL.replace("[[FORMAT]]", MODEL_FORMAT).replace("[[TASK]]", task)
+        code = _SAVE_MODEL.replace("[[FORMAT]]", MODEL_FORMAT).replace("[[TASK]]", task)
+        if encodes_labels(self.layer):
+            code = code.replace(
+                "header: list[str]) -> None:",
+                "header: list[str], class_names: np.ndarray) -> None:",
+            ).replace(CLASS_NAMES, NAMED_CLASSES)
+        return code
 
     def _predict(self) -> str:
         return _PREDICT.replace("[[OUTPUT]]", self._output())
@@ -431,10 +531,13 @@ class _ClassicalGenerator:
         return _PREDICT_VALUES
 
     def _demo(self) -> str:
-        if self.classification:
+        if encodes_labels(self.layer):
+            target = "    target = np.where(features[:, 0] + features[:, -1] > 0, 1, 0)  # indices"
+        elif self.classification:
             target = '    target = np.where(features[:, 0] + features[:, -1] > 0, "yes", "no")'
         else:
             target = "    target = features[:, 0] + np.sin(2 * features[:, -1])"
+        target = "\n".join([target, *demo_without_stopping(self.layer)])
         return _DEMO.replace("[[TARGET]]", target)
 
     def _main(self, training: bool) -> str:
@@ -479,11 +582,13 @@ class _ClassicalGenerator:
             "    print(model)",
         ]
         if training:
+            encode = encodes_labels(self.layer)
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
+                *(ENCODE_LABELS if encode else []),
                 "        fit(model, features, target, args.seed)",
-                "        save_model(model, args.save, header)",
+                f"        save_model(model, args.save, header{', class_names' if encode else ''})",
                 "        return",
             ]
         lines += ["    demo(model)", "", "", 'if __name__ == "__main__":', "    main()"]
