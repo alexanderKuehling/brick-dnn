@@ -597,8 +597,9 @@ def _infer_ensemble(
         return
     if len(sources) < 2:
         result.error(
-            f"{layer.label} combines at least 2 models, but "
-            f"{'only one is' if sources else 'none is'} connected.",
+            f"{layer.label} combines at least 2 models, but only one is connected."
+            if sources
+            else f"{layer.label} combines at least 2 models, but none is connected.",
             nid,
         )
         return

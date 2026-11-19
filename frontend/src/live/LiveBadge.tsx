@@ -28,7 +28,9 @@ const BADGES: Record<LiveIndicator, { color: string; label: string; more?: strin
       get label() {
         return i18n.t('ui.live.LiveBadge.offline');
       },
-      more: ' – changes will sync',
+      get more() {
+        return i18n.t('ui.live.LiveBadge.changesWillSync');
+      },
       get tip() {
         return i18n.t('ui.live.LiveBadge.noConnectionToTheServer');
       },

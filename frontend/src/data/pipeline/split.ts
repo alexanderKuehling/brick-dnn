@@ -23,10 +23,10 @@ export function percentToShare(percent: number): number {
  */
 export function splitError(val: number, test: number): { val?: string; test?: string } | null {
   if (!(val >= 0)) {
-    return { val: 'Use 0 % or more.' };
+    return { val: i18n.t('ui.data.split.use0OrMore') };
   }
   if (test < 0) {
-    return { test: 'Use 0 % or more.' };
+    return { test: i18n.t('ui.data.split.use0OrMore') };
   }
   if (val + test > MAX_HELD_OUT + 1e-9) {
     return { test: i18n.t('ui.data.split.validationAndTestTogetherCan') };

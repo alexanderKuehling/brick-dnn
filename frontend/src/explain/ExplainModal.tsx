@@ -179,7 +179,10 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
     const names =
       (run.state?.preprocessing?.class_names as string[] | undefined) ?? plan?.class_names ?? [];
     const count = plan?.num_classes ?? names.length;
-    return Array.from({ length: count }, (_, i) => names[i] ?? `class ${i}`);
+    return Array.from(
+      { length: count },
+      (_, i) => names[i] ?? i18n.t('ui.explain.ExplainModal.classNumber', { number: i })
+    );
   }, [run.plan, run.state?.preprocessing]);
 
   const pick = (next: PickedSample) => {
@@ -265,7 +268,10 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
               </Pending>
             )}
             {explainMethod === 'tabular' && hasSample && (
-              <Pending result={explanation as Explanation<TabularAnswer>} what="the attributions">
+              <Pending
+                result={explanation as Explanation<TabularAnswer>}
+                what={i18n.t('ui.explain.ExplainModal.theAttributions')}
+              >
                 {(data) => (
                   <TabularExplanation
                     answer={data}
@@ -312,7 +318,7 @@ export function ExplainContent({ run, ...start }: { run: RunDetail } & ExplainSt
               </Pending>
             )}
             {can('weights') && (
-              <Pending result={weights} what="the weights">
+              <Pending result={weights} what={i18n.t('ui.explain.ExplainModal.theWeights')}>
                 {(data) => (
                   <InsideView activations={null} weights={data} descriptions={descriptions} />
                 )}

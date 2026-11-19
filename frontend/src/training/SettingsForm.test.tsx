@@ -130,12 +130,12 @@ describe('SettingsForm', () => {
     expect(keepBest).not.toBeChecked();
     expect(keepBest).toHaveAccessibleDescription(/weights of the last epoch are kept/);
     await userEvent.type(screen.getByLabelText('Early stopping'), '3');
-    expect(await screen.findByText(NO_VALIDATION_PATIENCE)).toBeInTheDocument();
+    expect(await screen.findByText(NO_VALIDATION_PATIENCE())).toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText('Early stopping'));
 
     await userEvent.click(screen.getByRole('switch', { name: /Hyperparameter search/ }));
-    expect(screen.getByRole('alert')).toHaveTextContent(NO_VALIDATION_SEARCH);
-    expect(validateSettings(latest).search).toBe(NO_VALIDATION_SEARCH);
+    expect(screen.getByRole('alert')).toHaveTextContent(NO_VALIDATION_SEARCH());
+    expect(validateSettings(latest).search).toBe(NO_VALIDATION_SEARCH());
 
     // A validation split above 0 lifts both.
     await userEvent.clear(input);

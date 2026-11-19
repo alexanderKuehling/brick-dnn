@@ -11,7 +11,7 @@ import type {
   TuningMetric,
   TuningRange,
 } from '@/api/types';
-import { currentLocale, i18n } from '@/i18n';
+import { currentLanguage, currentLocale, i18n } from '@/i18n';
 
 // --------------------------------------------------------------------------
 // Objective metrics
@@ -143,11 +143,14 @@ export function planMetrics(plan: TrainingPlan | null | undefined): MetricInfo[]
 
 /** The metric inside a sentence: "balanced accuracy", "macro F1", "ROC AUC", "the loss". */
 export function metricInSentence(name: TuningMetric | null | undefined): string {
-  const { label } = metricInfo(name);
-  if (label === 'Loss') {
-    return 'the loss';
+  const { name: metric, label } = metricInfo(name);
+  if (metric === 'loss') {
+    return i18n.t('ui.training.search.theLoss');
   }
-  return /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+  // German nouns keep their capital letter.
+  return currentLanguage() === 'en' && /^[A-Z][a-z]/.test(label)
+    ? label[0].toLowerCase() + label.slice(1)
+    : label;
 }
 
 /** "higher is better" or "lower is better". */
@@ -199,15 +202,18 @@ export interface Tunable {
   help?: string;
 }
 
+/** `label`: the label in the language of the app, read when it is shown. */
 const tunable = (
   name: string,
-  label: string,
+  label: () => string,
   kind: Tunable['kind'],
   defaults: Tunable['default'],
   extra: Partial<Tunable> = {}
 ): Tunable => ({
   name,
-  label,
+  get label() {
+    return label();
+  },
   kind,
   min: 0,
   max: 1e6,
@@ -219,26 +225,35 @@ const tunable = (
   ...extra,
 });
 
-const CLASS_WEIGHT = tunable('class_weight', 'Class weights', 'choice', ['none', 'balanced'], {
-  options: ['none', 'balanced'],
-});
+const CLASS_WEIGHT = tunable(
+  'class_weight',
+  () => i18n.t('ui.training.search.classWeights'),
+  'choice',
+  ['none', 'balanced'],
+  {
+    options: ['none', 'balanced'],
+  }
+);
 const BOOSTING = [
   tunable(
     'learning_rate',
-    'Learning rate',
+    () => i18n.t('ui.training.search.learningRate'),
     'float',
     { min: 0.01, max: 0.3 },
     { max: 10, minExclusive: true }
   ),
-  tunable('max_iter', 'Max. iterations', 'int', [100, 200, 500], { min: 1, max: 10_000 }),
+  tunable('max_iter', () => i18n.t('ui.training.search.maxIterations'), 'int', [100, 200, 500], {
+    min: 1,
+    max: 10_000,
+  }),
   tunable(
     'max_leaf_nodes',
-    'Max. leaves per tree',
+    () => i18n.t('ui.training.search.maxLeavesPerTree'),
     'int',
     { min: 15, max: 127 },
     { min: 2, max: 4096 }
   ),
-  tunable('max_depth', 'Max. depth', 'int', [null, 3, 6], {
+  tunable('max_depth', () => i18n.t('ui.training.search.maxDepth'), 'int', [null, 3, 6], {
     min: 1,
     max: 100,
     none: true,
@@ -246,14 +261,26 @@ const BOOSTING = [
       return i18n.t('ui.training.search.noneNoLimit');
     },
   }),
-  tunable('min_samples_leaf', 'Min. rows per leaf', 'int', { min: 5, max: 100 }, { min: 1 }),
-  tunable('l2_regularization', 'L2 regularisation', 'float', [0, 0.1, 1, 10], { max: 1e4 }),
+  tunable(
+    'min_samples_leaf',
+    () => i18n.t('ui.training.search.minRowsPerLeaf'),
+    'int',
+    { min: 5, max: 100 },
+    { min: 1 }
+  ),
+  tunable(
+    'l2_regularization',
+    () => i18n.t('ui.training.search.l2Regularisation'),
+    'float',
+    [0, 0.1, 1, 10],
+    { max: 1e4 }
+  ),
 ];
 const SVM = [
-  tunable('C', 'C', 'float', { min: 0.1, max: 100 }, { minExclusive: true }),
+  tunable('C', () => 'C', 'float', { min: 0.1, max: 100 }, { minExclusive: true }),
   tunable(
     'gamma',
-    'Gamma',
+    () => i18n.t('ui.training.search.gamma'),
     'gamma',
     { min: 0.001, max: 1 },
     {
@@ -265,26 +292,47 @@ const SVM = [
       },
     }
   ),
-  tunable('kernel', 'Kernel', 'choice', ['rbf', 'linear'], {
+  tunable('kernel', () => i18n.t('ui.training.search.kernel'), 'choice', ['rbf', 'linear'], {
     options: ['linear', 'poly', 'rbf', 'sigmoid'],
   }),
 ];
-const RESTARTS = tunable('n_restarts_optimizer', 'Optimizer restarts', 'int', [0, 2, 5], {
-  max: 20,
-  scale: 'linear',
-});
+const RESTARTS = tunable(
+  'n_restarts_optimizer',
+  () => i18n.t('ui.training.search.optimizerRestarts'),
+  'int',
+  [0, 2, 5],
+  {
+    max: 20,
+    scale: 'linear',
+  }
+);
 
 /** What each classical model can tune, by brick type. */
 export const CLASSICAL_TUNABLES: Record<string, Tunable[]> = {
   HistGradientBoostingRegressor: BOOSTING,
   HistGradientBoostingClassifier: [...BOOSTING, CLASS_WEIGHT],
-  SVR: [...SVM, tunable('epsilon', 'Epsilon', 'float', { min: 0.01, max: 1 })],
+  SVR: [
+    ...SVM,
+    tunable('epsilon', () => i18n.t('ui.training.search.epsilon'), 'float', { min: 0.01, max: 1 }),
+  ],
   SVC: [...SVM, CLASS_WEIGHT],
   GaussianProcessRegressor: [
-    tunable('alpha', 'Alpha', 'float', { min: 1e-10, max: 0.01 }, { max: 1e3 }),
-    tunable('normalize_y', 'Normalize targets', 'bool', [true, false], {
-      options: [true, false],
-    }),
+    tunable(
+      'alpha',
+      () => i18n.t('ui.training.search.alpha'),
+      'float',
+      { min: 1e-10, max: 0.01 },
+      { max: 1e3 }
+    ),
+    tunable(
+      'normalize_y',
+      () => i18n.t('ui.training.search.normalizeTargets'),
+      'bool',
+      [true, false],
+      {
+        options: [true, false],
+      }
+    ),
     RESTARTS,
   ],
   GaussianProcessClassifier: [RESTARTS],
@@ -300,12 +348,16 @@ export const DEFAULT_CLASSICAL_PARAMS: Record<string, string[]> = {
   GaussianProcessClassifier: ['n_restarts_optimizer'],
 };
 
-/** Labels of brick parameters (trial tables), by name over all classical models. */
-export const PARAM_LABELS: Record<string, string> = Object.fromEntries(
-  Object.values(CLASSICAL_TUNABLES)
-    .flat()
-    .map((item) => [item.name, item.label])
-);
+/** The label of a classical model's parameter, in the language of the app; null if unknown. */
+export function classicalParamLabel(name: string): string | null {
+  for (const items of Object.values(CLASSICAL_TUNABLES)) {
+    const item = items.find((tunable) => tunable.name === name);
+    if (item) {
+      return item.label;
+    }
+  }
+  return null;
+}
 
 export const FOLDS = { min: 2, max: 10, default: 5 } as const;
 
@@ -378,7 +430,9 @@ function checkNumber(item: Tunable, value: number): string | null {
   }
   const low = item.minExclusive ? value <= item.min : value < item.min;
   if (low || value > item.max) {
-    const bound = item.minExclusive ? 'Greater than' : 'At least';
+    const bound = item.minExclusive
+      ? i18n.t('ui.training.search.greaterThan')
+      : i18n.t('ui.training.search.atLeast');
     return i18n.t('ui.training.search.atMost', {
       bound,
       min: item.min.toLocaleString(currentLocale()),

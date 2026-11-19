@@ -1,6 +1,6 @@
 # Erklärung zur Barrierefreiheit / Accessibility statement
 
-Last updated / Stand: 15 November 2026
+Last updated / Stand: 18 November 2026
 
 ## English
 
@@ -44,7 +44,7 @@ If something does not work for you, or you need content in another form, please 
 
 ### Enforcement
 
-If the BFSG applied, the market surveillance authority of the German federal states for accessibility, the Marktüberwachungsstelle der Länder für die Barrierefreiheit von Produkten und Dienstleistungen (MLBF) in Magdeburg, would be responsible. Please contact me first, so that I can fix the problem.
+If the BFSG applied, the market surveillance authority of the German federal states for accessibility, the Marktüberwachungsstelle der Länder für die Barrierefreiheit von Produkten und Dienstleistungen (MLBF), would be responsible: Carl-Miller-Straße 6, 39112 Magdeburg, Germany, [www.mlbf-barrierefrei.de](https://www.mlbf-barrierefrei.de). Please contact me first, so that I can fix the problem.
 
 ## Deutsch
 
@@ -88,4 +88,4 @@ Wenn etwas für Sie nicht funktioniert oder Sie Inhalte in einer anderen Form br
 
 ### Durchsetzung
 
-Fiele Brick DNN unter das BFSG, wäre die Marktüberwachungsstelle der Länder für die Barrierefreiheit von Produkten und Dienstleistungen (MLBF) in Magdeburg zuständig. Bitte wenden Sie sich zuerst an mich, damit ich das Problem beheben kann.
+Fiele Brick DNN unter das BFSG, wäre die Marktüberwachungsstelle der Länder für die Barrierefreiheit von Produkten und Dienstleistungen (MLBF) zuständig: Carl-Miller-Straße 6, 39112 Magdeburg, [www.mlbf-barrierefrei.de](https://www.mlbf-barrierefrei.de). Bitte wenden Sie sich zuerst an mich, damit ich das Problem beheben kann.

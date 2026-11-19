@@ -149,7 +149,7 @@ export function MissingMatrix({
         ? i18n.t('ui.components.MissingMatrix.noMissingValues')
         : i18n.t('ui.components.MissingMatrix.missingValuesIn', {
             length: withMissing.length,
-            value: withMissing.length === 1 ? 'column' : 'columns',
+            value: i18n.t('ui.components.MissingMatrix.columnWord', { count: withMissing.length }),
             map: withMissing
               .slice(0, 6)
               .map(({ c }) => columnText(c))
@@ -301,7 +301,7 @@ export function MissingMatrix({
                       value={`${formatCount(s.counts[b])} of ${formatCount(s.sizes[b])}`}
                       label={
                         from === to
-                          ? `row ${formatCount(from)}`
+                          ? i18n.t('ui.components.MissingMatrix.row', { row: formatCount(from) })
                           : i18n.t('ui.components.MissingMatrix.rows2', {
                               from: formatCount(from),
                               to: formatCount(to),

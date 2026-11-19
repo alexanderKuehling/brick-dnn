@@ -20,9 +20,10 @@ export function ActivityLink({
       </Text>
     );
   }
-  const actions = `${activity.actions.toLocaleString(currentLocale())} ${
-    activity.actions === 1 ? 'action' : 'actions'
-  }`;
+  const actions = i18n.t('ui.tokens.ActivityLink.actions', {
+    count: activity.actions,
+    n: activity.actions.toLocaleString(currentLocale()),
+  });
   return (
     <Anchor component={Link} to={`/activity?agent=${agentKey}`} size="sm">
       {actions} · {relativeTime(activity.last_at)}

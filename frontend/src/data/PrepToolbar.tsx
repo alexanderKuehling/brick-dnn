@@ -26,7 +26,7 @@ import {
 } from '@mantine/core';
 import type { DataSource, PrepDownloadFormat, ProjectRef, ProjectRole } from '@/api';
 import { currentLocale, i18n, useTranslation } from '@/i18n';
-import { UNTITLED, type SaveStatus } from './useDataPrep';
+import { untitled, type SaveStatus } from './useDataPrep';
 import classes from './DataPage.module.css';
 
 export type ToolbarAction = 'export' | 'train' | PrepDownloadFormat;
@@ -183,7 +183,7 @@ export function PrepToolbar(props: PrepToolbarProps) {
             onChange={(event) => props.onNameChange(event.currentTarget.value)}
             onBlur={() => {
               if (!name.trim() && !readOnly) {
-                props.onNameChange(UNTITLED);
+                props.onNameChange(untitled());
               }
             }}
             maxLength={120}

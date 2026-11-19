@@ -1034,6 +1034,11 @@
   without one keep working.
 
 ### Fixed
+- **"Why the model decides" on text runs.** For a run trained on a built-in text dataset
+  (Sentiment, Key lookup, Topics) the side panel said "For models trained on a CSV file only",
+  although the full explanation offers the weights the network learned. It now says that
+  there is no preview for texts and that the full explanation shows the weights, and its
+  button opens the dialog on *Inside the network*.
 - **Hybrid networks without validation data.** A hybrid training (neural layers before a
   classical model or ensemble) with a validation share of 0 failed after phase 1 with
   "cannot reshape tensor of 0 elements": an empty set of rows still gave one empty batch.

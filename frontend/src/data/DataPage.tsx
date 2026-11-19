@@ -50,7 +50,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { downloadBlob } from '@/builder/download';
 import { HEADER_HEIGHT } from '@/components/AppHeader';
-import { i18n, Trans, useTranslation } from '@/i18n';
+import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { ShareInNetworkDialog } from '@/sharing/ShareInNetworkDialog';
 import { loadSource, saveSource } from '@/training/settings';
 import { AnalysisPanel } from './analysis/AnalysisPanel';
@@ -134,12 +134,22 @@ function datasetSummary(dataset: Dataset): string {
   const { num_features: features, num_classes: classes_, target_kind: kind } = dataset.info;
   const parts: string[] = [];
   if (typeof features === 'number') {
-    parts.push(`${features} ${features === 1 ? 'feature' : 'features'}`);
+    parts.push(
+      i18n.t('ui.training.format.features', {
+        count: features,
+        n: features.toLocaleString(currentLocale()),
+      })
+    );
   }
   if (kind === 'number') {
-    parts.push('numeric target');
+    parts.push(i18n.t('ui.training.format.numericTarget'));
   } else if (typeof classes_ === 'number') {
-    parts.push(`${classes_} classes`);
+    parts.push(
+      i18n.t('ui.training.format.classes', {
+        count: classes_,
+        n: classes_.toLocaleString(currentLocale()),
+      })
+    );
   }
   return parts.join(', ');
 }
@@ -400,7 +410,10 @@ function Workspace({ resources, status }: WorkspaceProps) {
     copy?: Pick<DataPrep, 'name' | 'steps' | 'settings'>,
     signal?: AbortSignal
   ) => {
-    const name = uniqueName(copy ? `${copy.name} (copy)` : from.name, preps ?? []);
+    const name = uniqueName(
+      copy ? i18n.t('ui.data.DataPage.copyOf', { name: copy.name }) : from.name,
+      preps ?? []
+    );
     try {
       const created = await api.data.preps.create({
         name,
@@ -1057,9 +1070,13 @@ function PrepContent(props: PrepContentProps) {
   const failedIndex = firstFailedStep(prep.steps, prep.reports);
   const exportBlocked =
     failedIndex >= 0 && catalog
-      ? `Step ${failedIndex + 1} “${stepSpec(catalog, prep.steps[failedIndex].type)?.label ?? prep.steps[failedIndex].type}” failed.`
+      ? i18n.t('ui.data.DataPage.stepNamedFailed', {
+          number: failedIndex + 1,
+          label:
+            stepSpec(catalog, prep.steps[failedIndex].type)?.label ?? prep.steps[failedIndex].type,
+        })
       : failedIndex >= 0
-        ? `Step ${failedIndex + 1} failed.`
+        ? i18n.t('ui.data.DataPage.stepFailed', { number: failedIndex + 1 })
         : null;
   // The last result stays visible while a new one is computed, slightly faded.
   const stale = (prep.previewing && result !== null) || undefined;

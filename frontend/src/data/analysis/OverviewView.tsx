@@ -9,7 +9,12 @@ import { KIND_LABELS, KIND_ORDER, Note } from './shared';
 import { groupWarnings } from './warningGroups';
 import { WarningList } from './WarningList';
 
-export const SPLIT_NAMES = ['Training', 'Validation', 'Test'];
+/** The parts of the split, in the language of the app. */
+export const splitNames = (): string[] => [
+  i18n.t('ui.data.OverviewView.training'),
+  i18n.t('ui.data.OverviewView.validation'),
+  i18n.t('ui.data.OverviewView.test'),
+];
 
 export interface OverviewViewProps {
   profile: DataProfile;
@@ -23,7 +28,7 @@ export interface OverviewViewProps {
 export function warningHeading(profile: DataProfile): string {
   const total = profile.warnings.length;
   if (!total) {
-    return 'Warnings';
+    return i18n.t('ui.data.OverviewView.warnings');
   }
   const entries = groupWarnings(profile.warnings, profile).length;
   return entries < total
@@ -55,7 +60,7 @@ export function OverviewView({
   const classes = targetProfile?.classes?.length ?? 0;
   const targetHint = targetProfile
     ? targetProfile.task === 'classification'
-      ? `${formatCount(classes)} classes${targetProfile.imbalance_ratio ? ` · ${targetProfile.imbalance_ratio.toFixed(1)} : 1` : ''}`
+      ? `${i18n.t('ui.training.format.classes', { count: classes, n: formatCount(classes) })}${targetProfile.imbalance_ratio ? ` · ${targetProfile.imbalance_ratio.toFixed(1)} : 1` : ''}`
       : i18n.t('ui.data.OverviewView.regression')
     : i18n.t('ui.data.OverviewView.chooseOneInTargetSplit');
 
@@ -119,8 +124,8 @@ export function OverviewView({
               label={i18n.t('ui.data.OverviewView.rowsPerSplit')}
               showLegend={false}
               segments={split.map((value, i) => ({
-                key: SPLIT_NAMES[i],
-                label: SPLIT_NAMES[i],
+                key: splitNames()[i],
+                label: splitNames()[i],
                 value,
                 color: seriesColor(i),
               }))}

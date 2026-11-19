@@ -103,6 +103,10 @@ STRUCTURE_WORK = 5e8
 STRUCTURE_MIN_ROWS = 50
 STRUCTURE_TWIN_SHARE = 0.05
 STRUCTURE_HELD_SHARE = 0.05
+ATYPICAL_HINT = (
+    "Such rows are often filler or synthetic rows with made-up labels; look at them in "
+    "Analysis → Rows."
+)
 
 # Order of the warnings and notes in the list (errors keep the order they are found in).
 PRIORITY = (
@@ -656,9 +660,12 @@ def class_issues(
             issue(
                 "rare_classes",
                 "warning",
-                f"{plural(len(rare), 'class has', 'classes have')} fewer than {MIN_CLASS_ROWS} "
-                f"training rows ({listed}{more}); the network can hardly learn "
-                f"{'it' if len(rare) == 1 else 'them'}.",
+                f"1 class has fewer than {MIN_CLASS_ROWS} training rows ({listed}); the "
+                "network can hardly learn it."
+                if len(rare) == 1
+                else f"{plural(len(rare), 'class has', 'classes have')} fewer than "
+                f"{MIN_CLASS_ROWS} training rows ({listed}{more}); the network can hardly "
+                "learn them.",
                 [target],
                 fix,
             )
@@ -688,9 +695,12 @@ def class_issues(
             issue(
                 "classes_not_in_split",
                 "warning",
-                f"{plural(len(all_lacking), 'class has', 'classes have')} no {parts} rows "
-                f"({names_text(all_lacking)}), so the {parts} scores say nothing about "
-                f"{'it' if len(all_lacking) == 1 else 'them'}. {hint}",
+                f"1 class has no {parts} rows ({names_text(all_lacking)}), so the {parts} "
+                f"scores say nothing about it. {hint}"
+                if len(all_lacking) == 1
+                else f"{plural(len(all_lacking), 'class has', 'classes have')} no {parts} rows "
+                f"({names_text(all_lacking)}), so the {parts} scores say nothing about them. "
+                f"{hint}",
                 [target],
             )
         )
@@ -1310,23 +1320,32 @@ def row_issues(
         overlap = int(np.isin(hashes[held_out], hashes[~held_out]).sum())
     if overlap:
         share = overlap / max(held, 1)
-        text = f"{plural(overlap, 'validation/test row')} ({fmt_share(overlap, held)})"
+        copies = fmt_share(overlap, held)
+        in_all = plural(duplicates, "duplicate row")
+        message = (
+            f"1 validation/test row ({copies}) is an exact copy of training rows, so the "
+            f"validation and test scores are too optimistic ({in_all} in all)."
+            if overlap == 1
+            else f"{plural(overlap, 'validation/test row')} ({copies}) are exact copies of "
+            "training rows, so the validation and test scores are too optimistic "
+            f"({in_all} in all)."
+        )
         issues.append(
             issue(
                 "split_overlap",
                 "warning" if share >= OVERLAP_WARNING else "info",
-                f"{sampled}{text} {'is an exact copy' if overlap == 1 else 'are exact copies'} "
-                "of training rows, so the validation and test scores are too optimistic "
-                f"({plural(duplicates, 'duplicate row')} in all).",
+                sampled + message,
                 [],
                 fix,
             )
         )
     elif duplicates:
         share = duplicates / rows
+        copies = fmt_share(duplicates, rows)
         message = (
-            f"{plural(duplicates, 'row')} ({fmt_share(duplicates, rows)}) "
-            f"{'is an exact copy' if duplicates == 1 else 'are exact copies'} of other rows."
+            f"1 row ({copies}) is an exact copy of other rows."
+            if duplicates == 1
+            else f"{plural(duplicates, 'row')} ({copies}) are exact copies of other rows."
         )
         if sampled:
             message = sampled + message[0].lower() + message[1:]
@@ -1435,11 +1454,14 @@ def row_structure_issues(
                 "atypical_rows",
                 "warning",
                 sentence(
-                    f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) "
-                    f"{'is' if count == 1 else 'are'} unusually typical: every value is close "
-                    f"to its column median (spread below {fmt_number(threshold)}; ordinary rows "
-                    f"{fmt_number(typical)}). Such rows are often filler or synthetic rows "
-                    "with made-up labels; look at them in Analysis → Rows."
+                    f"1 row ({fmt_share(count, stats.rows)}) is unusually typical: every value "
+                    f"is close to its column median (spread below {fmt_number(threshold)}; "
+                    f"ordinary rows {fmt_number(typical)}). {ATYPICAL_HINT}"
+                    if count == 1
+                    else f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) are "
+                    "unusually typical: every value is close to its column median (spread "
+                    f"below {fmt_number(threshold)}; ordinary rows {fmt_number(typical)}). "
+                    f"{ATYPICAL_HINT}"
                 ),
                 [],
                 step_fix(
@@ -1478,9 +1500,11 @@ def row_structure_issues(
                     "twin in the training rows"
                 )
             base = sentence(
-                f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) "
-                f"{'has' if count == 1 else 'have'} a near twin: {how_close} (repeated "
-                "measurements of the same person or object?)."
+                f"1 row ({fmt_share(count, stats.rows)}) has a near twin: {how_close} "
+                "(repeated measurements of the same person or object?)."
+                if count == 1
+                else f"{plural(count, 'row')} ({fmt_share(count, stats.rows)}) have a near "
+                f"twin: {how_close} (repeated measurements of the same person or object?)."
             )
             if group_by:
                 if held_share >= STRUCTURE_HELD_SHARE:

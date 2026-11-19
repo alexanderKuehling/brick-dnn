@@ -182,14 +182,14 @@ export function VersionPreview({
               doc={detail.graph}
               tips={[
                 current
-                  ? 'This is the current state of the network, read only here.'
-                  : 'This is an earlier version of the network, read only.',
-                'Click a layer to see its settings here.',
+                  ? i18n.t('ui.history.VersionPreview.currentStateReadOnly')
+                  : i18n.t('ui.history.VersionPreview.earlierVersionReadOnly'),
+                i18n.t('ui.history.VersionPreview.clickALayer'),
                 current
-                  ? 'Close the preview to continue working on it.'
+                  ? i18n.t('ui.history.VersionPreview.closeThePreview')
                   : canRestore
-                    ? 'Restore this version to continue from it. The current state stays in the history.'
-                    : 'The owner and editors can restore it.',
+                    ? i18n.t('ui.history.VersionPreview.restoreThisVersion')
+                    : i18n.t('ui.history.VersionPreview.ownerAndEditorsCanRestore'),
               ]}
             />
           </WithoutCollab>

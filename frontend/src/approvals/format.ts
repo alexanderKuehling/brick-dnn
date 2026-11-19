@@ -6,15 +6,17 @@ import { formatCpu, formatMoney } from '@/usage/format';
 export function ruleSummary(rule: ApprovalRule): string {
   const parts: string[] = [];
   if (rule.training_cpu_minutes === 0) {
-    parts.push('every training');
+    parts.push(i18n.t('ui.approvals.format.everyTraining'));
   } else if (rule.training_cpu_minutes !== null) {
-    parts.push(`trainings above ${formatCpu(rule.training_cpu_minutes)}`);
+    parts.push(
+      i18n.t('ui.approvals.format.trainingsAbove', { limit: formatCpu(rule.training_cpu_minutes) })
+    );
   }
   if (rule.publishing) {
-    parts.push('publishing');
+    parts.push(i18n.t('ui.approvals.format.publishing'));
   }
   if (rule.deleting) {
-    parts.push('deleting');
+    parts.push(i18n.t('ui.approvals.format.deleting'));
   }
   if (parts.length === 0) {
     return i18n.t('ui.approvals.format.neverAsks');
@@ -44,7 +46,7 @@ export function estimateText(estimate: ApprovalEstimate | null): string {
 export function expiresIn(iso: string, now: Date = new Date()): string {
   const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
   if (minutes <= 0) {
-    return 'now';
+    return i18n.t('ui.approvals.format.now');
   }
   if (minutes < 60) {
     return i18n.t('ui.approvals.format.inMin', { minutes });

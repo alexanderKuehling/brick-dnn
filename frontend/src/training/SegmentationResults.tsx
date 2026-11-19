@@ -153,9 +153,13 @@ function splitName(split: string | null | undefined): string {
 /** "8 validation images · weights of epoch 7". */
 function galleryNote(previews: RunPreviews): string {
   const split = splitName(previews.split);
-  const images = `${previews.samples.length} ${split} images${
-    split === 'training' ? ' (seen in training)' : ''
-  }`;
+  const count = previews.samples.length;
+  const images =
+    split === 'training'
+      ? i18n.t('ui.training.SegmentationResults.trainingImages', { count })
+      : split === 'test'
+        ? i18n.t('ui.training.SegmentationResults.testImages', { count })
+        : i18n.t('ui.training.SegmentationResults.validationImages', { count });
   return typeof previews.epoch === 'number'
     ? i18n.t('ui.training.SegmentationResults.weightsOfEpoch', { images, epoch: previews.epoch })
     : images;

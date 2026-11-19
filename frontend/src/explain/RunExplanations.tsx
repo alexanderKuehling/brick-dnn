@@ -206,12 +206,22 @@ function Explanations({ run }: { run: RunDetail }) {
     body = (
       <Stack gap="xs" align="flex-start">
         <Text size="sm" c="dimmed">
-          {(methods.kind === 'image'
-            ? (reason('samples') ?? reason('image'))
-            : (reason('permutation') ?? reason('tabular'))) ??
-            i18n.t('ui.explain.RunExplanations.thereIsNoPreviewFor')}
+          {methods.kind === 'tokens'
+            ? // Texts: no attributions or importance, but the weights are on the Inside tab.
+              can('weights')
+              ? i18n.t('ui.explain.RunExplanations.textsWeightsOnly')
+              : (reason('weights') ?? i18n.t('ui.explain.RunExplanations.thereIsNoPreviewFor'))
+            : ((methods.kind === 'image'
+                ? (reason('samples') ?? reason('image'))
+                : (reason('permutation') ?? reason('tabular'))) ??
+              i18n.t('ui.explain.RunExplanations.thereIsNoPreviewFor'))}
         </Text>
-        {anyTab && <OpenFull onClick={() => open({})} />}
+        {anyTab && (
+          <OpenFull
+            tab={methods.kind === 'tokens' ? 'inside' : undefined}
+            onClick={() => open(methods.kind === 'tokens' ? { tab: 'inside' } : {})}
+          />
+        )}
       </Stack>
     );
   } else if (!requested) {

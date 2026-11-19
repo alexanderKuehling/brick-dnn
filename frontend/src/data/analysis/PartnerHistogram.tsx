@@ -117,7 +117,10 @@ export function PartnerHistogram({
         },
       ]}
       table={() => ({
-        head: ['Strongest |ρ|', 'Columns'],
+        head: [
+          i18n.t('ui.data.PartnerHistogram.strongestRho'),
+          i18n.t('ui.data.PartnerHistogram.columns'),
+        ],
         rows: counts.map((count, i) => [
           `${edges[i].toFixed(2)} – ${edges[i + 1].toFixed(2)}`,
           formatCount(count),

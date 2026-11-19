@@ -123,7 +123,12 @@ export function ImageSamplePicker({
         <DrawPad
           format={format}
           onUse={(pixels) => {
-            onPick({ kind: 'input', input: pixels, scale: 'raw', label: 'your drawing' });
+            onPick({
+              kind: 'input',
+              input: pixels,
+              scale: 'raw',
+              label: i18n.t('ui.explain.SamplePicker.yourDrawing'),
+            });
           }}
         />
       )}
@@ -357,7 +362,7 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
                 onPick({
                   kind: 'input',
                   input: values.map((v) => (typeof v === 'number' ? v : Number(v) || 0)),
-                  label: 'your row',
+                  label: i18n.t('ui.explain.SamplePicker.yourRow'),
                 });
                 setEditing(false);
               }}
@@ -379,7 +384,9 @@ export function TabularSamplePicker({ samples, loading, error, picked, onPick }:
       {samples && (
         <ScrollArea.Autosize mah={260} type="auto">
           <Table
-            aria-label={`${SOURCE_LABELS[samples.source] ?? 'Validation'} rows`}
+            aria-label={i18n.t('ui.explain.SamplePicker.sourceRows', {
+              source: SOURCE_LABELS[samples.source] ?? SOURCE_LABELS.validation,
+            })}
             striped
             highlightOnHover
             withTableBorder

@@ -148,31 +148,31 @@ export function CompareView({
         label={i18n.t('ui.data.CompareView.dataBeforeAndAfterThe')}
         rows={[
           [
-            'Rows',
+            i18n.t('ui.data.CompareView.rows'),
             formatCount(before.n_rows),
             formatCount(profile.n_rows),
             change(before.n_rows, profile.n_rows),
           ],
           [
-            'Columns',
+            i18n.t('ui.data.CompareView.columns'),
             formatCount(before.n_columns),
             formatCount(profile.n_columns),
             change(before.n_columns, profile.n_columns),
           ],
           [
-            'Missing cells',
+            i18n.t('ui.data.CompareView.missingCells'),
             formatCount(before.missing_cells),
             formatCount(profile.missing_cells),
             change(before.missing_cells, profile.missing_cells),
           ],
           [
-            'Duplicate rows',
+            i18n.t('ui.data.CompareView.duplicateRows'),
             formatCount(before.duplicate_rows),
             formatCount(profile.duplicate_rows),
             change(before.duplicate_rows, profile.duplicate_rows),
           ],
           [
-            'Warnings',
+            i18n.t('ui.data.CompareView.warnings'),
             formatCount(before.warnings.length),
             formatCount(profile.warnings.length),
             change(before.warnings.length, profile.warnings.length),
@@ -282,21 +282,26 @@ function ColumnComparison({
     typeof v !== 'number' ? '–' : time ? formatDate(v) : formatNumber(v);
   const kindChanged = before.kind !== after.kind;
   const statRows: [string, string, string, string][] = [
-    ['Type', KIND_LABELS[before.kind], KIND_LABELS[after.kind], kindChanged ? 'changed' : 'same'],
     [
-      'Values',
+      i18n.t('ui.data.CompareView.type'),
+      KIND_LABELS[before.kind],
+      KIND_LABELS[after.kind],
+      kindChanged ? i18n.t('ui.data.CompareView.changed') : i18n.t('ui.data.CompareView.same'),
+    ],
+    [
+      i18n.t('ui.data.CompareView.values'),
       formatCount(before.count),
       formatCount(after.count),
       change(before.count, after.count),
     ],
     [
-      'Missing',
+      i18n.t('ui.data.CompareView.missing'),
       formatCount(before.missing),
       formatCount(after.missing),
       change(before.missing, after.missing),
     ],
     [
-      'Unique',
+      i18n.t('ui.data.CompareView.unique'),
       formatCount(before.unique),
       formatCount(after.unique),
       change(before.unique, after.unique),
@@ -304,12 +309,12 @@ function ColumnComparison({
   ];
   if (before.stats && after.stats && !kindChanged) {
     const keys = [
-      ['Mean', 'mean'],
-      ['Standard deviation', 'std'],
-      ['Min', 'min'],
-      ['Median', 'median'],
-      ['Max', 'max'],
-      ['Skewness', 'skew'],
+      [i18n.t('ui.data.CompareView.mean'), 'mean'],
+      [i18n.t('ui.data.CompareView.standardDeviation'), 'std'],
+      [i18n.t('ui.data.CompareView.min'), 'min'],
+      [i18n.t('ui.data.CompareView.median'), 'median'],
+      [i18n.t('ui.data.CompareView.max'), 'max'],
+      [i18n.t('ui.data.CompareView.skewness'), 'skew'],
     ] as const;
     for (const [label, key] of keys) {
       statRows.push([

@@ -163,7 +163,12 @@ const ColumnRow = memo(
         </td>
         <td>{KIND_LABELS[column.kind]}</td>
         <td className={column.missing ? classes.right : `${classes.right} ${classes.dimmed}`}>
-          <span title={`${formatCount(column.missing)} rows`}>
+          <span
+            title={i18n.t('data.rows', {
+              count: column.missing,
+              value: formatCount(column.missing),
+            })}
+          >
             {formatPercent(rows ? column.missing / rows : 0)}
           </span>
         </td>
@@ -297,16 +302,17 @@ export function ColumnsView({ profile, target, onShowColumn }: ColumnsViewProps)
         <table className={classes.table}>
           <thead>
             <tr>
-              {header('name', 'Column', false)}
-              {header('kind', 'Type', false)}
-              {header('missing', 'Missing')}
-              {header('unique', 'Unique')}
-              {header('mean', 'Mean')}
-              {header('median', 'Median')}
-              {header('min', 'Min')}
-              {header('max', 'Max')}
+              {header('name', i18n.t('ui.data.ColumnsView.headName'), false)}
+              {header('kind', i18n.t('ui.data.ColumnsView.headKind'), false)}
+              {header('missing', i18n.t('ui.data.ColumnsView.headMissing'))}
+              {header('unique', i18n.t('ui.data.ColumnsView.headUnique'))}
+              {header('mean', i18n.t('ui.data.ColumnsView.headMean'))}
+              {header('median', i18n.t('ui.data.ColumnsView.headMedian'))}
+              {header('min', i18n.t('ui.data.ColumnsView.headMin'))}
+              {header('max', i18n.t('ui.data.ColumnsView.headMax'))}
               <th>{i18n.t('ui.data.ColumnsView.distribution')}</th>
-              {hasAssociation && header('association', 'Target')}
+              {hasAssociation &&
+                header('association', i18n.t('ui.data.ColumnsView.headAssociation'))}
             </tr>
           </thead>
           <tbody>

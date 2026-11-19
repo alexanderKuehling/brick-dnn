@@ -13,7 +13,7 @@ export function versionTitle(entry: ProjectVersion, me: string | null): string {
     return entry.label || i18n.t('ui.history.labels.restoredVersion', { version: entry.version });
   }
   if (!entry.created_by) {
-    return 'Edited';
+    return i18n.t('ui.history.labels.edited');
   }
   return i18n.t('ui.history.labels.editedBy', {
     value: entry.created_by === me ? i18n.t('ui.history.labels.you') : entry.created_by,
@@ -34,7 +34,7 @@ export const KIND_LABELS: Record<ProjectVersion['kind'], string> = {
 };
 
 export function layerCount(count: number): string {
-  return count === 1 ? '1 layer' : `${count} layers`;
+  return i18n.t('ui.history.labels.layers', { count });
 }
 
 /** Who made a named or restored version (automatic ones say it in the title). */

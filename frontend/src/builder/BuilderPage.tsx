@@ -982,7 +982,10 @@ function Builder() {
     const generation = documentGeneration.current;
     setSaving(true);
     const trimmed = name.trim() || i18n.t('builder.untitled');
-    const payload = { name: asCopy ? `${trimmed} (copy)` : trimmed, graph: doc };
+    const payload = {
+      name: asCopy ? i18n.t('ui.builder.BuilderPage.copyOf', { name: trimmed }) : trimmed,
+      graph: doc,
+    };
     let savedAsNew = false;
     try {
       let saved: Project;

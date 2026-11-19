@@ -170,7 +170,11 @@ export function Histogram({
     if (!hasData) {
       return i18n.t('ui.components.Histogram.noValues', { title });
     }
-    const range = `${bins} bins from ${formatX0(lo)} to ${formatX0(hi)}`;
+    const range = i18n.t('ui.components.Histogram.binsFromTo', {
+      count: bins,
+      lo: formatX0(lo),
+      hi: formatX0(hi),
+    });
     const parts = data.map((s) => {
       let peak = 0;
       s.counts.forEach((c, i) => {
@@ -234,9 +238,14 @@ export function Histogram({
       legend={legend}
       table={() => ({
         head: [
-          xLabel ?? 'Range',
+          xLabel ?? i18n.t('ui.components.Histogram.range'),
           ...data.flatMap((s) =>
-            normalize ? [`${s.label} (share)`] : [data.length > 1 ? s.label : 'Count', 'Share']
+            normalize
+              ? [i18n.t('ui.components.Histogram.labelShare', { label: s.label })]
+              : [
+                  data.length > 1 ? s.label : i18n.t('ui.components.Histogram.count'),
+                  i18n.t('ui.components.Histogram.share'),
+                ]
           ),
         ],
         rows: labels.map((label, i) => [

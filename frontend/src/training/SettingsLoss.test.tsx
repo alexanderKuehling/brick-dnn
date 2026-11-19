@@ -224,7 +224,7 @@ describe('a search over the loss', () => {
     await userEvent.click(loss);
     expect(screen.getByRole('combobox', { name: 'Loss' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Search focal gamma' })).toBeInTheDocument();
-    expect(validateSettings(latest, { loss: FRAUD }).metric).toBe(LOSS_SEARCH_METRIC);
+    expect(validateSettings(latest, { loss: FRAUD }).metric).toBe(LOSS_SEARCH_METRIC());
     const tuning = toTuning({ ...latest, metric: 'pr_auc' }, null, { loss: FRAUD });
     expect(tuning?.space).toEqual({
       learning_rate: { min: 0.0001, max: 0.01 },

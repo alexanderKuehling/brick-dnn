@@ -22,7 +22,8 @@ export const PREVIEW_DELAY = 400;
 /** Wait this long after the last change before saving it (ms). */
 export const AUTOSAVE_DELAY = 800;
 
-export const UNTITLED = 'Untitled preparation';
+/** The name of a preparation without one, in the language of the app. */
+export const untitled = (): string => i18n.t('ui.data.useDataPrep.untitledPreparation');
 
 /**
  * saved: the server has the shown state · unsaved: a save is scheduled · saving: a save is
@@ -269,7 +270,7 @@ export function useDataPrep(prepId: number | null, options: Options = {}): DataP
         }
         try {
           const saved = await api.data.preps.update(id, {
-            name: current.draft.name.trim() || UNTITLED,
+            name: current.draft.name.trim() || untitled(),
             steps: current.draft.steps,
             settings: current.draft.settings,
           });
@@ -592,6 +593,6 @@ function notifyNotSaved(pending: Pending, error: Error): void {
   notifications.show({
     color: 'red',
     title: i18n.t('ui.data.useDataPrep.changesNotSaved'),
-    message: `“${pending.draft.name.trim() || UNTITLED}”: ${error.message}`,
+    message: `“${pending.draft.name.trim() || untitled()}”: ${error.message}`,
   });
 }

@@ -137,10 +137,10 @@ export function CombineDialog({ opened, runs, project, onClose, onCreated }: Com
                   <Text size="xs" c="dimmed">
                     {[
                       run.family === 'classical'
-                        ? 'classical model'
+                        ? i18n.t('ui.training.CombineDialog.classicalModel')
                         : run.family === 'hybrid'
-                          ? 'hybrid network'
-                          : 'neural network',
+                          ? i18n.t('ui.training.CombineDialog.hybridNetwork')
+                          : i18n.t('ui.training.CombineDialog.neuralNetwork'),
                       run.dataset.name,
                     ]
                       .filter(Boolean)

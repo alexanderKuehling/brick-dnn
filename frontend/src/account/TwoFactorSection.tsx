@@ -84,7 +84,7 @@ function RecoveryCodes({ codes, username }: { codes: string[]; username: string 
           onClick={() =>
             downloadText(
               `brick-dnn-recovery-codes-${username}.txt`,
-              `Brick DNN recovery codes for ${username}\nEach code works once.\n\n${text}\n`
+              `${i18n.t('ui.account.TwoFactorSection.recoveryCodesFile', { username })}\n\n${text}\n`
             )
           }
         >

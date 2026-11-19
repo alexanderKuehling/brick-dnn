@@ -58,6 +58,7 @@ from django.db.models.signals import post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import slugify
+from django.utils.translation import gettext
 from rest_framework import serializers
 
 from brickdnn import REGISTRY, Analysis, analyze
@@ -1777,26 +1778,29 @@ def preview_file(run: TrainingRun, name: Any) -> Path | None:
 
 
 def no_weights_reason(run: TrainingRun) -> str:
-    """Why a run has no weights to download or predict with (for the user)."""
+    """Why a run has no weights to download or predict with (for the user, in the language of
+    the request)."""
     if run.kind == "external":
-        return (
+        return gettext(
             "This run was trained elsewhere and logged its curves here: its weights stayed "
             "where it ran."
         )
     if run.kind == "ensemble" and run.has_weights:
-        return (
+        return gettext(
             "An ensemble has no weights of its own: it predicts with its members. Their runs "
             "have the weights, explanations and code."
         )
     if run.status == QUEUED:
-        return "This run still waits in the queue: it has not trained anything yet."
+        return gettext("This run still waits in the queue: it has not trained anything yet.")
     if run.status in ACTIVE_STATUSES:
-        return (
-            f"This run is still {run.status}: its weights are saved when it finishes or is stopped."
-        )
+        return gettext(
+            "This run is still %(status)s: its weights are saved when it finishes or is stopped."
+        ) % {"status": run.status}
     if run.status == "failed":
-        return f"This run failed before it saved weights: {run.message}"
-    return "This run has no trained weights (it was stopped before the training started)."
+        return gettext("This run failed before it saved weights: %(message)s") % {
+            "message": run.message
+        }
+    return gettext("This run has no trained weights (it was stopped before the training started).")
 
 
 # --------------------------------------------------------------------------- #

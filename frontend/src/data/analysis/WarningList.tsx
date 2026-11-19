@@ -88,7 +88,7 @@ function GroupEntry({
             <Text size="sm">{group.title}</Text>
             <Group gap="xs">
               <Badge size="xs" variant="light" color="gray">
-                {group.code.replace(/_/g, ' ')}
+                {codeLabel(group.code)}
               </Badge>
               <UnstyledButton
                 onClick={() => setOpen((value) => !value)}
@@ -152,6 +152,28 @@ function GroupEntry({
  * Profile warnings, most serious first, each with its one-click fix. Warnings of one kind
  * about many columns are grouped into one entry (expandable) with one fix for all of them.
  */
+const CODES = [
+  'constant',
+  'duplicates',
+  'high_cardinality',
+  'high_correlation',
+  'high_missing',
+  'id_like',
+  'imbalanced',
+  'many_zeros',
+  'mixed_types',
+  'outliers',
+  'skewed',
+  'target_missing',
+  'text',
+] as const;
+
+/** The kind of a warning as a short label: "id like", "skewed" (a new kind: its code). */
+function codeLabel(code: string): string {
+  const known = CODES.find((item) => item === code);
+  return known ? i18n.t(`ui.data.WarningList.code_${known}`) : code.replace(/_/g, ' ');
+}
+
 export function WarningList({
   warnings,
   resetKey,
@@ -218,7 +240,7 @@ export function WarningList({
                   <Text size="sm">{warning.message}</Text>
                   <Group gap="xs">
                     <Badge size="xs" variant="light" color="gray">
-                      {warning.code.replace(/_/g, ' ')}
+                      {codeLabel(warning.code)}
                     </Badge>
                     {warning.column && onShowColumn && (
                       <Anchor
