@@ -67,8 +67,9 @@ function queryFrom(params: URLSearchParams): RunTableQuery {
 
 /**
  * The runs page (`/runs`): every run of the user and of their shared networks in one table,
- * filtered and sorted on the server, with chosen columns; up to 10 runs selected are compared
- * below it (curves, settings against results, parallel coordinates) and can be shared.
+ * filtered and sorted on the server, with chosen columns; the selected runs are compared below
+ * it (settings against results and parallel coordinates of all of them, the curves of the
+ * first 10) and the first 10 can be shared.
  */
 export function RunsPage() {
   const { t } = useTranslation();
@@ -154,21 +155,22 @@ export function RunsPage() {
     return () => controller.abort();
   }, []);
 
-  // The curves of the selected runs.
-  const selectedKey = selected.join(',');
+  // The curves of the selected runs: of the first ones, as many as one chart takes.
+  const curveLimit = table?.limits.compare ?? 10;
+  const curveKey = selected.slice(0, curveLimit).join(',');
   const lastCurves = useRef<string>('');
   useEffect(() => {
-    if (selected.length === 0) {
+    if (curveKey === '') {
       setCurves(null);
       return;
     }
     const controller = new AbortController();
-    if (lastCurves.current !== selectedKey) {
+    if (lastCurves.current !== curveKey) {
       setCurves(null);
-      lastCurves.current = selectedKey;
+      lastCurves.current = curveKey;
     }
     api.training.runs
-      .curves(selected, controller.signal)
+      .curves(curveKey.split(','), controller.signal)
       .then((data) => {
         setCurves(data.runs);
         setCurvesError(null);
@@ -179,7 +181,7 @@ export function RunsPage() {
         }
       });
     return () => controller.abort();
-  }, [selectedKey, tick]);
+  }, [curveKey, tick]);
 
   const live =
     (table?.results ?? []).some((row) => isActive(row.status)) ||
@@ -205,15 +207,11 @@ export function RunsPage() {
       })
     );
   };
-  const maxSelected = table?.limits.compare ?? 10;
   const toggle = (id: string) => {
     const row = rows.find((r) => r.id === id);
-    setSelected((list) => {
-      if (list.includes(id)) {
-        return list.filter((other) => other !== id);
-      }
-      return list.length >= maxSelected ? list : [...list, id];
-    });
+    setSelected((list) =>
+      list.includes(id) ? list.filter((other) => other !== id) : [...list, id]
+    );
     setSelectedRows((map) => {
       const next = { ...map };
       if (id in next) {
@@ -221,6 +219,27 @@ export function RunsPage() {
       } else if (row) {
         next[id] = row;
       }
+      return next;
+    });
+  };
+  // The header's checkbox: all runs of this page, after those selected before (or none of
+  // them; runs selected on other pages stay).
+  const toggleAll = (select: boolean) => {
+    const ids = rows.map((row) => row.id);
+    setSelected((list) =>
+      select
+        ? [...list, ...ids.filter((id) => !list.includes(id))]
+        : list.filter((id) => !ids.includes(id))
+    );
+    setSelectedRows((map) => {
+      const next = { ...map };
+      rows.forEach((row) => {
+        if (select) {
+          next[row.id] = row;
+        } else {
+          delete next[row.id];
+        }
+      });
       return next;
     });
   };
@@ -398,22 +417,23 @@ export function RunsPage() {
           </Text>
         ) : table ? (
           <>
-            <Group justify="space-between" wrap="wrap" gap="xs">
+            <Group gap="xs" wrap="wrap">
               <Text size="xs" c="dimmed" aria-live="polite">
                 {t('experiments.page.count', { count: table.count })}
                 {selected.length > 0 &&
-                  ` · ${t('experiments.page.selected', { count: selected.length, max: maxSelected })}`}
+                  ` · ${t('experiments.page.selected', { count: selected.length })}`}
               </Text>
               {selected.length > 0 && (
                 <Button
                   size="compact-xs"
                   variant="subtle"
+                  aria-label={t('experiments.page.clearSelection')}
                   onClick={() => {
                     setSelected([]);
                     setSelectedRows({});
                   }}
                 >
-                  {t('experiments.page.clearSelection')}
+                  {t('experiments.page.clear')}
                 </Button>
               )}
             </Group>
@@ -425,8 +445,8 @@ export function RunsPage() {
               order={table.order}
               onSort={sortBy}
               selected={selected}
-              maxSelected={maxSelected}
               onToggle={toggle}
+              onToggleAll={toggleAll}
               onOpen={(row) =>
                 navigate(EDITOR_PATH, { state: { openTraining: true, run: row.id } })
               }
@@ -462,6 +482,7 @@ export function RunsPage() {
           <CompareView
             rows={compared}
             curves={curves}
+            curveLimit={curveLimit}
             allRows={rows}
             options={options}
             onOptionsChange={setOptions}
@@ -484,7 +505,8 @@ export function RunsPage() {
       <ShareComparisonDialog
         opened={sharing}
         onClose={() => setSharing(false)}
-        rows={compared}
+        rows={compared.slice(0, curveLimit)}
+        selectedCount={compared.length}
         columns={columns.map((c) => c.id)}
         options={options}
       />

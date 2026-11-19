@@ -42,8 +42,9 @@ export interface RunsTableProps {
   onSort: (sort: string) => void;
   /** Selected for comparing (ids); without it the table has no checkboxes. */
   selected?: string[];
-  maxSelected?: number;
   onToggle?: (id: string) => void;
+  /** Select (true) or deselect all rows of the table; with it the header has a checkbox. */
+  onToggleAll?: (select: boolean) => void;
   onOpen?: (row: RunRow) => void;
   onAnnotate?: (row: RunRow) => void;
   onStar?: (row: RunRow) => void;
@@ -121,7 +122,8 @@ function TrialsOfRun({ row }: { row: RunRow }) {
 
 /**
  * The runs table: sortable column headers (the server sorts), a checkbox per run to compare
- * it, its star, and the trials of a search below its row.
+ * it (and one in the header for all of them), its star, and the trials of a search below its
+ * row.
  */
 export function RunsTable({
   rows,
@@ -130,8 +132,8 @@ export function RunsTable({
   order,
   onSort,
   selected,
-  maxSelected = 10,
   onToggle,
+  onToggleAll,
   onOpen,
   onAnnotate,
   onStar,
@@ -141,6 +143,9 @@ export function RunsTable({
   const [expanded, setExpanded] = useState<string[]>([]);
   const selecting = selected !== undefined && onToggle !== undefined;
   const span = columns.length + 2 + (selecting ? 1 : 0);
+  const selectedHere = rows.filter((row) => selected?.includes(row.id)).length;
+  const allSelected = rows.length > 0 && selectedHere === rows.length;
+  const someSelected = selectedHere > 0 && !allSelected;
 
   const header = (column: { id: string; label: string; sort?: string; numeric?: boolean }) => {
     const sortKey = column.sort;
@@ -196,7 +201,19 @@ export function RunsTable({
           <Table.Tr>
             {selecting && (
               <Table.Th>
-                <VisuallyHidden>{t('experiments.table.compare')}</VisuallyHidden>
+                {onToggleAll ? (
+                  <Checkbox
+                    size="xs"
+                    aria-label={t('experiments.table.selectAll')}
+                    aria-checked={someSelected ? 'mixed' : undefined}
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    disabled={rows.length === 0}
+                    onChange={() => onToggleAll(!allSelected)}
+                  />
+                ) : (
+                  <VisuallyHidden>{t('experiments.table.compare')}</VisuallyHidden>
+                )}
               </Table.Th>
             )}
             <Table.Th>
@@ -209,7 +226,6 @@ export function RunsTable({
         <Table.Tbody>
           {rows.map((row) => {
             const isSelected = selected?.includes(row.id) ?? false;
-            const full = !isSelected && (selected?.length ?? 0) >= maxSelected;
             const open = expanded.includes(row.id);
             const detailsId = `trials-${row.id}`;
             return (
@@ -217,18 +233,12 @@ export function RunsTable({
                 <Table.Tr data-selected={isSelected || undefined}>
                   {selecting && (
                     <Table.Td>
-                      <Tooltip
-                        label={t('experiments.table.full', { count: maxSelected })}
-                        disabled={!full}
-                      >
-                        <Checkbox
-                          size="xs"
-                          aria-label={t('experiments.table.select', { name: row.name })}
-                          checked={isSelected}
-                          disabled={full}
-                          onChange={() => onToggle(row.id)}
-                        />
-                      </Tooltip>
+                      <Checkbox
+                        size="xs"
+                        aria-label={t('experiments.table.select', { name: row.name })}
+                        checked={isSelected}
+                        onChange={() => onToggle(row.id)}
+                      />
                     </Table.Td>
                   )}
                   <Table.Td>

@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
+  of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
+  selected); runs selected on other pages stay. The line above the table counts them
+  (*12 selected*) with *Clear* next to it. The selection is no longer limited to ten runs:
+  the scatter plot and the parallel coordinates take all selected runs, the curve charts
+  show the first ten (in the order they were selected) and say so in one line, and a shared
+  comparison keeps its limit and takes the same first ten, which its dialog says.
 - **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
   has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
   `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):
