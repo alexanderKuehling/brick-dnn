@@ -73,6 +73,9 @@ DATABASE_FORMATS = ("auto", "native", "json")
 # Top-level entries of the data directory that are not backed up: the cache can be rebuilt,
 # the SQLite database is in the database part of the backup.
 EXCLUDED = {"cache", "db.sqlite3", "db.sqlite3-journal", "db.sqlite3-wal", "db.sqlite3-shm"}
+# Folders anywhere below that are not backed up: files to predict and their results are
+# temporary (predict_files.FOLDER) and must not outlive their hour in a backup.
+TEMPORARY_FOLDERS = {"predict-files"}
 # Not in a JSON dump: rebuilt by ``migrate`` (content types, permissions) or not worth keeping
 # (sessions of the Django admin).
 JSON_EXCLUDE = ["contenttypes", "auth.permission", "sessions"]
@@ -504,7 +507,7 @@ def _walk(entries: list[Path]) -> Iterator[Path]:
             yield entry
         elif entry.is_dir():
             for root, dirs, files in os.walk(entry):
-                dirs.sort()
+                dirs[:] = sorted(d for d in dirs if d not in TEMPORARY_FOLDERS)
                 for name in sorted(files):
                     yield Path(root) / name
 

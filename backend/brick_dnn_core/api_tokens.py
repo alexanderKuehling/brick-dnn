@@ -35,6 +35,7 @@ READ_ONLY_POSTS = {
     "generate",
     "training-check",
     "training-run-predict",
+    "training-run-predict-file",
     *MCP_URL_NAMES,
 }
 # What a token with the scope "runs:log" may use: logging runs trained elsewhere.
