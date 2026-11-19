@@ -20,6 +20,10 @@ The server fetches the link, so it must not become a way into internal services
 ``allow_private`` (setting ``DATA_URL_ALLOW_PRIVATE``) lifts the address check for local
 installations, e.g. to import from a file server in the same network.
 
+``auth`` (an origin and the value of an ``Authorization`` header, e.g. a Hugging Face access
+token for a gated dataset, see hub_datasets.py) is sent to that origin only: not to the
+storage server a redirect leads to.
+
 Links that people share are rewritten to the file itself: Google Sheets to its CSV export
 (``gid`` selects the tab), Google Drive files to their download, GitHub ``blob`` pages to
 raw.githubusercontent.com, Hugging Face ``blob`` pages to ``resolve``, Dropbox ``dl=0`` to
@@ -217,9 +221,12 @@ def fetch(
     max_bytes: int,
     allow_private: bool = False,
     time_limit: float = TIME_LIMIT,
+    auth: tuple[str, object] | None = None,
 ) -> Download:
     """Download the file at ``url`` into ``folder`` (see the module docstring for the
-    checks). Raises :class:`LinkError` with a message for the user."""
+    checks). ``auth``: ``(origin, credential)``, the credential's ``authorization()`` is sent
+    as the ``Authorization`` header to that origin (``https://huggingface.co``) only. Raises
+    :class:`LinkError` with a message for the user."""
     given = check_url(url)
     current = rewrite(given)
     deadline = time.monotonic() + time_limit
@@ -230,7 +237,10 @@ def fetch(
         host = _ascii_host(parts.hostname or "")
         port = parts.port or (443 if https else 80)
         addresses = _addresses(host, port, allow_private)
-        connection, response = _get(host, port, https, addresses, _target(parts))
+        headers = {}
+        if auth is not None and auth[1] is not None and _origin(current) == _origin(auth[0]):
+            headers["Authorization"] = auth[1].authorization()  # type: ignore[attr-defined]
+        connection, response = _get(host, port, https, addresses, _target(parts), headers)
         try:
             if response.status in (301, 302, 303, 307, 308):
                 location = response.getheader("Location")
@@ -238,12 +248,19 @@ def fetch(
                     raise LinkError("The server sent a redirect without a target.")
                 current = urljoin(current, location.strip())
                 continue
-            _check_status(response, given)
+            hub = auth is not None or host.lower() in ("huggingface.co", "www.huggingface.co")
+            _check_status(response, given, hub)
             return _save(response, given, current, folder, max_bytes, deadline)
         finally:
             response.close()
             connection.close()
     raise LinkError(f"The link redirects more than {MAX_REDIRECTS} times.")
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    return scheme, (parts.hostname or "").lower(), parts.port or (443 if scheme == "https" else 80)
 
 
 def _ascii_host(host: str) -> str:
@@ -260,7 +277,7 @@ def _target(parts) -> str:
     return path + (f"?{query}" if query else "")
 
 
-def _get(host: str, port: int, https: bool, addresses: list[str], target: str):
+def _get(host: str, port: int, https: bool, addresses: list[str], target: str, headers=None):
     """Send the request to the first checked address that answers."""
     last_error: Exception | None = None
     for address in addresses:
@@ -274,7 +291,11 @@ def _get(host: str, port: int, https: bool, addresses: list[str], target: str):
         # (server name and certificate) still uses the host name.
         connection._create_connection = _connector(address)  # type: ignore[attr-defined]
         try:
-            connection.request("GET", target, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+            connection.request(
+                "GET",
+                target,
+                headers={"User-Agent": USER_AGENT, "Accept": "*/*", **(headers or {})},
+            )
             return connection, connection.getresponse()
         except ssl.SSLCertVerificationError:
             connection.close()
@@ -302,15 +323,19 @@ def _connector(address: str):
     return connect
 
 
-def _check_status(response: http.client.HTTPResponse, given: str) -> None:
+def _check_status(response: http.client.HTTPResponse, given: str, hub: bool = False) -> None:
     status = response.status
     google = (urlsplit(given).hostname or "").endswith("google.com")
     if status in (401, 403):
-        hint = (
-            " For Google Sheets: Share → “Anyone with the link” (Viewer)."
-            if google
-            else " Only links that work without logging in can be imported."
-        )
+        if google:
+            hint = " For Google Sheets: Share → “Anyone with the link” (Viewer)."
+        elif hub:
+            hint = (
+                " A gated or private dataset on Hugging Face needs an access token that may "
+                "read it; for a gated one, first accept its conditions on its page."
+            )
+        else:
+            hint = " Only links that work without logging in can be imported."
         raise LinkError(f"The server refused access (HTTP {status}).{hint}")
     if status == 404:
         raise LinkError("Nothing was found at this link (HTTP 404). Check the link.")

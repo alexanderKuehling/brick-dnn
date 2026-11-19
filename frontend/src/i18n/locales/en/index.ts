@@ -8,6 +8,7 @@ import { builder } from './builder';
 import { common } from './common';
 import { data } from './data';
 import { experiments } from './experiments';
+import { huggingface } from './huggingface';
 import { nav } from './nav';
 import { projects } from './projects';
 import { training } from './training';
@@ -24,5 +25,6 @@ export const en = {
   ui,
   data,
   experiments,
+  huggingface,
   a11y,
 };

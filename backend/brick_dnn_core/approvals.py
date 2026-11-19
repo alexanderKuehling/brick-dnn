@@ -9,7 +9,7 @@ A user sets per API token and per connected app what the agent may do on its own
 - **publishing**: ask before something becomes visible to others or downloadable without
   logging in: a link to the trained weights (get_weights_download), a dataset or a data
   preparation shared in a project (upload_dataset, create_data_prep and create_upload_link
-  with ``project_id``);
+  with ``project_id``), publishing a run to the Hugging Face Hub (publish_to_huggingface);
 - **deleting**: ask before deleting a network, a training run, a dataset, a data file or a
   data preparation.
 
@@ -26,6 +26,12 @@ request with the tool get_approval. The user approves or denies it in the web ap
 token or app, its budgets checked at that moment, the same checks as the tool. The result
 (e.g. the run) is stored on the request for get_approval. Requests expire after
 :data:`EXPIRY_HOURS` hours. Every step is in the activity log (agent_activity.py).
+
+**Grants.** publish_to_huggingface needs the user's Hugging Face access token, which is never
+stored, so an approval cannot do it later by itself. Approving it grants the agent the right
+to publish exactly what it asked for (the run, repository, visibility and licence), once,
+within :data:`EXPIRY_HOURS` hours: the agent calls the tool again with ``approval_id`` and the
+token (:func:`claim_grant`, :func:`finish_grant`).
 
 The REST API cannot ask: requests made with a token whose rule covers them are refused there
 (``refuse_rest``, ``refuse_rest_training``) with a message that points to MCP or the web app.
@@ -465,6 +471,53 @@ def _gate_upload_link(request, args: dict[str, Any], rule: Rule) -> Gate | None:
     )
 
 
+def _gate_hub_publish(request, args: dict[str, Any], rule: Rule) -> Gate | None:
+    from . import hub_publish
+    from .hub_client import HubToken
+    from .shared_data import visible_runs
+
+    if not rule.publishing or args.get("approval_id") is not None:
+        return None  # an approved grant is checked by the tool itself
+    if not hub_publish.enabled() or not isinstance(args.get("hf_token"), HubToken):
+        return None
+    try:
+        run = visible_runs(request.user).filter(pk=args.get("run_id")).first()
+    except Exception:
+        run = None
+    if run is None or hub_publish.problem(run) or not hub_publish.can_publish(request.user, run):
+        return None  # the tool explains it
+    try:
+        options = hub_publish.parse_options(hub_publish.choices(args), run)
+    except hub_publish.HubInputError:
+        return None
+    ref = activity.run_ref(request.user, str(run.pk), run.name)
+    what = activity.phrase_of(ref, "run")
+    visibility = "a private" if options.private else "a public"
+    seen_by = (
+        "only the Hugging Face account (and the members of its organization) can see them"
+        if options.private
+        else "anyone can see and download them"
+    )
+    return Gate(
+        "publishing",
+        "publish_to_huggingface",
+        hub_publish.grant_arguments(run, options),
+        f"publish {what} to Hugging Face as {visibility} model repository “{options.repo}”",
+        [ref] if ref else [],
+        "Publishing to Hugging Face needs approval.",
+        {
+            "exposes": (
+                f"The trained model of {what}, its generated script, the network, its "
+                "preprocessing and a model card with its results are uploaded to Hugging Face "
+                f"(USA) into {visibility} repository “{options.repo}” (licence "
+                f"{options.license}): {seen_by}. Once you approve, the agent may do this once "
+                f"within {EXPIRY_HOURS} hours with its own Hugging Face access token, which "
+                "Brick DNN never stores."
+            )
+        },
+    )
+
+
 DELETE_WARNING = "Deleting cannot be undone."
 
 
@@ -568,6 +621,7 @@ GATES: dict[str, Callable[[Request, dict[str, Any], Rule], Gate | None]] = {
     "upload_dataset": _gate_upload,
     "create_data_prep": _gate_prep,
     "create_upload_link": _gate_upload_link,
+    "publish_to_huggingface": _gate_hub_publish,
     "delete_project": _gate_delete_project,
     "delete_training_run": _gate_delete_run,
     "delete_dataset": _gate_delete_dataset,
@@ -582,6 +636,7 @@ GATED_TOOLS = {
         "upload_dataset (with project_id)",
         "create_data_prep (with project_id)",
         "create_upload_link (training_dataset with project_id)",
+        "publish_to_huggingface",
     ],
     "deleting": [
         "delete_project",
@@ -1001,6 +1056,22 @@ def _share(kind: str):
 SHARE_ACTIONS = {"share_dataset": _share("dataset"), "share_data_prep": _share("prep")}
 
 
+def _grant(request, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """An approved publish_to_huggingface: the agent may now do it once (with its token)."""
+    until = timezone.now() + timedelta(hours=EXPIRY_HOURS)
+    return {
+        "granted": True,
+        "valid_until": _iso(until),
+        "next": "Call publish_to_huggingface again with the same arguments, approval_id set "
+        "to this request's id and the Hugging Face access token. It works once, until "
+        "valid_until.",
+    }, None
+
+
+# Approved, but done by the agent afterwards: it needs a secret the server never stores.
+GRANT_ACTIONS = {"publish_to_huggingface": _grant}
+
+
 def _execute(approval: ApprovalRequest, web_request) -> None:
     from . import mcp
 
@@ -1010,6 +1081,8 @@ def _execute(approval: ApprovalRequest, web_request) -> None:
         request = _agent_request(web_request, approval.owner, _agent_token(approval))
         if approval.action in SHARE_ACTIONS:
             result, error = SHARE_ACTIONS[approval.action](request, approval.arguments)
+        elif approval.action in GRANT_ACTIONS:
+            result, error = GRANT_ACTIONS[approval.action](request, approval.arguments)
         else:
             result, error = mcp._run_tool(mcp.TOOLS[approval.action], request, approval.arguments)
     except _Failed as exc:
@@ -1035,6 +1108,11 @@ def _execute(approval: ApprovalRequest, web_request) -> None:
 
 
 def _done_summary(approval: ApprovalRequest, result: Any, ok: bool) -> str:
+    if approval.action in GRANT_ACTIONS:
+        return (
+            f"Allowed {approval.agent_name} to {approval.summary} once, approved by you "
+            f"(request #{approval.pk})"
+        )
     if approval.action in activity.TOOL_DESCRIPTIONS:
         described = activity.describe_tool(
             approval.owner, approval.action, approval.arguments, result if ok else None
@@ -1046,6 +1124,81 @@ def _done_summary(approval: ApprovalRequest, result: Any, ok: bool) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Grants: approved calls that the agent makes itself (publish_to_huggingface)
+# --------------------------------------------------------------------------- #
+
+
+class GrantError(Exception):
+    """The approval cannot be used (the message is for the agent)."""
+
+
+def needs_approval(request, category: str) -> bool:
+    """True if the token or app behind ``request`` asks for approval in ``category``."""
+    token = getattr(request, "auth", None)
+    if not isinstance(token, ApiToken):
+        return False
+    return bool(getattr(rule_of(token), category))
+
+
+def claim_grant(request, approval_id: Any, action: str, arguments: dict[str, Any]):
+    """Take the approved grant ``approval_id`` for ``action`` with exactly ``arguments``.
+    Raises GrantError; :func:`finish_grant` (or :func:`release_grant` if it failed) ends it."""
+    number = _int(approval_id)
+    token = getattr(request, "auth", None)
+    if number is None or not isinstance(token, ApiToken):
+        raise GrantError("'approval_id' must be the id of an approval request (list_approvals).")
+    approval = _agent_requests(token).filter(pk=number, action=action).first()
+    if approval is None:
+        raise GrantError(
+            f"No approval request #{number} of this token or app for {action}. Call {action} "
+            "without approval_id to ask the user."
+        )
+    approval = _current(approval)
+    if approval.status in ("pending", "approved"):
+        raise GrantError(
+            f"Request #{number} still waits for the user's decision: get_approval shows it."
+        )
+    if approval.status != "executed":
+        raise GrantError(f"Request #{number} is {approval.status}. {NEXT[approval.status]}")
+    if approval.arguments != _plain(arguments):
+        raise GrantError(
+            f"Request #{number} was approved for other settings "
+            f"({json.dumps(approval.arguments, ensure_ascii=False)}). Call it with exactly "
+            "these, or without approval_id to ask the user for the new ones."
+        )
+    decided = approval.decided_at or approval.created_at
+    if decided + timedelta(hours=EXPIRY_HOURS) <= timezone.now():
+        raise GrantError(
+            f"The approval of request #{number} ran out after {EXPIRY_HOURS} hours. Call "
+            f"{action} without approval_id to ask the user again."
+        )
+    taken = ApprovalRequest.objects.filter(
+        pk=approval.pk, status="executed", result__granted=True
+    ).update(result={**(approval.result or {}), "granted": False, "in_use": True})
+    if not taken:
+        raise GrantError(
+            f"The approval of request #{number} has been used already. Call {action} without "
+            "approval_id to ask the user again."
+        )
+    approval.refresh_from_db()
+    return approval
+
+
+def release_grant(approval: ApprovalRequest) -> None:
+    """It failed: the agent may try again with the same grant."""
+    result = {**(approval.result or {}), "granted": True}
+    result.pop("in_use", None)
+    ApprovalRequest.objects.filter(pk=approval.pk).update(result=result)
+
+
+def finish_grant(approval: ApprovalRequest, done: str, result: dict[str, Any]) -> None:
+    """It was done: the grant is used up; the web app shows what came of it."""
+    approval.result = {"granted": False, "used_at": _iso(timezone.now()), **_plain(result)}
+    approval.details = {**approval.details, "done": f"{done} (request #{approval.pk})"}
+    approval.save(update_fields=["result", "details"])
+
+
+# --------------------------------------------------------------------------- #
 # The REST API cannot ask
 # --------------------------------------------------------------------------- #
 
@@ -1054,6 +1207,7 @@ REST_ROUTES = {
     ("project-members", "POST"): ("publishing", "Inviting people to a network"),
     ("project-data", "POST"): ("publishing", "Sharing data in a network"),
     ("training-comparisons", "POST"): ("publishing", "Sharing training runs with a link"),
+    ("training-run-huggingface", "POST"): ("publishing", "Publishing a run to Hugging Face"),
     ("project-detail", "DELETE"): ("deleting", "Deleting a network"),
     ("training-run-detail", "DELETE"): ("deleting", "Deleting a training run"),
     ("training-dataset-detail", "DELETE"): ("deleting", "Deleting a dataset"),

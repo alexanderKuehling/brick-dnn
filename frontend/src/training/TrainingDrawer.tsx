@@ -353,6 +353,7 @@ function SelectedRun({
         onDeleted={training.forgetRun}
         onLoadNetwork={onLoadNetwork}
         onOpenRun={training.openRun}
+        hub={training.status?.huggingface}
       />
     </Stack>
   );

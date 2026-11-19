@@ -479,7 +479,15 @@ def capabilities(user=None) -> dict[str, Any]:
         },
         # Classical models (scikit-learn): "available" above is about PyTorch.
         "classical": classical_capabilities(),
+        # Publishing finished runs to the Hugging Face Hub (hub_publish.py).
+        "huggingface": _hub_capabilities(),
     }
+
+
+def _hub_capabilities() -> dict[str, Any]:
+    from .hub_publish import capabilities as hub
+
+    return hub()
 
 
 # --------------------------------------------------------------------------- #

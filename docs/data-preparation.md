@@ -77,6 +77,12 @@ are turned into download links:
 | Hugging Face `https://huggingface.co/datasets/<owner>/<name>/blob/<branch>/<file>` | `…/resolve/…` |
 | Dropbox `…?dl=0` | `…?dl=1` |
 
+**From Hugging Face.** The tab *Hugging Face* lists the CSV, JSON and Parquet files of a
+dataset on the Hugging Face Hub (`hf://datasets/<owner>/<name>`, `<owner>/<name>` or the
+link of its page) with their config and split and imports the one you choose, like a link
+import; an access token is only needed for gated or private datasets and is not stored.
+See [huggingface.md](huggingface.md#importing-a-dataset-file).
+
 Only `http`/`https` links without a user name or password work. Because the server makes
 the request, links to private networks are refused (see [Security of link
 imports](#security-of-link-imports)); a self-hosted installation can allow them with
@@ -573,6 +579,7 @@ also apply to new data; class balancing does not.
 | `BRICKDNN_DATA_MAX_ROWS` | `2000000` | Most rows per imported file |
 | `BRICKDNN_DATA_MAX_COLUMNS` | no limit | Most columns per imported file (a single step may add at most 2,000 columns) |
 | `BRICKDNN_DATA_URL_IMPORT` | `true` | Set to `false` to switch imports from links off |
+| `BRICKDNN_HUGGINGFACE` | `true` | Set to `false` to switch the import of dataset files from the Hugging Face Hub (and publishing runs there) off ([huggingface.md](huggingface.md#settings)) |
 | `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false` | Set to `true` to allow links to private, loopback and other non-public addresses (only for installations in a trusted network) |
 | `BRICKDNN_DATA_RATE` | `1200/hour` | Previews per user (they run on every change) |
 | `BRICKDNN_UPLOAD_RATE` | `60/hour` | Imports per user (files and links count together) and dataset uploads |
