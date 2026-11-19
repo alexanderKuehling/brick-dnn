@@ -40,6 +40,8 @@ class Project(models.Model):
         default="none",
     )
     share_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # When the link was switched on (null: off, or on since before this was recorded).
+    link_shared_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-updated_at"]
@@ -919,6 +921,11 @@ class BillingEvent(models.Model):
     subscription_id = models.CharField(max_length=64, blank=True)
     outcome = models.CharField(max_length=10, choices=OUTCOMES)
     note = models.CharField(max_length=300, blank=True)
+    # For an applied event of a subscription: its status, plan and Paddle price from then
+    # on. The history of paying accounts is read from these (business_report.py).
+    status = models.CharField(max_length=20, blank=True)
+    plan = models.CharField(max_length=40, blank=True)
+    price_id = models.CharField(max_length=64, blank=True)
 
     class Meta:
         ordering = ["-occurred_at", "-id"]

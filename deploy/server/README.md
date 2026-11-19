@@ -111,6 +111,7 @@ Deploy server → Run workflow*) or push to `main`.
 | `BRICKDNN_PADDLE_ENV` | `sandbox`, later `live` | [billing](../../docs/billing.md#settings) |
 | `BRICKDNN_PADDLE_CLIENT_TOKEN` | `test_…` / `live_…` | |
 | `BRICKDNN_PADDLE_PRICES` | `starter=pri_…,plus=pri_…,pro=pri_…` | |
+| `BRICKDNN_PADDLE_PRICES_YEARLY` | `plus=pri_…,pro=pri_…` (optional) | [paying per year](../../docs/billing.md#paying-per-year) |
 | `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | `pro_…` | |
 | `BRICKDNN_EMAIL_HOST` | `smtp-relay.brevo.com` | [e-mail](../../docs/email.md#2-settings) |
 | `BRICKDNN_EMAIL_PORT` | `587` | |

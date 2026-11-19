@@ -103,6 +103,9 @@ class BillingEventAdmin(ReadOnlyAdmin):
         "subscription_id",
         "outcome",
         "note",
+        "status",
+        "plan",
+        "price_id",
     )
 
 

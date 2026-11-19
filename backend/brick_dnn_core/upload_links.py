@@ -206,7 +206,9 @@ class UploadLinkView(APIView):
         too_large = Response(
             {
                 "detail": f"The file is too large: upload links take at most "
-                f"{round(limit / 1024**2, 2):g} MB."
+                f"{round(limit / 1024**2, 2):g} MB.",
+                "code": "upload_too_large",
+                "limit": {"kind": "upload_size", "limit": limit, "unit": "bytes"},
             },
             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )

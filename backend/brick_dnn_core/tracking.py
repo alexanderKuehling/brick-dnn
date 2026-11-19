@@ -93,18 +93,34 @@ def limits() -> dict[str, int]:
 
 
 class TrackingError(Exception):
-    """A refused request: its HTTP status and a message (and a code for limits)."""
+    """A refused request: its HTTP status and a message, and for limits a code and
+    ``data``: the ``limit`` and, where a plan lifts it, ``upgrade`` (budgets.limit_data)."""
 
-    def __init__(self, message: str, status_code: int = 400, code: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 400,
+        code: str | None = None,
+        data: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+        self.data = data or {}
 
     def response(self) -> Response:
-        body: dict[str, Any] = {"detail": str(self)}
+        body: dict[str, Any] = {"detail": str(self), **self.data}
         if self.code:
             body["code"] = self.code
         return Response(body, status=self.status_code)
+
+
+def _server_limit(kind: str, used: int, limit: int, unit: str) -> dict[str, Any]:
+    """``data`` for a limit of this server that is the same for every plan."""
+    return {
+        "limit": {"kind": kind, "used": used, "limit": limit, "unit": unit, "resets_at": None},
+        "upgrade": None,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -304,6 +320,13 @@ def _refuse_finished(run: TrainingRun) -> None:
         )
 
 
+def _storage_full(exc) -> TrackingError:
+    """The storage quota of the account's plan as the tracker's error: the message, the
+    limit and the plan with more storage (budgets.check_storage)."""
+    data = {key: value for key, value in exc.data.items() if key != "code"}
+    return TrackingError(exc.message, status.HTTP_403_FORBIDDEN, "storage_quota_exceeded", data)
+
+
 def create_run(user, token: ApiToken | None, data: Any) -> TrainingRun:
     from . import budgets
     from .shared_data import editable_projects
@@ -312,7 +335,8 @@ def create_run(user, token: ApiToken | None, data: Any) -> TrainingRun:
     if not isinstance(data, dict):
         raise TrackingError(gettext("Send the run as a JSON object."))
     runs = TrainingRun.objects.filter(owner=user, kind=KIND)
-    if runs.count() >= settings.TRACKING_MAX_RUNS:
+    kept = runs.count()
+    if kept >= settings.TRACKING_MAX_RUNS:
         raise TrackingError(
             gettext(
                 "Your account has %(count)d runs logged from elsewhere, the most it may keep. "
@@ -321,8 +345,10 @@ def create_run(user, token: ApiToken | None, data: Any) -> TrainingRun:
             % {"count": settings.TRACKING_MAX_RUNS},
             status.HTTP_409_CONFLICT,
             "runs_limit",
+            _server_limit("external_runs", kept, settings.TRACKING_MAX_RUNS, "runs"),
         )
-    if runs.filter(status="running").count() >= settings.TRACKING_MAX_ACTIVE:
+    active = runs.filter(status="running").count()
+    if active >= settings.TRACKING_MAX_ACTIVE:
         raise TrackingError(
             gettext(
                 "%(count)d runs of your account are logging at the moment, the most at a time. "
@@ -331,11 +357,12 @@ def create_run(user, token: ApiToken | None, data: Any) -> TrainingRun:
             % {"count": settings.TRACKING_MAX_ACTIVE},
             status.HTTP_409_CONFLICT,
             "active_limit",
+            _server_limit("external_active_runs", active, settings.TRACKING_MAX_ACTIVE, "runs"),
         )
     try:
         budgets.check_storage(user)
     except budgets.StorageQuotaExceeded as exc:
-        raise TrackingError(str(exc), status.HTTP_403_FORBIDDEN, "storage_quota_exceeded") from None
+        raise _storage_full(exc) from None
     project = None
     if data.get("project") is not None:
         ident = data["project"]
@@ -419,7 +446,7 @@ def append_points(run: TrainingRun, data: Any, size: int) -> TrainingRun:
     try:
         budgets.check_storage(run.owner, adding=size)
     except budgets.StorageQuotaExceeded as exc:
-        raise TrackingError(str(exc), status.HTTP_403_FORBIDDEN, "storage_quota_exceeded") from None
+        raise _storage_full(exc) from None
     with transaction.atomic():
         # One request after the other per run: the count and the file stay in step.
         run = TrainingRun.objects.select_for_update().get(pk=run.pk)
@@ -435,6 +462,7 @@ def append_points(run: TrainingRun, data: Any, size: int) -> TrainingRun:
                 % {"count": settings.TRACKING_MAX_POINTS, "has": count},
                 status.HTTP_409_CONFLICT,
                 "points_limit",
+                _server_limit("external_points", count, settings.TRACKING_MAX_POINTS, "points"),
             )
         path = points_path(run)
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -261,7 +261,34 @@ class McpError(Exception):
 
 
 class ToolError(Exception):
-    """A tool could not do its job; the assistant sees the message and can react."""
+    """A tool could not do its job; the assistant sees the message and can react. ``data``
+    is the same for clients that read no text (the ``structuredContent`` of the error): for a
+    limit its ``code``, the ``limit`` and the next plan that lifts it (``upgrade``)."""
+
+    def __init__(self, message: str, data: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.data = data
+
+
+class ErrorText(str):
+    """The error message of a tool call, with :class:`ToolError`'s ``data``."""
+
+    data: dict[str, Any] | None = None
+
+
+def error_text(message: str, data: dict[str, Any] | None) -> ErrorText:
+    text = ErrorText(message)
+    text.data = data or None
+    return text
+
+
+# What the error of a limit says besides its text (budgets.limit_data).
+LIMIT_KEYS = ("code", "limit", "plan", "upgrade", "overage", "resets_at", "budget", "storage")
+
+
+def limit_details(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    found = {key: data[key] for key in LIMIT_KEYS if data and key in data}
+    return found or None
 
 
 @dataclass(frozen=True)
@@ -1055,7 +1082,7 @@ def start_training(request: Request, args: dict[str, Any]) -> Any:
         training.TrainingInputError,
         training.TrainingBusy,
     ) as exc:
-        raise ToolError(str(exc)) from None
+        raise ToolError(str(exc), limit_details(getattr(exc, "data", None))) from None
     data = dict(RunSummarySerializer(run).data)
     if run.budget_warning:
         data["budget_warning"] = run.budget_warning
@@ -1171,7 +1198,7 @@ def create_ensemble(request: Request, args: dict[str, Any]) -> Any:
         training.TrainingInputError,
         training.TrainingBusy,
     ) as exc:
-        raise ToolError(str(exc)) from None
+        raise ToolError(str(exc), limit_details(getattr(exc, "data", None))) from None
     data = dict(RunSummarySerializer(run, context={"user": request.user}).data)
     if run.budget_warning:
         data["budget_warning"] = run.budget_warning
@@ -2255,10 +2282,14 @@ def _run_tool(tool: Tool, request: Request, args: dict[str, Any]) -> tuple[Any, 
             raise ToolError(f"Missing argument: {', '.join(missing)}.")
         return tool.run(request, args), None
     except ToolError as exc:
-        return None, str(exc)
+        return None, error_text(str(exc), exc.data)
     except budgets.BudgetError as exc:
-        # A budget or the storage quota does not allow it: say which, and how to get more.
-        return None, f"{exc.message}\nget_usage shows the usage and budgets of this month."
+        # A budget or the storage quota does not allow it: say which, and how to get more
+        # (the message names the next plan with its price; the data has it as JSON).
+        return None, error_text(
+            f"{exc.message}\nget_usage shows the usage and budgets of this month.",
+            limit_details(exc.data),
+        )
     except Exception:
         logger.exception("MCP tool %s failed", tool.name)
         return None, "Internal error in the Brick DNN server."
@@ -2303,7 +2334,14 @@ def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
         **logged,
     )
     if error is not None:
-        return {"content": [{"type": "text", "text": error}], "isError": True}
+        failed: dict[str, Any] = {
+            "content": [{"type": "text", "text": str(error)}],
+            "isError": True,
+        }
+        details = getattr(error, "data", None)
+        if details:
+            failed["structuredContent"] = json.loads(json.dumps(details, default=str))
+        return failed
     if isinstance(result, str):
         return {"content": [{"type": "text", "text": result}]}
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)

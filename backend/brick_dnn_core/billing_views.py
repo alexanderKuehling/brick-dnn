@@ -59,17 +59,21 @@ class SubscriptionView(BillingApiView):
 class PlanSerializer(serializers.Serializer):
     plan = serializers.CharField(max_length=40)
     preview = serializers.BooleanField(required=False, default=False)
+    # Paid every month or every year (billing.INTERVALS).
+    interval = serializers.ChoiceField(choices=billing.INTERVALS, required=False)
 
 
 class CheckoutView(BillingApiView):
-    """``POST {"plan"}``: what Paddle's checkout needs to sell the plan to this account:
-    ``{"plan", "price_id", "customer_id", "custom_data"}``. Creates the account's customer at
-    Paddle (with its e-mail address) the first time."""
+    """``POST {"plan", "interval"?}``: what Paddle's checkout needs to sell the plan to this
+    account, paid per month or (``"interval": "year"``) per year:
+    ``{"plan", "interval", "price_id", "customer_id", "custom_data"}``. Creates the account's
+    customer at Paddle (with its e-mail address) the first time."""
 
     def post(self, request: Request) -> Response:
         serializer = PlanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(billing.checkout(request.user, serializer.validated_data["plan"]))
+        data = serializer.validated_data
+        return Response(billing.checkout(request.user, data["plan"], data.get("interval", "month")))
 
 
 class ChangePlanView(BillingApiView):
@@ -80,7 +84,9 @@ class ChangePlanView(BillingApiView):
         serializer = PlanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        return Response(billing.change_plan(request.user, data["plan"], data["preview"]))
+        return Response(
+            billing.change_plan(request.user, data["plan"], data["preview"], data.get("interval"))
+        )
 
 
 class CancelView(BillingApiView):
