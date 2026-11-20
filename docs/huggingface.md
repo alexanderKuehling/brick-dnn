@@ -81,8 +81,12 @@ link back to Brick DNN.
 - The files of one publish together may have `BRICKDNN_HUGGINGFACE_MAX_UPLOAD_MB` (250) MB;
   larger runs are refused before anything is sent (`413`): download them and upload them
   with the Hugging Face tools.
-- `BRICKDNN_HUGGINGFACE_RATE` (`30/hour` per user) limits publishing and listing datasets.
+- `BRICKDNN_HUGGINGFACE_RATE` (`30/hour` per user) limits publishing and listing datasets,
+  in the web app and over MCP.
 - A publish may take 240 seconds; then it stops (`504`).
+- The files are prepared and measured before the repository is created. If the Hub refuses
+  the upload after that, the new repository stays, empty: the error says so (`created_repo`),
+  and publishing again under that name needs *update the repository*.
 
 | Problem | Answer |
 | ------- | ------ |
@@ -154,7 +158,7 @@ private datasets).
 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
-| `BRICKDNN_HUGGINGFACE` | `true` | `false` switches publishing and the dataset import off (the button and the tab disappear; the API answers `403`). The import also needs `BRICKDNN_DATA_URL_IMPORT` |
+| `BRICKDNN_HUGGINGFACE` | `true` | `false` switches publishing and the dataset import off (the button and the tab disappear; the API answers `403`; the link of a file on huggingface.co stays an ordinary link import). The import also needs `BRICKDNN_DATA_URL_IMPORT` |
 | `BRICKDNN_HUGGINGFACE_MAX_UPLOAD_MB` | `250` | The files of one publish together |
 | `BRICKDNN_HUGGINGFACE_RATE` | `30/hour` | Publishes and dataset listings per user |
 | `BRICKDNN_HUGGINGFACE_URL` | `https://huggingface.co` | Another Hub (the tests use a local fake one) |

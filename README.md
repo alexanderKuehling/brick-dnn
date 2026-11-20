@@ -525,7 +525,8 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
-[docs/mcp.md](docs/mcp.md), the database setup (SQLite,
+[docs/mcp.md](docs/mcp.md), publishing to and importing from the Hugging Face Hub in
+[docs/huggingface.md](docs/huggingface.md), the database setup (SQLite,
 PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server for other
 people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
 legal pages (imprint, privacy policy, terms of use; templates in
