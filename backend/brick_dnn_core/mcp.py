@@ -39,7 +39,16 @@ from brickdnn.training import ACTIVE_STATUSES, RUNNING_STATUSES, DatasetError, i
 from brickdnn.training import losses as training_losses
 from brickdnn.training.config import TrainingConfig
 
-from . import approvals, budgets, downloads, ensembles, history, raw_predictions
+from . import (
+    approvals,
+    budgets,
+    downloads,
+    ensembles,
+    history,
+    hub_datasets,
+    hub_publish,
+    raw_predictions,
+)
 from . import data_service as data
 from . import mcp_compact as compact
 from . import mcp_data as data_answers
@@ -48,6 +57,8 @@ from . import upload_links as links
 from .accounts import usage_data
 from .agent_activity import record_tool_call
 from .api_tokens import uses_api_token
+from .hub_client import HubError, HubToken, InvalidToken
+from .hub_client import wrap as wrap_token
 from .models import ApiToken, DataPrep, DataSource, Project, TrainingRun
 from .oauth import McpAuthentication
 from .parsers import SafeJSONParser
@@ -175,7 +186,13 @@ The user may want to approve some actions first: trainings above a number of CPU
 sharing in projects and links that work without logging in (get_weights_download), or
 deleting. Such a call does nothing yet and answers with approval_required and the id of
 an approval request; the user decides in the web app, and once approved the server does it
-and get_approval returns the result. Do not repeat the call: check it with get_approval."""
+and get_approval returns the result. Do not repeat the call: check it with get_approval.
+
+Only when the user asks for it, publish_to_huggingface uploads a finished run to the Hugging
+Face Hub as a model repository, with the user's Hugging Face access token (ask the user for
+it; it is used for that call and never stored). If it needs approval, the server cannot do it
+later by itself: once get_approval says executed, call it again with approval_id and the
+token. import_data also takes files of datasets on the Hub (hf://datasets/<owner>/<name>)."""
 
 GRAPH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -275,6 +292,8 @@ class Tool:
     # Changes something (saves a network, starts a training): not for read-only tokens.
     writes: bool = False
     destructive: bool = False
+    # Reaches a service outside Brick DNN (the Hugging Face Hub).
+    open_world: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -292,7 +311,7 @@ class Tool:
                 "readOnlyHint": not self.writes,
                 "destructiveHint": self.destructive,
                 "idempotentHint": not self.writes,
-                "openWorldHint": False,
+                "openWorldHint": self.open_world,
             },
         }
 
@@ -715,15 +734,32 @@ def import_data(request: Request, args: dict[str, Any]) -> Any:
     if name is not None and (not isinstance(name, str) or len(name.strip()) > 120):
         raise ToolError("'name' must be a text of at most 120 characters.")
     fields = {key: args.get(key) for key in ("name", *data.OPTION_FIELDS)}
+    token = args.get("hf_token")
+    if isinstance(token, InvalidToken):
+        raise ToolError(token.message)
     if given == ["url"]:
         if not settings.DATA_URL_IMPORT_ENABLED:
             raise ToolError(f"{data.URL_DISABLED_MESSAGE} Send the file as content instead.")
+        try:
+            hub_ref = hub_datasets.import_reference(args["url"], token)
+        except (hub_datasets.HubInputError, hub_datasets.HubDisabled) as exc:
+            raise ToolError(str(exc)) from None
+        if hub_ref is not None and (
+            hub_ref.path is None or not hub_datasets.importable(hub_ref.path)
+        ):
+            # Just the dataset: the answer lists its files (asking the Hub is limited, too).
+            if not ScopedRateThrottle().allow_request(request, _HubScope()):
+                raise ToolError(HUB_BUSY)
+            raise ToolError(_hub_files(hub_ref, token))
         if not ScopedRateThrottle().allow_request(request, _UploadScope()):
             raise ToolError("Too many files were imported recently. Try again later.")
         # The same download as in the web app, with its checks against requests to
         # private addresses (url_import.py).
         with _data_errors():
-            source = data.import_url(request.user, args["url"], fields)
+            if hub_ref is not None:
+                source = hub_datasets.import_file(request.user, hub_ref, token, fields)
+            else:
+                source = data.import_url(request.user, args["url"], fields)
     else:
         with _data_errors():
             content, filename = data_answers.decode_content(args)
@@ -746,6 +782,99 @@ def import_data(request: Request, args: dict[str, Any]) -> Any:
         "next": f"create_data_prep with source_id {source.pk} and the target column (the "
         "column to predict) checks what the data needs for training.",
     }
+
+
+def _hub_files(ref: hub_datasets.DatasetRef, token: HubToken | None) -> str:
+    """The answer when import_data names a dataset of the Hub instead of one of its files:
+    the files it can import."""
+    try:
+        listing = hub_datasets.list_files(ref, token)
+    except HubError as exc:
+        return exc.message
+    files = listing["files"]
+    if not files:
+        return (
+            f"The dataset “{listing['repo_id']}” has no CSV, JSON, JSON Lines or Parquet files "
+            "that can be imported."
+        )
+    shown = files[:HUB_FILES_SHOWN]
+    lines = [
+        f"“{listing['repo_id']}” is a dataset with {len(files)} file"
+        f"{'s' if len(files) != 1 else ''} that can be imported"
+        + (" (Parquet files converted by Hugging Face)" if listing["converted"] else "")
+        + ". Call import_data again with url set to the ref of one of them:"
+    ]
+    for item in shown:
+        size = f", {item['size'] / 1024 / 1024:.1f} MB" if item["size"] is not None else ""
+        split = f", split {item['split']}" if item["split"] else ""
+        lines.append(f"- {item['ref']} (config {item['config']}{split}{size})")
+    if len(files) > len(shown):
+        lines.append(f"… and {len(files) - len(shown)} more.")
+    return "\n".join(lines)
+
+
+HUB_FILES_SHOWN = 30
+HUB_BUSY = "Too many requests to Hugging Face were made recently. Try again later."
+
+
+class _HubScope:
+    """Publishing and listing datasets over MCP count against the same rate limit as in the
+    web app (hub_publish.PublishView, hub_datasets.DatasetFilesView)."""
+
+    throttle_scope = "huggingface"
+
+
+def publish_to_huggingface(request: Request, args: dict[str, Any]) -> Any:
+    if not hub_publish.enabled():
+        raise ToolError(hub_publish.DISABLED)
+    run = _run(request, args, "run_id")
+    if not hub_publish.can_publish(request.user, run):
+        raise ToolError("Only who started the run and the editors of its network can publish it.")
+    reason = hub_publish.problem(run)
+    if reason is not None:
+        raise ToolError(reason)
+    token = args.get("hf_token")
+    if not isinstance(token, HubToken):
+        raise ToolError(
+            token.message
+            if isinstance(token, InvalidToken)
+            else "hf_token must be a Hugging Face access token with write access."
+        )
+    try:
+        options = hub_publish.parse_options(hub_publish.choices(args), run)
+    except hub_publish.HubInputError as exc:
+        raise ToolError(str(exc)) from None
+    if not ScopedRateThrottle().allow_request(request, _HubScope()):
+        raise ToolError(HUB_BUSY)
+    grant = None
+    if args.get("approval_id") is not None and approvals.needs_approval(request, "publishing"):
+        try:
+            grant = approvals.claim_grant(
+                request,
+                args["approval_id"],
+                "publish_to_huggingface",
+                hub_publish.grant_arguments(run, options),
+            )
+        except approvals.GrantError as exc:
+            raise ToolError(str(exc)) from None
+    try:
+        result = hub_publish.publish(request.user, run, token, options)
+    except (HubError, hub_publish.HubInputError) as exc:
+        if grant is not None:
+            approvals.release_grant(grant)
+        raise ToolError(getattr(exc, "message", None) or str(exc)) from None
+    except BaseException:
+        if grant is not None:
+            approvals.release_grant(grant)
+        raise
+    if grant is not None:
+        approvals.finish_grant(
+            grant,
+            f"{grant.agent_name} published run “{run.name}” to Hugging Face as "
+            f"“{result['repo_id']}”",
+            {"repo_id": result["repo_id"], "url": result["url"]},
+        )
+    return result
 
 
 def list_data_preps(request: Request, args: dict[str, Any]) -> Any:
@@ -1536,7 +1665,12 @@ TOOLS: dict[str, Tool] = {
             "content_base64, a binary file (Excel .xlsx/.xls, OpenDocument .ods, Parquet, "
             "Feather, or packed as .gz/.zip) with its filename; or url, a public http(s) link "
             "that the server downloads (share links of Google Sheets, Google Drive, GitHub and "
-            "Dropbox work). Delimiter, decimal mark, header, encoding and missing-value markers "
+            "Dropbox work), or a dataset on the Hugging Face Hub: "
+            "hf://datasets/<owner>/<name>/<file path> (or its huggingface.co link); naming just "
+            "the dataset lists its CSV, JSON and Parquet files with their config and split. "
+            "hf_token: the user's Hugging Face access token, only for gated or private datasets "
+            "(used for this call only, never stored). "
+            "Delimiter, decimal mark, header, encoding and missing-value markers "
             "are detected: pass the options only to override them. Every column gets a type. "
             "Returns the source with its columns and first rows; list_data_sources shows the "
             "size limit. Next: create_data_prep.",
@@ -1544,7 +1678,14 @@ TOOLS: dict[str, Tool] = {
             {
                 "content": {"type": "string", "description": "Text of a CSV or JSON file"},
                 "content_base64": {"type": "string", "description": "A binary file as base64"},
-                "url": {"type": "string", "description": "Public link to the file"},
+                "url": {
+                    "type": "string",
+                    "description": "Public link to the file, or hf://datasets/<owner>/<name>/<path>",
+                },
+                "hf_token": {
+                    "type": "string",
+                    "description": "Hugging Face access token for a gated or private dataset",
+                },
                 "filename": {
                     "type": "string",
                     "description": "File name with its ending, e.g. sales.xlsx (decides the "
@@ -2026,6 +2167,51 @@ TOOLS: dict[str, Tool] = {
             ("id",),
         ),
         Tool(
+            "publish_to_huggingface",
+            "Publish a run to Hugging Face",
+            "Publish a finished or stopped run to the Hugging Face Hub as a model repository "
+            "of the user: the trained model (model.safetensors for a neural network, "
+            "model.joblib for a classical model, both model.joblib and model.features.pt for "
+            "a hybrid network), the generated script, network.json, preprocessing.json and a "
+            "model card (README.md with metadata, architecture, training settings, results per "
+            "split and how to load it). Only when the user asks for it. hf_token: the user's "
+            "Hugging Face access token with write access; ask the user for it: it is used for "
+            "this call only and never stored. repo: the repository name (default: from the "
+            "network's name) or owner/name for an organization; private (default true); "
+            "license (default apache-2.0; one of "
+            + ", ".join(hub_publish.LICENSES)
+            + "); update_existing: true to upload into a repository that exists already. If "
+            "the user's approval rule covers publishing, the first call asks the user "
+            "(approval_required); once get_approval says it is executed, call again with the "
+            "same arguments, approval_id and hf_token: the approval works once.",
+            publish_to_huggingface,
+            {
+                "run_id": {"type": "string", "description": "Run id from list_training_runs"},
+                "hf_token": {
+                    "type": "string",
+                    "description": "The user's Hugging Face access token (write access)",
+                },
+                "repo": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Repository name or owner/name (default: the network's name)",
+                },
+                "private": {"type": "boolean", "description": "Default true"},
+                "license": {"type": "string", "enum": list(hub_publish.LICENSES)},
+                "update_existing": {
+                    "type": "boolean",
+                    "description": "Upload into an existing repository (default false)",
+                },
+                "approval_id": {
+                    "type": "integer",
+                    "description": "The approved request (after approval_required)",
+                },
+            },
+            ("run_id", "hf_token"),
+            writes=True,
+            open_world=True,
+        ),
+        Tool(
             "predict",
             "Predict with a trained network",
             "Run the trained network of a finished or stopped run on up to "
@@ -2264,6 +2450,9 @@ def _run_tool(tool: Tool, request: Request, args: dict[str, Any]) -> tuple[Any, 
         return None, "Internal error in the Brick DNN server."
 
 
+SECRET_ARGUMENTS = ("hf_token",)
+
+
 def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     name = params.get("name")
@@ -2273,6 +2462,11 @@ def _call_tool(request: Request, params: dict[str, Any]) -> dict[str, Any]:
         message = f"Unknown tool: {name}" if tool is None else "'arguments' must be an object."
         record_tool_call(request, name, args, started=started, error=message)
         raise McpError(-32602, message)
+    # Access tokens for other services (Hugging Face) are wrapped right away: from here on
+    # nothing (the activity log, approvals, error reports) can see their value.
+    for key in SECRET_ARGUMENTS:
+        if key in args:
+            args[key] = wrap_token(args[key])
 
     # Calls that need the user's approval wait instead (approvals.py).
     try:

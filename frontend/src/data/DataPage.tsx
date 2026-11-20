@@ -920,6 +920,7 @@ function Workspace({ resources, status }: WorkspaceProps) {
           maxUploadMb={status.max_upload_mb}
           fileTypes={status.file_types}
           urlImport={status.url_import ?? false}
+          hubImport={status.huggingface ?? false}
           currentPrepName={loaded ? prep.name : null}
           onImported={onImported}
         />

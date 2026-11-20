@@ -194,6 +194,7 @@ def test_status_is_public(client, settings):
         "login_required": True,
         "file_types": response.data["file_types"],
         "url_import": True,
+        "huggingface": True,
     }
     assert {".csv", ".xlsx", ".json", ".parquet", ".zip"} <= set(response.data["file_types"])
 

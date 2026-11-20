@@ -1038,6 +1038,8 @@ export interface TrainingStatus {
   classical?: ClassicalCapabilities;
   /** Segmentation (a class for every pixel). Missing on servers without it. */
   segmentation?: SegmentationLimits;
+  /** Publishing finished runs to the Hugging Face Hub. Missing on older servers. */
+  huggingface?: HubCapabilities;
 }
 
 export interface ClassicalCapabilities {
@@ -2261,6 +2263,8 @@ export interface DataStatus {
   file_types?: string[];
   /** Whether files can be imported from a link (the server downloads them). */
   url_import?: boolean;
+  /** Whether files of datasets on the Hugging Face Hub can be imported. */
+  huggingface?: boolean;
 }
 
 /**
@@ -3163,4 +3167,91 @@ export interface SharedComparison {
   include_notes: boolean;
   runs: RunRow[];
   curves: RunCurve[];
+}
+
+// ---------------------------------------------------------------------------
+// The Hugging Face Hub (backend: hub_publish.py, hub_datasets.py)
+// ---------------------------------------------------------------------------
+
+/** GET /api/training/ → `huggingface`: publishing runs as model repositories. */
+export interface HubCapabilities {
+  publish: boolean;
+  max_upload_mb: number;
+  /** Licence identifiers of the Hub that can be chosen ("other" for anything else). */
+  licenses: string[];
+  default_license: string;
+  /** The Hub's address (https://huggingface.co). */
+  url: string;
+}
+
+export interface HubFile {
+  path: string;
+  /** Bytes; null if the Hub did not say. */
+  size: number | null;
+}
+
+/** GET /api/training/runs/<id>/huggingface/: what publishing would upload (nothing is sent). */
+export interface HubPublishPreview {
+  repo: string;
+  default_repo: string;
+  /** README.md (the model card) first; the size of the weights is approximate. */
+  files: HubFile[];
+  size: number;
+  max_upload_mb: number;
+  too_large: boolean;
+  model_card: string;
+  can_publish: boolean;
+}
+
+/** POST /api/training/runs/<id>/huggingface/. The token is used for this request only. */
+export interface HubPublishRequest {
+  hf_token: string;
+  /** "name" or "owner/name". */
+  repo: string;
+  private: boolean;
+  license: string;
+  update_existing: boolean;
+}
+
+export interface HubPublishResult {
+  repo_id: string;
+  url: string;
+  /** False: an existing repository was updated (its visibility stays as it was). */
+  created: boolean;
+  private: boolean | null;
+  license: string;
+  commit_url: string | null;
+  commit: string | null;
+  files: HubFile[];
+  size: number;
+}
+
+export interface HubDatasetFile {
+  path: string;
+  size: number | null;
+  format: 'csv' | 'json' | 'jsonl' | 'parquet';
+  config: string;
+  split: string | null;
+  /** hf://datasets/<owner>/<name>[@revision]/<path>: what the import is sent. */
+  ref: string;
+}
+
+/** POST /api/data/huggingface/files/: the files of a dataset that can be imported. */
+export interface HubDatasetFiles {
+  repo_id: string;
+  revision: string;
+  /** Listed from the Parquet files the Hub converted the dataset to. */
+  converted: boolean;
+  page: string;
+  private: boolean;
+  gated: false | 'auto' | 'manual';
+  files: HubDatasetFile[];
+  total: number;
+  truncated: boolean;
+  configs: string[];
+  splits: string[];
+  /** Chosen by the link (a viewer page), if any. */
+  config: string | null;
+  split: string | null;
+  max_upload_mb: number;
 }

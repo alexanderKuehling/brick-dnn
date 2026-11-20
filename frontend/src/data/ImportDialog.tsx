@@ -6,6 +6,7 @@ import {
   IconCircleCheck,
   IconFileSpreadsheet,
   IconLink,
+  IconMoodSmile,
   IconUpload,
 } from '@tabler/icons-react';
 import {
@@ -41,6 +42,7 @@ import {
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import { useUploadProgress } from '@/components/useUploadProgress';
+import { HubImportPanel, isHubDatasetLink, type HubChoice } from '@/huggingface/HubImportPanel';
 import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import classes from './DataPage.module.css';
@@ -335,7 +337,7 @@ function errorSheets(error: unknown): string[] | null {
   return Array.isArray(sheets) && sheets.every((s) => typeof s === 'string') ? sheets : null;
 }
 
-type Mode = 'file' | 'link';
+type Mode = 'file' | 'link' | 'hub';
 
 interface ImportDialogProps {
   opened: boolean;
@@ -347,6 +349,8 @@ interface ImportDialogProps {
   fileTypes?: string[];
   /** Whether the server can import files from links. */
   urlImport?: boolean;
+  /** Whether the server can import files of datasets on the Hugging Face Hub. */
+  hubImport?: boolean;
   /** The open preparation, if any: importing a table to join it there is an option. */
   currentPrepName: string | null;
   /**
@@ -369,6 +373,7 @@ export function ImportDialog({
   maxUploadMb,
   fileTypes = DEFAULT_FILE_TYPES,
   urlImport = false,
+  hubImport = false,
   currentPrepName,
   onImported,
 }: ImportDialogProps) {
@@ -376,6 +381,9 @@ export function ImportDialog({
   const [mode, setMode] = useState<Mode>('file');
   const [file, setFile] = useState<File | null>(initialFile);
   const [link, setLink] = useState('');
+  const [hub, setHub] = useState<HubChoice>({ file: null, token: '' });
+  /** A dataset link pasted into the link tab, listed in the Hugging Face tab. */
+  const [hubStart, setHubStart] = useState('');
   const [name, setName] = useState(initialFile ? fileStem(initialFile.name) : '');
   const [nameEdited, setNameEdited] = useState(false);
   const [options, setOptions] = useState<ImportOptions>(DEFAULT_OPTIONS);
@@ -449,8 +457,13 @@ export function ImportDialog({
       ? file
         ? fileProblem(file, maxUploadMb, fileTypes)
         : 'Choose a file.'
-      : linkProblem(link);
-  const source = mode === 'file' ? (file?.name ?? '') : link.trim();
+      : mode === 'hub'
+        ? hub.file
+          ? null
+          : i18n.t('huggingface.import.choose')
+        : linkProblem(link);
+  const source =
+    mode === 'file' ? (file?.name ?? '') : mode === 'hub' ? (hub.file?.ref ?? '') : link.trim();
 
   /** Send the file or link; null if it failed (the error is shown) or was cancelled. */
   const importSource = async (
@@ -478,6 +491,13 @@ export function ImportDialog({
           signal: controller.signal,
           onUploadProgress: progress.report,
         });
+      } else if (mode === 'hub' && hub.file) {
+        result = await api.data.sources.importFromHub(
+          hub.file.ref,
+          fields,
+          hub.token.trim() || null,
+          controller.signal
+        );
       } else {
         result = await api.data.sources.importUrl(link.trim(), fields, controller.signal);
       }
@@ -558,8 +578,10 @@ export function ImportDialog({
     await finish(result.source, result.controller);
   };
 
-  const applies = optionsFor(mode === 'file' ? (file?.name ?? null) : null);
-  const label = mode === 'file' ? (file?.name ?? '') : link.trim();
+  const applies = optionsFor(
+    mode === 'file' ? (file?.name ?? null) : mode === 'hub' ? (hub.file?.path ?? null) : null
+  );
+  const label = source;
 
   return (
     <Modal
@@ -574,6 +596,7 @@ export function ImportDialog({
       }
       size="lg"
       closeOnClickOutside={!busy}
+      closeButtonProps={{ 'aria-label': i18n.t('common.close') }}
     >
       {imported ? (
         <Stack gap="md">
@@ -691,14 +714,21 @@ export function ImportDialog({
                 }
               }}
             >
-              {urlImport && (
+              {(urlImport || hubImport) && (
                 <Tabs.List grow mb="md">
                   <Tabs.Tab value="file" leftSection={<IconUpload size={14} />} disabled={busy}>
                     {i18n.t('ui.data.ImportDialog.file')}
                   </Tabs.Tab>
-                  <Tabs.Tab value="link" leftSection={<IconLink size={14} />} disabled={busy}>
-                    {i18n.t('ui.data.ImportDialog.fromALink')}
-                  </Tabs.Tab>
+                  {urlImport && (
+                    <Tabs.Tab value="link" leftSection={<IconLink size={14} />} disabled={busy}>
+                      {i18n.t('ui.data.ImportDialog.fromALink')}
+                    </Tabs.Tab>
+                  )}
+                  {hubImport && (
+                    <Tabs.Tab value="hub" leftSection={<IconMoodSmile size={14} />} disabled={busy}>
+                      {i18n.t('huggingface.import.tab')}
+                    </Tabs.Tab>
+                  )}
                 </Tabs.List>
               )}
               <Tabs.Panel value="file">
@@ -778,6 +808,22 @@ export function ImportDialog({
                       disabled={busy}
                       data-autofocus
                     />
+                    {hubImport && isHubDatasetLink(link) && (
+                      <Text size="xs">
+                        <Anchor
+                          component="button"
+                          type="button"
+                          size="xs"
+                          onClick={() => {
+                            setHubStart(link.trim());
+                            setMode('hub');
+                            setError(null);
+                          }}
+                        >
+                          {i18n.t('huggingface.import.openInTab')}
+                        </Anchor>
+                      </Text>
+                    )}
                     <Text size="xs" c="dimmed">
                       {i18n.t('ui.data.ImportDialog.aPublicLinkToA', { maxUploadMb })}
                     </Text>
@@ -819,6 +865,20 @@ export function ImportDialog({
                       />
                     </Text>
                   </Stack>
+                </Tabs.Panel>
+              )}
+              {hubImport && (
+                <Tabs.Panel value="hub">
+                  <HubImportPanel
+                    key={hubStart}
+                    initialDataset={hubStart}
+                    maxUploadMb={maxUploadMb}
+                    busy={busy}
+                    onChange={(choice) => {
+                      setHub(choice);
+                      setError(null);
+                    }}
+                  />
                 </Tabs.Panel>
               )}
             </Tabs>
