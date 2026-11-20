@@ -560,9 +560,9 @@ Ideas for future versions, contributions welcome:
 
 Hi everyone,
 
-My name is Alexander Kühling and I am an MSc Computer Science student at ETHZ. I first became interested in data science in 2018, before the LLM, when I started training simple neural networks. I have always enjoyed experimenting with different structures and approaches, but it would take some time to set everything up and debug before I could test new approaches and networks. That's why I originally started this project.
+My name is Alexander Kühling and I am an MSc Computer Science student at ETHZ. I first became interested in data science in 2018 before everyone was talking about LLMs and I started training simple neural networks. I have always enjoyed experimenting with different structures and approaches without the time needed to bebug the channel counts and so on of the different layers. That's why I originally started this project.
 
-However, due to other commitments (school, university, other projects, etc.), I never had the time to finish it. However, as coding agents have improved, I have had the opportunity to complete the project in a reasonable amount of time. I'm now glad to be able to share the working code with you.
+However, due to other commitments (school, university, other projects, etc.), I never had the time to finish it. But, as coding agents have improved, I have had the opportunity to complete the project in a reasonable amount of time. I'm now glad to be able to share the working code with you.
 
 If you have any feedback or would like to request additional features, you can either email me at alexander.kuehling@brickdnn.com or create a GH issue. I hope I can help you save time or get started on a deep learning project you've always wanted to do, but could never find the time to write the code for.
 

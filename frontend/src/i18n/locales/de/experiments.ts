@@ -5,7 +5,7 @@ export const experiments: Messages<typeof en> = {
   page: {
     title: 'Läufe',
     intro:
-      'Alle Läufe Ihrer Netze und der Netze, die mit Ihnen geteilt sind. Wählen Sie bis zu 10 aus, um ihre Kurven, Einstellungen und Ergebnisse zu vergleichen.',
+      'Alle Läufe Ihrer Netze und der Netze, die mit Ihnen geteilt sind. Wählen Sie Läufe aus, um ihre Kurven, Einstellungen und Ergebnisse zu vergleichen.',
     share: 'Vergleich teilen …',
     retry: 'Erneut versuchen',
     loading: 'Die Läufe werden geladen',
@@ -13,8 +13,9 @@ export const experiments: Messages<typeof en> = {
     empty: 'Noch keine Läufe. Trainieren Sie ein Netz im Editor, dann erscheint es hier.',
     count_one: '{{count}} Lauf',
     count_other: '{{count}} Läufe',
-    selected_one: '{{count}} von {{max}} ausgewählt',
-    selected_other: '{{count}} von {{max}} ausgewählt',
+    selected_one: '{{count}} ausgewählt',
+    selected_other: '{{count}} ausgewählt',
+    clear: 'Aufheben',
     clearSelection: 'Auswahl aufheben',
     tableLabel: 'Läufe',
     page: 'Seite {{page}}',
@@ -123,8 +124,7 @@ export const experiments: Messages<typeof en> = {
     star: 'Markierung',
     sortBy: 'Nach {{label}} sortieren',
     select: '„{{name}}“ vergleichen',
-    full_one: 'Höchstens {{count}} Lauf lässt sich vergleichen',
-    full_other: 'Höchstens {{count}} Läufe lassen sich gleichzeitig vergleichen',
+    selectAll: 'Alle Läufe dieser Seite auswählen',
     starRun: '„{{name}}“ markieren',
     starred: 'Markiert',
     showTrials: 'Versuche von „{{name}}“',
@@ -161,6 +161,7 @@ export const experiments: Messages<typeof en> = {
     lossesDifferTitle: 'Die Verluste sind von verschiedener Art',
     lossesDiffer:
       'Diese Läufe haben mit verschiedenen Verlusten trainiert ({{losses}}). Ihre Verlustkurven sind nicht vergleichbar: Vergleichen Sie sie nach einer Metrik wie Genauigkeit oder RMSE.',
+    firstOnly: 'Die Diagramme zeigen die ersten {{shown}} von {{total}} ausgewählten Läufen.',
     tasksDifferTitle: 'Verschiedene Aufgaben',
     tasksDiffer:
       'Diese Läufe lösen verschiedene Aufgaben (z. B. eine Klassifikation und eine Regression): Ihre Kurven messen Verschiedenes.',
@@ -203,6 +204,7 @@ export const experiments: Messages<typeof en> = {
       'Ein Link nur zum Ansehen für {{count}} Lauf. Alle mit dem Link können ihn ansehen, ohne Konto.',
     intro_other:
       'Ein Link nur zum Ansehen für diese {{count}} Läufe. Alle mit dem Link können sie ansehen, ohne Konto.',
+    firstOnly: 'Es sind die ersten {{shown}} der {{total}} ausgewählten Läufe.',
     shows:
       'Er zeigt Namen, Datensätze, Einstellungen, Ergebnisse und Kurven der Läufe, mit den Spalten und Diagrammen, wie sie jetzt sind.',
     hides:

@@ -40,6 +40,7 @@ What happens to the steps:
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import math
@@ -93,6 +94,18 @@ class PreparedRows:
     """New rows after the preparation: one ``{feature: number}`` per row, in input order."""
 
     rows: list[dict[str, float]]
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PreparedTable:
+    """Many new rows after the preparation (:func:`prepare_table`): ``matrix`` has one line
+    per row and one column per feature; ``problems`` says per row index why a row could not
+    be prepared (its line of the matrix is not to be used)."""
+
+    features: list[str]
+    matrix: np.ndarray
+    problems: dict[int, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -387,9 +400,12 @@ def _boolean_cell(value: Any) -> float | None:
 
 
 def _date_cell(value: Any) -> np.datetime64 | None:
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
+    return _parse_date(value.strip()) if isinstance(value, str) else None
+
+
+@functools.lru_cache(maxsize=4096)
+def _parse_date(text: str) -> np.datetime64 | None:
+    # Cached: the rows of a file repeat their dates, and parsing one takes long.
     families = [f for f, pattern in data_io._DATE_PATTERNS.items() if pattern.fullmatch(text)]
     for family in families:
         parsed = data_io.parse_dates([text], family)[0]
@@ -422,9 +438,12 @@ def _label(number: int, count: int) -> str:
     return f"Row {number}" if count > 1 else "The row"
 
 
-def _read_rows(recipe: dict[str, Any], rows: Any) -> tuple[pd.DataFrame, list[str], list[set]]:
+def _read_rows(
+    recipe: dict[str, Any], rows: Any, problems: dict[int, str] | None = None
+) -> tuple[pd.DataFrame, list[str], list[set]]:
     """The new rows as a DataFrame in the storage format of the source table, warnings,
-    and per row the raw columns without a value. Raises :class:`RawInputError`."""
+    and per row the raw columns without a value. Raises :class:`RawInputError`; with
+    ``problems`` (row index -> message) a row with a wrong value is noted there instead."""
     columns = [c for c in recipe.get("columns") or [] if isinstance(c, dict)]
     names = [str(c["name"]) for c in columns]
     target = recipe.get("target")
@@ -443,6 +462,13 @@ def _read_rows(recipe: dict[str, Any], rows: Any) -> tuple[pd.DataFrame, list[st
     count = len(rows)
     errors: list[str] = []
     warnings: list[str] = []
+
+    def wrong(index: int, message: str) -> None:
+        if problems is None:
+            errors.append(message)
+        else:
+            problems.setdefault(index, message)
+
     cells: dict[str, list[Any]] = {name: [] for name in names}
     empty: list[set] = []
     not_given: dict[str, None] = {}
@@ -458,20 +484,22 @@ def _read_rows(recipe: dict[str, Any], rows: Any) -> tuple[pd.DataFrame, list[st
         label = _label(number, count)
         if isinstance(row, list):
             if len(row) != len(names):
-                errors.append(
-                    f"{label} has {len(row)} values, but {len(names)} are needed: {wanted}."
+                wrong(
+                    number - 1,
+                    f"{label} has {len(row)} values, but {len(names)} are needed: {wanted}.",
                 )
                 row = {}
             else:
                 row = dict(zip(names, row, strict=True))
         if not isinstance(row, dict):
-            errors.append(f"{label} must be {wanted}.")
+            wrong(number - 1, f"{label} must be {wanted}.")
             row = {}
         unknown = [str(k) for k in row if k not in cells and k != target]
         if unknown:
-            errors.append(
+            wrong(
+                number - 1,
                 f"{label}: unknown column '{unknown[0][:60]}'. The columns of "
-                f"'{source.get('name') or 'the source table'}' are: {', '.join(names)}."
+                f"'{source.get('name') or 'the source table'}' are: {', '.join(names)}.",
             )
         blank: set = set()
         for column in columns:
@@ -493,7 +521,10 @@ def _read_rows(recipe: dict[str, Any], rows: Any) -> tuple[pd.DataFrame, list[st
                 parsed = _string_cell(value)
             if parsed is None:
                 shown = repr(value)[:40]
-                errors.append(f"{label}, '{name}': {shown} is not {_WANTED.get(kind, 'valid')}.")
+                wrong(
+                    number - 1,
+                    f"{label}, '{name}': {shown} is not {_WANTED.get(kind, 'valid')}.",
+                )
             elif name in known and parsed not in known[name]:
                 warnings.append(
                     f"{label}, '{name}': '{str(parsed)[:40]}' does not occur in the training "
@@ -718,10 +749,10 @@ def _outside_rows(
             return None
         missing = df[columns].isna()
         drop = missing.any(axis=1) if params.get("how", "any") == "any" else missing.all(axis=1)
-        result = []
-        for i, dropped in enumerate(drop.to_numpy(dtype=bool)):
+        result: list[str | None] = [None] * len(df)
+        for i in np.flatnonzero(drop.to_numpy(dtype=bool)):
             names = [c for c in columns if missing[c].iloc[i]]
-            result.append(f"rows with a value in {', '.join(names[:3])}" if dropped else None)
+            result[i] = f"rows with a value in {', '.join(names[:3])}"
         return result
     if (
         kind == "outliers"
@@ -752,13 +783,38 @@ def prepare_rows(
     """Prepare new raw rows (``[{column: value}, ...]`` in the columns of the source table;
     a target value is ignored) with the frozen preparation ``recipe``. ``directory`` holds
     its stored tables (joins). Raises :class:`RawInputError`."""
-    from .store import load_table_cached
-
     if max_rows is not None and isinstance(rows, list) and len(rows) > max_rows:
         raise RawInputError(
             [f"{len(rows)} rows are too many: predict at most {max_rows} at a time."]
         )
-    df, warnings, empty = _read_rows(recipe, rows)
+    features, matrix, warnings = _prepare(recipe, rows, directory, None)
+    prepared = [dict(zip(features, row, strict=True)) for row in matrix.tolist()]
+    return PreparedRows(prepared, _capped(warnings))
+
+
+def prepare_table(
+    recipe: dict[str, Any], rows: list[Any], *, directory: str | Path | None = None
+) -> PreparedTable:
+    """Like :func:`prepare_rows` for the rows of a file: a row that cannot be prepared (a
+    wrong value, no value in a feature after the preparation) does not fail the others, it
+    is listed in ``problems``. All warnings are returned. Raises :class:`RawInputError` when
+    the rows cannot be prepared at all (e.g. a step fails on them)."""
+    problems: dict[int, str] = {}
+    features, matrix, warnings = _prepare(recipe, rows, directory, problems)
+    return PreparedTable(features, matrix, problems, warnings)
+
+
+def _prepare(
+    recipe: dict[str, Any],
+    rows: Any,
+    directory: str | Path | None,
+    problems: dict[int, str] | None,
+) -> tuple[list[str], np.ndarray, list[str]]:
+    """The feature columns, the prepared rows (one line each) and warnings. Rows that cannot
+    be prepared raise :class:`RawInputError`, or are noted in ``problems`` if given."""
+    from .store import load_table_cached
+
+    df, warnings, empty = _read_rows(recipe, rows, problems)
     count = len(df)
     target = recipe.get("target")
     source_kinds = {c["name"]: c["kind"] for c in recipe.get("columns") or []}
@@ -841,39 +897,36 @@ def prepare_rows(
         raise RawInputError(
             [f"The preparation did not create the column '{absent[0]}' for the new rows."]
         )
-    errors: list[str] = []
-    prepared: list[dict[str, float]] = []
-    values = {}
+    values = []
     for name in features:
         series = df[name]
         if pd.api.types.is_bool_dtype(series) or pd.api.types.is_numeric_dtype(series):
-            values[name] = series.to_numpy(dtype=float, na_value=np.nan)
+            values.append(series.to_numpy(dtype=float, na_value=np.nan))
         else:
-            values[name] = pd.to_numeric(series, errors="coerce").to_numpy(dtype=float)
-    for i in range(count):
-        row = {}
-        gaps = []
-        for name in features:
-            x = float(values[name][i])
-            if not math.isfinite(x):
-                gaps.append(name)
-            row[name] = x
-        if gaps:
-            # Raw columns without a value that the empty columns come from (by name), and
-            # joins without a match.
-            blank = [c for c in source_kinds if c in empty[i] and any(c in g for g in gaps)]
-            causes = [f"no value given for {', '.join(blank[:5])}"] if blank else []
-            causes += misses[i]
-            hint = f" ({'; '.join(causes)})" if causes else ""
-            errors.append(
-                f"{_label(i + 1, count)}: after the preparation, "
-                f"{_quoted(gaps)} {'has' if len(gaps) == 1 else 'have'} no value{hint}. "
-                "The model needs a number in every feature column."
-            )
-        prepared.append(row)
+            values.append(pd.to_numeric(series, errors="coerce").to_numpy(dtype=float))
+    matrix = np.column_stack(values) if values else np.empty((count, 0))
+    present = np.isfinite(matrix)
+    errors: list[str] = []
+    for i in np.flatnonzero(~present.all(axis=1)):
+        gaps = [features[j] for j in np.flatnonzero(~present[i])]
+        # Raw columns without a value that the empty columns come from (by name), and
+        # joins without a match.
+        blank = [c for c in source_kinds if c in empty[i] and any(c in g for g in gaps)]
+        causes = [f"no value given for {', '.join(blank[:5])}"] if blank else []
+        causes += misses[i]
+        hint = f" ({'; '.join(causes)})" if causes else ""
+        message = (
+            f"{_label(i + 1, count)}: after the preparation, "
+            f"{_quoted(gaps)} {'has' if len(gaps) == 1 else 'have'} no value{hint}. "
+            "The model needs a number in every feature column."
+        )
+        if problems is None:
+            errors.append(message)
+        else:
+            problems.setdefault(int(i), message)
     if errors:
         raise RawInputError(errors)
-    return PreparedRows(prepared, _capped(warnings))
+    return features, matrix, warnings
 
 
 def _quoted(names: list[str]) -> str:
