@@ -305,7 +305,7 @@ class EnsembleView(APIView):
         except training.TrainingInputError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except training.TrainingBusy as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+            return Response(exc.body(), status=status.HTTP_409_CONFLICT)
         body = RunDetailSerializer(run, context={"request": request}).data
         return Response(
             {**body, "budget_warning": run.budget_warning}, status=status.HTTP_201_CREATED
@@ -359,7 +359,10 @@ class DatasetViewSet(
         too_large = Response(
             {
                 "detail": "The file is too large. Uploads are limited to "
-                f"{settings.TRAINING_MAX_UPLOAD_MB} MB."
+                f"{settings.TRAINING_MAX_UPLOAD_MB} MB.",
+                # A limit of this server, the same for every plan.
+                "code": "upload_too_large",
+                "limit": {"kind": "upload_size", "limit": limit, "unit": "bytes"},
             },
             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
@@ -520,7 +523,7 @@ class TrainingRunViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except training.TrainingBusy as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+            return Response(exc.body(), status=status.HTTP_409_CONFLICT)
         body = {**RunDetailSerializer(run).data, "budget_warning": run.budget_warning}
         return Response(body, status=status.HTTP_201_CREATED)
 
@@ -583,7 +586,7 @@ class TrainingRunViewSet(
             return Response(exc.body(), status=exc.status_code)
         except training.TrainingBusy as exc:
             return Response(
-                {"detail": str(exc)},
+                exc.body(),
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 headers={"Retry-After": "5"},
             )

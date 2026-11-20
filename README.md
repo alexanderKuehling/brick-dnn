@@ -502,6 +502,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_ENV`          | – (paid plans off)         | `sandbox` or `live`: sell the plans with Paddle, see [docs/billing.md](docs/billing.md) |
 | `BRICKDNN_PADDLE_CLIENT_TOKEN` | –                          | Paddle's client-side token for the checkout (public) |
 | `BRICKDNN_PADDLE_PRICES`       | –                          | The Paddle price of each paid plan: `starter=pri_…,plus=pri_…` |
+| `BRICKDNN_PADDLE_PRICES_YEARLY` | –                         | Optional: the yearly Paddle price of plans that can be paid per year too (each needs `price_per_year` in `BRICKDNN_PLANS`) |
 | `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | –                       | Paddle product that compute beyond the allowance is billed as |
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |

@@ -375,184 +375,184 @@ msgid "Please agree to the terms of use to create an account."
 msgstr ""
 "Bitte stimmen Sie den Nutzungsbedingungen zu, um ein Konto zu erstellen."
 
-#: brick_dnn_core/tracking.py:163
+#: brick_dnn_core/tracking.py:179
 msgid "The config may only hold numbers, text, lists and objects."
 msgstr ""
 "Die Konfiguration darf nur Zahlen, Text, Listen und Objekte enthalten."
 
-#: brick_dnn_core/tracking.py:362
+#: brick_dnn_core/tracking.py:389
 msgid "Run from a script"
 msgstr "Lauf aus einem Skript"
 
-#: brick_dnn_core/tracking.py:363
+#: brick_dnn_core/tracking.py:390
 msgid "Elsewhere"
 msgstr "Anderswo"
 
-#: brick_dnn_core/tracking.py:170
+#: brick_dnn_core/tracking.py:186
 msgid "'config' must be an object."
 msgstr "„config“ muss ein Objekt sein."
 
-#: brick_dnn_core/tracking.py:186
+#: brick_dnn_core/tracking.py:202
 msgid "'summary' must be an object of numbers."
 msgstr "„summary“ muss ein Objekt aus Zahlen sein."
 
-#: brick_dnn_core/tracking.py:193
+#: brick_dnn_core/tracking.py:209
 msgid "Summary"
 msgstr "Zusammenfassung"
 
-#: brick_dnn_core/tracking.py:210
+#: brick_dnn_core/tracking.py:226
 msgid "'points' must be a list of points."
 msgstr "„points“ muss eine Liste von Punkten sein."
 
-#: brick_dnn_core/tracking.py:219
+#: brick_dnn_core/tracking.py:235
 msgid "Point %(index)d"
 msgstr "Punkt %(index)d"
 
-#: brick_dnn_core/tracking.py:313
+#: brick_dnn_core/tracking.py:336
 msgid "Send the run as a JSON object."
 msgstr "Senden Sie den Lauf als JSON-Objekt."
 
-#: brick_dnn_core/tracking.py:353
+#: brick_dnn_core/tracking.py:380
 msgid "'task' must be classification, regression or segmentation."
 msgstr "„task“ muss classification, regression oder segmentation sein."
 
-#: brick_dnn_core/tracking.py:358
+#: brick_dnn_core/tracking.py:385
 msgid "'epochs' must be a whole number from 1."
 msgstr "„epochs“ muss eine ganze Zahl ab 1 sein."
 
-#: brick_dnn_core/tracking.py:392
+#: brick_dnn_core/tracking.py:419
 msgid "Logging from a script elsewhere."
 msgstr "Ein Skript anderswo protokolliert diesen Lauf."
 
-#: brick_dnn_core/tracking.py:417
+#: brick_dnn_core/tracking.py:444
 msgid "Send the points as {\"points\": [...]}."
 msgstr "Senden Sie die Punkte als {\"points\": [...]}."
 
-#: brick_dnn_core/tracking.py:464
+#: brick_dnn_core/tracking.py:492
 msgid "Send the changes as a JSON object."
 msgstr "Senden Sie die Änderungen als JSON-Objekt."
 
-#: brick_dnn_core/tracking.py:485
+#: brick_dnn_core/tracking.py:513
 msgid "Send the end of the run as a JSON object."
 msgstr "Senden Sie das Ende des Laufs als JSON-Objekt."
 
-#: brick_dnn_core/tracking.py:488
+#: brick_dnn_core/tracking.py:516
 msgid "'status' must be completed, failed or stopped."
 msgstr "„status“ muss completed, failed oder stopped sein."
 
-#: brick_dnn_core/tracking.py:523
+#: brick_dnn_core/tracking.py:551
 msgid "The script stopped reporting: nothing arrived for 24 hours."
 msgstr ""
 "Das Skript meldet sich nicht mehr: Seit 24 Stunden ist nichts angekommen."
 
-#: brick_dnn_core/tracking.py:125
+#: brick_dnn_core/tracking.py:141
 msgid "'%(field)s' must be text."
 msgstr "„%(field)s“ muss Text sein."
 
-#: brick_dnn_core/tracking.py:133
+#: brick_dnn_core/tracking.py:149
 msgid ""
 "%(where)s: '%(name)s' is not a metric name (letters, digits and _ . / -, starting with a letter, at most 64 characters)."
 msgstr ""
 "%(where)s: „%(name)s“ ist kein Metrikname (Buchstaben, Ziffern und _ . / -, beginnend mit einem Buchstaben, höchstens 64 Zeichen)."
 
-#: brick_dnn_core/tracking.py:148
+#: brick_dnn_core/tracking.py:164
 msgid "The config holds a number that is not finite."
 msgstr "Die Konfiguration enthält eine Zahl, die nicht endlich ist."
 
-#: brick_dnn_core/tracking.py:154
+#: brick_dnn_core/tracking.py:170
 msgid "The config is nested too deeply (at most %(depth)d levels)."
 msgstr ""
 "Die Konfiguration ist zu tief verschachtelt (höchstens %(depth)d Ebenen)."
 
-#: brick_dnn_core/tracking.py:174
+#: brick_dnn_core/tracking.py:190
 msgid "The config is too large (at most %(kb)d KB)."
 msgstr "Die Konfiguration ist zu groß (höchstens %(kb)d KB)."
 
-#: brick_dnn_core/tracking.py:189
+#: brick_dnn_core/tracking.py:205
 msgid "A summary has at most %(count)d numbers."
 msgstr "Eine Zusammenfassung hat höchstens %(count)d Zahlen."
 
-#: brick_dnn_core/tracking.py:213
+#: brick_dnn_core/tracking.py:229
 msgid "Send at most %(count)d points at a time."
 msgstr "Senden Sie höchstens %(count)d Punkte auf einmal."
 
-#: brick_dnn_core/tracking.py:300
+#: brick_dnn_core/tracking.py:316
 msgid "This run has ended (%(status)s): it takes no more reports."
 msgstr ""
 "Dieser Lauf ist beendet (%(status)s): Er nimmt keine Meldungen mehr an."
 
-#: brick_dnn_core/tracking.py:317
+#: brick_dnn_core/tracking.py:341
 msgid ""
 "Your account has %(count)d runs logged from elsewhere, the most it may keep. Delete some on the runs page."
 msgstr ""
 "Ihr Konto hat %(count)d anderswo protokollierte Läufe, so viele, wie es behalten darf. Löschen Sie einige auf der Seite „Läufe“."
 
-#: brick_dnn_core/tracking.py:327
+#: brick_dnn_core/tracking.py:353
 msgid ""
 "%(count)d runs of your account are logging at the moment, the most at a time. Finish one first."
 msgstr ""
 "Gerade protokollieren %(count)d Läufe Ihres Kontos, die meisten, die gleichzeitig erlaubt sind. Beenden Sie zuerst einen."
 
-#: brick_dnn_core/tracking.py:538
+#: brick_dnn_core/tracking.py:566
 msgid "Stopped in Brick DNN; the script's further reports are refused."
 msgstr ""
 "In Brick DNN gestoppt; weitere Meldungen des Skripts werden abgelehnt."
 
-#: brick_dnn_core/tracking.py:665
+#: brick_dnn_core/tracking.py:693
 msgid "No such run logged from elsewhere."
 msgstr "Diesen anderswo protokollierten Lauf gibt es nicht."
 
-#: brick_dnn_core/tracking.py:199
+#: brick_dnn_core/tracking.py:215
 msgid "Summary: '%(name)s' must be a finite number."
 msgstr "Zusammenfassung: „%(name)s“ muss eine endliche Zahl sein."
 
-#: brick_dnn_core/tracking.py:221
+#: brick_dnn_core/tracking.py:237
 msgid "%(where)s is not an object."
 msgstr "%(where)s ist kein Objekt."
 
-#: brick_dnn_core/tracking.py:233
+#: brick_dnn_core/tracking.py:249
 msgid "%(where)s needs an epoch or a step."
 msgstr "%(where)s braucht eine Epoche oder einen Schritt."
 
-#: brick_dnn_core/tracking.py:245
+#: brick_dnn_core/tracking.py:261
 msgid "%(where)s has more than %(count)d metrics."
 msgstr "%(where)s hat mehr als %(count)d Metriken."
 
-#: brick_dnn_core/tracking.py:347
+#: brick_dnn_core/tracking.py:374
 msgid "Network %(id)d is not one you own or edit."
 msgstr "Netz %(id)d gehört Ihnen nicht, und Sie bearbeiten es nicht."
 
-#: brick_dnn_core/tracking.py:431
+#: brick_dnn_core/tracking.py:458
 msgid ""
 "A run logged from elsewhere keeps at most %(count)d points; this one has %(has)d. Log less often (e.g. once per epoch)."
 msgstr ""
 "Ein anderswo protokollierter Lauf behält höchstens %(count)d Punkte; dieser hat %(has)d. Protokollieren Sie seltener (z. B. einmal pro Epoche)."
 
-#: brick_dnn_core/tracking.py:499
+#: brick_dnn_core/tracking.py:527
 msgid "Finished elsewhere."
 msgstr "Anderswo abgeschlossen."
 
-#: brick_dnn_core/tracking.py:500
+#: brick_dnn_core/tracking.py:528
 msgid "The script reported a failure."
 msgstr "Das Skript hat einen Fehler gemeldet."
 
-#: brick_dnn_core/tracking.py:501
+#: brick_dnn_core/tracking.py:529
 msgid "Stopped elsewhere."
 msgstr "Anderswo gestoppt."
 
-#: brick_dnn_core/tracking.py:238
+#: brick_dnn_core/tracking.py:254
 msgid "%(where)s: 'time' must be the seconds since the start."
 msgstr "%(where)s: „time“ müssen die Sekunden seit dem Start sein."
 
-#: brick_dnn_core/tracking.py:256
+#: brick_dnn_core/tracking.py:272
 msgid "%(where)s: '%(name)s' must be a finite number."
 msgstr "%(where)s: „%(name)s“ muss eine endliche Zahl sein."
 
-#: brick_dnn_core/tracking.py:228
+#: brick_dnn_core/tracking.py:244
 msgid "%(where)s: '%(key)s' must be a whole number from 0."
 msgstr "%(where)s: „%(key)s“ muss eine ganze Zahl ab 0 sein."
 
-#: brick_dnn_core/tracking.py:652
+#: brick_dnn_core/tracking.py:680
 msgid "A request may hold at most %(kb)d KB: send fewer points at a time."
 msgstr ""
 "Eine Anfrage darf höchstens %(kb)d KB enthalten: Senden Sie weniger Punkte auf einmal."
@@ -581,7 +581,7 @@ msgstr "Die Zwei-Faktor-Authentifizierung ist ausgeschaltet."
 msgid "The code is wrong. Check the app."
 msgstr "Der Code ist falsch. Prüfen Sie die App."
 
-#: brick_dnn_core/views.py:481
+#: brick_dnn_core/views.py:484
 msgid ""
 "Only who started the run and the editors of its network can change this."
 msgstr ""

@@ -165,7 +165,13 @@ class FakePaddle:
 
     def get_price(self, price_id: str) -> dict[str, Any]:
         self._call("get_price", price_id)
-        amount = {"pri_starter": "500", "pri_plus": "1400", "pri_pro": "4500"}.get(price_id)
+        amount = {
+            "pri_starter": "500",
+            "pri_plus": "1400",
+            "pri_pro": "4500",
+            "pri_plus_year": "14000",
+            "pri_pro_year": "45000",
+        }.get(price_id)
         if amount is None:
             raise PaddleError("Paddle answered HTTP 404 not_found", 404, "not_found")
         return {
@@ -173,7 +179,10 @@ class FakePaddle:
             "status": "active",
             "tax_mode": "internal",
             "unit_price": {"amount": amount, "currency_code": "EUR"},
-            "billing_cycle": {"interval": "month", "frequency": 1},
+            "billing_cycle": {
+                "interval": "year" if price_id.endswith("_year") else "month",
+                "frequency": 1,
+            },
         }
 
     def get_product(self, product_id: str) -> dict[str, Any]:

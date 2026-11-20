@@ -377,10 +377,23 @@ class RunSummarySerializer(serializers.ModelSerializer):
 
 class RunDetailSerializer(RunSummarySerializer):
     state = serializers.SerializerMethodField()
+    limit_hint = serializers.SerializerMethodField()
 
     class Meta(RunSummarySerializer.Meta):
-        fields = [*RunSummarySerializer.Meta.fields, "graph", "plan", "state"]
+        fields = [*RunSummarySerializer.Meta.fields, "graph", "plan", "state", "limit_hint"]
         read_only_fields = fields
+
+    def get_limit_hint(self, obj: TrainingRun) -> dict | None:
+        """For a run that a limit stopped (or kept from starting), for who started it: which
+        limit that was and the next plan that lifts it (budgets.stop_hint). Null otherwise."""
+        user = getattr(self.context.get("request"), "user", None)
+        if obj.stop_reason not in ("budget", "run_limit") or user is None:
+            return None
+        if user.pk != obj.owner_id:
+            return None
+        from . import budgets
+
+        return budgets.stop_hint(obj)
 
     def get_state(self, obj: TrainingRun) -> dict | None:
         from .training_service import state_of

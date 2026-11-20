@@ -24,7 +24,7 @@ from . import agent_activity
 from . import explain_service as explaining
 from . import training_service as training
 from .budgets import Actor, BudgetError
-from .mcp import TOOLS, Tool, ToolError, _run
+from .mcp import TOOLS, Tool, ToolError, _run, limit_details
 
 # Pictures in an answer with ``images``: at most this many characters together.
 MAX_IMAGE_CHARS = 60_000
@@ -56,7 +56,7 @@ def _explain(request: Request, run_id: Any, body: dict[str, Any]) -> dict[str, A
     try:
         return explaining.run_explanation(explanation, Actor.of(request))
     except BudgetError as exc:
-        raise ToolError(str(exc.body().get("detail") or exc)) from None
+        raise ToolError(exc.message, limit_details(exc.data)) from None
     except (training.TrainingBusy, training.PredictionFailed) as exc:
         raise ToolError(str(exc)) from None
 

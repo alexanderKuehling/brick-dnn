@@ -36,6 +36,7 @@ jobs:
           BRICKDNN_PADDLE_ENV: ${{ vars.BRICKDNN_PADDLE_ENV }}
           BRICKDNN_PADDLE_CLIENT_TOKEN: ${{ vars.BRICKDNN_PADDLE_CLIENT_TOKEN }}
           BRICKDNN_PADDLE_PRICES: ${{ vars.BRICKDNN_PADDLE_PRICES }}
+          BRICKDNN_PADDLE_PRICES_YEARLY: ${{ vars.BRICKDNN_PADDLE_PRICES_YEARLY }}
           BRICKDNN_PADDLE_OVERAGE_PRODUCT: ${{ vars.BRICKDNN_PADDLE_OVERAGE_PRODUCT }}
           BRICKDNN_PADDLE_API_KEY: ${{ secrets.BRICKDNN_PADDLE_API_KEY }}
           BRICKDNN_PADDLE_WEBHOOK_SECRET: ${{ secrets.BRICKDNN_PADDLE_WEBHOOK_SECRET }}
@@ -66,7 +67,7 @@ jobs:
             BRICKDNN_REQUIRE_2FA_FOR_STAFF BRICKDNN_SENTRY_DSN BRICKDNN_SENTRY_FRONTEND_DSN
             BRICKDNN_SENTRY_ENVIRONMENT BRICKDNN_SENTRY_TRACES_SAMPLE_RATE"
           # ... and the ones added since (new names go here).
-          names="$old_names SENTRY_AUTH_TOKEN"
+          names="$old_names SENTRY_AUTH_TOKEN BRICKDNN_PADDLE_PRICES_YEARLY"
           server() {
             # The key may only run deploy.sh on the server, which deploys commits of main only.
             ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
