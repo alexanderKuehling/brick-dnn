@@ -38,6 +38,7 @@ import {
   type ImportOptions,
   type ImportReport,
 } from '@/api';
+import { limitOf, UpgradeHint, type Limit } from '@/billing/LimitNotice';
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import { useUploadProgress } from '@/components/useUploadProgress';
@@ -385,6 +386,8 @@ export function ImportDialog({
   const [error, setError] = useState<string | null>(
     initialFile ? fileProblem(initialFile, maxUploadMb, fileTypes) : null
   );
+  /** The storage of the account's plan did not take the file: where that leads. */
+  const [limit, setLimit] = useState<Limit | null>(null);
   /** The sheets of a workbook whose (chosen) sheet could not be imported. */
   const [sheetChoices, setSheetChoices] = useState<string[] | null>(null);
   /** Imported from a workbook with several sheets; the user confirms or picks another. */
@@ -460,6 +463,7 @@ export function ImportDialog({
     upload.current = controller;
     setBusy(true);
     setError(null);
+    setLimit(null);
     const changed = Object.fromEntries(
       Object.entries(options).filter(
         ([key, value]) => value !== DEFAULT_OPTIONS[key as keyof ImportOptions]
@@ -485,6 +489,7 @@ export function ImportDialog({
     } catch (err) {
       if (!controller.signal.aborted) {
         setError((err as Error).message);
+        setLimit(limitOf(err));
         const sheets = errorSheets(err);
         if (sheets && !pendingSource.current) {
           setSheetChoices(sheets);
@@ -655,6 +660,7 @@ export function ImportDialog({
                 title={i18n.t('ui.data.ImportDialog.cannotImport')}
               >
                 {error}
+                {limit && <UpgradeHint info={limit} />}
               </Alert>
             )}
             <ImportProgress mode={mode} label={label} busy={busy} bytes={progress.bytes} />
@@ -959,6 +965,7 @@ export function ImportDialog({
                 title={i18n.t('ui.data.ImportDialog.cannotImport')}
               >
                 {error}
+                {limit && <UpgradeHint info={limit} />}
               </Alert>
             )}
             <ImportProgress mode={mode} label={source} busy={busy} bytes={progress.bytes} />

@@ -367,6 +367,9 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_PARSER_CLASSES": ["brick_dnn_core.parsers.SafeJSONParser"],
+    # A budget or quota that refuses a request answers with its code, the limit and the next
+    # plan that lifts it, whichever view it comes through (budgets.py).
+    "EXCEPTION_HANDLER": "brick_dnn_core.budgets.exception_handler",
     # Number of reverse proxies in front of Django (1 with the bundled nginx). Rate limits
     # then use the address added by the proxy instead of a client-supplied X-Forwarded-For.
     "NUM_PROXIES": int(os.environ.get("BRICKDNN_NUM_PROXIES", "0")),
@@ -544,6 +547,9 @@ AGENT_LOG_DAYS = max(0, int(os.environ.get("BRICKDNN_AGENT_LOG_DAYS") or 90))
 PADDLE_ENV = os.environ.get("BRICKDNN_PADDLE_ENV", "").strip().lower()
 PADDLE_CLIENT_TOKEN = os.environ.get("BRICKDNN_PADDLE_CLIENT_TOKEN", "").strip()
 PADDLE_PRICES = os.environ.get("BRICKDNN_PADDLE_PRICES", "").strip()
+# Optional: the yearly Paddle price of plans that can be paid per year too, in the same form
+# (starter=pri_…,plus=pri_…). Such a plan needs "price_per_year" in BRICKDNN_PLANS.
+PADDLE_PRICES_YEARLY = os.environ.get("BRICKDNN_PADDLE_PRICES_YEARLY", "").strip()
 PADDLE_OVERAGE_PRODUCT = os.environ.get("BRICKDNN_PADDLE_OVERAGE_PRODUCT", "").strip()
 PADDLE_API_KEY = os.environ.get("BRICKDNN_PADDLE_API_KEY", "").strip()
 PADDLE_WEBHOOK_SECRETS = env_list("BRICKDNN_PADDLE_WEBHOOK_SECRET")

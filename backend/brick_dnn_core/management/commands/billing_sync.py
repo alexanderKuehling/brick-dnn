@@ -75,23 +75,30 @@ class Command(BaseCommand):
         plans = budgets.plans()
         currency = settings.PRICE_CURRENCY
         problems = 0
-        for key, price_ids in cfg.prices.items():
-            for price_id in price_ids:
-                try:
-                    price = api.get_price(price_id)
-                except PaddleError as exc:
-                    problems += 1
-                    write(self.style.ERROR(f"✗ {key}: {price_id}: {exc}"))
-                    continue
-                for line in self._price_problems(plans[key], price, currency):
-                    problems += 1
-                    write(self.style.ERROR(f"✗ {key}: {price_id}: {line}"))
-                unit = price.get("unit_price") or {}
-                write(
-                    f"  {key}: {price_id} = {unit.get('amount')} {unit.get('currency_code')} "
-                    f"(smallest unit), tax {price.get('tax_mode')}, "
-                    f"every {(price.get('billing_cycle') or {}).get('interval', '?')}"
-                )
+        priced = [
+            (key, price_id, interval)
+            for interval, table in (("month", cfg.prices), ("year", cfg.yearly_prices))
+            for key, price_ids in table.items()
+            for price_id in price_ids
+        ]
+        for key, price_id, interval in priced:
+            try:
+                price = api.get_price(price_id)
+            except PaddleError as exc:
+                problems += 1
+                write(self.style.ERROR(f"✗ {key}: {price_id}: {exc}"))
+                continue
+            for line in self._price_problems(plans[key], price, currency, interval):
+                problems += 1
+                write(self.style.ERROR(f"✗ {key}: {price_id}: {line}"))
+            unit = price.get("unit_price") or {}
+            write(
+                f"  {key}: {price_id} = {unit.get('amount')} {unit.get('currency_code')} "
+                f"(smallest unit), tax {price.get('tax_mode')}, "
+                f"every {(price.get('billing_cycle') or {}).get('interval', '?')}"
+            )
+        if not cfg.yearly_prices:
+            write("  No BRICKDNN_PADDLE_PRICES_YEARLY: plans are sold per month only.")
         if cfg.overage_product:
             try:
                 product = api.get_product(cfg.overage_product)
@@ -113,22 +120,26 @@ class Command(BaseCommand):
         )
 
     @staticmethod
-    def _price_problems(plan: budgets.Plan, price: dict, currency: str) -> list[str]:
-        """What about a Paddle price does not fit the plan it is configured for."""
+    def _price_problems(
+        plan: budgets.Plan, price: dict, currency: str, interval: str = "month"
+    ) -> list[str]:
+        """What about a Paddle price does not fit the plan it is configured for (as its
+        monthly price, or as its yearly one)."""
         found = []
         unit = price.get("unit_price") or {}
         if price.get("status") != "active":
             found.append("the price is not active.")
         cycle = price.get("billing_cycle") or {}
-        if cycle.get("interval") != "month" or cycle.get("frequency") != 1:
-            found.append("it is not billed monthly.")
+        if cycle.get("interval") != interval or cycle.get("frequency") != 1:
+            found.append(f"it is not billed {'yearly' if interval == 'year' else 'monthly'}.")
+        shown = plan.price_per_year if interval == "year" else plan.price
         if unit.get("currency_code") != currency:
             found.append(
                 f"its currency is {unit.get('currency_code')}, BRICKDNN_PRICE_CURRENCY is {currency}."
             )
-        elif plan.price is not None:
+        elif shown is not None:
             factor = 1 if currency in billing.ZERO_DECIMAL else 100
-            expected = int(Decimal(str(plan.price)) * factor)
+            expected = int(Decimal(str(shown)) * factor)
             if str(unit.get("amount")) != str(expected):
                 found.append(
                     f"it costs {unit.get('amount')} (smallest unit), the plan says {expected}."

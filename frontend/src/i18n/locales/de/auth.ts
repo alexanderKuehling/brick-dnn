@@ -30,7 +30,7 @@ export const auth: Messages<typeof enAuth> = {
     title: 'Konto erstellen',
     already: 'Schon registriert? <anchor>Anmelden</anchor>',
     intro:
-      'Mit einem Konto können Sie Netze auf diesem Server speichern. Netze bauen und Code exportieren geht auch ohne.',
+      'Ein Konto ist kostenlos: Netze speichern, auf diesem Server trainieren und Daten vorbereiten. Netze bauen und Code exportieren geht auch ohne.',
     emailHint: 'Damit können andere Sie zu ihren Netzen einladen.',
     acceptTerms: 'Ich stimme den <terms>Nutzungsbedingungen</terms> zu.',
     acceptTermsAndPrivacy:

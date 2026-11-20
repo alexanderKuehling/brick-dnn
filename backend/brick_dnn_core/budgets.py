@@ -177,6 +177,7 @@ IMPLICIT_PLAN = "default"
 PLAN_FIELDS = {
     "name": str,
     "price": float,
+    "price_per_year": float,
     "cpu_hours_per_month": float,
     "storage_gb": float,
     "cpu_minutes_per_run": float,
@@ -191,9 +192,11 @@ PLAN_FIELDS = {
 class Plan:
     """A plan (subscription tier) and its limits; None (or 0 in the settings): unlimited.
 
-    ``price`` per month and ``overage_price_per_cpu_hour`` are in BRICKDNN_PRICE_CURRENCY.
-    The price is for display (with paid plans the customer pays the price set in Paddle, see
-    billing.py); overage is billed at its price. ``priority`` is for the job queue
+    ``price`` per month, ``price_per_year`` and ``overage_price_per_cpu_hour`` are in
+    BRICKDNN_PRICE_CURRENCY. The prices are for display (with paid plans the customer pays
+    the price set in Paddle, see billing.py); overage is billed at its price.
+    ``price_per_year`` is only offered together with a yearly Paddle price for the plan
+    (BRICKDNN_PADDLE_PRICES_YEARLY; billing.info adds it to the plan it shows). ``priority`` is for the job queue
     (training_queue.py): runs of plans with a higher priority start first.
     ``queued_trainings``: how many trainings of an account may wait in the queue (None: the
     server's default, BRICKDNN_QUEUE_MAX_WAITING)."""
@@ -208,6 +211,10 @@ class Plan:
     priority: int = 0
     overage_price_per_cpu_hour: float | None = None
     queued_trainings: int | None = None
+    price_per_year: float | None = None
+    # Features only some plans include (``"features": ["…"]`` in BRICKDNN_PLANS), see
+    # :func:`has_feature`. Nothing is gated unless a plan lists it.
+    features: tuple[str, ...] = ()
 
     @property
     def unlimited(self) -> bool:
@@ -231,6 +238,7 @@ class Plan:
             "queued_trainings": self.queued_trainings,
             "priority": self.priority,
             "overage_price_per_cpu_hour": self.overage_price_per_cpu_hour,
+            "features": list(self.features),
         }
 
 
@@ -251,10 +259,19 @@ def _plan(key: str, raw: Any) -> Plan:
                 f"BRICKDNN_PLANS: {field} of plan {key!r} must be a {kind.__name__}."
             ) from None
         # 0 means unlimited for the limits (and "free" for prices, which is kept).
-        if field not in ("name", "price", "priority") and value <= 0:
+        if field not in ("name", "price", "price_per_year", "priority") and value <= 0:
             continue
         values[field] = value
-    unknown = set(raw) - set(PLAN_FIELDS)
+    features = raw.get("features")
+    if features not in (None, ""):
+        if not isinstance(features, list) or not all(
+            isinstance(name, str) and name.strip() for name in features
+        ):
+            raise ImproperlyConfigured(
+                f"BRICKDNN_PLANS: features of plan {key!r} must be a list of names."
+            )
+        values["features"] = tuple(dict.fromkeys(name.strip() for name in features))
+    unknown = set(raw) - set(PLAN_FIELDS) - {"features"}
     if unknown:
         raise ImproperlyConfigured(
             f"BRICKDNN_PLANS: unknown setting {sorted(unknown)[0]!r} in plan {key!r}."
@@ -423,7 +440,202 @@ def pricing_url() -> str | None:
     return billing.pricing_url()
 
 
-def concurrency_refusal(user, active: int) -> str | None:
+# --------------------------------------------------------------------------- #
+# Where a limit leads: the next plan that lifts it
+# --------------------------------------------------------------------------- #
+
+# The limits of a plan that a higher plan can lift (fields of :class:`Plan`).
+PLAN_LIMITS = (
+    "cpu_hours_per_month",
+    "storage_gb",
+    "cpu_minutes_per_run",
+    "concurrent_trainings",
+    "queued_trainings",
+)
+
+
+def _amount(plan: Plan, field: str) -> float | None:
+    """What ``plan`` allows of ``field`` (None: unlimited)."""
+    if field == "queued_trainings":
+        return plan.queued_trainings or default_waiting()
+    return getattr(plan, field)
+
+
+def _amounts(limits: Limits) -> dict[str, float | None]:
+    """What the account may use now, in the units of :class:`Plan` (None: unlimited). These
+    are its limits as they apply, the operator's overrides included."""
+    return {
+        "cpu_hours_per_month": (
+            limits.monthly_seconds / 3600 if limits.monthly_seconds is not None else None
+        ),
+        "storage_gb": limits.storage_bytes / 1024**3 if limits.storage_bytes is not None else None,
+        "cpu_minutes_per_run": limits.run_seconds / 60 if limits.run_seconds is not None else None,
+        "concurrent_trainings": limits.concurrent_trainings,
+        "queued_trainings": limits.queued_trainings,
+    }
+
+
+def next_plan(user, field: str, needed: dict[str, float] | None = None) -> dict[str, Any] | None:
+    """The cheapest plan on sale that lifts the account's limit ``field`` (one of
+    PLAN_LIMITS): it allows more of it than the account has now, and at least ``needed``
+    (amounts by field, in the units of :class:`Plan`). The plan as a dict (billing.offer)
+    with ``url``, the pricing page with that plan preselected.
+
+    None on a server that sells no plans (billing.py), for an account without limits, and
+    when no plan lifts it: then nothing is suggested."""
+    from . import billing  # billing.py builds on this module
+
+    cfg = billing.config()
+    if not cfg.enabled:
+        return None
+    limits = limits_for(user)
+    have = _amounts(limits).get(field)
+    if limits.unlimited or have is None:
+        return None
+    # A plan on sale that costs at least what the account's plan costs: an upgrade.
+    candidates = [
+        plan
+        for key, plan in plans().items()
+        if key in cfg.prices
+        and key != limits.plan.key
+        and plan.price is not None
+        and plan.price >= (limits.plan.price or 0.0)
+    ]
+    for plan in sorted(candidates, key=lambda item: item.price or 0.0):
+        amount = _amount(plan, field)
+        if amount is not None and amount <= have:
+            continue
+        enough = True
+        for other, minimum in (needed or {}).items():
+            allowed = _amount(plan, other)
+            enough = enough and (allowed is None or allowed >= minimum)
+        if enough:
+            return billing.offer(plan, cfg)
+    return None
+
+
+def has_feature(user, feature: str) -> bool:
+    """Whether the account may use ``feature``. A feature belongs to plans only once a plan
+    lists it (``"features"`` in BRICKDNN_PLANS): until then, and on a server without plans,
+    everybody has it. Accounts without limits have every feature."""
+    if not any(feature in plan.features for plan in plans().values()):
+        return True
+    profile = _profile(user)
+    return is_unlimited(user, profile) or feature in plan_of(user, profile).features
+
+
+def require_feature(user, feature: str, what: str) -> None:
+    """Raise :class:`FeatureNotInPlan` unless the account :func:`has_feature`. ``what``
+    names the feature in the message ("Sharing a comparison")."""
+    if has_feature(user, feature):
+        return
+    from . import billing  # billing.py builds on this module
+
+    plan = plan_of(user)
+    cfg = billing.config()
+    offers = [
+        other
+        for key, other in plans().items()
+        if cfg.enabled and key in cfg.prices and feature in other.features
+    ]
+    offer = billing.offer(min(offers, key=lambda item: item.price or 0.0), cfg) if offers else None
+    included = ", ".join(p.name for p in plans().values() if feature in p.features)
+    sentence = upgrade_sentence(offer)
+    raise FeatureNotInPlan(
+        f"{what} is not part of your plan ({plan.name}); it comes with {included}."
+        + (f" {sentence}" if sentence else ""),
+        {
+            "limit": {
+                "kind": "feature",
+                "feature": feature,
+                "used": None,
+                "limit": None,
+                "unit": None,
+                "resets_at": None,
+            },
+            "plan": {"key": plan.key, "name": plan.name},
+            "upgrade": offer,
+        },
+    )
+
+
+def plan_includes(plan: dict[str, Any]) -> str:
+    """ "10 CPU hours per month, 3 GB of storage, up to 60 CPU minutes per training and 1
+    training at a time": what a plan (``Plan.to_dict``) includes, in words."""
+    hours, storage = plan.get("cpu_hours_per_month"), plan.get("storage_gb")
+    parts = [
+        f"{hours:g} CPU hour{'' if hours == 1 else 's'} per month"
+        if hours is not None
+        else "unlimited compute",
+        f"{storage:g} GB of storage" if storage is not None else "unlimited storage",
+    ]
+    if plan.get("cpu_minutes_per_run") is not None:
+        parts.append(f"up to {plan['cpu_minutes_per_run']:g} CPU minutes per training")
+    if plan.get("concurrent_trainings") is not None:
+        count = plan["concurrent_trainings"]
+        parts.append(f"{count} training{'' if count == 1 else 's'} at a time")
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def upgrade_sentence(offer: dict[str, Any] | None) -> str:
+    """ "The Starter plan (5.00 EUR per month) includes …: <url>" for a plan of
+    :func:`next_plan` ("" for None): what the messages for scripts and AI assistants say."""
+    if offer is None:
+        return ""
+    return (
+        f"The {offer['name']} plan ({offer['price']:.2f} {offer['currency']} per month) includes "
+        f"{plan_includes(offer)}: {offer['url']}"
+    )
+
+
+def limit_data(
+    user,
+    kind: str,
+    *,
+    used: float | None = None,
+    limit: float | None = None,
+    unit: str | None = None,
+    resets_at: datetime | None = None,
+    field: str | None = None,
+    needed: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """What an error says about the limit that stopped a request, for clients that do not
+    read its text (``LimitInfo`` in frontend/src/api/types.ts): ``limit`` (which one and how
+    much of it is used), ``plan`` (the account's; None on a server without plans) and
+    ``upgrade`` (:func:`next_plan` for ``field``; None when no plan on sale lifts it)."""
+    plan = plan_of(user)
+    return {
+        "limit": {
+            "kind": kind,
+            "used": used,
+            "limit": limit,
+            "unit": unit,
+            "resets_at": _iso(resets_at),
+        },
+        "plan": {"key": plan.key, "name": plan.name} if plan.key != IMPLICIT_PLAN else None,
+        "upgrade": next_plan(user, field, needed) if field else None,
+    }
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """A request refused by a limit that is no budget (trainings at a time, trainings
+    waiting): the message, and what training_service.TrainingBusy carries for clients
+    (``code``, ``limit``, ``plan``, ``upgrade``)."""
+
+    message: str
+    data: dict[str, Any]
+
+    def __str__(self) -> str:
+        return self.message
+
+
+def _refusal(message: str, code: str, data: dict[str, Any]) -> Refusal:
+    sentence = upgrade_sentence(data.get("upgrade"))
+    return Refusal(f"{message} {sentence}".strip(), {"code": code, **data})
+
+
+def concurrency_refusal(user, active: int) -> Refusal | None:
     """Why the account cannot start another training while ``active`` of its trainings run
     (its plan allows fewer at a time), or None."""
     limits = limits_for(user)
@@ -431,9 +643,18 @@ def concurrency_refusal(user, active: int) -> str | None:
     if allowed is None or active < allowed:
         return None
     count = "1 training" if allowed == 1 else f"{allowed} trainings"
-    return (
+    return _refusal(
         f"Your plan ({limits.plan.name}) allows {count} at a time. Wait until your running "
-        "training finishes, or stop it."
+        "training finishes, or stop it.",
+        "concurrent_trainings_limit",
+        limit_data(
+            user,
+            "concurrent_trainings",
+            used=active,
+            limit=allowed,
+            unit="trainings",
+            field="concurrent_trainings",
+        ),
     )
 
 
@@ -452,7 +673,7 @@ def default_waiting() -> int | None:
     return DEFAULT_WAITING if settings.PLANS else None
 
 
-def waiting_refusal(user, waiting: int) -> str | None:
+def waiting_refusal(user, waiting: int) -> Refusal | None:
     """Why the account cannot put another training into the queue while ``waiting`` of its
     trainings wait there, or None."""
     limits = limits_for(user)
@@ -461,9 +682,18 @@ def waiting_refusal(user, waiting: int) -> str | None:
         return None
     count = "1 training" if allowed == 1 else f"{allowed} trainings"
     where = "This server" if limits.plan.key == IMPLICIT_PLAN else f"Your plan ({limits.plan.name})"
-    return (
+    return _refusal(
         f"{where} lets {count} of an account wait in the queue. Wait until one of yours has "
-        "started, or cancel one."
+        "started, or cancel one.",
+        "queued_trainings_limit",
+        limit_data(
+            user,
+            "queued_trainings",
+            used=waiting,
+            limit=allowed,
+            unit="trainings",
+            field="queued_trainings",
+        ),
     )
 
 
@@ -545,6 +775,8 @@ class Budget:
     used: float
     name: str = ""
     resets_at: datetime | None = None
+    # The account it limits (for the plan that would lift it).
+    user: Any = None
 
     @property
     def remaining(self) -> float:
@@ -566,15 +798,79 @@ class Budget:
         }[self.kind]
 
     @property
+    def limit_kind(self) -> str:
+        """The ``limit.kind`` of errors about this budget (:func:`limit_data`)."""
+        return {
+            "allowance": "cpu_time",
+            "overage": "overage_cap",
+            "own": "own_budget",
+            "token": "token_budget",
+            "app": "app_budget",
+        }[self.kind]
+
+    def upgrade(self, needed_seconds: float = 0.0) -> dict[str, Any] | None:
+        """The next plan whose monthly allowance has room for what is used and
+        ``needed_seconds`` more in one training (:func:`next_plan`); only the plan's
+        allowance leads to one."""
+        if self.kind != "allowance" or self.user is None:
+            return None
+        needed = {"cpu_hours_per_month": (self.used + max(needed_seconds, MIN_RUN_SECONDS)) / 3600}
+        if needed_seconds > 0:
+            needed["cpu_minutes_per_run"] = needed_seconds / 60
+        return next_plan(self.user, "cpu_hours_per_month", needed)
+
+    def overage_offer(self) -> dict[str, Any] | None:
+        """``{"price_per_cpu_hour", "currency"}`` when the account could switch on compute
+        beyond its plan's allowance (account page) and has not: the way on without a higher
+        plan."""
+        if self.kind != "allowance" or self.user is None:
+            return None
+        plan = plan_of(self.user)
+        if plan.overage_price_per_cpu_hour is None or not overage_billable(self.user):
+            return None
+        return {
+            "price_per_cpu_hour": plan.overage_price_per_cpu_hour,
+            "currency": settings.PRICE_CURRENCY,
+        }
+
+    def data(self, needed_seconds: float = 0.0) -> dict[str, Any]:
+        """What an error about this budget carries (see :class:`BudgetError`)."""
+        data = {
+            "budget": self.to_dict(),
+            "resets_at": _iso(self.resets_at),
+            **limit_data(
+                self.user,
+                self.limit_kind,
+                used=minutes(self.used),
+                limit=minutes(self.limit),
+                unit="cpu_minutes",
+                resets_at=self.resets_at,
+            ),
+        }
+        if self.kind == "allowance":
+            data["upgrade"] = self.upgrade(needed_seconds)
+            data["overage"] = self.overage_offer()
+            if pricing_url():
+                data["upgrade_url"] = pricing_url()  # where plans are compared and bought
+        return data
+
+    @property
     def how_to_raise(self) -> str:
         pricing = pricing_url()
-        higher = (
-            f"Higher plans include more: {pricing}"
-            if pricing
-            else "Higher plans include more (see your account page)."
-            if len(plans()) > 1
-            else "Ask the operator of this server for a higher allowance."
-        )
+        offer, overage = self.upgrade(), self.overage_offer()
+        if offer is not None:
+            higher = upgrade_sentence(offer)
+        elif overage is not None:
+            higher = (
+                "You can allow compute beyond the allowance on your account page, at "
+                f"{overage['price_per_cpu_hour']:.2f} {overage['currency']} per CPU hour."
+            )
+        elif pricing:
+            higher = f"Higher plans include more: {pricing}"
+        elif len(plans()) > 1:
+            higher = "Higher plans include more (see your account page)."
+        else:
+            higher = "Ask the operator of this server for a higher allowance."
         return {
             "allowance": higher,
             "overage": "You can raise the overage cap on your account page.",
@@ -619,15 +915,17 @@ def compute_budgets(actor: Actor, period: date | None = None) -> list[Budget]:
                 account = used_seconds(actor.user, period=period)
             named = kind == "allowance" and limits.plan.key != IMPLICIT_PLAN
             name = limits.plan.name if named else ""
-            budgets.append(Budget(kind, limit, account, name, resets_at=resets))
+            budgets.append(Budget(kind, limit, account, name, resets, actor.user))
     token, connection = actor.token, actor.connection
     if token is not None and token.budget_cpu_minutes is not None:
         used = used_seconds(actor.user, token=token, period=period)
-        budgets.append(Budget("token", token.budget_cpu_minutes * 60, used, token.name, resets))
+        limit = token.budget_cpu_minutes * 60
+        budgets.append(Budget("token", limit, used, token.name, resets, actor.user))
     if connection is not None and connection.budget_cpu_minutes is not None:
         used = used_seconds(actor.user, connection=connection, period=period)
         name = connection.client.name
-        budgets.append(Budget("app", connection.budget_cpu_minutes * 60, used, name, resets))
+        limit = connection.budget_cpu_minutes * 60
+        budgets.append(Budget("app", limit, used, name, resets, actor.user))
     return budgets
 
 
@@ -638,7 +936,9 @@ def compute_budgets(actor: Actor, period: date | None = None) -> list[Budget]:
 
 class BudgetError(APIException):
     """A budget or quota does not allow the request (403). The message says which one, how
-    much is used and how to get more; ``data`` is the same as JSON."""
+    much is used and how to get more; ``data`` is the same for clients that do not read text:
+    ``code``, ``limit`` and ``plan`` (:func:`limit_data`) and ``upgrade``, the next plan that
+    lifts the limit, with its price, what it includes and where to get it (null: none)."""
 
     status_code = status.HTTP_403_FORBIDDEN
     default_code = "budget_exceeded"
@@ -666,11 +966,25 @@ class StorageQuotaExceeded(BudgetError):
     default_code = "storage_quota_exceeded"
 
 
+class FeatureNotInPlan(BudgetError):
+    """The account's plan does not include a feature (:func:`require_feature`)."""
+
+    default_code = "feature_not_in_plan"
+
+
 def _exceeded(budget: Budget) -> BudgetExceeded:
-    data = {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)}
-    if budget.kind == "allowance" and pricing_url():
-        data["upgrade_url"] = pricing_url()  # a higher plan can be bought there
-    return BudgetExceeded(budget.exhausted_message(), data)
+    return BudgetExceeded(budget.exhausted_message(), budget.data())
+
+
+def exception_handler(exc: Exception, context: dict[str, Any]):
+    """Django REST framework's handler, with the whole body of a :class:`BudgetError` in the
+    answer (``code``, ``limit``, ``upgrade`` …) wherever a view lets one through."""
+    from rest_framework.views import exception_handler as default_handler
+
+    response = default_handler(exc, context)
+    if response is not None and isinstance(exc, BudgetError):
+        response.data = exc.body()
+    return response
 
 
 def check_compute(actor: Actor) -> list[Budget]:
@@ -749,12 +1063,15 @@ def run_limit(actor: Actor, exclude: Any = None) -> RunLimit:
                     f"{label} is almost used up: {_min_text(budget.used, True)} of "
                     f"{_min_text(budget.limit, True)} this month, too little is left for a training."
                     f"{resets} {budget.how_to_raise}",
-                    {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
+                    budget.data(),
                 )
+            # Waiting helps here, so no plan is suggested.
+            data = {**budget.data(), "upgrade": None, "overage": None, "reserved": True}
+            data.pop("upgrade_url", None)
             raise BudgetExceeded(
                 f"What is left of {budget.label} ({_min_text(budget.remaining)}) is reserved by "
                 "trainings that are still running. Wait until they finish, or stop one.",
-                {"budget": budget.to_dict(), "resets_at": _iso(budget.resets_at)},
+                data,
             )
         candidates.append((available, "budget", budget))
     if not candidates:
@@ -806,9 +1123,57 @@ def estimate_verdict(estimate: Estimate | None, limit: RunLimit) -> tuple[str | 
     return None, None
 
 
+def estimate_hint(actor: Actor, estimate: Estimate, limit: RunLimit) -> dict[str, Any]:
+    """``{"limit", "plan", "upgrade", …}`` for a run whose estimate exceeds what it may use
+    (``limit``): which limit that is, and the next plan with room for the whole training."""
+    if limit.budget is not None:
+        return {
+            key: value
+            for key, value in limit.budget.data(estimate.cpu_seconds).items()
+            if key in ("limit", "plan", "upgrade", "overage", "upgrade_url")
+        }
+    user = actor.user
+    needed = {
+        "cpu_minutes_per_run": estimate.cpu_seconds / 60,
+        "cpu_hours_per_month": (used_seconds(user) + estimate.cpu_seconds) / 3600,
+    }
+    return limit_data(
+        user,
+        "run_time",
+        limit=minutes(limit.seconds),
+        unit="cpu_minutes",
+        field="cpu_minutes_per_run",
+        needed=needed,
+    )
+
+
+def estimate_check(
+    actor: Actor, estimate: Estimate | None, limit: RunLimit
+) -> tuple[str | None, str | None, dict[str, Any]]:
+    """:func:`estimate_verdict` with where it leads: ``(refusal, warning, hint)``. The
+    message names the plan of :func:`estimate_hint`, if there is one."""
+    refusal, warning = estimate_verdict(estimate, limit)
+    if estimate is None or (refusal is None and warning is None):
+        return None, None, {}
+    hint = estimate_hint(actor, estimate, limit)
+    sentence = upgrade_sentence(hint.get("upgrade"))
+    if sentence:
+        refusal = f"{refusal} Or: {sentence}" if refusal else None
+        warning = f"{warning} {sentence}" if warning else None
+    return refusal, warning, hint
+
+
+def estimate_too_high(
+    actor: Actor, estimate: Estimate | None, refusal: str, hint: dict[str, Any]
+) -> EstimateTooHigh:
+    """The error of a start that :func:`estimate_check` refuses."""
+    return EstimateTooHigh(refusal, {**estimate_data(actor, estimate), **hint})
+
+
 def estimate_data(actor: Actor, estimate: Estimate | None, exclude: Any = None) -> dict[str, Any]:
     """``{"estimate", "budget"}`` for the training check (web, REST and MCP): the estimated
-    CPU time of a planned run and whether the budgets allow it."""
+    CPU time of a planned run and whether the budgets allow it. A refusal or warning comes
+    with ``limit``, ``plan`` and ``upgrade`` like the errors (:func:`limit_data`)."""
     data: dict[str, Any] = {"estimate": None, "budget": None}
     if estimate is not None:
         data["estimate"] = {
@@ -838,8 +1203,15 @@ def estimate_data(actor: Actor, estimate: Estimate | None, exclude: Any = None) 
         limit = run_limit(actor, exclude=exclude)
     except BudgetError as exc:
         budget.update(allowed=False, reason=exc.message, code=exc.data["code"])
+        budget.update(
+            {
+                key: exc.data[key]
+                for key in ("limit", "plan", "upgrade", "overage")
+                if key in exc.data
+            }
+        )
     else:
-        refusal, warning = estimate_verdict(estimate, limit)
+        refusal, warning, hint = estimate_check(actor, estimate, limit)
         budget.update(
             allowed=refusal is None,
             reason=refusal,
@@ -847,8 +1219,11 @@ def estimate_data(actor: Actor, estimate: Estimate | None, exclude: Any = None) 
             run_limit_cpu_minutes=minutes(limit.seconds),
             limit_reason=limit.reason,
         )
+        budget.update(hint)
         if refusal is not None:
             budget["code"] = "estimate_too_high"
+        elif warning is not None:
+            budget["warning_code"] = "estimate_above_limit"
     data["budget"] = budget
     return data
 
@@ -957,6 +1332,30 @@ def over_budget(run: TrainingRun) -> tuple[str, str] | None:
     return None
 
 
+HINT_KEYS = ("limit", "plan", "upgrade", "overage")
+
+
+def stop_hint(run: TrainingRun) -> dict[str, Any] | None:
+    """For a run that a limit stopped or kept from starting (``stop_reason`` "run_limit" or
+    "budget"): ``{"limit", "plan", "upgrade", …}`` like the errors (:func:`limit_data`), as
+    things are now. None for other runs, and once the budget has room again."""
+    if run.stop_reason == "run_limit":
+        cap = run.cpu_limit_seconds or limits_for(run.owner).run_seconds
+        return limit_data(
+            run.owner,
+            "run_time",
+            used=minutes(run.cpu_seconds or 0.0),
+            limit=minutes(cap),
+            unit="cpu_minutes",
+            field="cpu_minutes_per_run",
+        )
+    if run.stop_reason == "budget":
+        for budget in compute_budgets(Actor.of_run(run)):
+            if budget.exhausted:
+                return {key: value for key, value in budget.data().items() if key in HINT_KEYS}
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Storage
 # --------------------------------------------------------------------------- #
@@ -1016,13 +1415,27 @@ def check_storage(user, adding: int = 0) -> None:
     else:
         message = f"The storage of this account is full: {_size(used)} of {_size(limit)}."
     pricing = pricing_url()
-    message += " Delete data sources, datasets or training runs you no longer need, or " + (
-        f"choose a plan with more storage: {pricing}"
+    hint = limit_data(
+        user,
+        "storage",
+        used=used,
+        limit=limit,
+        unit="bytes",
+        field="storage_gb",
+        # Room for what is stored and the upload (or a little more, if it is just full).
+        needed={"storage_gb": (used + max(adding, 1)) / 1024**3},
+    )
+    sentence = upgrade_sentence(hint["upgrade"])
+    message += " Delete data sources, datasets or training runs you no longer need" + (
+        f". Or: {sentence}"
+        if sentence
+        else f", or choose a plan with more storage: {pricing}"
         if pricing
-        else "ask the operator of this server for more space."
+        else ", or ask the operator of this server for more space."
     )
     data: dict[str, Any] = {
-        "storage": {"used_bytes": used, "limit_bytes": limit, "adding_bytes": adding}
+        "storage": {"used_bytes": used, "limit_bytes": limit, "adding_bytes": adding},
+        **hint,
     }
     if pricing:
         data["upgrade_url"] = pricing
@@ -1116,6 +1529,12 @@ def usage_summary(actor: Actor) -> dict[str, Any]:
         "plans": offered if len(offered) > 1 else [],
         # Where plans can be bought, on a server that sells them (else null).
         "upgrade_url": pricing_url(),
+        # The next plan on sale with more compute and with more storage (null: none, or no
+        # plans are sold): what the usage indicator links to when a limit comes close.
+        "next_plans": {
+            "compute": next_plan(user, "cpu_hours_per_month"),
+            "storage": next_plan(user, "storage_gb"),
+        },
         "overage": {
             "available": plan.overage_price_per_cpu_hour is not None
             and not limits.unlimited

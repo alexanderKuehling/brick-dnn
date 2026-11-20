@@ -335,7 +335,9 @@ also the budget of the token or app the assistant uses; `check_training` (with `
 `tuning`) returns `estimate`, a rough estimate of the CPU time, and `budget`: whether a start
 would be allowed (`allowed`, `reason`), a `warning` if the run will probably be stopped by its
 limit, and `run_limit_cpu_minutes`, the most it may use. A refused start or prediction is a
-tool error that names the budget, how much is used, when it resets and who can raise it; a
+tool error that names the budget, how much is used, when it resets and who can raise it (on a
+server that sells plans also the next plan that lifts the limit, with its price and address;
+the same as JSON in the error's `structuredContent`: `code`, `limit`, `plan`, `upgrade`); a
 training that runs out stops by itself and keeps its weights (`get_training_run`:
 `usage.stop_reason` `budget` or `run_limit`). Only the user can change budgets, in the web app
 (account page, API tokens page): a token cannot raise its own. Checks, analyses and listings

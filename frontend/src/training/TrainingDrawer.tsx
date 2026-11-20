@@ -69,6 +69,8 @@ export interface TrainingDrawerProps {
   networkName: string;
   analysis: Analysis | null;
   onLogin: () => void;
+  /** To the sign-up page; without it the gate only offers the login. */
+  onRegister?: () => void;
   onShowProblems: () => void;
   onLoadNetwork: (graph: GraphDocument, name: string) => void;
   /** The builder's check against the chosen dataset and the "Adapt network" action. */
@@ -147,6 +149,7 @@ function DrawerContent({
   networkName,
   analysis,
   onLogin,
+  onRegister,
   onShowProblems,
   onLoadNetwork,
   fit = null,
@@ -208,7 +211,12 @@ function DrawerContent({
           <Text size="sm" c="dimmed" maw={380}>
             {t('training.drawer.loginText')}
           </Text>
-          <Button onClick={onLogin}>{t('auth.logIn')}</Button>
+          <Group gap="sm" justify="center">
+            {onRegister && <Button onClick={onRegister}>{t('plans.gate.create')}</Button>}
+            <Button onClick={onLogin} variant={onRegister ? 'default' : 'filled'}>
+              {t('auth.logIn')}
+            </Button>
+          </Group>
         </Stack>
       </Stack>
     );

@@ -5,9 +5,9 @@ import {
   IconBrandGithub,
   IconChartLine,
   IconChevronDown,
-  IconCoffee,
   IconFileText,
   IconFolder,
+  IconGauge,
   IconId,
   IconInfoCircle,
   IconKey,
@@ -42,7 +42,9 @@ import { relativeTime } from '@/collab/time';
 import { useTranslation } from '@/i18n';
 import { LanguageSwitch } from '@/i18n/LanguageSwitch';
 import { legalPages, useLegalInfo } from '@/legal/useLegalInfo';
-import { REPOSITORY_URL, SUPPORT_URL } from '@/links';
+import { REPOSITORY_URL } from '@/links';
+import { computeText } from '@/usage/UsageIndicator';
+import { useUsage } from '@/usage/useUsage';
 import { ColorSchemeToggle } from './ColorSchemeToggle';
 import { Logo } from './Logo';
 import { EDITOR_PATH } from './RedirectToEditor';
@@ -71,7 +73,19 @@ export function AppHeader() {
   const pending = usePendingApprovals(Boolean(user));
   // When an agent last did something: asked for when the account menu opens.
   const [latestActivity, setLatestActivity] = useState<string | null>(null);
+  // The plan and this month's compute, asked for when the account menu opens the first
+  // time (and again when the tab gets the focus back).
+  const [menuSeen, setMenuSeen] = useState(false);
+  const { usage } = useUsage(Boolean(user) && menuSeen);
+  const compute = usage && !usage.unlimited ? usage.compute : null;
+  const used = compute && compute.limit !== null ? computeText(compute.used, compute.limit) : null;
+  const planUsage = !used
+    ? null
+    : usage?.plan && usage.plan.key !== 'default'
+      ? t('plans.usage.menu', { plan: usage.plan.name, usage: used })
+      : t('plans.usage.menuNoPlan', { usage: used });
   const checkActivity = () => {
+    setMenuSeen(true);
     api.agentActivity
       .summary()
       .then((summary) => setLatestActivity(summary.latest_at))
@@ -165,20 +179,6 @@ export function AppHeader() {
             <IconBrandGithub size={18} />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label={t('nav.coffee')}>
-          <ActionIcon
-            component="a"
-            href={SUPPORT_URL}
-            target="_blank"
-            rel="noreferrer"
-            variant="default"
-            size="lg"
-            aria-label={t('nav.coffee')}
-            visibleFrom="sm"
-          >
-            <IconCoffee size={18} />
-          </ActionIcon>
-        </Tooltip>
         {legal.length > 0 && (
           <Box visibleFrom="sm">
             <Menu position="bottom-end" withinPortal>
@@ -251,6 +251,19 @@ export function AppHeader() {
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
+              {planUsage && (
+                <>
+                  <Menu.Item
+                    leftSection={<IconGauge size={16} />}
+                    onClick={() => navigate(pricing ? '/pricing' : '/account')}
+                    aria-label={`${t('plans.usage.menuLabel')}: ${planUsage}`}
+                    data-testid="menu-plan-usage"
+                  >
+                    {planUsage}
+                  </Menu.Item>
+                  <Menu.Divider />
+                </>
+              )}
               <Menu.Item
                 leftSection={<IconFolder size={16} />}
                 onClick={() => navigate('/projects')}
@@ -372,15 +385,6 @@ function PhoneMenu({
             leftSection={<IconBrandGithub size={16} />}
           >
             {t('nav.sourceCode')}
-          </Menu.Item>
-          <Menu.Item
-            component="a"
-            href={SUPPORT_URL}
-            target="_blank"
-            rel="noreferrer"
-            leftSection={<IconCoffee size={16} />}
-          >
-            {t('nav.coffee')}
           </Menu.Item>
           <Menu.Divider />
           <Box px="sm" py={6} hiddenFrom="xs">

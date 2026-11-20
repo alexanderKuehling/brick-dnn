@@ -51,6 +51,7 @@ import { DataFlowTour } from '@/explain/DataFlowTour';
 import { i18n, Trans, useTranslation } from '@/i18n';
 import { useLiveBuilder } from '@/live/useLiveBuilder';
 import { ShareDialog } from '@/sharing/ShareDialog';
+import { matchingBuiltin } from '@/training/settings';
 import { useDatasetFit } from '@/training/useDatasetFit';
 import { useTraining } from '@/training/useTraining';
 import {
@@ -220,16 +221,38 @@ function Builder() {
   // agent activity page opens a run (`run`) or selects a dataset the same way. The state is
   // cleared, so going back or reloading does not open it again.
   const { setSource: setTrainingSource, reloadDatasets } = training.data;
+  // Asked for after signing up from "Train": once the server's datasets are known, the
+  // built-in one that fits the network is chosen, unless the user chose data before.
+  const [matchDataset, setMatchDataset] = useState(false);
+  const builtinDatasets = training.status?.builtin_datasets;
+  useEffect(() => {
+    if (!matchDataset || !builtinDatasets) {
+      return;
+    }
+    setMatchDataset(false);
+    const match = matchingBuiltin(doc, name, builtinDatasets);
+    if (match) {
+      setTrainingSource((current) =>
+        current.tab === 'random' && current.builtin === null
+          ? { ...current, tab: 'builtin', builtin: match }
+          : current
+      );
+    }
+  }, [matchDataset, builtinDatasets, doc, name, setTrainingSource]);
   useEffect(() => {
     const state = location.state as {
       openTraining?: boolean;
       dataset?: unknown;
       run?: unknown;
+      matchDataset?: boolean;
     } | null;
     if (!state?.openTraining) {
       return;
     }
     const { dataset, run } = state;
+    if (state.matchDataset) {
+      setMatchDataset(true);
+    }
     if (typeof dataset === 'number') {
       setTrainingSource((current) => ({ ...current, tab: 'upload', upload: dataset }));
       reloadDatasets();
@@ -965,7 +988,8 @@ function Builder() {
         title: i18n.t('builder.page.loginToSave'),
         message: i18n.t('builder.page.loginToSaveText'),
       });
-      navigate('/login', { state: { from: '/' } });
+      // An account first (it is free); the sign-up page also leads to the login.
+      navigate('/register', { state: { from: '/' } });
       return null;
     }
     if (readOnly && !asCopy) {
@@ -1193,10 +1217,16 @@ function Builder() {
     showSummary();
   };
 
-  const loginToTrain = () => {
+  // After logging in or signing up the panel opens again, and a network that fits one of
+  // the built-in datasets (the MNIST example) gets that dataset instead of demo data.
+  const accountToTrain = (page: '/login' | '/register') => {
     training.close();
-    navigate('/login', { state: { from: '/' } });
+    navigate(page, {
+      state: { from: '/', returnState: { openTraining: true, matchDataset: true } },
+    });
   };
+  const loginToTrain = () => accountToTrain('/login');
+  const registerToTrain = () => accountToTrain('/register');
 
   useHotkeys([
     ['mod+S', () => void save()],
@@ -1449,6 +1479,7 @@ function Builder() {
             networkName={name}
             analysis={analysis}
             onLogin={loginToTrain}
+            onRegister={registerToTrain}
             onShowProblems={showProblemsFromTraining}
             onLoadNetwork={loadTrainedNetwork}
             fit={datasetFit.controller}

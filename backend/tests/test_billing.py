@@ -310,6 +310,7 @@ def test_checkout_creates_the_customer_with_the_accounts_email(paddle, ada, web)
     customer = BillingCustomer.objects.get(user=ada)
     assert response.json() == {
         "plan": "plus",
+        "interval": "month",
         "price_id": "pri_plus",
         "customer_id": customer.customer_id,
         "custom_data": {"user_id": str(ada.pk)},
@@ -1229,20 +1230,32 @@ def test_budget_messages_point_to_the_pricing_page(paddle, plans, ada, web):
     use_up_the_free_allowance(ada)
     with pytest.raises(budgets.BudgetExceeded) as caught:
         budgets.check_compute(budgets.Actor(ada))
-    assert caught.value.message.endswith("Higher plans include more: /pricing")
+    # The message names the next plan, what it costs and includes, and where to get it.
+    assert caught.value.message.endswith(
+        "The Starter plan (5.00 EUR per month) includes 10 CPU hours per month, 3 GB of "
+        "storage, up to 60 CPU minutes per training and 1 training at a time: "
+        "/pricing?plan=starter"
+    )
     assert caught.value.data["upgrade_url"] == "/pricing"
+    assert caught.value.data["upgrade"]["url"] == "/pricing?plan=starter"
     assert web.get("/api/account/usage/").json()["upgrade_url"] == "/pricing"
     # With the site's address, scripts and AI assistants get a link they can pass on.
     plans.PUBLIC_URL = "https://brickdnn.com"
     with pytest.raises(budgets.BudgetExceeded) as caught:
         budgets.check_compute(budgets.Actor(ada))
-    assert "Higher plans include more: https://brickdnn.com/pricing" in caught.value.message
+    assert caught.value.message.endswith(": https://brickdnn.com/pricing?plan=starter")
     assert caught.value.body()["upgrade_url"] == "https://brickdnn.com/pricing"
-    # A full storage names the pricing page too.
+    # A full storage names the plan with room for the upload: 2 GB need the Starter plan.
     with pytest.raises(budgets.StorageQuotaExceeded) as full:
         budgets.check_storage(ada, adding=2 * 1024**3)
-    assert "choose a plan with more storage: https://brickdnn.com/pricing" in full.value.message
+    assert "Or: The Starter plan (5.00 EUR per month) includes" in full.value.message
+    assert full.value.message.endswith(": https://brickdnn.com/pricing?plan=starter")
     assert full.value.data["upgrade_url"] == "https://brickdnn.com/pricing"
+    # More than any plan stores: no plan is named, only the pricing page.
+    with pytest.raises(budgets.StorageQuotaExceeded) as full:
+        budgets.check_storage(ada, adding=80 * 1024**3)
+    assert "choose a plan with more storage: https://brickdnn.com/pricing" in full.value.message
+    assert full.value.data["upgrade"] is None
 
 
 def test_budget_messages_without_paid_plans_are_as_before(plans, ada, web):
@@ -1251,11 +1264,13 @@ def test_budget_messages_without_paid_plans_are_as_before(plans, ada, web):
         budgets.check_compute(budgets.Actor(ada))
     assert caught.value.message.endswith("Higher plans include more (see your account page).")
     assert "upgrade_url" not in caught.value.data
+    assert caught.value.data["upgrade"] is None and caught.value.data["overage"] is None
     assert web.get("/api/account/usage/").json()["upgrade_url"] is None
     with pytest.raises(budgets.StorageQuotaExceeded) as full:
         budgets.check_storage(ada, adding=2 * 1024**3)
     assert full.value.message.endswith("ask the operator of this server for more space.")
     assert "upgrade_url" not in full.value.data
+    assert full.value.data["upgrade"] is None
 
 
 def test_overage_needs_a_subscription_it_can_be_billed_to(paddle, ada, web):
@@ -1465,3 +1480,123 @@ def test_state_of_an_account_without_a_subscription(paddle, ada, web):
         "email_missing": False,
     }
     assert iso(None) is None
+
+
+# --------------------------------------------------------------------------- #
+# Paying per year (optional: BRICKDNN_PADDLE_PRICES_YEARLY and price_per_year)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def yearly(paddle, plans):
+    """Plus and Pro can be paid per year too; Starter only per month."""
+    plans.PLANS = {
+        key: {**plan, **({"price_per_year": plan["price"] * 10} if key in ("plus", "pro") else {})}
+        for key, plan in plans.PLANS.items()
+    }
+    plans.PADDLE_PRICES_YEARLY = "plus=pri_plus_year,pro=pri_pro_year"
+    return paddle
+
+
+def test_without_yearly_prices_nothing_changes(paddle, web):
+    info = APIClient().get("/api/billing/").json()
+    assert info["yearly"] is False
+    assert all(plan["price_per_year"] is None for plan in info["plans"])
+    refused = web.post(
+        "/api/billing/checkout/", {"plan": "plus", "interval": "year"}, format="json"
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "This plan cannot be paid per year."
+    assert paddle.calls == []
+
+
+def test_a_yearly_amount_alone_is_not_offered(paddle, plans):
+    plans.PLANS = {**plans.PLANS, "plus": {**plans.PLANS["plus"], "price_per_year": 140}}
+    info = APIClient().get("/api/billing/").json()
+    assert billing.config().enabled and info["yearly"] is False
+    assert [plan["price_per_year"] for plan in info["plans"]] == [None] * 4
+
+
+def test_yearly_prices_are_checked(paddle, plans):
+    plans.PADDLE_PRICES_YEARLY = "plus=pri_plus_year,gold=pri_gold_year,starter=pri_plus"
+    problems = " ".join(billing.config().problems)
+    assert "the plan 'plus' has no price_per_year in BRICKDNN_PLANS" in problems
+    assert "'gold' has no monthly price in BRICKDNN_PADDLE_PRICES" in problems
+    assert "BRICKDNN_PADDLE_PRICES_YEARLY: pri_plus is used twice." in problems
+    assert billing.info() == {"enabled": False}
+
+
+def test_plans_are_offered_and_bought_per_year(yearly, ada, web):
+    info = APIClient().get("/api/billing/").json()
+    assert info["yearly"] is True
+    prices = {plan["key"]: (plan["price"], plan["price_per_year"]) for plan in info["plans"]}
+    assert prices == {"free": (0, None), "starter": (5, None), "plus": (14, 140), "pro": (45, 450)}
+
+    refused = web.post(
+        "/api/billing/checkout/", {"plan": "starter", "interval": "year"}, format="json"
+    )
+    assert refused.status_code == 409
+    odd = {"plan": "plus", "interval": "decade"}
+    assert web.post("/api/billing/checkout/", odd, format="json").status_code == 400
+    checkout = web.post(
+        "/api/billing/checkout/", {"plan": "plus", "interval": "year"}, format="json"
+    ).json()
+    assert (checkout["price_id"], checkout["interval"]) == ("pri_plus_year", "year")
+    entity = yearly.subscribe(
+        checkout["customer_id"], checkout["price_id"], checkout["custom_data"]
+    )
+    assert notify(yearly, "subscription.created", entity)["outcome"] == "applied"
+    assert plan_of(ada) == "plus"
+    subscription = state(web)["subscription"]
+    assert (subscription["plan"], subscription["interval"]) == ("plus", "year")
+    # The notification remembers what the subscription was like, for the business report.
+    event = BillingEvent.objects.get(event_type="subscription.created")
+    assert (event.status, event.plan, event.price_id) == ("active", "plus", "pri_plus_year")
+
+
+def test_a_subscription_keeps_its_interval_when_its_plan_changes(yearly, ada, web):
+    checkout = web.post(
+        "/api/billing/checkout/", {"plan": "plus", "interval": "year"}, format="json"
+    ).json()
+    entity = yearly.subscribe(
+        checkout["customer_id"], checkout["price_id"], checkout["custom_data"]
+    )
+    notify(yearly, "subscription.created", entity)
+
+    def change(**body):
+        return web.post("/api/billing/change-plan/", body, format="json")
+
+    # Starter has no yearly price, and the interval of a running subscription stays.
+    assert "cannot be paid per year" in change(plan="starter").json()["detail"]
+    refused = change(plan="pro", interval="month")
+    assert refused.status_code == 409
+    assert "paid per year; that cannot be changed while it runs" in refused.json()["detail"]
+    assert yearly.called("change_price") == []
+    preview = change(plan="pro", preview=True).json()
+    assert (preview["interval"], preview["upgrade"]) == ("year", True)
+    assert preview["plan"]["price_per_year"] == 450
+    assert change(plan="pro").status_code == 200
+    assert yearly.called("change_price")[-1][:2] == (entity["id"], "pri_pro_year")
+    assert state(web)["subscription"]["interval"] == "year"
+
+
+def test_billing_sync_checks_yearly_prices(yearly, plans):
+    out = StringIO()
+    call_command("billing_sync", "--check", stdout=out)
+    text = out.getvalue()
+    assert "plus: pri_plus_year = 14000 EUR (smallest unit), tax internal, every year" in text
+    assert "Everything fits." in text
+    # The two yearly prices mixed up: the amounts do not fit the plans.
+    plans.PADDLE_PRICES_YEARLY = "plus=pri_pro_year,pro=pri_plus_year"
+    out = StringIO()
+    call_command("billing_sync", "--check", stdout=out)
+    text = out.getvalue()
+    assert "plus: pri_pro_year: it costs 45000 (smallest unit), the plan says 14000." in text
+    assert "2 problem(s)" in text
+
+
+def test_the_site_settings_name_the_yearly_prices(plans):
+    """Off on brickdnn.com until the owner creates yearly prices in Paddle."""
+    lines = SITE_ENV.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("# BRICKDNN_PADDLE_PRICES_YEARLY=") for line in lines)
+    assert not any("price_per_year" in line for line in lines if not line.startswith("#"))

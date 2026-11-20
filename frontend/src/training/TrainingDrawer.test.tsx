@@ -160,8 +160,19 @@ describe('TrainingDrawer', () => {
     const props = renderDrawer({ loggedIn: false });
     expect(screen.getByText('Log in to train')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start training' })).not.toBeInTheDocument();
+    // Only the login without a way to sign up (the caller decides).
+    expect(screen.queryByRole('button', { name: 'Create free account' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
     expect(props.onLogin).toHaveBeenCalled();
+  });
+
+  it('offers a free account first where visitors can sign up', async () => {
+    const onRegister = vi.fn();
+    const props = renderDrawer({ loggedIn: false, onRegister });
+    await userEvent.click(screen.getByRole('button', { name: 'Create free account' }));
+    expect(onRegister).toHaveBeenCalled();
+    expect(props.onLogin).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument();
   });
 
   it('points to the problems of an invalid network', async () => {
@@ -292,7 +303,7 @@ describe('TrainingDrawer', () => {
     expect(within(box).getByText('≈ 2.1 CPU min (0.7–6.3) · €0.02')).toBeInTheDocument();
     expect(
       within(box).getByText(
-        'It may use up to 30 CPU min (the limit per training). 287 CPU min left this month, until 1 December 2026.'
+        'It may use up to 30 CPU min (the limit per training). 287 CPU min left this month, until 1 December 2026. About 136 trainings like this one fit into what is left.'
       )
     ).toBeInTheDocument();
     // The estimate is for the settings of the start.

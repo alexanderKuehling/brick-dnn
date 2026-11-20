@@ -1,10 +1,11 @@
-import { render, screen, userEvent, waitFor, within } from '@test-utils';
+import { axeViolations, render, screen, userEvent, waitFor, within } from '@test-utils';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { Notifications, notifications } from '@mantine/notifications';
 import { api, ApiError, setTokens, type BillingState } from '@/api';
 import { AuthProvider } from '@/auth/AuthContext';
 import { AppHeader } from '@/components/AppHeader';
+import { setLanguage } from '@/i18n';
 import { resetLegalInfo } from '@/legal/useLegalInfo';
 import { loadPaddle, openCheckout } from './paddle';
 import { PricingPage } from './PricingPage';
@@ -103,20 +104,31 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('a server that sells no plans has no pricing page and no link to it', async () => {
+test('a server that sells no plans says so, without prices, a link to it or a 404', async () => {
   vi.mocked(api.billing.info).mockResolvedValue({ enabled: false });
   renderPage();
-  expect(await screen.findByText('Page not found')).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'No plans are sold here' })
+  ).toBeInTheDocument();
+  expect(screen.queryByText('Page not found')).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Pricing' })).not.toBeInTheDocument();
-  expect(screen.queryByText(/per month/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/per month|€/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open the editor' })).toHaveAttribute('href', '/app');
+  // Logged out: nothing about an account page either.
+  expect(screen.queryByRole('link', { name: /account page/ })).not.toBeInTheDocument();
   expect(api.billing.state).not.toHaveBeenCalled();
   expect(paddleScripts()).toHaveLength(0);
 });
 
-test('no answer about billing means no pricing page either', async () => {
-  vi.mocked(api.billing.info).mockRejectedValue(new ApiError(500, null, 'Server error'));
+test('no answer about billing offers to try again instead of a 404', async () => {
+  vi.mocked(api.billing.info).mockRejectedValueOnce(new ApiError(500, null, 'Server error'));
   renderPage();
-  expect(await screen.findByText('Page not found')).toBeInTheDocument();
+  expect(await screen.findByText('The plans could not be loaded')).toBeInTheDocument();
+  expect(screen.queryByText('Page not found')).not.toBeInTheDocument();
+  expect(screen.queryByText('No plans are sold here')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByRole('heading', { name: 'Plans and prices' })).toBeInTheDocument();
+  expect(api.billing.info).toHaveBeenCalledTimes(2);
 });
 
 test('shows the plans with prices, what they include and the overage price', async () => {
@@ -145,7 +157,10 @@ test('shows the plans with prices, what they include and the overage price', asy
   expect(card('Pro').getByText('2 trainings at the same time')).toBeInTheDocument();
 
   expect(screen.getByText(/Prices are per month and include VAT/)).toBeInTheDocument();
-  expect(screen.getByText(/only used and billed if you switch it on yourself/)).toBeInTheDocument();
+  // Overage in one sentence; the price per CPU hour is on each card.
+  expect(
+    screen.getByText(/trainings stop unless you allow more yourself on your account page/)
+  ).toBeInTheDocument();
   expect(screen.getByText(/sold by Paddle \(Paddle.com Market Ltd\)/)).toBeInTheDocument();
   expect(screen.getByText(/Nothing is deleted when a plan ends/)).toBeInTheDocument();
   expect(screen.queryByText('Test mode')).not.toBeInTheDocument();
@@ -167,7 +182,7 @@ test('a payment link from Paddle loads Paddle.js, which opens its checkout', asy
 test('a payment link does nothing on a server that sells no plans', async () => {
   vi.mocked(api.billing.info).mockResolvedValue({ enabled: false });
   renderPage('/pricing?_ptxn=txn_01abc');
-  await screen.findByText('Page not found');
+  await screen.findByText('No plans are sold here');
   expect(loadPaddle).not.toHaveBeenCalled();
 });
 
@@ -176,7 +191,7 @@ test('overage is not advertised when the server cannot bill it', async () => {
   renderPage();
   await screen.findByRole('heading', { name: 'Plans and prices' });
   expect(screen.queryByText(/More compute/)).not.toBeInTheDocument();
-  expect(screen.queryByText(/only used and billed/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/unless you allow more yourself/)).not.toBeInTheDocument();
 });
 
 test('the sandbox is marked as test mode', async () => {
@@ -209,7 +224,7 @@ test('choosing a plan asks the server and opens the checkout it prepared', async
 
   await userEvent.click(choose);
   await waitFor(() => expect(openCheckout).toHaveBeenCalledTimes(1));
-  expect(api.billing.checkout).toHaveBeenCalledWith('plus');
+  expect(api.billing.checkout).toHaveBeenCalledWith('plus', 'month');
   const [info, checkout, theme, handlers] = vi.mocked(openCheckout).mock.calls[0];
   expect(info).toBe(BILLING);
   expect(checkout).toEqual(CHECKOUT);
@@ -303,7 +318,7 @@ test('subscribers switch plans after seeing the price', async () => {
   expect(dialog.getByText('€45 per month')).toBeInTheDocument();
   expect(dialog.getByText(/VAT included/)).toBeInTheDocument();
   expect(
-    await dialog.findByText(/€15.50 is charged now for the rest of the month you paid for/)
+    await dialog.findByText(/€15.50 is charged now for the rest of the period you paid for/)
   ).toBeInTheDocument();
   expect(dialog.getByText(/Next payment: 9 December 2026/)).toBeInTheDocument();
   expect(api.billing.previewChange).toHaveBeenCalledWith('pro');
@@ -360,4 +375,185 @@ test('unlimited accounts are told that they need no plan', async () => {
     screen.queryByRole('button', { name: /^(Choose|Switch to) (Starter|Plus|Pro)/ })
   ).not.toBeInTheDocument();
   expect(screen.queryByText('Your plan')).not.toBeInTheDocument();
+});
+
+// --------------------------------------------------------------------------
+// Comparing plans, the plan a limit led here for, paying per year
+// --------------------------------------------------------------------------
+
+const PRIORITIES = BILLING.plans.map((plan, index) => ({ ...plan, priority: index }));
+
+test('says what changes against the own plan, and which plans start first', async () => {
+  vi.mocked(api.billing.info).mockResolvedValue({ ...BILLING, plans: PRIORITIES });
+  logIn(NO_SUBSCRIPTION);
+  renderPage();
+  await screen.findByRole('button', { name: 'Choose Plus' });
+  expect(card('Free').getByText('Your plan')).toBeInTheDocument();
+  expect(card('Free').queryByText(/\(now/)).not.toBeInTheDocument();
+  // 30 CPU hours instead of 0.5, 20 GB instead of 1, three hours per training instead of 15 min.
+  expect(card('Plus').getByText('(now 0.5)')).toBeInTheDocument();
+  expect(card('Plus').getByText('(now 1 GB)')).toBeInTheDocument();
+  expect(card('Plus').getByText('(now 15 min)')).toBeInTheDocument();
+  // One training at a time on both: nothing changes there.
+  expect(card('Plus').getAllByText(/\(now/)).toHaveLength(3);
+  expect(card('Pro').getByText('(now 1)')).toBeInTheDocument();
+  // The queue: paid plans start before cheaper ones, the free plan does not.
+  const line = 'Starts before trainings of cheaper plans when the server is busy';
+  expect(card('Free').queryByText(line)).not.toBeInTheDocument();
+  expect(card('Starter').getByText(line)).toBeInTheDocument();
+  expect(card('Pro').getByText(line)).toBeInTheDocument();
+});
+
+test('plans without a queue priority of their own do not claim one', async () => {
+  renderPage();
+  await screen.findByRole('heading', { name: 'Plans and prices' });
+  expect(screen.queryByText(/Starts before trainings/)).not.toBeInTheDocument();
+});
+
+test('the plan a limit message led here for is marked and its button is the main one', async () => {
+  logIn(NO_SUBSCRIPTION);
+  renderPage('/pricing?plan=starter');
+  const choose = await screen.findByRole('button', { name: 'Choose Starter' });
+  expect(screen.getByRole('region', { name: 'Starter plan' })).toHaveAttribute(
+    'aria-current',
+    'true'
+  );
+  expect(screen.getByRole('region', { name: 'Plus plan' })).not.toHaveAttribute('aria-current');
+  expect(choose).toHaveAttribute('data-variant', 'filled');
+  expect(screen.getByRole('button', { name: 'Choose Plus' })).toHaveAttribute(
+    'data-variant',
+    'light'
+  );
+  // Nothing opens by itself.
+  expect(openCheckout).not.toHaveBeenCalled();
+  expect(api.billing.checkout).not.toHaveBeenCalled();
+});
+
+test('visitors are offered a free account first, and come back to the plan', async () => {
+  renderPage('/pricing?plan=plus');
+  await screen.findByRole('heading', { name: 'Plans and prices' });
+  const create = card('Plus').getByRole('link', { name: 'Create a free account to choose Plus' });
+  expect(create).toHaveAttribute('href', '/register');
+  expect(create).toHaveAttribute('data-variant', 'filled');
+  expect(card('Plus').getByRole('link', { name: 'Log in to choose Plus' })).toBeInTheDocument();
+  await userEvent.click(create);
+  expect(await screen.findByText('Sign-up page')).toBeInTheDocument();
+});
+
+test('teaching and research are pointed to the operator, as on the landing page', async () => {
+  renderPage();
+  await screen.findByRole('heading', { name: 'Plans and prices' });
+  expect(
+    screen.getByText(/Discounts for teaching and research are available on request/)
+  ).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'write to us' })).toHaveAttribute('href', '/imprint');
+});
+
+test('without yearly prices there is no switch and nothing about years', async () => {
+  renderPage();
+  await screen.findByRole('heading', { name: 'Plans and prices' });
+  expect(screen.queryByRole('radio', { name: 'Yearly' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/per year|Yearly/)).not.toBeInTheDocument();
+});
+
+const YEARLY = {
+  ...BILLING,
+  yearly: true,
+  plans: BILLING.plans.map((plan) =>
+    plan.key === 'plus' || plan.key === 'pro' ? { ...plan, price_per_year: plan.price! * 10 } : plan
+  ),
+};
+
+test('with yearly prices the page offers both and buys the chosen one', async () => {
+  vi.mocked(api.billing.info).mockResolvedValue(YEARLY);
+  logIn(NO_SUBSCRIPTION);
+  vi.mocked(api.billing.checkout).mockResolvedValue({ ...CHECKOUT, interval: 'year' });
+  renderPage();
+  await screen.findByRole('button', { name: 'Choose Plus' });
+  expect(card('Plus').getByText('€14')).toBeInTheDocument();
+  expect(screen.getByText(/Prices are per month or per year and include VAT/)).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
+  expect(card('Plus').getByText('€140')).toBeInTheDocument();
+  expect(card('Plus').getByText('per year')).toBeInTheDocument();
+  // What that is per month, and how much less than twelve months: from the two prices.
+  expect(
+    card('Plus').getByText('€11.67 per month · 17 % less than paying monthly')
+  ).toBeInTheDocument();
+  // A plan without a yearly price keeps its monthly one and says so.
+  expect(card('Starter').getByText('€5')).toBeInTheDocument();
+  expect(card('Starter').getByText('Only monthly')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Choose Plus' }));
+  await waitFor(() => expect(api.billing.checkout).toHaveBeenCalledWith('plus', 'year'));
+  await userEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+  expect(card('Plus').getByText('€14')).toBeInTheDocument();
+});
+
+test('a subscription keeps the way it is paid: no switch, its prices', async () => {
+  vi.mocked(api.billing.info).mockResolvedValue(YEARLY);
+  const state = subscribed();
+  logIn({ ...state, subscription: { ...state.subscription!, interval: 'year' } });
+  renderPage();
+  await screen.findByText('Your plan');
+  expect(screen.queryByRole('radio', { name: 'Yearly' })).not.toBeInTheDocument();
+  expect(card('Pro').getByText('€450')).toBeInTheDocument();
+  expect(card('Pro').getByRole('button', { name: 'Switch to Pro' })).toBeInTheDocument();
+  // Starter has no yearly price: this subscription cannot move there.
+  expect(card('Starter').queryByRole('button')).not.toBeInTheDocument();
+  expect(card('Starter').getAllByText('Only monthly').length).toBeGreaterThan(0);
+});
+
+test('the page is German in the German app', async () => {
+  await setLanguage('de', { save: false });
+  vi.mocked(api.billing.info).mockResolvedValue({ ...BILLING, plans: PRIORITIES });
+  logIn(NO_SUBSCRIPTION);
+  renderPage('/pricing?plan=starter');
+  expect(await screen.findByRole('heading', { name: 'Tarife und Preise' })).toBeInTheDocument();
+  const starter = within(screen.getByRole('region', { name: 'Tarif Starter' }));
+  expect(
+    starter.getByText('10 CPU-Stunden pro Monat für Trainings und Vorhersagen')
+  ).toBeInTheDocument();
+  expect(starter.getByText('5 GB Speicher für Daten und trainierte Modelle')).toBeInTheDocument();
+  expect(starter.getByText('Bis zu 1 CPU-Stunde pro Training')).toBeInTheDocument();
+  expect(starter.getByText('Ein Training zur selben Zeit')).toBeInTheDocument();
+  expect(
+    starter.getByText('Mehr Rechenzeit, wenn Sie sie einschalten: 0,40 € pro CPU-Stunde')
+  ).toBeInTheDocument();
+  expect(await starter.findByText('(jetzt 0,5)')).toBeInTheDocument();
+  expect(starter.getByRole('button', { name: 'Starter wählen' })).toBeInTheDocument();
+  expect(
+    screen.getByText(/Für Lehre und Forschung gibt es auf Anfrage einen Rabatt/)
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /stoppen Trainings, sofern Sie auf Ihrer Kontoseite nicht selbst mehr erlauben/
+    )
+  ).toBeInTheDocument();
+  // No English plan lines are left.
+  expect(
+    screen.queryByText(/CPU hours per month|storage for data|per training$/)
+  ).not.toBeInTheDocument();
+});
+
+test('a preselected plan and the yearly switch have no accessibility violations', async () => {
+  vi.mocked(api.billing.info).mockResolvedValue(YEARLY);
+  logIn(NO_SUBSCRIPTION);
+  renderPage('/pricing?plan=plus');
+  await screen.findByRole('button', { name: 'Choose Plus' });
+  await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
+  expect(await axeViolations()).toEqual([]);
+});
+
+test('no plans, and no answer: both without accessibility violations', async () => {
+  vi.mocked(api.billing.info).mockResolvedValue({ enabled: false });
+  const { unmount } = renderPage();
+  await screen.findByText('No plans are sold here');
+  expect(await axeViolations()).toEqual([]);
+  unmount();
+  resetBillingInfo();
+  vi.mocked(api.billing.info).mockRejectedValue(new ApiError(500, null, 'Server error'));
+  renderPage();
+  await screen.findByText('The plans could not be loaded');
+  expect(await axeViolations()).toEqual([]);
 });

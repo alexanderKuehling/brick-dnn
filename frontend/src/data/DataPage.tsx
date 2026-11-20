@@ -237,11 +237,11 @@ function LoggedOut() {
         title={i18n.t('ui.data.DataPage.logInToPrepareData')}
         actions={
           <>
-            <Button component={Link} to="/login" state={{ from: pathname }}>
-              {i18n.t('ui.data.DataPage.logIn')}
+            <Button component={Link} to="/register" state={{ from: pathname }}>
+              {i18n.t('plans.gate.create')}
             </Button>
-            <Button component={Link} to="/register" state={{ from: pathname }} variant="default">
-              {i18n.t('ui.data.DataPage.signUp')}
+            <Button component={Link} to="/login" state={{ from: pathname }} variant="default">
+              {i18n.t('ui.data.DataPage.logIn')}
             </Button>
           </>
         }

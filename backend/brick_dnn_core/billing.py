@@ -9,6 +9,11 @@ subscription pays for (``budgets.set_plan``); the limits themselves are those of
 of at least one plan, the API key and the webhook secret. With billing off, :func:`info` says
 so, every other endpoint answers 404 and the app shows no prices.
 
+**Paying per year** is optional: with ``BRICKDNN_PADDLE_PRICES_YEARLY`` (a yearly Paddle
+price per plan) and ``price_per_year`` in the plan, the pricing page offers both. The plan and
+its monthly allowances are the same; only the price and the period Paddle bills differ. A
+subscription keeps its interval when its plan is changed here.
+
 **Buying a plan.** The account page asks for a checkout (:func:`checkout`): the account gets
 a customer at Paddle with its e-mail address, and the browser opens Paddle's checkout for
 that customer and the price of the plan. Nothing the browser says is trusted afterwards:
@@ -43,7 +48,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from datetime import timezone as dt_timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -73,6 +78,8 @@ ENTITLED = ("active", "trialing")
 BELOW_CHARGE_LIMIT = "subscription_update_transaction_balance_less_than_charge_limit"
 LIVE = (*ENTITLED, "past_due", "paused")
 PRICING_PATH = "/pricing"
+# How often a subscription is billed: every plan has a monthly price, some a yearly one too.
+INTERVALS = ("month", "year")
 # Paddle's error when a customer with the e-mail address exists already.
 CUSTOMER_EXISTS = "customer_already_exists"
 # A refused overage charge is tried again on the following days, this often in total.
@@ -101,32 +108,46 @@ class Config:
     overage_product: str
     configured: bool
     problems: tuple[str, ...]
+    # Plan key -> its yearly Paddle prices (BRICKDNN_PADDLE_PRICES_YEARLY; empty: plans are
+    # only sold per month). The first one is sold, as with ``prices``.
+    yearly_prices: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def enabled(self) -> bool:
         return self.configured and not self.problems
 
-    def price_of(self, plan: str) -> str | None:
-        found = self.prices.get(plan)
+    def price_of(self, plan: str, interval: str = "month") -> str | None:
+        found = (self.yearly_prices if interval == "year" else self.prices).get(plan)
         return found[0] if found else None
 
     def plan_of(self, price_id: str) -> str | None:
-        for plan, prices in self.prices.items():
-            if price_id in prices:
-                return plan
+        for prices in (self.prices, self.yearly_prices):
+            for plan, ids in prices.items():
+                if price_id in ids:
+                    return plan
+        return None
+
+    def interval_of(self, price_id: str) -> str | None:
+        """ "month" or "year" for a price of a plan (None: not one of them)."""
+        if any(price_id in ids for ids in self.yearly_prices.values()):
+            return "year"
+        if any(price_id in ids for ids in self.prices.values()):
+            return "month"
         return None
 
 
-def _prices(raw: str) -> tuple[dict[str, tuple[str, ...]], list[str]]:
-    """``BRICKDNN_PADDLE_PRICES``: ``starter=pri_a,plus=pri_b|pri_old`` or the same as JSON
-    (``{"starter": "pri_a", "plus": ["pri_b", "pri_old"]}``)."""
+def _prices(
+    raw: str, name: str = "BRICKDNN_PADDLE_PRICES"
+) -> tuple[dict[str, tuple[str, ...]], list[str]]:
+    """``BRICKDNN_PADDLE_PRICES`` (and ``…_YEARLY``): ``starter=pri_a,plus=pri_b|pri_old`` or
+    the same as JSON (``{"starter": "pri_a", "plus": ["pri_b", "pri_old"]}``)."""
     problems: list[str] = []
     pairs: list[tuple[str, Any]] = []
     if raw.startswith("{"):
         try:
             parsed = json.loads(raw)
         except ValueError:
-            return {}, ["BRICKDNN_PADDLE_PRICES is not valid JSON."]
+            return {}, [f"{name} is not valid JSON."]
         pairs = list(parsed.items()) if isinstance(parsed, dict) else []
     else:
         for part in raw.split(","):
@@ -134,7 +155,7 @@ def _prices(raw: str) -> tuple[dict[str, tuple[str, ...]], list[str]]:
             if found:
                 pairs.append((key.strip(), value.split("|")))
             elif part.strip():
-                problems.append(f"BRICKDNN_PADDLE_PRICES: {part.strip()!r} is not plan=price.")
+                problems.append(f"{name}: {part.strip()!r} is not plan=price.")
     prices: dict[str, tuple[str, ...]] = {}
     for key, value in pairs:
         ids = tuple(
@@ -154,7 +175,18 @@ def config() -> Config:
     api_key = settings.PADDLE_API_KEY
     secrets = tuple(secret for secret in settings.PADDLE_WEBHOOK_SECRETS if secret)
     prices, problems = _prices(settings.PADDLE_PRICES)
-    configured = bool(environment or token or api_key or secrets or settings.PADDLE_PRICES)
+    yearly, yearly_problems = _prices(
+        settings.PADDLE_PRICES_YEARLY, "BRICKDNN_PADDLE_PRICES_YEARLY"
+    )
+    problems += yearly_problems
+    configured = bool(
+        environment
+        or token
+        or api_key
+        or secrets
+        or settings.PADDLE_PRICES
+        or settings.PADDLE_PRICES_YEARLY
+    )
     if configured:
         if environment not in ENVIRONMENTS:
             problems.append("BRICKDNN_PADDLE_ENV must be sandbox or live.")
@@ -187,14 +219,26 @@ def config() -> Config:
                 problems.append(
                     f"BRICKDNN_PADDLE_PRICES: {key!r} is the default plan, which is not sold."
                 )
+        for key in yearly:
+            name = "BRICKDNN_PADDLE_PRICES_YEARLY"
+            if key not in prices:
+                problems.append(f"{name}: {key!r} has no monthly price in BRICKDNN_PADDLE_PRICES.")
+            elif key in known and known[key].price_per_year is None:
+                problems.append(
+                    f"{name}: the plan {key!r} has no price_per_year in BRICKDNN_PLANS (the "
+                    "amount that is shown)."
+                )
         seen: dict[str, str] = {}
-        for key, ids in prices.items():
-            for price_id in ids:
-                if price_id in seen and seen[price_id] != key:
-                    problems.append(
-                        f"BRICKDNN_PADDLE_PRICES: {price_id} is the price of two plans."
-                    )
-                seen[price_id] = key
+        for interval, table in (("month", prices), ("year", yearly)):
+            for key, ids in table.items():
+                for price_id in ids:
+                    if price_id in seen and seen[price_id] != f"{key}/{interval}":
+                        problems.append(
+                            f"BRICKDNN_PADDLE_PRICES: {price_id} is the price of two plans."
+                            if interval == "month"
+                            else f"BRICKDNN_PADDLE_PRICES_YEARLY: {price_id} is used twice."
+                        )
+                    seen[price_id] = f"{key}/{interval}"
     return Config(
         environment=environment,
         client_token=token,
@@ -204,6 +248,7 @@ def config() -> Config:
         overage_product=settings.PADDLE_OVERAGE_PRODUCT,
         configured=configured,
         problems=tuple(problems),
+        yearly_prices=yearly,
     )
 
 
@@ -291,6 +336,23 @@ def pricing_url() -> str | None:
     return f"{settings.PUBLIC_URL}{PRICING_PATH}"
 
 
+def plan_dict(plan: budgets.Plan, cfg: Config) -> dict[str, Any]:
+    """``Plan.to_dict`` with ``price_per_year``: the yearly price, if the plan is sold per
+    year too (it needs a yearly Paddle price), else None."""
+    yearly = plan.price_per_year if plan.key in cfg.yearly_prices else None
+    return {**plan.to_dict(), "price_per_year": yearly}
+
+
+def offer(plan: budgets.Plan, cfg: Config | None = None) -> dict[str, Any]:
+    """A plan on sale as the messages of a limit name it (budgets.next_plan): what it costs
+    and includes, and ``url``, the pricing page with this plan preselected."""
+    cfg = cfg or config()
+    return {
+        **plan_dict(plan, cfg),
+        "url": f"{settings.PUBLIC_URL}{PRICING_PATH}?plan={plan.key}",
+    }
+
+
 def info() -> dict[str, Any]:
     """``BillingInfo`` (frontend/src/api/types.ts): whether this server sells plans, what the
     browser needs for Paddle's checkout, and the plans. Public."""
@@ -299,7 +361,7 @@ def info() -> dict[str, Any]:
         return {"enabled": False}
     default = budgets.default_plan().key
     offered = [
-        {**plan.to_dict(), "purchasable": key in cfg.prices, "default": key == default}
+        {**plan_dict(plan, cfg), "purchasable": key in cfg.prices, "default": key == default}
         for key, plan in budgets.plans().items()
         if key in cfg.prices or key == default
     ]
@@ -312,6 +374,8 @@ def info() -> dict[str, Any]:
         # Paddle shows and charges the prices as configured there; these are for display.
         "prices_include_tax": True,
         "overage_billed": bool(cfg.overage_product),
+        # Some plan can be paid per year too: the pricing page then offers both.
+        "yearly": any(plan["price_per_year"] is not None for plan in offered),
         "plans": offered,
     }
 
@@ -340,6 +404,8 @@ def state(user) -> dict[str, Any]:
             "status": customer.status,
             "plan": customer.plan or None,
             "plan_name": plan.name if plan else None,
+            # Billed every month or every year.
+            "interval": cfg.interval_of(customer.price_id) or "month",
             # Renews then, unless it ends (cancelled to the end of the period).
             "renews_at": customer.next_billed_at
             if customer.status in ENTITLED and customer.cancel_at is None
@@ -603,6 +669,11 @@ def handle_event(payload: Any) -> tuple[BillingEvent, bool]:
         event.note = note
         event.user_id = customer.user_id if customer is not None else None
         event.subscription_id = subscription_id[:64]
+        if outcome == "applied" and event_type.startswith("subscription.") and customer:
+            # What the subscription was like from this event on (business_report.py).
+            event.status = customer.status
+            event.plan = customer.plan
+            event.price_id = customer.price_id
         event.save()
     return event, True
 
@@ -684,13 +755,18 @@ def ensure_customer(user, cfg: Config) -> BillingCustomer:
         ) from None
 
 
-def checkout(user, plan_key: str) -> dict[str, Any]:
-    """What the browser needs to open Paddle's checkout for ``plan_key``: the price, the
-    account's customer and the custom data that names the account."""
+def checkout(user, plan_key: str, interval: str = "month") -> dict[str, Any]:
+    """What the browser needs to open Paddle's checkout for ``plan_key``, paid every
+    ``interval`` ("month" or "year"): the price, the account's customer and the custom data
+    that names the account."""
     cfg = require()
-    price_id = cfg.price_of(plan_key)
+    price_id = cfg.price_of(plan_key, interval)
     if price_id is None or plan_key not in budgets.plans():
-        raise BillingRefused("This plan cannot be bought.")
+        raise BillingRefused(
+            "This plan cannot be paid per year."
+            if interval == "year" and cfg.price_of(plan_key) is not None
+            else "This plan cannot be bought."
+        )
     if budgets.is_unlimited(user):
         raise BillingRefused("Your account has no limits; it does not need a plan.")
     current = _customer(user, cfg)
@@ -699,6 +775,7 @@ def checkout(user, plan_key: str) -> dict[str, Any]:
     customer = ensure_customer(user, cfg)
     return {
         "plan": plan_key,
+        "interval": interval,
         "price_id": price_id,
         "customer_id": customer.customer_id,
         "custom_data": {"user_id": str(user.pk)},
@@ -730,11 +807,22 @@ def _money(amount: Any, currency: str) -> float | None:
     return float(value if currency.upper() in ZERO_DECIMAL else value / 100)
 
 
-def change_plan(user, plan_key: str, preview: bool) -> dict[str, Any]:
+def _shown_price(plan: budgets.Plan | None, interval: str) -> float:
+    if plan is None:
+        return 0.0
+    return (plan.price_per_year if interval == "year" else plan.price) or 0.0
+
+
+def change_plan(user, plan_key: str, preview: bool, interval: str | None = None) -> dict[str, Any]:
     """Move the subscription to another plan. An upgrade starts at once and Paddle charges
     the difference for the rest of the period; a downgrade starts at once too and the
     difference is credited to the next invoice. With ``preview``, nothing changes and the
-    answer says what Paddle would charge."""
+    answer says what Paddle would charge.
+
+    The subscription keeps its interval (monthly or yearly): the new plan needs a price for
+    it, and asking for the other ``interval`` is refused. Moving a running subscription to
+    another billing period makes Paddle start a new period and bill it at once, which this
+    server does not do for its users."""
     cfg = require()
     customer = _subscribed(user, cfg)
     if customer.status not in ENTITLED:
@@ -743,14 +831,24 @@ def change_plan(user, plan_key: str, preview: bool) -> dict[str, Any]:
         )
     if customer.cancel_at is not None:
         raise BillingRefused("Your subscription ends soon. Continue it first, then change it.")
-    price_id = cfg.price_of(plan_key)
+    current = cfg.interval_of(customer.price_id) or "month"
+    if interval is not None and interval != current:
+        raise BillingRefused(
+            f"Your subscription is paid per {current}; that cannot be changed while it runs. "
+            "Cancel it to the end of the period you paid for and choose the plan again then."
+        )
+    price_id = cfg.price_of(plan_key, current)
     plans = budgets.plans()
     if price_id is None or plan_key not in plans:
-        raise BillingRefused("This plan cannot be bought.")
+        raise BillingRefused(
+            "This plan cannot be paid per year, as your subscription is."
+            if current == "year" and cfg.price_of(plan_key) is not None
+            else "This plan cannot be bought."
+        )
     if plan_key == customer.plan:
         raise BillingRefused("You already have this plan.")
     new, old = plans[plan_key], plans.get(customer.plan)
-    upgrade = old is None or (new.price or 0) >= (old.price or 0)
+    upgrade = old is None or _shown_price(new, current) >= _shown_price(old, current)
     proration = "prorated_immediately" if upgrade else "prorated_next_billing_period"
     api = client(cfg)
     try:
@@ -778,7 +876,8 @@ def change_plan(user, plan_key: str, preview: bool) -> dict[str, Any]:
     currency = str(result.get("currency_code") or data.get("currency_code") or "")
     amount = _money(result.get("amount"), currency) if result else None
     return {
-        "plan": new.to_dict(),
+        "plan": plan_dict(new, cfg),
+        "interval": current,
         "upgrade": upgrade,
         # What Paddle charges now ("charge") or credits to the next invoice ("credit") for
         # the rest of the period that is paid already; null if Paddle did not say.
@@ -1257,6 +1356,8 @@ def export_records(user) -> dict[str, Any] | None:
                 "received_at": event.received_at,
                 "paddle_subscription_id": event.subscription_id or None,
                 "outcome": event.outcome,
+                "status": event.status or None,
+                "plan": event.plan or None,
             }
             for event in events
         ],

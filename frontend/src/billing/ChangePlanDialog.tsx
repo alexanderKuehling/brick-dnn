@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { Alert, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { api, type BillingPlan, type BillingState, type PlanChangePreview } from '@/api';
+import {
+  api,
+  type BillingInterval,
+  type BillingPlan,
+  type BillingState,
+  type PlanChangePreview,
+} from '@/api';
 import { i18n, Trans, useTranslation } from '@/i18n';
-import { formatDay, formatPrice } from './format';
+import { formatDay, formatPrice, priceFor } from './format';
 
 /** What Paddle does with the rest of the period that is paid already. */
 function nowLine(preview: PlanChangePreview): string {
@@ -24,11 +30,14 @@ function nowLine(preview: PlanChangePreview): string {
 export function ChangePlanDialog({
   plan,
   currentName,
+  interval = 'month',
   onClose,
   onChanged,
 }: {
   plan: BillingPlan;
   currentName: string;
+  /** How the subscription is paid; it stays that way. */
+  interval?: BillingInterval;
   onClose: () => void;
   onChanged: (state: BillingState) => void;
 }) {
@@ -66,7 +75,8 @@ export function ChangePlanDialog({
     }
   };
 
-  const price = `${formatPrice(plan.price ?? 0, plan.currency)} per month`;
+  // The subscription keeps its interval: a yearly one moves to the plan's yearly price.
+  const price = priceFor(plan, preview?.interval ?? interval) || priceFor(plan);
   return (
     <Modal
       opened

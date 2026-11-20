@@ -228,7 +228,11 @@ describe('DataPage', () => {
     });
     renderPage('/data/10');
     expect(await screen.findByText('Log in to prepare data')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sign up' })).toHaveAttribute('href', '/register');
+    // A free account is the first thing offered, the login the second.
+    expect(screen.getByRole('link', { name: 'Create free account' })).toHaveAttribute(
+      'href',
+      '/register'
+    );
     await userEvent.click(screen.getByRole('link', { name: 'Log in' }));
     expect(location()).toHaveTextContent('/login {"from":"/data/10"}');
     expect(api.data.preps.list).not.toHaveBeenCalled();

@@ -14,6 +14,7 @@ from typing import Any
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
+from django.utils import timezone
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -314,6 +315,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         data = request.data if isinstance(request.data, dict) else {}
         if data.get("enabled") is True:
+            if project.link_access != "view":
+                project.link_shared_at = timezone.now()
             project.link_access = "view"
             if not project.share_token or data.get("regenerate") is True:
                 project.share_token = secrets.token_urlsafe(18)
@@ -321,7 +324,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
             # Turning it off kills the old link for good; turning it on makes a new one.
             project.link_access = "none"
             project.share_token = None
-        project.save(update_fields=["link_access", "share_token"])
+            project.link_shared_at = None
+        project.save(update_fields=["link_access", "share_token", "link_shared_at"])
         return Response({"link_access": project.link_access, "share_token": project.share_token})
 
     # Data of the project ----------------------------------------------------

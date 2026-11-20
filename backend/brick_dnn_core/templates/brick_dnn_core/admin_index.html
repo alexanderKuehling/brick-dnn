@@ -1,0 +1,10 @@
+{% extends "admin/index.html" %}
+{% comment %}The start page of the admin with a link to the business report (admin_site.py).{% endcomment %}
+
+{% block content %}
+<p style="margin: 0 0 16px;">
+  <a href="{% url 'admin:business-report' %}">Business report</a>:
+  sign-ups, activation, paying accounts, MRR, compute and storage.
+</p>
+{{ block.super }}
+{% endblock %}

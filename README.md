@@ -438,7 +438,7 @@ brick-dnn/
 │       ├── i18n/            languages: English and German texts, switch, number formats
 │       └── pages/           login, sign-up, saved networks
 ├── deploy/                  server setup (Docker Compose, Caddy), legal templates
-├── docs/                    graph format, REST API, training, data, database, privacy, scaling
+├── docs/                    graph format, REST API, training, data, database, privacy, scaling, operations
 └── docker-compose.yml
 ```
 
@@ -502,6 +502,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_PADDLE_ENV`          | – (paid plans off)         | `sandbox` or `live`: sell the plans with Paddle, see [docs/billing.md](docs/billing.md) |
 | `BRICKDNN_PADDLE_CLIENT_TOKEN` | –                          | Paddle's client-side token for the checkout (public) |
 | `BRICKDNN_PADDLE_PRICES`       | –                          | The Paddle price of each paid plan: `starter=pri_…,plus=pri_…` |
+| `BRICKDNN_PADDLE_PRICES_YEARLY` | –                         | Optional: the yearly Paddle price of plans that can be paid per year too (each needs `price_per_year` in `BRICKDNN_PLANS`) |
 | `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | –                       | Paddle product that compute beyond the allowance is billed as |
 | `BRICKDNN_PADDLE_API_KEY`      | –                          | Paddle API key (secret; only in `.env`)              |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | –                        | Secret of Paddle's notification destination (secret; only in `.env`) |
@@ -527,8 +528,10 @@ reset, confirming addresses, notices) and two-factor login: [docs/email.md](docs
 Selling plans as
 subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
 training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); error
-monitoring with Sentry (off unless configured): [docs/monitoring.md](docs/monitoring.md); what
-comes after one server: [docs/scaling.md](docs/scaling.md).
+monitoring with Sentry (off unless configured): [docs/monitoring.md](docs/monitoring.md); the
+business report (sign-ups, paying accounts, compute against capacity):
+[docs/operations.md](docs/operations.md); what comes after one server:
+[docs/scaling.md](docs/scaling.md).
 
 ## Tests
 

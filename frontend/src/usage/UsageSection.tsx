@@ -15,7 +15,8 @@ import {
   Text,
 } from '@mantine/core';
 import { api, type Plan, type Usage } from '@/api';
-import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
+import { planIncludes, planLimits } from '@/billing/format';
+import { i18n, Trans, useTranslation } from '@/i18n';
 import { formatBytes } from '@/training/format';
 import { BudgetEditor } from './BudgetEditor';
 import { formatCpu, formatMoney, formatResetDate, usageColor, usagePercent } from './format';
@@ -64,41 +65,17 @@ function Meter({
 function breakdown(usage: Usage): string {
   const { by_kind: kind, by_source: sources } = usage.compute;
   const parts = [
-    `trainings ${formatCpu(kind.training)}`,
-    `predictions ${formatCpu(kind.prediction)}`,
+    i18n.t('plans.usage.trainings', { value: formatCpu(kind.training) }),
+    i18n.t('plans.usage.predictions', { value: formatCpu(kind.prediction) }),
   ];
   const agents = sources.filter((source) => source.source !== 'web');
   for (const agent of agents.slice(0, 3)) {
     parts.push(`“${agent.name}” ${formatCpu(agent.used_cpu_minutes)}`);
   }
   if (agents.length > 3) {
-    parts.push(`${agents.length - 3} more tokens or apps`);
+    parts.push(i18n.t('plans.usage.moreSources', { count: agents.length - 3 }));
   }
   return parts.join(' · ');
-}
-
-/** "0.5 CPU h per month · 1 GB · 15 CPU min per training · 1 training at a time". */
-export function planLimits(plan: Plan): string {
-  const parts = [
-    plan.cpu_hours_per_month !== null
-      ? `${formatHours(plan.cpu_hours_per_month)} per month`
-      : 'unlimited compute',
-    plan.storage_gb !== null
-      ? `${plan.storage_gb.toLocaleString(currentLocale())} GB`
-      : 'unlimited storage',
-  ];
-  if (plan.cpu_minutes_per_run !== null) {
-    parts.push(`${formatCpu(plan.cpu_minutes_per_run)} per training`);
-  }
-  if (plan.concurrent_trainings !== null) {
-    const count = plan.concurrent_trainings;
-    parts.push(`${count} training${count === 1 ? '' : 's'} at a time`);
-  }
-  return parts.join(' · ');
-}
-
-function formatHours(hours: number): string {
-  return `${hours.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })} CPU h`;
 }
 
 function planPrice(plan: Plan): string {
@@ -106,21 +83,17 @@ function planPrice(plan: Plan): string {
     return '';
   }
   return plan.price === 0
-    ? 'no charge'
+    ? i18n.t('plans.short.noCharge')
     : i18n.t('ui.usage.UsageSection.perMonth', { price: formatMoney(plan.price, plan.currency) });
 }
 
-/** "Starter (€5.00 per month): 10 CPU h, 5 GB". */
+/** "Starter (€5.00 per month): 10 CPU hours per month, 5 GB of storage and …". */
 function otherPlan(plan: Plan): string {
-  const limits = [
-    plan.cpu_hours_per_month !== null ? formatHours(plan.cpu_hours_per_month) : 'unlimited',
-    plan.storage_gb !== null ? `${plan.storage_gb.toLocaleString(currentLocale())} GB` : null,
-  ].filter(Boolean);
   const price = planPrice(plan);
   return i18n.t('ui.usage.UsageSection.text', {
     name: plan.name,
     value: price ? ` (${price})` : '',
-    limits: limits.join(', '),
+    limits: planIncludes(plan),
   });
 }
 
@@ -174,10 +147,23 @@ function PlanInfo({ usage }: { usage: Usage }) {
   );
 }
 
-function OverageForm({ usage, onSaved }: { usage: Usage; onSaved: (usage: Usage) => void }) {
+/**
+ * Compute beyond the plan's allowance: off until the user switches it on, with a limit of
+ * their own. `startEnabled`: opened where the allowance ran out (the switch is set, saving
+ * is still the user's step).
+ */
+export function OverageForm({
+  usage,
+  onSaved,
+  startEnabled = false,
+}: {
+  usage: Usage;
+  onSaved: (usage: Usage) => void;
+  startEnabled?: boolean;
+}) {
   useTranslation();
   const overage = usage.overage!;
-  const [enabled, setEnabled] = useState(overage.enabled);
+  const [enabled, setEnabled] = useState(overage.enabled || startEnabled);
   const [cap, setCap] = useState<string | number>(overage.cap_cpu_hours ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -279,11 +265,13 @@ export function UsageSection() {
   const resets = formatResetDate(usage.period.resets_at);
   const cost = formatMoney(prices.compute_cost, currency);
   const limitCost = formatMoney(prices.compute_limit_cost, currency);
+  const of = (used: string, limit: string) => i18n.t('plans.usage.compute', { used, limit });
+  const noLimit = (used: string) => i18n.t('plans.usage.noLimit', { used });
   const computeValue =
     compute.limit !== null
-      ? `${formatCpu(compute.used, '')} of ${formatCpu(compute.limit)}`
-      : `${formatCpu(compute.used)} · no limit`;
-  const money = cost && (limitCost && compute.limit !== null ? `${cost} of ${limitCost}` : cost);
+      ? of(formatCpu(compute.used, ''), formatCpu(compute.limit))
+      : noLimit(formatCpu(compute.used));
+  const money = cost && (limitCost && compute.limit !== null ? of(cost, limitCost) : cost);
 
   const save = async (budget: number | null) => {
     setUsage(await api.account.setBudget(budget));
@@ -308,8 +296,8 @@ export function UsageSection() {
         limit={storage.limit_bytes}
         value={
           storage.limit_bytes !== null
-            ? `${formatBytes(storage.used_bytes)} of ${formatBytes(storage.limit_bytes)}`
-            : `${formatBytes(storage.used_bytes)} · no limit`
+            ? of(formatBytes(storage.used_bytes), formatBytes(storage.limit_bytes))
+            : noLimit(formatBytes(storage.used_bytes))
         }
         detail={i18n.t('ui.usage.UsageSection.importedTablesDatasetsTrainedWeights', {
           data_sources: formatBytes(storage.by_kind.data_sources),

@@ -156,7 +156,10 @@ class DataSourceViewSet(
         too_large = Response(
             {
                 "detail": "The file is too large. Uploads are limited to "
-                f"{settings.DATA_MAX_UPLOAD_MB:g} MB."
+                f"{settings.DATA_MAX_UPLOAD_MB:g} MB.",
+                # A limit of this server, the same for every plan.
+                "code": "upload_too_large",
+                "limit": {"kind": "upload_size", "limit": limit, "unit": "bytes"},
             },
             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )

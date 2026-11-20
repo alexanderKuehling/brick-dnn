@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useComputedColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { api, type BillingEnabled, type BillingPlan, type BillingState } from '@/api';
+import {
+  api,
+  type BillingEnabled,
+  type BillingInterval,
+  type BillingPlan,
+  type BillingState,
+} from '@/api';
 import { i18n } from '@/i18n';
 import { openCheckout } from './paddle';
 
@@ -61,10 +67,10 @@ export function useSubscribe(info: BillingEnabled, onChanged: (state: BillingSta
   );
 
   const subscribe = useCallback(
-    async (plan: BillingPlan) => {
+    async (plan: BillingPlan, interval: BillingInterval = 'month') => {
       setBusy(plan.key);
       try {
-        const checkout = await api.billing.checkout(plan.key);
+        const checkout = await api.billing.checkout(plan.key, interval);
         await openCheckout(info, checkout, theme, {
           onCompleted: async () => {
             setActivating(plan.key);

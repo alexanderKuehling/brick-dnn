@@ -416,6 +416,57 @@ export interface Plan {
   priority: number;
   /** Compute beyond the allowance, if the plan offers it (per CPU hour). */
   overage_price_per_cpu_hour: number | null;
+  /** Per year, where the plan can be paid per year too (billing); else null or missing. */
+  price_per_year?: number | null;
+  /** Features only some plans include (empty: no feature is tied to plans). */
+  features?: string[];
+}
+
+/** A plan on sale that lifts a limit: what it costs and includes, and where to get it. */
+export interface PlanOffer extends Plan {
+  /** The pricing page with this plan preselected. */
+  url: string;
+}
+
+/** Which limit stopped (or would stop) a request. */
+export type LimitKind =
+  | 'cpu_time'
+  | 'overage_cap'
+  | 'own_budget'
+  | 'token_budget'
+  | 'app_budget'
+  | 'run_time'
+  | 'storage'
+  | 'concurrent_trainings'
+  | 'queued_trainings'
+  | 'upload_size'
+  | 'external_runs'
+  | 'external_active_runs'
+  | 'external_points'
+  | 'feature'
+  | (string & {});
+
+/**
+ * What the answer of a refused request says about the limit besides its text: which limit,
+ * how much of it is used, the account's plan and the next plan on sale that lifts it.
+ */
+export interface LimitInfo {
+  limit: {
+    kind: LimitKind;
+    used?: number | null;
+    limit?: number | null;
+    unit?: 'cpu_minutes' | 'bytes' | 'trainings' | 'runs' | 'points' | null;
+    /** When a monthly budget resets. */
+    resets_at?: string | null;
+  };
+  /** The account's plan (null on a server without plans). */
+  plan?: { key: string; name: string } | null;
+  /** Null: no plan on sale lifts it (or the server sells none). */
+  upgrade?: PlanOffer | null;
+  /** The account could switch on compute beyond its allowance (account page). */
+  overage?: { price_per_cpu_hour: number; currency: string } | null;
+  /** What is left is reserved by trainings that are still running: waiting helps. */
+  reserved?: boolean;
 }
 
 /** GET /api/account/usage/: this month's usage, the limits and what is left. */
@@ -429,6 +480,8 @@ export interface Usage {
   plans?: Plan[];
   /** Where plans can be bought, on a server that sells them (the pricing page); else null. */
   upgrade_url?: string | null;
+  /** The next plan on sale with more compute and with more storage (null: none). */
+  next_plans?: { compute: PlanOffer | null; storage: PlanOffer | null };
   /** Compute beyond the monthly allowance (paid plans), switched on by the user. */
   overage?: {
     available: boolean;
@@ -498,7 +551,7 @@ export interface CostEstimate {
 }
 
 /** Whether the budgets allow a planned training, and how much it may use. */
-export interface BudgetCheck {
+export interface BudgetCheck extends Partial<LimitInfo> {
   allowed: boolean;
   /** Why a start would be refused. */
   reason: string | null;
@@ -512,12 +565,29 @@ export interface BudgetCheck {
   resets_at: string;
   /** budget_exceeded | estimate_too_high | storage_quota_exceeded, when not allowed. */
   code?: string;
+  /** With `warning`: the estimate is above what the run may use. */
+  warning_code?: 'estimate_above_limit';
 }
 
 /** The answer of the API when a budget or quota does not allow a request (HTTP 403). */
-export interface BudgetErrorBody {
+export interface BudgetErrorBody extends Partial<LimitInfo> {
   detail: string;
   code: 'budget_exceeded' | 'estimate_too_high' | 'storage_quota_exceeded';
+}
+
+/**
+ * The answer when a limit that is no budget refuses a request: trainings at a time or
+ * waiting in the queue (HTTP 409), a file above the upload limit (413).
+ */
+export interface LimitErrorBody extends Partial<LimitInfo> {
+  detail: string;
+  code:
+    | 'concurrent_trainings_limit'
+    | 'queued_trainings_limit'
+    | 'server_busy'
+    | 'upload_too_large'
+    | 'feature_not_in_plan'
+    | (string & {});
 }
 
 // --------------------------------------------------------------------------
@@ -2058,6 +2128,11 @@ export interface KernelBound {
 }
 
 export interface RunDetail extends RunSummary {
+  /**
+   * For a run that a limit stopped or kept from starting, for who started it: which limit
+   * and the next plan that lifts it. Null otherwise; missing on older servers.
+   */
+  limit_hint?: LimitInfo | null;
   graph: GraphDocument;
   plan: TrainingPlan | null;
   state: RunState | null;
@@ -2823,6 +2898,8 @@ export type BillingInfo =
       prices_include_tax: boolean;
       /** Compute beyond the allowance can be billed (plans offer overage). */
       overage_billed: boolean;
+      /** Some plan can be paid per year too (`price_per_year`). */
+      yearly?: boolean;
       plans: BillingPlan[];
     };
 
@@ -2835,6 +2912,8 @@ export interface BillingSubscription {
   /** The plan it pays for. */
   plan: string | null;
   plan_name: string | null;
+  /** Paid every month or every year. */
+  interval?: BillingInterval;
   /** The next payment (null: it does not renew). */
   renews_at: string | null;
   /** Cancelled to the end of the paid period: when it ends. */
@@ -2864,9 +2943,13 @@ export interface BillingState {
   email_missing: boolean;
 }
 
+/** How often a subscription is paid. */
+export type BillingInterval = 'month' | 'year';
+
 /** POST /api/billing/checkout/: what Paddle's checkout is opened with. */
 export interface BillingCheckout {
   plan: string;
+  interval?: BillingInterval;
   price_id: string;
   customer_id: string;
   custom_data: Record<string, string>;
@@ -2875,6 +2958,8 @@ export interface BillingCheckout {
 /** POST /api/billing/change-plan/ with `preview`: what changing the plan would cost. */
 export interface PlanChangePreview {
   plan: Plan;
+  /** The subscription's interval, which stays. */
+  interval?: BillingInterval;
   upgrade: boolean;
   /** Charged now, or credited to the next invoice; null if Paddle did not say. */
   now: { action: 'charge' | 'credit'; amount: number; currency: string } | null;

@@ -6,6 +6,8 @@ type State = BillingEnabled | null | undefined;
 
 let state: State;
 let loading = false;
+/** The server did not answer: unlike "sells no plans", asking again may help. */
+let failed = false;
 const listeners = new Set<() => void>();
 
 /** The API, unless this test has none. */
@@ -20,12 +22,16 @@ function load(): void {
     return;
   }
   loading = true;
-  billing
-    .info()
-    // Without an answer nothing of billing is shown until the page is loaded again.
-    .catch((): BillingInfo => ({ enabled: false }))
-    .then((info) => {
+  Promise.resolve()
+    .then(() => billing.info())
+    .then(
+      (info): [BillingInfo, boolean] => [info, false],
+      // Without an answer nothing of billing is shown until it is asked again.
+      (): [BillingInfo, boolean] => [{ enabled: false }, true]
+    )
+    .then(([info, error]) => {
       state = info?.enabled ? info : null;
+      failed = error;
       loading = false;
       listeners.forEach((listener) => listener());
     });
@@ -50,8 +56,30 @@ export function useBillingInfo(): State {
   return info;
 }
 
+/** Ask the server again (after it did not answer). */
+export function retryBillingInfo(): void {
+  if (loading) {
+    return;
+  }
+  state = undefined;
+  failed = false;
+  listeners.forEach((listener) => listener());
+  load();
+}
+
+/**
+ * `useBillingInfo` for the pricing page, which says why there are no plans: `failed` when
+ * the server did not answer (with `retry`), otherwise it sells none.
+ */
+export function useBillingStatus(): { info: State; failed: boolean; retry: () => void } {
+  const info = useBillingInfo();
+  const error = useSyncExternalStore(subscribe, () => failed);
+  return { info, failed: info === null && error, retry: retryBillingInfo };
+}
+
 /** For tests: forget what was loaded. */
 export function resetBillingInfo(): void {
   state = undefined;
   loading = false;
+  failed = false;
 }

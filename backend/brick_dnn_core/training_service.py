@@ -236,7 +236,17 @@ class TrainingUnavailable(Exception):
 
 
 class TrainingBusy(Exception):
-    """The maximum number of concurrent trainings is reached."""
+    """The maximum number of concurrent trainings (or predictions) is reached. ``data`` says
+    which limit it is for clients that do not read the message: ``code`` and, for a limit of
+    the account's plan, ``limit``, ``plan`` and ``upgrade`` (budgets.limit_data)."""
+
+    def __init__(self, message: Any, code: str = "server_busy"):
+        super().__init__(str(message))
+        self.data: dict[str, Any] = {"code": code, **getattr(message, "data", {})}
+
+    def body(self) -> dict[str, Any]:
+        """The body of the API's answer."""
+        return {"detail": str(self), **self.data}
 
 
 class DatasetInUse(Exception):
@@ -940,21 +950,21 @@ def start_new(
             with queue.account_lock(user.pk):
                 sync_runs(TrainingRun.objects.filter(owner=user, status__in=RUNNING_STATUSES))
                 limit = budgets.run_limit(actor)
-                refusal, warning = budgets.estimate_verdict(estimate, limit)
+                refusal, warning, hint = budgets.estimate_check(actor, estimate, limit)
                 if refusal is not None:
-                    raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
-                refusal = budgets.waiting_refusal(user, queue.waiting_count(user))
-                if refusal is not None:
-                    raise TrainingBusy(refusal)
+                    raise budgets.estimate_too_high(actor, estimate, refusal, hint)
+                waiting = budgets.waiting_refusal(user, queue.waiting_count(user))
+                if waiting is not None:
+                    raise TrainingBusy(waiting)
                 run = create(
                     limit, status=QUEUED, message=queue.QUEUED_MESSAGE, queued_at=timezone.now()
                 )
         else:
             active = active_run_count()  # also counts what the active runs used so far
             limit = budgets.run_limit(actor)
-            refusal, warning = budgets.estimate_verdict(estimate, limit)
+            refusal, warning, hint = budgets.estimate_check(actor, estimate, limit)
             if refusal is not None:
-                raise budgets.EstimateTooHigh(refusal, budgets.estimate_data(actor, estimate))
+                raise budgets.estimate_too_high(actor, estimate, refusal, hint)
             if active >= settings.TRAINING_MAX_RUNS:
                 raise TrainingBusy(BUSY_MESSAGE)
             mine = (
@@ -962,8 +972,8 @@ def start_new(
                 .exclude(kind="external")
                 .count()
             )
-            if (refusal := budgets.concurrency_refusal(user, mine)) is not None:
-                raise TrainingBusy(refusal)  # the plan allows fewer trainings at a time
+            if (busy := budgets.concurrency_refusal(user, mine)) is not None:
+                raise TrainingBusy(busy)  # the plan allows fewer trainings at a time
             run = create(limit, message="Starting …")
             _launch(run, _job(run, info, path, limit))
     run.budget_warning = warning  # type: ignore[attr-defined]

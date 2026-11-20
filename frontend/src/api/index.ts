@@ -14,6 +14,7 @@ import type {
   ApprovalRules,
   BillingCheckout,
   BillingInfo,
+  BillingInterval,
   BillingState,
   CommentInput,
   Compatibility,
@@ -267,10 +268,10 @@ const serverApi = {
     state: (signal?: AbortSignal) =>
       request<BillingState>('/api/billing/subscription/', { auth: true, signal }),
     /** What Paddle's checkout needs to sell `plan` to this account. */
-    checkout: (plan: string) =>
+    checkout: (plan: string, interval: BillingInterval = 'month') =>
       request<BillingCheckout>('/api/billing/checkout/', {
         method: 'POST',
-        body: { plan },
+        body: interval === 'month' ? { plan } : { plan, interval },
         auth: true,
       }),
     /** What moving the subscription to `plan` would cost; changes nothing. */
