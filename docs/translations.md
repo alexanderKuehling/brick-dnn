@@ -112,8 +112,15 @@ Django's gettext with `LOCALE_PATHS = backend/locale`:
   (`Kernel size {0} is larger than the (padded) input size {1}.`, context `brickdnn` in the
   `.po` file). The API's JSON renderer matches the text fields of every answer (`message`,
   `errors`, `warnings`, `summary`, `log` …) against them, sentence by sentence, and fills the
-  values into the German template. The MCP server stays English; a message that matches no
-  template stays English;
+  values into the German template. Values are translated too where they are text of the
+  package: a sentence put into another one, the label of a layer or a step, counts
+  (`3 rows`), whole numbers (`3,072` is `3.072`) and the metrics of a run
+  (`validation accuracy 97.1%` is `Validierungsgenauigkeit 97,1 %`). What the extraction
+  cannot find is listed in `messages.py`: short and composed messages (`EXTRA_TEMPLATES`,
+  e.g. `Finished: {0}`), the labels of the steps a readiness check offers (`LABEL_TEMPLATES`,
+  matched only in `fix.label`) and what the training queue stores with a run; a test fails
+  when such an entry is no longer in the source. The MCP server stays English; a message
+  that matches no template stays English;
 - `brick_dnn_core/notices.py`: every e-mail is written inside
   `translation.override(<recipient's language>)`;
 - `backend/locale/de/LC_MESSAGES/django.po`: the German texts; `django.mo` next to it is
@@ -135,7 +142,10 @@ same key to the German file (`locales/de/<area>.ts`), then use it with `t('<area
 New messages of the `brickdnn` package need nothing in the package: write them in English
 as before and run `manage.py update_translations`, which adds their templates (context
 `brickdnn`); translate them in the `.po` file. Keep the values in placeholders, not in the
-literal text.
+literal text, and write a message as one f-string per variant (singular and plural as two
+whole sentences, not `{'is' if n == 1 else 'are'}` inside one): a sentence glued together
+from parts has no template. A short message (two words) or one that has to be put together
+goes into `EXTRA_TEMPLATES` in `brick_dnn_core/messages.py`.
 
 **Backend:** write new user-visible strings with `gettext` (or `gettext_lazy` for module
 constants), with named placeholders (`gettext("Saved “%(name)s”.") % {"name": name}`), not
@@ -168,14 +178,18 @@ the catalogues and adds their texts.
 
 Still English in the German app:
 
-- values that the server or the package put into a translated message, e.g. task names
-  (*classification*), dataset names (*Demo data*) or metric phrases inside a run summary
-  (*Validation accuracy 87.5%*);
+- some values that the server or the package put into a translated message, e.g. single
+  words such as the name of a split or a task inside a sentence, and decimal numbers outside
+  the metrics of a run (*skewness 3.6*);
+- results of preparation steps and a few readiness messages that are built from several
+  clauses (e.g. the summary of a date or encoding step);
+- the summaries of the agent activity (*Saved network “X” (#3), now version 4*): they are
+  stored as English sentences;
 - messages of the package outside the translated modules: reading and importing files
   (`brickdnn/data/io.py`, `readers.py`), frozen datasets, training data loading and
-  estimates, and the explanation and inference modules; the Django side's own messages of
-  billing, budgets, approvals, sharing and the training service (`training_service.py`,
-  `data_service.py`) beyond the account and sign-up;
+  estimates, predictions of a file, and the explanation and inference modules; the Django
+  side's own messages of billing, budgets, approvals, sharing and the training service
+  (`training_service.py`, `data_service.py`) beyond the account and sign-up;
 - a few composed sentences in the frontend whose parts come from separate texts read in
   German word order but are put together in English order (e.g. lists of counts);
 - the test e-mail of `manage.py send_test_email` (for the operator).

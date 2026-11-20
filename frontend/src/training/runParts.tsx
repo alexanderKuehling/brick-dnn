@@ -49,7 +49,14 @@ export function cpuUsage(run: RunDetail): string | null {
     : formatCpu(usage.cpu_minutes);
 }
 
-const QUEUED_MESSAGE = 'Waiting for a free training slot.';
+/**
+ * What the server writes into a run that waits in the queue, in both languages (the API
+ * translates it, see backend/brick_dnn_core/messages.py): the notice below says the same.
+ */
+const QUEUED_MESSAGES = [
+  'Waiting for a free training slot.',
+  'Wartet auf einen freien Trainingsplatz.',
+];
 
 /**
  * A run that waits for a training worker: its position, when it probably starts (the
@@ -59,23 +66,21 @@ export function QueueNotice({ run }: { run: RunDetail }) {
   useTranslation();
   const queue = run.queue ?? null;
   const notes: string[] = [];
-  if (run.message && run.message !== QUEUED_MESSAGE) {
+  if (run.message && !QUEUED_MESSAGES.includes(run.message)) {
     notes.push(run.message); // e.g. it starts again after the worker was restarted
   }
   if (queue?.blocked_by === 'account') {
-    notes.push(
-      'Your plan limits how many trainings run at the same time: this one starts when your running training has ended.'
-    );
+    notes.push(i18n.t('ui.training.runParts.yourPlanLimits'));
   } else if (queue?.worker_online && queue.estimated_wait_seconds !== null) {
-    notes.push('The start time is a rough estimate.');
+    notes.push(i18n.t('ui.training.runParts.theStartTimeIsARough'));
   }
   if (queue && queue.waiting > 1) {
-    notes.push(`${queue.waiting} trainings are waiting.`);
+    notes.push(i18n.t('ui.training.runParts.trainingsAreWaiting', { count: queue.waiting }));
   }
   if (queue?.hint) {
     notes.push(queue.hint);
   }
-  notes.push('You can close this panel: the training starts by itself.');
+  notes.push(i18n.t('ui.training.runParts.youCanCloseThisPanel'));
   return (
     <Stack gap="xs">
       <Paper

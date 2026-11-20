@@ -291,7 +291,7 @@ describe('Setting up a hybrid network', () => {
     expect(validateSettings(neural, { hybrid })).toEqual({});
     // It needs validation rows (no cross-validation), and some values.
     expect(validateSettings({ ...neural, val_split: 0 }, { hybrid }).search).toBe(
-      NEURAL_SEARCH_NO_VALIDATION
+      NEURAL_SEARCH_NO_VALIDATION()
     );
     expect(validateSettings({ ...neural, batch_sizes: [] }, { hybrid }).batch_sizes).toBe(
       'Choose at least one'

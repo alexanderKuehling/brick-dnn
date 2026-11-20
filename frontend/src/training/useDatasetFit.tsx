@@ -21,7 +21,7 @@ import { notifications } from '@mantine/notifications';
 import type { Analysis, CompatibilityFix, GraphDocument, LayerSpec, Params } from '@/api/types';
 import type { InputFit } from '@/builder/BuilderContext';
 import type { LayerFlowNode, LayerNodeData } from '@/builder/graph';
-import { i18n } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 import { canTrain, NO_SCOPE } from './access';
 import { canStartTraining, trainingFamily } from './classical';
 import {
@@ -164,15 +164,19 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
     if (changes.length === 0) {
       return;
     }
-    showUndo(`${describeFixes(list, unit)} from “${datasetName}”.`, () => {
-      // Only layers that were not changed since (e.g. by hand) go back.
-      for (const change of changes) {
-        const node = latest.current.nodes.find((n) => n.id === change.id);
-        if (node && sameParams(node.data.params, change.after)) {
-          latest.current.updateNode(change.id, { params: change.before });
+    const summary = describeFixes(list, unit);
+    showUndo(
+      i18n.t('ui.training.useDatasetFit.changedFor', { changes: summary, name: datasetName }),
+      () => {
+        // Only layers that were not changed since (e.g. by hand) go back.
+        for (const change of changes) {
+          const node = latest.current.nodes.find((n) => n.id === change.id);
+          if (node && sameParams(node.data.params, change.after)) {
+            latest.current.updateNode(change.id, { params: change.before });
+          }
         }
       }
-    });
+    );
   }, []);
 
   /** A first network on the empty canvas. */
@@ -183,10 +187,20 @@ export function useDatasetFit(options: DatasetFitOptions): DatasetFit {
     // Segmentation networks end in a convolution with one channel per class.
     const channels = last?.out_channels;
     const outputs = channels ?? last?.out_features;
-    const shape = Array.isArray(input) ? describeShape(input as number[], unit) : 'the data';
+    const shape = Array.isArray(input)
+      ? describeShape(input as number[], unit)
+      : i18n.t('ui.training.useDatasetFit.theData');
+    const count = Number(outputs);
+    const n = Number.isFinite(count) ? count.toLocaleString(currentLocale()) : String(outputs);
     showUndo(
-      `Started a network for “${datasetName}”: Input ${shape}, ${String(outputs)} ` +
-        `output${channels !== undefined ? ' channel' : ''}${outputs === 1 ? '' : 's'}.`,
+      i18n.t('ui.training.useDatasetFit.startedANetwork', {
+        name: datasetName,
+        shape,
+        outputs:
+          channels !== undefined
+            ? i18n.t('ui.training.fit.outputChannels', { count, n })
+            : i18n.t('ui.training.fit.outputs', { count, n }),
+      }),
       () => {
         const ids = new Set(latest.current.nodes.map((n) => n.id));
         if (network.nodes.every((n) => ids.has(n.id))) {

@@ -1927,8 +1927,11 @@ class ReplaceValues(Step):
             warnings.append(f"Not found: {quoted(unused)}.")
         if numeric_now:
             warnings.append(
-                f"{quoted(numeric_now)} only hold numbers now; use “Change type” to turn "
-                f"{'it' if len(numeric_now) == 1 else 'them'} into numbers."
+                f"{quoted(numeric_now)} only holds numbers now; use “Change type” to turn it "
+                "into numbers."
+                if len(numeric_now) == 1
+                else f"{quoted(numeric_now)} only hold numbers now; use “Change type” to turn "
+                "them into numbers."
             )
         summary = (
             f"Replaced {plural(total, 'value')} in {plural(len(updates), 'column')}."

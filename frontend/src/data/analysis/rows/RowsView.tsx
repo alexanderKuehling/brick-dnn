@@ -121,11 +121,21 @@ const FILTERS: { value: RowFilter; label: string }[] = [
 ];
 
 const REASONS: Record<string, string> = {
-  target_or_group: 'target / group column',
-  id: 'ID column',
-  constant: 'constant',
-  no_partner: 'no strong partner',
-  limit: 'over the limit',
+  get target_or_group() {
+    return i18n.t('ui.data.RowsView.reasonTargetOrGroup');
+  },
+  get id() {
+    return i18n.t('ui.data.RowsView.reasonId');
+  },
+  get constant() {
+    return i18n.t('ui.data.RowsView.reasonConstant');
+  },
+  get no_partner() {
+    return i18n.t('ui.data.RowsView.reasonNoPartner');
+  },
+  get limit() {
+    return i18n.t('ui.data.RowsView.reasonLimit');
+  },
 };
 
 const RELOAD_DELAY = 400;
@@ -484,7 +494,7 @@ export function RowsView({
           description={i18n.t('ui.data.RowsView.distanceToTheNearestOther')}
           values={analysis.rows.nn_ratio}
           baseline={randomRatios}
-          baselineLabel="random pairs (same number of rows)"
+          baselineLabel={i18n.t('ui.data.RowsView.randomPairs')}
           threshold={thresholds.twins}
           onThresholdChange={setTwinOverride}
           suggested={analysis.suggested.twins}

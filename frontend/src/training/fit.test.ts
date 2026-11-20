@@ -1,4 +1,6 @@
-import type { CompatibilityFix, Dataset, LayerSpec } from '@/api/types';
+import type { CompatibilityFix, Dataset, LayerSpec, TuningConfig } from '@/api/types';
+import { monthNames, weekdayNames } from '@/data/analysis/sampleData';
+import { setLanguage } from '@/i18n';
 import {
   describeFixes,
   describeShape,
@@ -7,6 +9,7 @@ import {
   starterNetwork,
 } from './fit';
 import { dataset, STATUS } from './fixtures';
+import { formatBytes, searchLabel } from './format';
 import { effectiveSource } from './settings';
 
 const INPUT_FIX: CompatibilityFix = {
@@ -79,6 +82,27 @@ describe('fixes', () => {
       'Last layer set to 1 output'
     );
     expect(describeShape([1], 'features')).toBe('1 feature');
+  });
+
+  it('describes what changes in German, with the counts and their nouns', async () => {
+    await setLanguage('de');
+    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [10] } }, OUTPUT_FIX], 'tokens')).toBe(
+      'Eingabe auf 10 Token gesetzt, letzte Schicht auf 3 Ausgaben'
+    );
+    expect(describeFixes([{ ...INPUT_FIX, params: { shape: [3072] } }], 'images')).toBe(
+      'Eingabe auf 3.072 Werte gesetzt'
+    );
+    expect(describeFixes([{ ...OUTPUT_FIX, params: { out_features: 1 } }], 'features')).toBe(
+      'Letzte Schicht auf 1 Ausgabe gesetzt'
+    );
+    // Texts kept in constants and helpers follow the language too.
+    expect(searchLabel({ method: 'grid', trials: 6 } as TuningConfig)).toBe(
+      'Rastersuche · 6 Versuche'
+    );
+    expect(formatBytes(0)).toBe('0 Bytes');
+    expect(formatBytes(1536)).toBe('1,5 KB');
+    expect(weekdayNames()[0]).toBe('Mo');
+    expect(monthNames()[2]).toBe('Mär');
   });
 
   it('compares parameters by value', () => {

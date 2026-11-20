@@ -8,7 +8,8 @@ Sources:
 - ``{% translate "…" %}`` in the e-mail templates;
 - the texts of the layer and step catalogues and the training options (catalog.py);
 - the message templates of the ``brickdnn`` package (messages.py), with the context
-  ``brickdnn``.
+  ``brickdnn``, the parts it translates by themselves (step labels, metric names) and the
+  nouns its messages count (``"3 rows"``), with their plural.
 """
 
 from __future__ import annotations
@@ -108,6 +109,16 @@ def collect() -> list[Message]:
         Message(template, context=package_messages.CONTEXT, where="brickdnn")
         for template in package_messages.templates()
         if template not in known
+    )
+    # Step labels, metric names and other parts that messages.py translates by themselves.
+    messages.extend(
+        Message(text, context=package_messages.CONTEXT, where="brickdnn")
+        for text in package_messages.phrases()
+    )
+    # The nouns its messages count ("3 rows"), with their plural.
+    messages.extend(
+        Message(singular, plural, context=package_messages.CONTEXT, where="brickdnn")
+        for singular, plural in package_messages.counts()
     )
     unique: dict[tuple[str | None, str], Message] = {}
     for message in messages:

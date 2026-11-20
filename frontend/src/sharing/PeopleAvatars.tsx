@@ -31,10 +31,12 @@ export function PeopleAvatars({ names, here = null, max = 3, onClick }: PeopleAv
       ? i18n.t('ui.sharing.PeopleAvatars.sharedOwner', { owner, slice: names.slice(1).join(', ') })
       : i18n.t('ui.sharing.PeopleAvatars.shared');
   if (here && present.size > 0) {
-    label += `. Here now: ${names.filter((name) => present.has(name)).join(', ')}`;
+    label += i18n.t('ui.sharing.PeopleAvatars.hereNowList', {
+      names: names.filter((name) => present.has(name)).join(', '),
+    });
   }
   const describe = (name: string) =>
-    `${name}${name === owner ? ' (owner)' : ''}${present.has(name) ? ' · here now' : ''}`;
+    `${name}${name === owner ? i18n.t('ui.sharing.PeopleAvatars.ownerSuffix') : ''}${present.has(name) ? i18n.t('ui.sharing.PeopleAvatars.hereNowSuffix') : ''}`;
 
   return (
     <UnstyledButton

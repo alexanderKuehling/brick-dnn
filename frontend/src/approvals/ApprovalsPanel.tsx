@@ -28,7 +28,7 @@ import type { OpenTarget } from '@/activity/ActivityItem';
 import { summaryParts, TARGET_LABELS, unnamedTargets } from '@/activity/format';
 import { api, type AgentTarget, type ApprovalCategory, type ApprovalRequest } from '@/api';
 import { relativeTime } from '@/collab/time';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { formatCpu } from '@/usage/format';
 import { estimateText, expiresIn } from './format';
 import classes from './Approvals.module.css';
@@ -60,7 +60,7 @@ function TargetLink({ target, onOpen }: { target: AgentTarget; onOpen: OpenTarge
       className={classes.link}
       onClick={() => onOpen(target)}
       aria-label={i18n.t('ui.approvals.ApprovalsPanel.open', {
-        value: TARGET_LABELS[target.kind].toLowerCase(),
+        value: lowerCase(TARGET_LABELS[target.kind]),
         name: target.name,
       })}
     >
@@ -93,20 +93,25 @@ function Summary({ approval, onOpen }: { approval: ApprovalRequest; onOpen: Open
 function Facts({ approval }: { approval: ApprovalRequest }) {
   const rows: [string, string][] = [];
   if (approval.category === 'training') {
-    rows.push(['Estimated CPU time', estimateText(approval.estimate)]);
+    rows.push([
+      i18n.t('ui.approvals.ApprovalsPanel.estimatedCpuTime'),
+      estimateText(approval.estimate),
+    ]);
     if (approval.limit_cpu_minutes !== null) {
       rows.push([
-        'Allowed without asking',
+        i18n.t('ui.approvals.ApprovalsPanel.allowedWithoutAsking'),
         approval.limit_cpu_minutes === 0
-          ? 'none'
-          : `up to ${formatCpu(approval.limit_cpu_minutes)}`,
+          ? i18n.t('ui.approvals.ApprovalsPanel.none')
+          : i18n.t('ui.approvals.ApprovalsPanel.upTo', {
+              limit: formatCpu(approval.limit_cpu_minutes),
+            }),
       ]);
     }
     if (approval.network) {
-      rows.push(['Network', approval.network]);
+      rows.push([i18n.t('ui.approvals.ApprovalsPanel.network'), approval.network]);
     }
     if (approval.dataset) {
-      rows.push(['Data', approval.dataset]);
+      rows.push([i18n.t('ui.approvals.ApprovalsPanel.data'), approval.dataset]);
     }
   }
   if (rows.length === 0) {
@@ -348,7 +353,12 @@ export function ApprovalsPanel({
         <Title order={3} size="h4" id="approvals-title">
           {i18n.t('ui.approvals.ApprovalsPanel.waitingForYourApproval')}
         </Title>
-        <Badge color="yellow" variant="filled" circle aria-label={`${approvals.length} waiting`}>
+        <Badge
+          color="yellow"
+          variant="filled"
+          circle
+          aria-label={i18n.t('ui.approvals.ApprovalsPanel.waiting', { count: approvals.length })}
+        >
           {approvals.length}
         </Badge>
       </Group>

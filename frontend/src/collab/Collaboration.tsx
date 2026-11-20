@@ -160,7 +160,14 @@ function OpenBadge({ count }: { count: number }) {
     return null;
   }
   return (
-    <Badge size="xs" circle color="yellow" c="black" variant="filled" aria-label={`${count} open`}>
+    <Badge
+      size="xs"
+      circle
+      color="yellow"
+      c="black"
+      variant="filled"
+      aria-label={i18n.t('ui.collab.Collaboration.open', { count })}
+    >
       {count}
     </Badge>
   );

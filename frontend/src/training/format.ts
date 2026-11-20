@@ -13,9 +13,9 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
-import { currentLocale, i18n } from '@/i18n';
+import { currentLanguage, currentLocale, i18n, lowerCase } from '@/i18n';
 import { isClassicalRun, isHybridRun } from './classical';
-import { PARAM_LABELS } from './search';
+import { classicalParamLabel } from './search';
 
 /** Not finished yet: waiting in the queue or training. */
 export const ACTIVE_STATUSES: readonly RunStatus[] = ['queued', 'starting', 'preparing', 'running'];
@@ -81,19 +81,24 @@ export function formatBytes(bytes: number | null | undefined): string {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) {
     return '–';
   }
-  const units = ['bytes', 'KB', 'MB', 'GB'];
+  const units = [i18n.t('ui.training.format.bytes'), 'KB', 'MB', 'GB'];
   let value = bytes;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit += 1;
   }
-  return unit === 0 ? `${value} bytes` : `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+  const digits = unit === 0 || value >= 10 ? 0 : 1;
+  const shown = value.toLocaleString(currentLocale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return `${shown} ${units[unit]}`;
 }
 
 /** Progress of an upload, both in the unit of the total: "12.3 MB of 48.0 MB". */
 export function formatBytesOf(sent: number, total: number): string {
-  const units = ['bytes', 'KB', 'MB', 'GB'];
+  const units = [i18n.t('ui.training.format.bytes'), 'KB', 'MB', 'GB'];
   let scale = 1;
   let unit = 0;
   while (total / scale >= 1024 && unit < units.length - 1) {
@@ -101,7 +106,10 @@ export function formatBytesOf(sent: number, total: number): string {
     unit += 1;
   }
   const format = (bytes: number) =>
-    `${unit === 0 ? bytes : (bytes / scale).toFixed(1)} ${units[unit]}`;
+    `${(unit === 0 ? bytes : bytes / scale).toLocaleString(currentLocale(), {
+      minimumFractionDigits: unit === 0 ? 0 : 1,
+      maximumFractionDigits: unit === 0 ? 0 : 1,
+    })} ${units[unit]}`;
   return i18n.t('ui.training.format.of', { sent: format(sent), total: format(total) });
 }
 
@@ -160,22 +168,25 @@ export function formatCompact(value: number | null | undefined): string {
 export function datasetDetails(dataset: Dataset): string {
   const { info } = dataset;
   const parts: string[] = [];
-  const count = (n: number | null | undefined, word: string) =>
+  type Counted = 'rows' | 'features' | 'classes' | 'images' | 'imagesWithMasks';
+  const count = (n: number | null | undefined, what: Counted) =>
     typeof n === 'number'
-      ? `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : word.endsWith('s') ? 'es' : 's'}`
+      ? i18n.t(`ui.training.format.${what}`, { count: n, n: n.toLocaleString(currentLocale()) })
       : null;
   if (dataset.kind === 'csv') {
-    parts.push(count(info.num_samples, 'row') ?? '', count(info.num_features, 'feature') ?? '');
+    parts.push(count(info.num_samples, 'rows') ?? '', count(info.num_features, 'features') ?? '');
     if (info.num_classes && info.target_kind !== 'number') {
-      parts.push(count(info.num_classes, 'class') ?? '');
+      parts.push(count(info.num_classes, 'classes') ?? '');
     } else if (info.target_kind === 'number') {
-      parts.push('numeric target');
+      parts.push(i18n.t('ui.training.format.numericTarget'));
     }
   } else if (dataset.kind === 'segmentation') {
-    const pairs = count(info.num_samples, 'image');
-    parts.push(pairs ? `${pairs} with masks` : '', count(info.num_classes, 'class') ?? '');
+    parts.push(
+      count(info.num_samples, 'imagesWithMasks') ?? '',
+      count(info.num_classes, 'classes') ?? ''
+    );
   } else {
-    parts.push(count(info.num_samples, 'image') ?? '', count(info.num_classes, 'class') ?? '');
+    parts.push(count(info.num_samples, 'images') ?? '', count(info.num_classes, 'classes') ?? '');
   }
   parts.push(formatBytes(dataset.size_bytes));
   return parts.filter(Boolean).join(' · ');
@@ -209,14 +220,17 @@ export function segmentationNotes(dataset: Dataset): string | null {
   if (!found) {
     return null;
   }
-  const say = (n: number | undefined, one: string, many: string) =>
-    n ? `${n.toLocaleString(currentLocale())} ${n === 1 ? one : many}` : null;
+  type Said = 'imagesWithoutAMask' | 'masksWithoutAnImage' | 'masksResized';
+  const say = (count: number | undefined, what: Said) =>
+    count
+      ? i18n.t(`ui.training.format.${what}`, { count, n: count.toLocaleString(currentLocale()) })
+      : null;
   const notes = [
-    say(found.unmatched_images, 'image without a mask', 'images without a mask'),
-    say(found.unmatched_masks, 'mask without an image', 'masks without an image'),
-    say(found.mask_size_mismatches, 'mask resized to its image', 'masks resized to their images'),
+    say(found.unmatched_images, 'imagesWithoutAMask'),
+    say(found.unmatched_masks, 'masksWithoutAnImage'),
+    say(found.mask_size_mismatches, 'masksResized'),
     found.ignore_index !== null && found.ignore_index !== undefined
-      ? `pixels with the value ${found.ignore_index} are ignored`
+      ? i18n.t('ui.training.format.pixelsIgnored', { value: found.ignore_index })
       : null,
   ].filter(Boolean);
   return notes.length > 0 ? notes.join(' · ') : null;
@@ -358,7 +372,9 @@ function isBrickParams(names: string[]): boolean {
 
 /** "Max. depth" → "max. depth", but "C" and "L2 regularisation" stay as they are. */
 const inSentence = (label: string) =>
-  /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+  currentLanguage() === 'en' && /^[A-Z][a-z]/.test(label)
+    ? label[0].toLowerCase() + label.slice(1)
+    : label;
 
 /**
  * "learning rate 0.00312, batch size 64, Adam" (like the engine's messages); for a classical
@@ -383,7 +399,7 @@ export function describeParams(params: TrialParams): string {
     .map((name) => {
       const value = formatSetting(name, params[name] as number | string);
       const plain = name === 'optimizer' || name === 'loss';
-      return plain ? value : `${SETTING_LABELS[name].toLowerCase()} ${value}`;
+      return plain ? value : `${lowerCase(SETTING_LABELS[name])} ${value}`;
     })
     .join(', ');
 }
@@ -420,10 +436,10 @@ export function paramLabel(name: string): string {
   if (name.startsWith(NEURAL_PREFIX)) {
     const setting = name.slice(NEURAL_PREFIX.length) as TunableSetting;
     return i18n.t('ui.training.format.neural', {
-      value: (SETTING_LABELS[setting] ?? setting).toLowerCase(),
+      value: lowerCase(SETTING_LABELS[setting] ?? setting),
     });
   }
-  return SETTING_LABELS[name as TunableSetting] ?? PARAM_LABELS[name] ?? name;
+  return SETTING_LABELS[name as TunableSetting] ?? classicalParamLabel(name) ?? name;
 }
 
 /** A searched value as people write it: 0.00312, 64, "Adam", "balanced", "none". */
@@ -474,11 +490,11 @@ export function lossText(run: RunDetail): string | null {
       ? (config.focal_gamma ?? 2)
       : undefined;
   if (gamma !== undefined) {
-    parts.push(`gamma ${gamma}`);
+    parts.push(i18n.t('ui.training.format.gamma', { gamma }));
   }
   const smoothing = found ? found.label_smoothing : config.label_smoothing;
   if (smoothing && ['cross_entropy', 'weighted_cross_entropy'].includes(name)) {
-    parts.push(`label smoothing ${smoothing}`);
+    parts.push(i18n.t('ui.training.format.labelSmoothingValue', { smoothing }));
   }
   const delta = found
     ? found.huber_delta
@@ -486,17 +502,20 @@ export function lossText(run: RunDetail): string | null {
       ? (config.huber_delta ?? 1)
       : undefined;
   if (delta !== undefined) {
-    parts.push(`delta ${delta} standard deviations`);
+    parts.push(i18n.t('ui.training.format.deltaStandardDeviations', { delta }));
   }
   const weights = found?.class_weights;
   if (found?.class_weights_from && Array.isArray(weights)) {
     const shown = weights.slice(0, 6).map((weight) => formatParam('weight', weight));
     const more = weights.length > 6 ? ' …' : '';
-    const from =
-      found.class_weights_from === 'balanced' ? 'balanced class weights' : 'class weights';
-    parts.push(`${from} ${shown.join(', ')}${more}`);
+    const weightsText = `${shown.join(', ')}${more}`;
+    parts.push(
+      found.class_weights_from === 'balanced'
+        ? i18n.t('ui.training.format.balancedClassWeights', { weights: weightsText })
+        : i18n.t('ui.training.format.classWeights', { weights: weightsText })
+    );
   } else if (found?.class_weights_from) {
-    parts.push('class weights given');
+    parts.push(i18n.t('ui.training.format.classWeightsGiven'));
   }
   const label = LOSS_NAMES[name] ?? found?.label ?? name;
   return parts.length > 0 ? `${label} (${parts.join(', ')})` : label;
@@ -504,8 +523,11 @@ export function lossText(run: RunDetail): string | null {
 
 /** "search · 10 trials" or "grid search · 6 trials". */
 export function searchLabel(tuning: TuningConfig): string {
-  const method = tuning.method === 'grid' ? 'grid search' : 'search';
-  return `${method} · ${tuning.trials} ${tuning.trials === 1 ? 'trial' : 'trials'}`;
+  const method =
+    tuning.method === 'grid'
+      ? i18n.t('ui.training.format.gridSearch')
+      : i18n.t('ui.training.format.search');
+  return `${method} · ${i18n.t('ui.training.format.trials', { count: tuning.trials })}`;
 }
 
 /** "starts in about 4 minutes": the estimated wait of a queued run; null if unknown. */
@@ -535,9 +557,9 @@ export function startsIn(seconds: number | null | undefined): string | null {
  */
 export function queueText(queue: RunQueue | null | undefined): string {
   if (!queue) {
-    return 'Queued';
+    return i18n.t('ui.training.format.queuedOnly');
   }
-  const place = `Queued — position ${queue.position}`;
+  const place = i18n.t('ui.training.format.queuedPosition', { position: queue.position });
   if (!queue.worker_online) {
     return i18n.t('ui.training.format.waitingForATrainingWorker', { place });
   }
@@ -557,14 +579,18 @@ export function progressLabel(run: RunSummary): string {
     return i18n.t('ui.training.format.queued', { position: run.queue.position });
   }
   if (run.status === 'running' && isClassicalRun(run)) {
-    return 'Fitting';
+    return i18n.t('ui.training.format.fitting');
   }
   if (run.status === 'running' && isHybridRun(run)) {
     // The epochs learn the features, then the classical model is fitted, or its search runs
     // its trials. A search of the neural settings learns them in every trial.
     const search = run.tuning && run.tuning.trials > 0 ? run.tuning : null;
     const trial =
-      search && `Trial ${Math.min(run.trials_done + 1, search.trials)}/${search.trials}`;
+      search &&
+      i18n.t('ui.training.format.trialOf', {
+        trial: Math.min(run.trials_done + 1, search.trials),
+        trials: search.trials,
+      });
     if (search?.neural_space && trial) {
       return trial;
     }
@@ -574,7 +600,7 @@ export function progressLabel(run: RunSummary): string {
       run.config.feature_training !== 'frozen';
     return learning
       ? i18n.t('ui.training.format.epoch', { value: run.epochs_done + 1, epochs: run.epochs })
-      : (trial ?? 'Fitting');
+      : (trial ?? i18n.t('ui.training.format.fitting'));
   }
   if (run.status === 'running' && run.tuning && run.tuning.trials > 0) {
     const total = run.tuning.trials;
@@ -653,42 +679,45 @@ export function headlineMetric(metrics: RunMetrics | null | undefined): [string,
     return null;
   }
   if (typeof metrics.test_accuracy === 'number') {
-    return [formatPercent(metrics.test_accuracy), 'test accuracy'];
+    return [formatPercent(metrics.test_accuracy), i18n.t('ui.training.format.testAccuracy')];
   }
   // Segmentation: the mean IoU says more than the pixel accuracy (most pixels are background).
   if (typeof metrics.test_iou === 'number') {
-    return [formatPercent(metrics.test_iou), 'test mean IoU'];
+    return [formatPercent(metrics.test_iou), i18n.t('ui.training.format.testMeanIou')];
   }
   // Regression: R² says more than an RMSE in the units of the target.
   if (typeof metrics.test_r2 === 'number') {
-    return [formatR2(metrics.test_r2), 'test R²'];
+    return [formatR2(metrics.test_r2), i18n.t('ui.training.format.testR2')];
   }
   if (typeof metrics.test_rmse === 'number') {
-    return [formatMetric(metrics.test_rmse), 'test RMSE'];
+    return [formatMetric(metrics.test_rmse), i18n.t('ui.training.format.testRmse')];
   }
   if (typeof metrics.test_loss === 'number') {
-    return [formatMetric(metrics.test_loss), 'test loss'];
+    return [formatMetric(metrics.test_loss), i18n.t('ui.training.format.testLoss')];
   }
   if (typeof metrics.val_accuracy === 'number') {
-    return [formatPercent(metrics.val_accuracy), 'validation accuracy'];
+    return [formatPercent(metrics.val_accuracy), i18n.t('ui.training.format.validationAccuracy')];
   }
   if (typeof metrics.val_iou === 'number') {
-    return [formatPercent(metrics.val_iou), 'validation mean IoU'];
+    return [formatPercent(metrics.val_iou), i18n.t('ui.training.format.validationMeanIou')];
   }
   if (typeof metrics.val_r2 === 'number') {
-    return [formatR2(metrics.val_r2), 'validation R²'];
+    return [formatR2(metrics.val_r2), i18n.t('ui.training.format.validationR2')];
   }
   if (typeof metrics.val_rmse === 'number') {
-    return [formatMetric(metrics.val_rmse), 'validation RMSE'];
+    return [formatMetric(metrics.val_rmse), i18n.t('ui.training.format.validationRmse')];
   }
   if (typeof metrics.val_loss === 'number') {
-    return [formatMetric(metrics.val_loss), 'validation loss'];
+    return [formatMetric(metrics.val_loss), i18n.t('ui.training.format.validationLoss')];
   }
   if (typeof metrics.train_accuracy === 'number') {
-    return [formatPercent(metrics.train_accuracy), 'training accuracy (optimistic)'];
+    return [
+      formatPercent(metrics.train_accuracy),
+      i18n.t('ui.training.format.trainingAccuracyOptimistic'),
+    ];
   }
   if (typeof metrics.train_loss === 'number') {
-    return [formatMetric(metrics.train_loss), 'training loss (optimistic)'];
+    return [formatMetric(metrics.train_loss), i18n.t('ui.training.format.trainingLossOptimistic')];
   }
   return null;
 }
@@ -723,11 +752,15 @@ export function weightsNote(run: RunDetail): string | null {
   }
   const last = state?.history.at(-1)?.epoch ?? run.epochs_done;
   const best = epoch !== last && run.config.restore_best !== false;
-  const parts = [`Weights from epoch ${epoch}${best ? ' (lowest validation loss)' : ''}`];
+  const parts = [
+    best
+      ? i18n.t('ui.training.format.weightsFromEpochBest', { epoch })
+      : i18n.t('ui.training.format.weightsFromEpoch', { epoch }),
+  ];
   if (state?.stopped_early) {
-    parts.push(`stopped early after epoch ${last}`);
+    parts.push(i18n.t('ui.training.format.stoppedEarlyAfterEpoch', { epoch: last }));
   } else if (epoch !== last) {
-    parts.push(`${last} epochs trained`);
+    parts.push(i18n.t('ui.training.format.epochsTrained', { count: last ?? 0 }));
   }
   return parts.join(' · ');
 }
@@ -944,7 +977,10 @@ export function hybridSnippet(run: RunDetail, scriptName: string, archiveName: s
 export function classicalSnippet(run: RunDetail, modelName: string): string {
   const pre = run.state?.preprocessing ?? {};
   const classical = run.plan?.classical ?? null;
-  const estimator = classical?.estimator ?? run.state?.classical?.estimator ?? 'the model';
+  const estimator =
+    classical?.estimator ??
+    run.state?.classical?.estimator ??
+    i18n.t('ui.training.RunView.theModel');
   const four = (values: number[]) => `[${values.map((v) => Number(v.toPrecision(4))).join(', ')}]`;
   const columns = stringList(pre.columns);
   const mean = numberList(pre.mean);

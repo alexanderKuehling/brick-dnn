@@ -479,7 +479,9 @@ export function parseClassWeights(
       ? weight
       : null;
   };
-  const invalid = `Weights greater than 0 and at most ${LIMITS.class_weight.max}`;
+  const invalid = i18n.t('ui.training.settings.weightsGreaterThan0', {
+    max: LIMITS.class_weight.max,
+  });
   if (items.some((item) => /[:=]/.test(item))) {
     const weights: Record<string, number> = {};
     for (const item of items) {
@@ -616,7 +618,7 @@ function wholeNumber(
 ): string | null {
   const value = parseField(field);
   if (value === '') {
-    return required ? 'Required' : null;
+    return required ? i18n.t('ui.training.settings.required') : null;
   }
   if (value === null || !Number.isInteger(value)) {
     return i18n.t('ui.training.settings.enterAWholeNumber');
@@ -638,7 +640,7 @@ function decimal(
 ): string | null {
   const value = parseField(field);
   if (value === '') {
-    return required ? 'Required' : null;
+    return required ? i18n.t('ui.training.settings.required') : null;
   }
   if (value === null) {
     return i18n.t('ui.training.settings.enterANumber');
@@ -798,18 +800,13 @@ export function plannedHybridTrials(
 }
 
 /** Shown when a setting needs validation data that the run will not have. */
-export const NO_VALIDATION_PATIENCE =
-  'Early stopping needs validation data: set a validation split above 0, or leave this empty.';
-export const NO_VALIDATION_SEARCH =
-  'A hyperparameter search needs validation data to compare its trials: set a validation split above 0.';
-const PREPARED_PATIENCE =
-  'Early stopping needs validation data, and this dataset has no validation rows: leave this empty, or give it a validation share in the Data tab.';
-const PREPARED_SEARCH =
-  'A hyperparameter search needs validation data to compare its trials, and this dataset has no validation rows: give it a validation share in the Data tab.';
-export const LOSS_SEARCH_METRIC =
-  'A search over losses cannot rank its trials by the loss: losses of different kinds are not comparable. Choose another objective metric, e.g. PR AUC or balanced accuracy (regression: RMSE or MAE).';
-export const NEURAL_SEARCH_NO_VALIDATION =
-  'Searching the neural settings needs validation data: every trial is ranked by its classical model on the validation rows. Set a validation split above 0, or search only the classical model.';
+export const NO_VALIDATION_PATIENCE = () => i18n.t('ui.training.settings.noValidationPatience');
+export const NO_VALIDATION_SEARCH = () => i18n.t('ui.training.settings.noValidationSearch');
+const PREPARED_PATIENCE = () => i18n.t('ui.training.settings.preparedPatience');
+const PREPARED_SEARCH = () => i18n.t('ui.training.settings.preparedSearch');
+export const LOSS_SEARCH_METRIC = () => i18n.t('ui.training.settings.lossSearchMetric');
+export const NEURAL_SEARCH_NO_VALIDATION = () =>
+  i18n.t('ui.training.settings.neuralSearchNoValidation');
 
 /**
  * Whether the run gets validation data: the validation rows of a dataset that brings its own
@@ -834,9 +831,15 @@ function validateSplits(values: SettingsValues, errors: SettingsErrors) {
       errors[key] = message;
     }
   };
-  set('val_split', decimal(values.val_split, split, 'Between 0% and 50%', true));
+  set(
+    'val_split',
+    decimal(values.val_split, split, i18n.t('ui.training.settings.between0And50'), true)
+  );
   if (values.test_enabled) {
-    set('test_split', decimal(values.test_split, testShare, 'Between 5% and 50%', true));
+    set(
+      'test_split',
+      decimal(values.test_split, testShare, i18n.t('ui.training.settings.between5And50'), true)
+    );
     const val = parseField(values.val_split);
     const test = parseField(values.test_split);
     if (
@@ -846,7 +849,7 @@ function validateSplits(values: SettingsValues, errors: SettingsErrors) {
       typeof test === 'number' &&
       val + test > LIMITS.held_out.max
     ) {
-      errors.test_split = 'Validation and test together: at most 80%';
+      errors.test_split = i18n.t('ui.training.settings.validationAndTestTogether');
     }
   }
 }
@@ -897,9 +900,12 @@ function validateClassicalSearch(
   }
   const combos = classicalCombinations(model, states, grid);
   if (ticked === 0) {
-    errors.search = 'Choose at least one parameter to search.';
+    errors.search = i18n.t('ui.training.settings.chooseAtLeastOneParameter');
   } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
-    errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+    errors.search = i18n.t('ui.training.settings.theGridHasCombinations', {
+      combos,
+      max: LIMITS.search_trials.max,
+    });
   }
 }
 
@@ -922,7 +928,7 @@ function validateNeuralSearch(
   validateSearchSettings(values, null, set, task);
   const neural = Object.values(tunedSettings(values, task)).filter(Boolean).length;
   if (neural + classicalTicked === 0) {
-    errors.search = 'Choose at least one setting or parameter to search.';
+    errors.search = i18n.t('ui.training.settings.chooseAtLeastOneSettingOrParameter');
   }
 }
 
@@ -941,7 +947,9 @@ function validateClassical(
     const value = parseField(values.max_samples);
     errors.max_samples =
       maxRows !== null && typeof value === 'number' && value > maxRows
-        ? `At most ${maxRows.toLocaleString(currentLocale())} on this server`
+        ? i18n.t('ui.training.settings.atMostOnThisServer', {
+            max: maxRows.toLocaleString(currentLocale()),
+          })
         : samples;
   }
   const seed = wholeNumber(values.seed, LIMITS.seed, false);
@@ -999,9 +1007,12 @@ export function validateSettings(
         const grid = values.search_method === 'grid';
         const combos = plannedHybridTrials(values, hybrid.model, task);
         if (!errors.search && !hasValidation(values, validationRows)) {
-          errors.search = NEURAL_SEARCH_NO_VALIDATION;
+          errors.search = NEURAL_SEARCH_NO_VALIDATION();
         } else if (!errors.search && grid && combos !== null && combos > LIMITS.search_trials.max) {
-          errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+          errors.search = i18n.t('ui.training.settings.theGridHasCombinations', {
+            combos,
+            max: LIMITS.search_trials.max,
+          });
         }
       }
       checkMetric(values, metrics, errors);
@@ -1046,13 +1057,23 @@ export function validateSettings(
   if (!tuned.learning_rate) {
     set(
       'learning_rate',
-      decimal(values.learning_rate, learningRate, 'Greater than 0, at most 10', true)
+      decimal(
+        values.learning_rate,
+        learningRate,
+        i18n.t('ui.training.settings.greaterThan0AtMost10'),
+        true
+      )
     );
   }
   if (!tuned.weight_decay) {
     set(
       'weight_decay',
-      decimal(values.weight_decay, (wd) => wd >= 0 && wd <= 1, 'Between 0 and 1', false)
+      decimal(
+        values.weight_decay,
+        (wd) => wd >= 0 && wd <= 1,
+        i18n.t('ui.training.settings.betweenAnd', { min: 0, max: 1 }),
+        false
+      )
     );
   }
   validateSplits(values, errors);
@@ -1062,7 +1083,7 @@ export function validateSettings(
   const validates = hasValidation(values, validationRows);
   const prepared = validationRows !== null;
   if (!validates && !errors.patience && parseField(values.patience) !== '') {
-    errors.patience = prepared ? PREPARED_PATIENCE : NO_VALIDATION_PATIENCE;
+    errors.patience = prepared ? PREPARED_PATIENCE() : NO_VALIDATION_PATIENCE();
   }
   if (scope) {
     validateLoss(values, scope, set);
@@ -1073,11 +1094,14 @@ export function validateSettings(
     validateSearchSettings(values, tooLarge, set, task);
     const combos = combinations(values, task);
     if (!validates) {
-      errors.search = prepared ? PREPARED_SEARCH : NO_VALIDATION_SEARCH;
+      errors.search = prepared ? PREPARED_SEARCH() : NO_VALIDATION_SEARCH();
     } else if (!Object.values(tuned).some(Boolean)) {
-      errors.search = 'Choose at least one setting to search.';
+      errors.search = i18n.t('ui.training.settings.chooseAtLeastOneSetting');
     } else if (grid && combos !== null && combos > LIMITS.search_trials.max) {
-      errors.search = `The grid has ${combos} combinations, at most ${LIMITS.search_trials.max} are possible. Choose fewer values.`;
+      errors.search = i18n.t('ui.training.settings.theGridHasCombinations', {
+        combos,
+        max: LIMITS.search_trials.max,
+      });
     }
     checkMetric(values, metrics, errors);
     // A hybrid network ranks its trials by its classical model, whose loss does not change.
@@ -1088,7 +1112,7 @@ export function validateSettings(
       searchedLosses(values, task).length > 1 &&
       values.metric === 'loss'
     ) {
-      errors.metric = LOSS_SEARCH_METRIC;
+      errors.metric = LOSS_SEARCH_METRIC();
     }
   }
   return errors;
@@ -1120,14 +1144,27 @@ function validateLoss(
   if (uses('focal_gamma') && !tuned.focal_gamma) {
     const { min, max } = LIMITS.focal_gamma;
     const inRange = (value: number) => value >= min && value <= max;
-    set('focal_gamma', decimal(values.focal_gamma, inRange, `Between ${min} and ${max}`, true));
+    set(
+      'focal_gamma',
+      decimal(
+        values.focal_gamma,
+        inRange,
+        i18n.t('ui.training.settings.betweenAnd', { min, max }),
+        true
+      )
+    );
   }
   if (uses('label_smoothing') && !tuned.label_smoothing) {
     const { min, max } = LIMITS.label_smoothing;
     const inRange = (value: number) => value >= min && value <= max;
     set(
       'label_smoothing',
-      decimal(values.label_smoothing, inRange, `Between ${min} and ${max}`, false)
+      decimal(
+        values.label_smoothing,
+        inRange,
+        i18n.t('ui.training.settings.betweenAnd', { min, max }),
+        false
+      )
     );
   }
   if (uses('huber_delta') && !tuned.huber_delta) {
@@ -1135,7 +1172,12 @@ function validateLoss(
     const inRange = (value: number) => value > min && value <= max;
     set(
       'huber_delta',
-      decimal(values.huber_delta, inRange, `Greater than ${min}, at most ${max}`, true)
+      decimal(
+        values.huber_delta,
+        inRange,
+        i18n.t('ui.training.settings.greaterThanAtMost', { min, max }),
+        true
+      )
     );
   }
 }
@@ -1157,11 +1199,11 @@ function validateSearchSettings(
     set('search_trials', wholeNumber(values.search_trials, LIMITS.search_trials, true));
   }
   if (tuned.learning_rate && grid && values.lr_values.length === 0) {
-    set('lr_values', 'Choose at least one');
+    set('lr_values', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.learning_rate && !grid) {
     const range = (field: NumberField) =>
-      decimal(field, learningRate, 'Greater than 0, at most 10', true);
+      decimal(field, learningRate, i18n.t('ui.training.settings.greaterThan0AtMost10'), true);
     const lowError = range(values.lr_min);
     const highError = range(values.lr_max);
     set('lr_min', lowError);
@@ -1169,31 +1211,31 @@ function validateSearchSettings(
     const lo = parseField(values.lr_min);
     const hi = parseField(values.lr_max);
     if (!lowError && !highError && typeof lo === 'number' && typeof hi === 'number' && lo > hi) {
-      set('lr_min', 'At most the maximum');
+      set('lr_min', i18n.t('ui.training.settings.atMostTheMaximum'));
     }
   }
   if (tuned.batch_size && values.batch_sizes.length === 0) {
-    set('batch_sizes', 'Choose at least one');
+    set('batch_sizes', i18n.t('ui.training.settings.chooseAtLeastOne'));
   } else if (tuned.batch_size && tooLarge) {
     set('batch_sizes', tooLarge(Math.max(...values.batch_sizes)));
   }
   if (tuned.optimizer && values.optimizers.length === 0) {
-    set('optimizers', 'Choose at least one');
+    set('optimizers', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.weight_decay && values.weight_decays.length === 0) {
-    set('weight_decays', 'Choose at least one');
+    set('weight_decays', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.loss && task !== null && searchedLosses(values, task).length === 0) {
-    set('losses', 'Choose at least one');
+    set('losses', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.focal_gamma && values.focal_gammas.length === 0) {
-    set('focal_gammas', 'Choose at least one');
+    set('focal_gammas', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.label_smoothing && values.label_smoothings.length === 0) {
-    set('label_smoothings', 'Choose at least one');
+    set('label_smoothings', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
   if (tuned.huber_delta && values.huber_deltas.length === 0) {
-    set('huber_deltas', 'Choose at least one');
+    set('huber_deltas', i18n.t('ui.training.settings.chooseAtLeastOne'));
   }
 }
 
@@ -1204,7 +1246,7 @@ function checkMetric(
   errors: SettingsErrors
 ) {
   if (metrics !== null && !metrics.includes(values.metric)) {
-    errors.metric = 'Not available for this data: choose another metric.';
+    errors.metric = i18n.t('ui.training.settings.notAvailableForThisData');
   }
 }
 

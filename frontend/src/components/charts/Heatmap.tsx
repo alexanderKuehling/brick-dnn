@@ -116,7 +116,7 @@ export function Heatmap({
   const valueAt = (r: number, c: number) => values[r]?.[c] ?? null;
   const cellText = (r: number, c: number) => {
     const value = valueAt(r, c);
-    return `${rows[r]} × ${columns[c]}: ${measure} ${value === null ? 'not defined' : format(value)}`;
+    return `${rows[r]} × ${columns[c]}: ${measure} ${value === null ? i18n.t('ui.components.Heatmap.notDefined') : format(value)}`;
   };
   const top3 = strongestPairs(rows, values, 3)
     .map((p) =>
@@ -308,7 +308,7 @@ export function Heatmap({
             <TooltipRow
               value={(() => {
                 const value = valueAt(activeRow, activeColumn);
-                return value === null ? 'not defined' : format(value);
+                return value === null ? i18n.t('ui.components.Heatmap.notDefined') : format(value);
               })()}
               label={measure}
             />

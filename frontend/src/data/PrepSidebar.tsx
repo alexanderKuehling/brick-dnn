@@ -23,7 +23,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import type { DataPrep, DataSource } from '@/api';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { ROLE_LABELS } from '@/sharing/roles';
 import { prepRole } from './prepAccess';
 import { SourcesPanel } from './SourcesPanel';
@@ -171,7 +171,7 @@ function PrepList({
                   <>
                     {i18n.t('ui.data.PrepSidebar.by', {
                       owner: prep.owner,
-                      value: ROLE_LABELS[role].toLowerCase(),
+                      value: lowerCase(ROLE_LABELS[role]),
                       stepCount: stepCount(prep.steps.length),
                     })}
                   </>

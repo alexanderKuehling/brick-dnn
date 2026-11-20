@@ -96,7 +96,7 @@ export function ApprovalRuleEditor({ rule, label, onSave }: ApprovalRuleEditorPr
                   min={0}
                   max={10_000_000}
                   decimalScale={2}
-                  suffix=" CPU min"
+                  suffix={` ${i18n.t('ui.approvals.ApprovalRuleEditor.cpuMin')}`}
                   value={minutes}
                   onChange={setMinutes}
                   disabled={!training}

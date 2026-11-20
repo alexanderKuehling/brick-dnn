@@ -195,8 +195,10 @@ export function BarChart({
       legend={legend}
       table={() => ({
         head: [
-          'Category',
-          ...(series.length > 1 ? series.map((s) => s.label) : [unit ? capitalize(unit) : 'Value']),
+          i18n.t('ui.components.BarChart.category'),
+          ...(series.length > 1
+            ? series.map((s) => s.label)
+            : [unit ? capitalize(unit) : i18n.t('ui.components.BarChart.value')]),
           ...(stacked ? [i18n.t('ui.components.BarChart.total')] : []),
         ],
         rows: rows.map((row) => [

@@ -251,7 +251,7 @@ export function ThresholdAnalysis({
           onChange={setIndex}
           label={(i) => formatThreshold(thresholds[i])}
           marks={marks}
-          thumbLabel="Decision threshold"
+          thumbLabel={i18n.t('ui.training.ThresholdAnalysis.decisionThreshold')}
           // On the thumb (role slider), not on the root, which has no role.
           thumbProps={{ 'aria-valuetext': formatThreshold(threshold) }}
           mb="md"
@@ -359,7 +359,7 @@ export function ThresholdAnalysis({
             subtitle={i18n.t('ui.training.ThresholdAnalysis.recallAgainstTheFalsePositive')}
             xLabel={i18n.t('ui.training.ThresholdAnalysis.falsePositiveRate')}
             yLabel={i18n.t('ui.training.ThresholdAnalysis.recall')}
-            diagonal="Guessing"
+            diagonal={i18n.t('ui.training.ThresholdAnalysis.guessing')}
             series={lines.map(({ key, roc }) => {
               const point = points.find((p) => p.key === key)!.point;
               return {
@@ -374,7 +374,12 @@ export function ThresholdAnalysis({
               };
             })}
             table={() => ({
-              head: ['Split', 'Threshold', 'False-positive rate', 'Recall'],
+              head: [
+                i18n.t('ui.training.ThresholdAnalysis.split'),
+                i18n.t('ui.training.ThresholdAnalysis.threshold'),
+                i18n.t('ui.training.ThresholdAnalysis.falsePositiveRate'),
+                i18n.t('ui.training.ThresholdAnalysis.recall'),
+              ],
               rows: lines.flatMap(({ key, roc }) =>
                 roc.x.map((x, i) => [
                   LABELS[key],

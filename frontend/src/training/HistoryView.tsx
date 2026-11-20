@@ -80,10 +80,15 @@ function headline(run: RunSummary): [string, string] | null {
     // Its place in the queue and the server's rough estimate of the start.
     const queue = run.queue;
     const start = queue?.worker_online ? startsIn(queue.estimated_wait_seconds) : null;
-    return [queue ? `Position ${queue.position}` : 'Waiting', start ?? 'in the queue'];
+    return [
+      queue
+        ? i18n.t('ui.training.HistoryView.position', { position: queue.position })
+        : i18n.t('ui.training.HistoryView.waiting'),
+      start ?? i18n.t('ui.training.HistoryView.inTheQueue'),
+    ];
   }
   if (isActive(run.status)) {
-    return [progressLabel(run), 'in progress'];
+    return [progressLabel(run), i18n.t('ui.training.HistoryView.inProgress')];
   }
   const result = headlineMetric(run.metrics);
   return result ? [result[0], result[1].replace('validation', 'val.')] : null;

@@ -179,7 +179,7 @@ export function useTraining(
             <Text size="sm">
               “{run.name}”{by && i18n.t('ui.training.useTraining.by', { by })}
               {status === 'failed'
-                ? `: ${run.message || 'Something went wrong.'}`
+                ? `: ${run.message || i18n.t('ui.training.useTraining.somethingWentWrong')}`
                 : result
                   ? `: ${result}`
                   : '.'}

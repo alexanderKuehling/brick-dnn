@@ -133,7 +133,10 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                   size="sm"
                   loading={busy}
                   onClick={() =>
-                    void run(() => store.setResolved(comment.id, true), 'Could not resolve it')
+                    void run(
+                      () => store.setResolved(comment.id, true),
+                      i18n.t('ui.comments.CommentThread.couldNotResolveIt')
+                    )
                   }
                   aria-label={i18n.t('ui.comments.CommentThread.resolveThread')}
                 >
@@ -182,7 +185,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
         {editing ? (
           <CommentComposer
             label={i18n.t('ui.comments.CommentThread.editComment')}
-            submitLabel="Save"
+            submitLabel={i18n.t('ui.comments.CommentThread.save')}
             initialText={comment.text}
             autoFocus
             onSubmit={async (text) => {
@@ -220,7 +223,7 @@ function CommentItem({ comment, viewer, store, root = false, replyCount = 0 }: C
                 void run(async () => {
                   await store.remove(comment.id);
                   setConfirmDelete(false);
-                }, 'Could not delete the comment')
+                }, i18n.t('ui.comments.CommentThread.couldNotDeleteTheComment'))
               }
             >
               {i18n.t('ui.comments.CommentThread.delete')}
@@ -299,7 +302,7 @@ export function CommentThread({ thread, viewer, store, layer, highlight }: Comme
           <CommentComposer
             label={i18n.t('ui.comments.CommentThread.reply')}
             placeholder={i18n.t('ui.comments.CommentThread.writeAReply')}
-            submitLabel="Reply"
+            submitLabel={i18n.t('ui.comments.CommentThread.reply')}
             autoFocus
             onSubmit={async (text) => {
               await store.reply(root.id, text);

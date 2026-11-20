@@ -77,8 +77,7 @@ export interface StepCardProps {
 
 const DETAILS_SHOWN = 4;
 
-const FITTED_HINT =
-  'Means, bounds, categories … are computed on the training rows only and then applied to all rows, so validation and test data stay unseen.';
+const fittedHint = () => i18n.t('ui.data.StepCard.fittedHint');
 
 /** One step of the pipeline: header with status and actions, report, and its settings. */
 export function StepCard({
@@ -378,11 +377,11 @@ export function StepCard({
       {expanded && (spec.fitted || spec.training_only || spec.combine || spec.pre_split) && (
         <Group gap={12} mt={4} className={classes.hints}>
           {spec.fitted && (
-            <Tooltip label={FITTED_HINT} multiline w={260} withArrow>
+            <Tooltip label={fittedHint()} multiline w={260} withArrow>
               <Text size="xs" c="dimmed" className={classes.hint}>
                 <IconSchool size={14} aria-hidden />
                 {i18n.t('ui.data.StepCard.learnsFromTrainingRows')}
-                <VisuallyHidden>. {FITTED_HINT}</VisuallyHidden>
+                <VisuallyHidden>. {fittedHint()}</VisuallyHidden>
               </Text>
             </Tooltip>
           )}
@@ -435,8 +434,8 @@ export function StepCard({
   );
 }
 
-function plural(count: number, word: string): string {
-  return `${formatCount(count)} ${count === 1 ? word : `${word}s`}`;
+function plural(count: number, what: 'rows' | 'columns'): string {
+  return i18n.t(`data.${what}`, { count, value: formatCount(count) });
 }
 
 function names(list: string[], max = 3): string {
@@ -452,13 +451,13 @@ function names(list: string[], max = 3): string {
 function Changes({ report }: { report: StepReport }) {
   const parts: string[] = [];
   if (report.rows_after !== report.rows_before) {
-    parts.push(`${formatCount(report.rows_before)} → ${plural(report.rows_after, 'row')}`);
+    parts.push(`${formatCount(report.rows_before)} → ${plural(report.rows_after, 'rows')}`);
   }
   if (report.added.length > 0) {
-    parts.push(`+${plural(report.added.length, 'column')} (${names(report.added)})`);
+    parts.push(`+${plural(report.added.length, 'columns')} (${names(report.added)})`);
   }
   if (report.removed.length > 0) {
-    parts.push(`−${plural(report.removed.length, 'column')} (${names(report.removed)})`);
+    parts.push(`−${plural(report.removed.length, 'columns')} (${names(report.removed)})`);
   }
   if (parts.length === 0) {
     return null;

@@ -33,7 +33,7 @@ import {
 import { ActionIcon, Anchor, Badge, Collapse, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import type { AgentAction, AgentTarget } from '@/api';
 import { fullDateTime, timeInDay } from '@/collab/time';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import {
   actionLabel,
   argumentText,
@@ -120,7 +120,7 @@ function TargetLink({
         onOpen(target);
       }}
       aria-label={i18n.t('ui.activity.ActivityItem.open', {
-        value: TARGET_LABELS[target.kind].toLowerCase(),
+        value: lowerCase(TARGET_LABELS[target.kind]),
         name: target.name,
       })}
     >
@@ -195,7 +195,10 @@ function Details({ group, now }: { group: EntryGroup; now: Date }) {
   useTranslation();
   const [entry] = group.entries;
   const args = Object.entries(entry.arguments);
-  const source = entry.source === 'mcp' ? 'MCP tool' : 'REST request';
+  const source =
+    entry.source === 'mcp'
+      ? i18n.t('ui.activity.ActivityItem.mcpTool')
+      : i18n.t('ui.activity.ActivityItem.restRequest');
   return (
     <div className={classes.details}>
       <dl className={classes.facts}>

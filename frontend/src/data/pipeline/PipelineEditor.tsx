@@ -94,7 +94,9 @@ export function PipelineEditor({
 
   const hasOtherSources = sources.some((source) => source.id !== currentSourceId);
   const limit =
-    steps.length >= MAX_STEPS ? `A preparation can have at most ${MAX_STEPS} steps.` : null;
+    steps.length >= MAX_STEPS
+      ? i18n.t('ui.data.PipelineEditor.aPreparationCanHaveAtMost', { max: MAX_STEPS })
+      : null;
   const uptoIndex = upto === null ? -1 : steps.findIndex((step) => step.id === upto);
 
   const toggle = (id: string) => {
@@ -142,10 +144,10 @@ export function PipelineEditor({
   // The target can come from another table: a join brings it in (offered in Target & split).
   const joinSpec = catalog.steps.find((spec) => spec.type === 'join');
   const joinUnavailable = sharedBy
-    ? `Only ${sharedBy} can join other tables into this preparation.`
+    ? i18n.t('ui.data.PipelineEditor.onlyCanJoinOtherTables', { sharedBy })
     : hasOtherSources
       ? null
-      : 'Import that table as well, then add a “Join another table” step to bring the target in through a column both tables share.';
+      : i18n.t('ui.data.PipelineEditor.importThatTableAsWell');
   /** With a single other table: choose it, and a key column both tables have (e.g. id). */
   const joinDefaults = (): Record<string, unknown> => {
     const others = sources.filter((source) => source.id !== currentSourceId);
@@ -170,10 +172,10 @@ export function PipelineEditor({
       onAdd={addStep}
       combineDisabled={
         sharedBy
-          ? `Combining tables needs other tables of ${sharedBy}: only they can add these steps.`
+          ? i18n.t('ui.data.PipelineEditor.combiningTablesNeeds', { sharedBy })
           : hasOtherSources
             ? null
-            : 'Import another table first to combine it with this one.'
+            : i18n.t('ui.data.PipelineEditor.importAnotherTableFirst')
       }
       disabled={limit}
       buttonProps={

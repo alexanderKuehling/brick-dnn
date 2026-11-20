@@ -238,7 +238,9 @@ function NetworkRunView({
   const hybridFit = hybridRun ? (state?.classical ?? null) : null;
   const frozenFeatures = hybridRun && run.config.feature_training === 'frozen';
   const hybridModel =
-    MODEL_KINDS[run.plan?.classical?.type ?? ''] ?? run.plan?.classical?.estimator ?? 'the model';
+    MODEL_KINDS[run.plan?.classical?.type ?? ''] ??
+    run.plan?.classical?.estimator ??
+    i18n.t('ui.training.RunView.theModel');
   const learnedFeatures = run.plan?.hybrid?.features ?? hybridFit?.hybrid?.features ?? null;
   const by = otherStarter(run, scope);
   // Binary classification: the threshold its predictions use; only who started it saves another.
@@ -281,7 +283,7 @@ function NetworkRunView({
   const stepShare = progress && progress.steps > 0 ? progress.step / progress.steps : 0;
   const currentEpoch = progress?.epoch ?? Math.min(done + 1, epochs);
   let overall = epochs > 0 ? Math.min(100, ((done + stepShare) / epochs) * 100) : 0;
-  let headline = `Epoch ${currentEpoch} of ${epochs}`;
+  let headline = i18n.t('ui.training.RunView.epochOf', { epoch: currentEpoch, epochs });
   // A hybrid network that searches only its classical model learns the features once, before
   // the trials (which have no epochs); a search of its neural settings learns them per trial.
   const fittedTrials = hybridRun && !tuning?.neural_space;
@@ -294,8 +296,11 @@ function NetworkRunView({
     overall = Math.min(100, ((run.trials_done + share) / trialsTotal) * 100);
     headline =
       runningTrial !== null && !fittedTrials
-        ? `Trial ${runningTrial} of ${trialsTotal} · Epoch ${currentEpoch} of ${epochs}`
-        : `Trial ${runningTrial ?? Math.min(run.trials_done + 1, trialsTotal)} of ${trialsTotal}`;
+        ? `${i18n.t('ui.training.RunView.trialOf', { trial: runningTrial, trials: trialsTotal })} · ${i18n.t('ui.training.RunView.epochOf', { epoch: currentEpoch, epochs })}`
+        : i18n.t('ui.training.RunView.trialOf', {
+            trial: runningTrial ?? Math.min(run.trials_done + 1, trialsTotal),
+            trials: trialsTotal,
+          });
   }
   if (run.message.startsWith('Testing') || run.message.startsWith('Evaluating')) {
     headline = run.message;
@@ -517,8 +522,12 @@ function NetworkRunView({
                         : typeof bestTrial.val_iou === 'number'
                           ? `IoU ${formatPercent(bestTrial.val_iou)}`
                           : typeof bestTrial.val_accuracy === 'number'
-                            ? `accuracy ${formatPercent(bestTrial.val_accuracy)}`
-                            : `loss ${formatMetric(bestTrial.val_loss)}`
+                            ? i18n.t('ui.training.RunView.accuracyValue', {
+                                value: formatPercent(bestTrial.val_accuracy),
+                              })
+                            : i18n.t('ui.training.RunView.lossOnly', {
+                                value: formatMetric(bestTrial.val_loss),
+                              })
                       : undefined
                   }
                 />
@@ -537,8 +546,12 @@ function NetworkRunView({
                       ? typeof best.val_iou === 'number'
                         ? `IoU ${formatPercent(best.val_iou)}`
                         : typeof best.val_accuracy === 'number'
-                          ? `accuracy ${formatPercent(best.val_accuracy)}`
-                          : `loss ${formatMetric(best.val_loss)}`
+                          ? i18n.t('ui.training.RunView.accuracyValue', {
+                              value: formatPercent(best.val_accuracy),
+                            })
+                          : i18n.t('ui.training.RunView.lossOnly', {
+                              value: formatMetric(best.val_loss),
+                            })
                       : undefined
                   }
                 />
@@ -1447,7 +1460,7 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
   const iou = [
     series(
       'val_iou',
-      'Mean IoU',
+      i18n.t('ui.training.RunView.meanIou'),
       SERIES_COLORS[1],
       history.map((h) => h.val_iou)
     ),
@@ -1459,7 +1472,7 @@ function chartSeries(history: HistoryEntry[], classification: boolean) {
     ),
     series(
       'val_pixel_accuracy',
-      'Pixel accuracy',
+      i18n.t('ui.training.RunView.pixelAccuracy'),
       seriesColor(3),
       history.map((h) => h.val_pixel_accuracy)
     ),
@@ -1625,11 +1638,15 @@ function TestResultCard({
       ? formatPercent(result?.accuracy)
       : formatMetric(rmse ? result?.rmse : result?.loss);
   const samples =
-    size !== null ? `${size.toLocaleString(currentLocale())} test samples` : 'The test set';
+    size !== null
+      ? i18n.t('ui.training.RunView.testSamples', { size: size.toLocaleString(currentLocale()) })
+      : i18n.t('ui.training.RunView.theTestSet');
   let note: string;
   if (result) {
     const loss =
-      segmentation || classification || rmse ? `loss ${formatMetric(result.loss)} · ` : '';
+      segmentation || classification || rmse
+        ? i18n.t('ui.training.RunView.lossValue', { loss: formatMetric(result.loss) })
+        : '';
     note = i18n.t('ui.training.RunView.measuredOnceAfterTraining', { loss, samples });
   } else if (active) {
     note = i18n.t('ui.training.RunView.heldOutUntilTrainingHas', {
@@ -1720,7 +1737,9 @@ export function TrialsTable({
   const winner = trials.find((t) => t.trial === best) ?? null;
   const finished = trials.filter((t) => t.status === 'completed' || t.status === 'failed').length;
   const folds = tuning.cv_folds ?? trials.find((t) => t.folds)?.folds ?? null;
-  const where = folds ? `${folds}-fold cross-validation` : 'the validation data';
+  const where = folds
+    ? i18n.t('ui.training.RunView.foldCrossValidation', { folds })
+    : i18n.t('ui.training.RunView.theValidationData');
   const prefix = folds ? 'CV' : 'Val.';
 
   return (

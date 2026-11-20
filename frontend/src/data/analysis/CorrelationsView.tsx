@@ -87,7 +87,13 @@ export const CorrelationsView = memo(
         matrix = {
           columns: wanted,
           values: computed.values,
-          basis: `Computed on the ${formatCount(computed.rows)} ${computed.trainingRows ? 'training rows' : 'rows'} of the preview sample.`,
+          basis: computed.trainingRows
+            ? i18n.t('ui.data.CorrelationsView.computedOnTheTrainingRows', {
+                rows: formatCount(computed.rows),
+              })
+            : i18n.t('ui.data.CorrelationsView.computedOnTheRows', {
+                rows: formatCount(computed.rows),
+              }),
         };
       }
       if (!clustered || matrix.columns.length < 3) {
@@ -133,7 +139,9 @@ export const CorrelationsView = memo(
 
         {shown ? (
           <Heatmap
-            title={`${METHOD_LABELS[method]} correlation`}
+            title={i18n.t('ui.data.CorrelationsView.methodCorrelation', {
+              method: METHOD_LABELS[method],
+            })}
             subtitle={i18n.t('ui.data.CorrelationsView.showingOfNumberAndYes', {
               length: formatCount(shown.columns.length),
               all: formatCount(all),
@@ -149,7 +157,7 @@ export const CorrelationsView = memo(
                 onScatter(shown.columns[c], shown.columns[r]);
               }
             }}
-            clickHint="open the scatter plot"
+            clickHint={i18n.t('ui.data.CorrelationsView.openTheScatterPlot')}
           />
         ) : (
           <Text size="sm" c="dimmed">

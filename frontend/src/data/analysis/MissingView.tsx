@@ -58,7 +58,6 @@ export function MissingView({
     .filter((c) => allColumns || missingNames.has(c.name))
     .map((c) => ({ name: c.name, values: c.values }));
   const cells = profile.n_rows * profile.n_columns;
-  const plural = (n: number, word: string) => `${formatCount(n)} ${word}${n === 1 ? '' : 's'}`;
 
   if (withMissing.length === 0) {
     return (
@@ -86,7 +85,10 @@ export function MissingView({
         <StatTile
           label={i18n.t('ui.data.MissingView.columnsWithGaps')}
           value={formatCount(withMissing.length)}
-          hint={`of ${plural(profile.n_columns, 'column')}`}
+          hint={i18n.t('ui.data.MissingView.ofColumns', {
+            count: profile.n_columns,
+            n: formatCount(profile.n_columns),
+          })}
         />
         <StatTile
           label={i18n.t('ui.data.MissingView.incompleteRows')}
@@ -109,7 +111,10 @@ export function MissingView({
               }
             >
               {i18n.t('ui.data.MissingView.fillMedian', {
-                plural: plural(numeric.length, 'number column'),
+                plural: i18n.t('ui.data.MissingView.numberColumns', {
+                  count: numeric.length,
+                  n: formatCount(numeric.length),
+                }),
               })}
             </Button>
           )}
@@ -125,7 +130,10 @@ export function MissingView({
               }
             >
               {i18n.t('ui.data.MissingView.fillMostFrequent', {
-                plural: plural(categorical.length, 'category column'),
+                plural: i18n.t('ui.data.MissingView.categoryColumns', {
+                  count: categorical.length,
+                  n: formatCount(categorical.length),
+                }),
               })}
             </Button>
           )}
@@ -149,8 +157,8 @@ export function MissingView({
           return `${formatPercent(row.values[0])} · ${formatCount(column?.missing ?? 0)}`;
         }}
         onSelect={onShowColumn}
-        selectHint="show the column"
-        unit="share missing"
+        selectHint={i18n.t('ui.data.MissingView.showTheColumn')}
+        unit={i18n.t('ui.data.MissingView.shareMissing')}
       />
       {withMissing.length > BARS && (
         <Button

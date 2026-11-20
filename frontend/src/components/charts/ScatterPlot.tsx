@@ -447,7 +447,12 @@ export function ScatterPlot({
       legend={legend}
       legendExtra={color?.type === 'numeric' || fitText || diagonal ? legendExtra : undefined}
       table={() => ({
-        head: [pointLabel ? 'Point' : '#', xLabel, yLabel, ...(color ? [color.label] : [])],
+        head: [
+          pointLabel ? i18n.t('ui.components.ScatterPlot.point') : '#',
+          xLabel,
+          yLabel,
+          ...(color ? [color.label] : []),
+        ],
         rows: order
           .slice(0, TABLE_ROWS)
           .map((i, k) => [

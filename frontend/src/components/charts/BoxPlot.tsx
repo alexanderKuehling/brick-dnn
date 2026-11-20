@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { linearScale } from '@/components/chartScale';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { innerTicks, timeTicks } from './axes';
 import { ChartEmpty, ChartFrame, ChartTooltip, TooltipRow } from './ChartFrame';
 import { seriesColor } from './colors';
@@ -99,12 +99,21 @@ export function BoxPlot({
   const active = cursor.active;
 
   const facts = (box: BoxSummary): [string, string][] => [
-    ['Median', format(box.median)],
+    [i18n.t('ui.components.BoxPlot.median'), format(box.median)],
     ['Q1 – Q3', `${format(box.q1)} – ${format(box.q3)}`],
-    [box.exact ? 'Whiskers' : 'Whiskers (estimated)', `${format(box.low)} – ${format(box.high)}`],
-    ['Min – max', `${format(box.min)} – ${format(box.max)}`],
-    ...(box.mean !== null ? ([['Mean', format(box.mean)]] as [string, string][]) : []),
-    ...(box.n !== null ? ([['Values', formatCount(box.n)]] as [string, string][]) : []),
+    [
+      box.exact
+        ? i18n.t('ui.components.BoxPlot.whiskers')
+        : i18n.t('ui.components.BoxPlot.whiskersEstimated'),
+      `${format(box.low)} – ${format(box.high)}`,
+    ],
+    [i18n.t('ui.components.BoxPlot.minMax'), `${format(box.min)} – ${format(box.max)}`],
+    ...(box.mean !== null
+      ? ([[i18n.t('ui.components.BoxPlot.mean'), format(box.mean)]] as [string, string][])
+      : []),
+    ...(box.n !== null
+      ? ([[i18n.t('ui.components.BoxPlot.values'), formatCount(box.n)]] as [string, string][])
+      : []),
     ...(box.outlierCount !== null
       ? ([['Outliers (1.5 × IQR)', formatCount(box.outlierCount)]] as [string, string][])
       : []),
@@ -113,7 +122,7 @@ export function BoxPlot({
     const g = groups[i];
     return g
       ? `${showLabels ? `${g.label}: ` : ''}${facts(g.box)
-          .map(([k, v]) => `${k.toLowerCase()} ${v}`)
+          .map(([k, v]) => `${lowerCase(k)} ${v}`)
           .join(', ')}`
       : '';
   };
@@ -126,16 +135,16 @@ export function BoxPlot({
       controls={controls}
       table={() => ({
         head: [
-          'Group',
-          'Min',
-          'Whisker low',
+          i18n.t('ui.components.BoxPlot.group'),
+          i18n.t('ui.components.BoxPlot.min'),
+          i18n.t('ui.components.BoxPlot.whiskerLow'),
           'Q1',
-          'Median',
+          i18n.t('ui.components.BoxPlot.median'),
           'Q3',
-          'Whisker high',
-          'Max',
-          'Mean',
-          'Values',
+          i18n.t('ui.components.BoxPlot.whiskerHigh'),
+          i18n.t('ui.components.BoxPlot.max'),
+          i18n.t('ui.components.BoxPlot.mean'),
+          i18n.t('ui.components.BoxPlot.values'),
         ],
         rows: groups.map((g) => [
           g.label,

@@ -583,7 +583,10 @@ def _check_images(
             notes.append(f"{name} images are converted to grayscale.")
         elif nc == 1 and image["channels"] == 3:
             notes.append("The grayscale images are copied into 3 channels.")
-        sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test images"
+        summary = (
+            f"Classification into {num_classes} classes ({name}, {builtin.train_size:,} "
+            f"training and {builtin.test_size:,} test images)."
+        )
         notes.append(
             f"Validation data is taken from the {builtin.train_size:,} training images "
             f"(validation split). The {builtin.test_size:,} official test images are the test "
@@ -593,14 +596,17 @@ def _check_images(
     else:
         mode = "RGB" if image["channels"] == 3 else "grayscale"
         notes.append(f"Images are converted to {mode} and resized to {size}.")
-        sizes = _count(info.num_samples, "image")
+        summary = (
+            f"Classification into {num_classes} classes ({name}, "
+            f"{_count(info.num_samples, 'image')})."
+        )
 
     class_names = list(info.class_names or [])
     if k > len(class_names):
         class_names += [f"class {i}" for i in range(len(class_names), k)]
     result.plan = TrainingPlan(
         task="classification",
-        summary=f"Classification into {num_classes} classes ({name}, {sizes}).",
+        summary=summary,
         inputs=inputs,
         targets=[{"kind": "class", "num_classes": k}],
         image=image,
@@ -660,11 +666,11 @@ def _check_tokens(
         return
     class_names = list(info.class_names or [])
     class_names += [f"class {i}" for i in range(len(class_names), k)]
-    sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test texts"
     result.plan = TrainingPlan(
         task="classification",
         summary=(
-            f"Classification into {info.num_classes} classes ({name}, {sizes} of {length} tokens)."
+            f"Classification into {info.num_classes} classes ({name}, {builtin.train_size:,} "
+            f"training and {builtin.test_size:,} test texts of {length} tokens)."
         ),
         inputs=inputs,
         targets=[{"kind": "class", "num_classes": k}],
@@ -862,13 +868,19 @@ def _check_segmentation(
             f"{builtin.test_size:,} test images are the test set: the kept weights are "
             "measured on them once, after training."
         )
-        sizes = f"{builtin.train_size:,} training and {builtin.test_size:,} test images"
+        summary = (
+            f"Segmentation into {n} classes at {size} pixels ({name}, {builtin.train_size:,} "
+            f"training and {builtin.test_size:,} test images)."
+        )
     else:
         notes.append(
             f"Images are converted to {mode} and resized to {size}; masks are resized with "
             "nearest neighbour."
         )
-        sizes = _count(info.num_samples, "image") + " with masks"
+        summary = (
+            f"Segmentation into {n} classes at {size} pixels ({name}, "
+            f"{_count(info.num_samples, 'image')} with masks)."
+        )
         if info.predefined_split is not None:
             train, val, test = [*info.predefined_split, 0, 0, 0][:3]
             parts = (
@@ -924,7 +936,7 @@ def _check_segmentation(
             return
     result.plan = TrainingPlan(
         task="segmentation",
-        summary=f"Segmentation into {n} classes at {size} pixels ({name}, {sizes}).",
+        summary=summary,
         inputs=inputs,
         targets=[{"kind": "mask", "num_classes": classes, "binary": binary}],
         image=image,
@@ -1241,12 +1253,17 @@ def _describe_fix(analysis: Analysis, nid: str, params: dict[str, Any]) -> dict[
         k: list(v) if isinstance(v, tuple) else v for k, v in info.layer.p.items() if k in params
     }
     if info.type == "Input":
-        parts = []
-        if "shape" in params:
-            parts.append(f"Input shape {_x(previous['shape'])} → {_x(params['shape'])}")
-        if "dtype" in params:
-            parts.append(f"Input data type {previous['dtype']} → {params['dtype']}")
-        summary = ", ".join(parts)
+        # One sentence each, so that the summary can be translated (messages.py).
+        shape = (_x(previous["shape"]), _x(params["shape"])) if "shape" in params else None
+        dtype = (previous["dtype"], params["dtype"]) if "dtype" in params else None
+        if shape and dtype:
+            summary = (
+                f"Input shape {shape[0]} → {shape[1]}, Input data type {dtype[0]} → {dtype[1]}"
+            )
+        elif dtype:
+            summary = f"Input data type {dtype[0]} → {dtype[1]}"
+        else:
+            summary = f"Input shape {shape[0]} → {shape[1]}" if shape else ""
     elif "num_embeddings" in params:
         summary = (
             f"Vocabulary size of the Embedding {previous['num_embeddings']} → "
@@ -1598,10 +1615,16 @@ def _check_hybrid(
         )
         return
     if is_segmentation(info):
+        segmentation = (
+            "A segmentation needs a neural network that outputs a class per pixel, e.g. the "
+            "example U-Net."
+        )
         result.errors.append(
-            f"{layer.label} predicts one {'class' if classification else 'value'} per sample, "
-            f"but {name} has a class for every pixel. A segmentation needs a neural network "
-            "that outputs a class per pixel, e.g. the example U-Net."
+            f"{layer.label} predicts one class per sample, but {name} has a class for every "
+            f"pixel. {segmentation}"
+            if classification
+            else f"{layer.label} predicts one value per sample, but {name} has a class for "
+            f"every pixel. {segmentation}"
         )
         return
     if info.kind == "random":

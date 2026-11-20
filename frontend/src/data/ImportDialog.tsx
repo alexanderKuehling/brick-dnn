@@ -194,10 +194,18 @@ const ENCODING_NAMES: Record<string, string> = {
 };
 
 const DELIMITER_NAMES: Record<string, string> = {
-  ',': 'comma',
-  ';': 'semicolon',
-  '\t': 'tab',
-  '|': 'pipe',
+  get ','() {
+    return i18n.t('ui.data.ImportDialog.commaSeparated');
+  },
+  get ';'() {
+    return i18n.t('ui.data.ImportDialog.semicolonSeparated');
+  },
+  get '\t'() {
+    return i18n.t('ui.data.ImportDialog.tabSeparated');
+  },
+  get '|'() {
+    return i18n.t('ui.data.ImportDialog.pipeSeparated');
+  },
 };
 
 const FORMAT_NAMES: Record<ImportFormat, string> = {
@@ -222,10 +230,18 @@ const FORMAT_NAMES: Record<ImportFormat, string> = {
 };
 
 const PACKED: Record<string, string> = {
-  gzip: 'gzip-packed',
-  bz2: 'bzip2-packed',
-  xz: 'xz-packed',
-  zip: 'from a ZIP file',
+  get gzip() {
+    return i18n.t('ui.data.ImportDialog.packed', { format: 'gzip' });
+  },
+  get bz2() {
+    return i18n.t('ui.data.ImportDialog.packed', { format: 'bzip2' });
+  },
+  get xz() {
+    return i18n.t('ui.data.ImportDialog.packed', { format: 'xz' });
+  },
+  get zip() {
+    return i18n.t('ui.data.ImportDialog.fromAZipFile');
+  },
 };
 
 const WORKBOOKS: ImportFormat[] = ['xlsx', 'xls', 'ods'];
@@ -251,24 +267,42 @@ export function describeReport(report: ImportReport): string {
   if (format === 'csv') {
     const delimiter = report.delimiter ?? ',';
     parts.push(
-      `${DELIMITER_NAMES[delimiter] ?? `“${delimiter}”`}-separated`,
-      report.decimal === ',' ? 'decimal comma' : 'decimal point',
+      DELIMITER_NAMES[delimiter] ?? i18n.t('ui.data.ImportDialog.separatedBy', { delimiter }),
+      report.decimal === ','
+        ? i18n.t('ui.data.ImportDialog.decimalComma')
+        : i18n.t('ui.data.ImportDialog.decimalPoint'),
       ENCODING_NAMES[(report.encoding ?? '').toLowerCase()] ?? report.encoding ?? 'UTF-8'
     );
   } else if (report.sheet) {
-    parts.push(`${FORMAT_NAMES[format]}, sheet “${report.sheet}”`);
+    parts.push(
+      i18n.t('ui.data.ImportDialog.formatSheet', {
+        format: FORMAT_NAMES[format],
+        sheet: report.sheet,
+      })
+    );
   } else if (report.json_path?.length) {
-    parts.push(`${FORMAT_NAMES[format]}, the list under “${report.json_path.join('.')}”`);
+    parts.push(
+      i18n.t('ui.data.ImportDialog.formatListUnder', {
+        format: FORMAT_NAMES[format],
+        path: report.json_path.join('.'),
+      })
+    );
   } else {
     parts.push(FORMAT_NAMES[format] ?? format);
   }
   if (report.compression) {
     parts.push(
-      report.member ? `“${report.member}” from a ZIP file` : (PACKED[report.compression] ?? '')
+      report.member
+        ? i18n.t('ui.data.ImportDialog.memberFromAZipFile', { member: report.member })
+        : (PACKED[report.compression] ?? '')
     );
   }
   if (format === 'csv' || WORKBOOKS.includes(format)) {
-    parts.push(report.header ? 'header row' : 'no header row');
+    parts.push(
+      report.header
+        ? i18n.t('ui.data.ImportDialog.withHeaderRow')
+        : i18n.t('ui.data.ImportDialog.withoutHeaderRow')
+    );
   }
   return parts.filter(Boolean).join(' · ');
 }
@@ -999,7 +1033,7 @@ function ImportProgress({
       <UploadProgress
         bytes={bytes}
         fileName={label}
-        processingText="Reading and checking the file …"
+        processingText={i18n.t('ui.data.ImportDialog.readingAndCheckingTheFile')}
       />
     ) : null;
   }

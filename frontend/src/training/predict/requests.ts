@@ -58,7 +58,11 @@ export async function predictAll(
     } catch (error) {
       const problem = predictionProblem(error, done);
       if (problem.errors.length === 0 && done > 0) {
-        problem.message = `${problem.message} (rows ${done + 1}–${done + part.length})`;
+        problem.message = i18n.t('ui.training.requests.messageRows', {
+          message: problem.message,
+          from: done + 1,
+          to: done + part.length,
+        });
       }
       throw problem;
     }

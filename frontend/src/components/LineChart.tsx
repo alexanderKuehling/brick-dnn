@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Box, Group, Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
-import { currentLocale, i18n, useTranslation } from '@/i18n';
+import { currentLocale, i18n, lowerCase, useTranslation } from '@/i18n';
 import {
   extent,
   formatTick,
@@ -123,14 +123,14 @@ export function LineChart({
       return i18n.t('ui.components.LineChart.at', {
         label: s.label,
         value: formatValue(first[1]),
-        xLabel: xLabel.toLowerCase(),
+        xLabel: lowerCase(xLabel),
         value2: first[0],
       });
     }
     return i18n.t('ui.components.LineChart.atAt', {
       label: s.label,
       first: formatValue(first[1]),
-      xLabel: xLabel.toLowerCase(),
+      xLabel: lowerCase(xLabel),
       firstX: first[0],
       last: formatValue(last[1]),
       lastX: last[0],
@@ -309,7 +309,7 @@ export function LineChart({
             tabIndex={0}
             aria-label={i18n.t('ui.components.LineChart.useTheArrowKeysTo', {
               title,
-              xLabel: xLabel.toLowerCase(),
+              xLabel: lowerCase(xLabel),
             })}
             aria-valuemin={x[0]}
             aria-valuemax={x[x.length - 1]}

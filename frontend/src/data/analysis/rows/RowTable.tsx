@@ -130,16 +130,20 @@ export function RowTable({
                 }}
               />
             </th>
-            {header('position', 'Row', true)}
+            {header('position', i18n.t('ui.data.RowTable.rowHead'), true)}
             {showId && <th>{analysis.id_column}</th>}
-            {showSplit && header('split', 'Split')}
+            {showSplit && header('split', i18n.t('ui.data.RowTable.split'))}
             {showTarget &&
-              header('target', analysis.target ?? 'Target', analysis.task === 'regression')}
-            {header('spread', 'Spread', true)}
-            {header('missing', 'Missing', true)}
-            {header('nn_ratio', 'NN ratio', true)}
+              header(
+                'target',
+                analysis.target ?? i18n.t('ui.data.RowTable.target'),
+                analysis.task === 'regression'
+              )}
+            {header('spread', i18n.t('ui.data.RowTable.spread'), true)}
+            {header('missing', i18n.t('ui.data.RowTable.missing'), true)}
+            {header('nn_ratio', i18n.t('ui.data.RowTable.nnRatio'), true)}
             <th>{i18n.t('ui.data.RowTable.nearestRow')}</th>
-            {header('group_size', 'Group', true)}
+            {header('group_size', i18n.t('ui.data.RowTable.group'), true)}
           </tr>
         </thead>
         <tbody>

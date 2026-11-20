@@ -98,9 +98,9 @@ export function StepParamField(props: StepParamFieldProps) {
       let problem: string | null = null;
       if (chosen !== null && !others.some((s) => String(s.id) === chosen)) {
         if (Number(chosen) === currentSourceId) {
-          problem = 'Choose another table than the one you are preparing.';
+          problem = i18n.t('ui.data.StepParamField.chooseAnotherTable');
         } else if (!sharedBy) {
-          problem = 'This table does not exist (any more).';
+          problem = i18n.t('ui.data.StepParamField.thisTableDoesNotExist');
         }
         data.push({
           value: chosen,
@@ -249,7 +249,9 @@ function ColumnField({ param, value, onChange, columns, error }: StepParamFieldP
   const renderOption = columnOption(kinds);
   const description = param.help || undefined;
   const nothingFound =
-    allowed.length === 0 && columns.length > 0 ? 'No suitable column' : 'No matching column';
+    allowed.length === 0 && columns.length > 0
+      ? i18n.t('ui.data.StepParamField.noSuitableColumn')
+      : i18n.t('ui.data.StepParamField.noMatchingColumn');
 
   if (param.kind === 'column') {
     const current = typeof value === 'string' && value !== '' ? value : null;
@@ -426,11 +428,21 @@ function ColumnsField({
                 addColumns(found);
                 const added = found.filter((n) => !selected.includes(n)).length;
                 const more =
-                  unknown.length > 5 ? ` and ${formatCount(unknown.length - 5)} more` : '';
-                const missing = unknown.length
-                  ? `; not found: ${unknown.slice(0, 5).join(', ')}${more}.`
-                  : '.';
-                setPasteNote(`Added ${formatCount(added)} columns${missing}`);
+                  unknown.length > 5
+                    ? i18n.t('ui.data.TargetView.andMore', { n: formatCount(unknown.length - 5) })
+                    : '';
+                setPasteNote(
+                  unknown.length
+                    ? i18n.t('ui.data.StepParamField.addedColumnsNotFound', {
+                        count: added,
+                        n: formatCount(added),
+                        names: `${unknown.slice(0, 5).join(', ')}${more}`,
+                      })
+                    : i18n.t('ui.data.StepParamField.addedColumns', {
+                        count: added,
+                        n: formatCount(added),
+                      })
+                );
                 setPasted('');
               }}
             >
@@ -716,9 +728,9 @@ function MappingField({
             placeholder: keyLabel,
             value: row.key,
             error: duplicate
-              ? 'Listed twice'
+              ? i18n.t('ui.data.StepParamField.listedTwice')
               : unknownColumn
-                ? 'No such column at this step'
+                ? i18n.t('ui.data.StepParamField.noSuchColumnAtThisStep')
                 : undefined,
             style: { flex: 1, minWidth: 0 },
           };

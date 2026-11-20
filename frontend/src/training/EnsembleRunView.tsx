@@ -32,7 +32,7 @@ import {
   type GraphDocument,
   type RunDetail,
 } from '@/api';
-import { currentLocale, i18n, useTranslation } from '@/i18n';
+import { currentLocale, i18n, lowerCase, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
   canSetThreshold,
@@ -127,12 +127,13 @@ export function EnsembleRunView({
         </Group>
         <Text size="xs" c="dimmed" mt={4}>
           {[
-            'Ensemble',
-            METHOD_LABELS[method].toLowerCase(),
-            by && `by ${by}`,
+            i18n.t('ui.training.EnsembleRunView.ensemble'),
+            lowerCase(METHOD_LABELS[method]),
+            by && i18n.t('ui.training.DataSourcePicker.byOwner', { owner: by }),
             run.dataset.name,
-            run.started_via?.name && `via “${run.started_via.name}”`,
-            `created ${formatDate(run.created_at)}`,
+            run.started_via?.name &&
+              i18n.t('ui.training.EnsembleRunView.via', { name: run.started_via.name }),
+            i18n.t('ui.training.EnsembleRunView.created', { date: formatDate(run.created_at) }),
             cpuUsage(run),
           ]
             .filter(Boolean)
@@ -180,7 +181,7 @@ export function EnsembleRunView({
         <EvaluationResults
           evaluation={state?.evaluation}
           threshold={threshold}
-          subject="The ensemble"
+          subject={i18n.t('ui.training.EnsembleRunView.theEnsemble')}
         />
       )}
 
@@ -494,8 +495,10 @@ function Comparison({ combined, task }: { combined: EnsembleState; task: string 
       <Text size="xs" c="dimmed">
         {[
           typeof size === 'number' &&
-            `${size.toLocaleString(currentLocale())} rows, the same for all.`,
-          'The best value of each column is green.',
+            i18n.t('ui.training.EnsembleRunView.rowsTheSameForAll', {
+              size: size.toLocaleString(currentLocale()),
+            }),
+          i18n.t('ui.training.EnsembleRunView.theBestValueOfEach'),
         ]
           .filter(Boolean)
           .join(' ')}

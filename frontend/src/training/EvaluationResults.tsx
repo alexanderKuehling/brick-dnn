@@ -51,9 +51,15 @@ const SPLIT_LABELS: Record<SplitKey, string> = {
 };
 /** "120 validation rows". */
 const ROW_LABELS: Record<SplitKey, string> = {
-  val: 'validation',
-  test: 'test',
-  training: 'training',
+  get val() {
+    return i18n.t('ui.training.EvaluationResults.rowsValidation');
+  },
+  get test() {
+    return i18n.t('ui.training.EvaluationResults.rowsTest');
+  },
+  get training() {
+    return i18n.t('ui.training.EvaluationResults.rowsTraining');
+  },
 };
 
 /** F1 scores: 0.91234 → "0.912". */
@@ -219,7 +225,7 @@ export function ConfusionMatrix({
         <GradientLegend
           label={i18n.t('ui.training.EvaluationResults.colourShareOfTheTrue')}
           stops={[SEQUENTIAL[scheme].fillLow, SEQUENTIAL[scheme].high]}
-          labels={['0%', '100% of the true class']}
+          labels={['0%', i18n.t('ui.training.EvaluationResults.fullOfTheTrueClass')]}
         />
       }
       caption={i18n.t('ui.training.EvaluationResults.rowsTrueClassColumnsPredicted')}
@@ -547,38 +553,67 @@ function ClassificationResults({
   const options = parts.map((part) => part.key);
   const names = evaluation.class_names;
   const tiles = [
-    tile(parts, 'Accuracy', (s) => s.accuracy, formatPercent),
+    tile(parts, i18n.t('ui.training.EvaluationResults.accuracy'), (s) => s.accuracy, formatPercent),
     tile(
       parts,
-      'Balanced accuracy',
+      i18n.t('ui.training.EvaluationResults.balancedAccuracy'),
       (s) => s.balanced_accuracy,
       formatPercent,
-      'mean recall per class'
+      i18n.t('ui.training.EvaluationResults.meanRecallPerClass')
     ),
-    tile(parts, 'Macro F1', (s) => s.macro_f1, formatScore, 'mean over the classes'),
-    tile(parts, 'Weighted F1', (s) => s.weighted_f1, formatScore, 'weighted by class size'),
-    tile(parts, 'Top-3 accuracy', (s) => s.top_k_accuracy?.['3'], formatPercent),
-    tile(parts, 'Top-5 accuracy', (s) => s.top_k_accuracy?.['5'], formatPercent),
     tile(
       parts,
-      'ROC AUC',
+      i18n.t('ui.training.EvaluationResults.macroF1'),
+      (s) => s.macro_f1,
+      formatScore,
+      i18n.t('ui.training.EvaluationResults.meanOverTheClasses')
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.weightedF1'),
+      (s) => s.weighted_f1,
+      formatScore,
+      i18n.t('ui.training.EvaluationResults.weightedByClassSize')
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.topAccuracy', { k: 3 }),
+      (s) => s.top_k_accuracy?.['3'],
+      formatPercent
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.topAccuracy', { k: 5 }),
+      (s) => s.top_k_accuracy?.['5'],
+      formatPercent
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.rocAuc'),
       (s) => s.threshold_curve?.roc_auc,
       formatScore,
-      '0.5: guessing, 1: perfect'
+      i18n.t('ui.training.EvaluationResults.guessingPerfect')
     ),
     tile(
       parts,
-      'PR AUC',
+      i18n.t('ui.training.EvaluationResults.prAuc'),
       (s) => s.threshold_curve?.pr_auc,
       formatScore,
-      `average precision of “${names[1] ?? 'class 1'}”`
+      i18n.t('ui.training.EvaluationResults.averagePrecisionOf', {
+        name: names[1] ?? i18n.t('ui.training.EvaluationResults.class1'),
+      })
     ),
   ].filter(Boolean);
   return (
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(evaluation, parts, 'Log loss (cross-entropy)', trainHint)}
+        {lossTile(
+          evaluation,
+          parts,
+          i18n.t('ui.training.EvaluationResults.logLossCrossEntropy'),
+          trainHint
+        )}
       </SimpleGrid>
       <Group justify="space-between" gap="xs">
         <Text size="xs" c="dimmed">
@@ -594,7 +629,9 @@ function ClassificationResults({
         <ConfusionMatrix
           names={names}
           matrix={split.confusion_matrix}
-          subtitle={`${SPLIT_LABELS[shown]} rows`}
+          subtitle={i18n.t('ui.training.EvaluationResults.splitRows', {
+            split: SPLIT_LABELS[shown],
+          })}
         />
       ) : (
         <ConfusedPairs evaluation={evaluation} split={split} />
@@ -642,24 +679,58 @@ function RegressionResults({
   const options = parts.map((part) => part.key);
   const points = useMemo(() => samplePoints(split), [split]);
   const tiles = [
-    tile(parts, 'RMSE', (s) => s.rmse, formatMetric, 'root mean squared error'),
-    tile(parts, 'MAE', (s) => s.mae, formatMetric, 'mean absolute error'),
+    tile(
+      parts,
+      'RMSE',
+      (s) => s.rmse,
+      formatMetric,
+      i18n.t('ui.training.EvaluationResults.rootMeanSquaredError')
+    ),
+    tile(
+      parts,
+      'MAE',
+      (s) => s.mae,
+      formatMetric,
+      i18n.t('ui.training.EvaluationResults.meanAbsoluteError')
+    ),
     tile(
       parts,
       'R²',
       (s) => s.r2,
       (v) => (typeof v === 'number' ? v.toFixed(3) : '–')
     ),
-    tile(parts, 'MAPE', (s) => s.mape, formatPercent, 'mean absolute % error'),
-    tile(parts, 'Median abs. error', (s) => s.median_absolute_error, formatMetric),
-    tile(parts, 'Max error', (s) => s.max_error, formatMetric, 'largest absolute error'),
+    tile(
+      parts,
+      'MAPE',
+      (s) => s.mape,
+      formatPercent,
+      i18n.t('ui.training.EvaluationResults.meanAbsolutePercentError')
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.medianAbsError'),
+      (s) => s.median_absolute_error,
+      formatMetric
+    ),
+    tile(
+      parts,
+      i18n.t('ui.training.EvaluationResults.maxError'),
+      (s) => s.max_error,
+      formatMetric,
+      i18n.t('ui.training.EvaluationResults.largestAbsoluteError')
+    ),
   ].filter(Boolean);
   const residuals = split.residuals;
   return (
     <>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xs" verticalSpacing="xs">
         {tiles}
-        {lossTile(evaluation, parts, 'Loss (MSE, standardised)', trainHint)}
+        {lossTile(
+          evaluation,
+          parts,
+          i18n.t('ui.training.EvaluationResults.lossMseStandardised'),
+          trainHint
+        )}
       </SimpleGrid>
       {residuals && (
         <Text size="xs" c="dimmed">
@@ -728,12 +799,14 @@ export function EvaluationResults({
   const kept = subject
     ? subject
     : classical
-      ? 'The fitted model'
+      ? i18n.t('ui.training.EvaluationResults.theFittedModel')
       : [
           typeof evaluation.epoch === 'number'
-            ? `Weights of epoch ${evaluation.epoch}`
-            : 'The kept weights',
-          typeof evaluation.trial === 'number' ? `trial ${evaluation.trial}` : null,
+            ? i18n.t('ui.training.EvaluationResults.weightsOfEpoch', { epoch: evaluation.epoch })
+            : i18n.t('ui.training.EvaluationResults.theKeptWeights'),
+          typeof evaluation.trial === 'number'
+            ? i18n.t('ui.training.EvaluationResults.trial', { trial: evaluation.trial })
+            : null,
         ]
           .filter(Boolean)
           .join(' · ');

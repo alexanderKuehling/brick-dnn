@@ -14,7 +14,7 @@ import type {
   NodeAnalysis,
   OutputKind,
 } from '@/api/types';
-import { i18n } from '@/i18n';
+import { i18n, lowerCase } from '@/i18n';
 
 /** What a brick takes. Catalogues of older servers only know one tensor input. */
 export function inputSlots(spec: LayerSpec | undefined): InputSlot[] {
@@ -120,7 +120,7 @@ export function connectionProblem(
       : i18n.t('builder.connect.onlyKernels', { target: target.label });
   }
   if (slot.kind !== kind) {
-    const values = { slot: slot.label.toLowerCase(), target: target.label };
+    const values = { slot: lowerCase(slot.label), target: target.label };
     return slot.kind === 'tensor'
       ? i18n.t('builder.connect.dataNot', { ...values, kind: kindWord(kind) })
       : i18n.t('builder.connect.onlyKind', { ...values, kind: kindWord(slot.kind) });

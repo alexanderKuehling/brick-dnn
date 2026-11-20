@@ -86,9 +86,27 @@ const SECTIONS: { severity: Severity; title: string; shown: number }[] = [
 ];
 
 const SEVERITY = {
-  error: { color: 'red', Icon: IconAlertCircle, prefix: 'Error: ' },
-  warning: { color: 'yellow', Icon: IconAlertTriangle, prefix: 'Warning: ' },
-  info: { color: 'blue', Icon: IconBulb, prefix: 'Suggestion: ' },
+  error: {
+    color: 'red',
+    Icon: IconAlertCircle,
+    get prefix() {
+      return i18n.t('ui.data.ReadinessPanel.prefixError');
+    },
+  },
+  warning: {
+    color: 'yellow',
+    Icon: IconAlertTriangle,
+    get prefix() {
+      return i18n.t('ui.data.ReadinessPanel.prefixWarning');
+    },
+  },
+  info: {
+    color: 'blue',
+    Icon: IconBulb,
+    get prefix() {
+      return i18n.t('ui.data.ReadinessPanel.prefixSuggestion');
+    },
+  },
 } as const;
 
 /** Short names of the checks (`ReadinessIssue.code`), shown as a badge. */
@@ -147,7 +165,9 @@ const CHECK_LABELS: Record<string, string> = {
   get imbalanced() {
     return i18n.t('ui.data.ReadinessPanel.imbalance');
   },
-  id_like: 'ID column',
+  get id_like() {
+    return i18n.t('ui.data.RowsView.reasonId');
+  },
   get constant() {
     return i18n.t('ui.data.ReadinessPanel.constant');
   },
@@ -181,8 +201,8 @@ function fixKey(fix: DataFix): string {
   return JSON.stringify([fix.type, fix.params]);
 }
 
-function plural(count: number, word: string): string {
-  return count === 1 ? `1 ${word}` : `${formatCount(count)} ${word}s`;
+function plural(count: number, what: 'warnings' | 'suggestions'): string {
+  return i18n.t(`ui.data.ReadinessPanel.${what}`, { count, n: formatCount(count) });
 }
 
 /** Can the prepared data be used for training? Summary, problems with fixes, export. */
@@ -235,7 +255,10 @@ export function ReadinessPanel({
 
   const split = readiness.split_counts;
   const stats: { label: string; value: string; hint?: string }[] = [
-    { label: i18n.t('ui.data.ReadinessPanel.target'), value: readiness.target ?? 'Not set' },
+    {
+      label: i18n.t('ui.data.ReadinessPanel.target'),
+      value: readiness.target ?? i18n.t('ui.data.ReadinessPanel.notSet'),
+    },
     {
       label: i18n.t('ui.data.ReadinessPanel.task'),
       value: readiness.task ? TASK_LABELS[readiness.task] : '–',
@@ -257,8 +280,8 @@ export function ReadinessPanel({
   ];
   const classNames = readiness.class_names ?? [];
   const notes = [
-    warnings.length > 0 ? plural(warnings.length, 'warning') : '',
-    hints.length > 0 ? plural(hints.length, 'suggestion') : '',
+    warnings.length > 0 ? plural(warnings.length, 'warnings') : '',
+    hints.length > 0 ? plural(hints.length, 'suggestions') : '',
   ].filter(Boolean);
   const lists = { error: errors, warning: warnings, info: hints };
 

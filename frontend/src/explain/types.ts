@@ -20,8 +20,8 @@ export interface ExplainMethod {
 /** GET: which methods work for a run. */
 export interface ExplainMethods {
   family: 'neural' | 'classical';
-  /** How the inputs were prepared; null if unknown. */
-  kind: 'image' | 'tabular' | 'demo' | null;
+  /** How the inputs were prepared (`tokens`: the built-in text datasets); null if unknown. */
+  kind: 'image' | 'tabular' | 'tokens' | 'demo' | null;
   /** Why nothing works (no weights, no PyTorch, training disabled). */
   unavailable: string | null;
   methods: ExplainMethod[];

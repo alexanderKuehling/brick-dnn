@@ -299,3 +299,22 @@ describe('Why the model decides: demo data', () => {
     expect(run).toHaveBeenCalledWith(RUN.id, { method: 'weights' }, expect.anything());
   });
 });
+
+describe('Why the model decides: a built-in text dataset', () => {
+  it('says what the full explanation offers instead of a reason for tables', async () => {
+    methods.mockResolvedValue(available('tokens', ['weights']));
+    render(
+      <RunExplanations
+        run={{ ...RUN, dataset: { kind: 'builtin', id: 'sentiment', name: 'Sentiment' } }}
+      />
+    );
+    expect(await screen.findByText(/Models trained on texts have no preview/)).toBeInTheDocument();
+    expect(screen.queryByText('Not for this run (permutation).')).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Open the full explanation: Inside the network' })
+    );
+    expect(
+      await screen.findByRole('tab', { name: 'Inside the network', selected: true })
+    ).toBeInTheDocument();
+  });
+});
