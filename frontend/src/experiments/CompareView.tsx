@@ -38,6 +38,8 @@ export interface CompareViewProps {
   /** The runs to compare (the order gives their colours). */
   rows: RunRow[];
   curves: RunCurve[] | null;
+  /** How many runs the curve charts take: the first ones of `rows` (default: all of them). */
+  curveLimit?: number;
   /** All runs on the page, for the scatter plot over all of them. */
   allRows?: RunRow[];
   options: ComparisonOptions;
@@ -54,10 +56,14 @@ function numericColumns(rows: RunRow[]): Column[] {
   );
 }
 
-/** Curves, settings against results and parallel coordinates of the chosen runs. */
+/**
+ * Curves, settings against results and parallel coordinates of the chosen runs. The curve
+ * charts stop at `curveLimit` runs and say so; the other two take all of them.
+ */
 export function CompareView({
   rows,
   curves,
+  curveLimit,
   allRows,
   options,
   onOptionsChange,
@@ -71,9 +77,13 @@ export function CompareView({
   const set = (change: Partial<ComparisonOptions>) => onOptionsChange({ ...options, ...change });
 
   // ------------------------------------------------------------------ curves
+  const curveRows = useMemo(
+    () => (curveLimit === undefined ? rows : rows.slice(0, curveLimit)),
+    [rows, curveLimit]
+  );
   const shownCurves = useMemo(
-    () => (curves ?? []).filter((curve) => rows.some((row) => row.id === curve.id)),
-    [curves, rows]
+    () => (curves ?? []).filter((curve) => curveRows.some((row) => row.id === curve.id)),
+    [curves, curveRows]
   );
   const metrics = curveMetrics(shownCurves).filter((key) => !key.endsWith('_loss'));
   const metric =
@@ -204,6 +214,14 @@ export function CompareView({
       <Tabs.Panel value="curves" pt="md">
         <Stack gap="lg">
           {error && <Alert color="red">{error}</Alert>}
+          {curveRows.length < rows.length && (
+            <Text size="xs" c="dimmed">
+              {t('experiments.curves.firstOnly', {
+                shown: curveRows.length,
+                total: rows.length,
+              })}
+            </Text>
+          )}
           {tasks && (
             <Alert color="yellow" title={t('experiments.curves.tasksDifferTitle')}>
               {t('experiments.curves.tasksDiffer')}

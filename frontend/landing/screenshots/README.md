@@ -1,7 +1,9 @@
 # Screenshots of the landing pages
 
-The images of `/` and `/de/` (`frontend/landing/images/`) are real screenshots of the app,
-taken with Playwright from a Brick DNN running locally with real data and results:
+The images of the landing pages and the guides (`frontend/landing/images/`) are real
+screenshots of the app, taken with Playwright from a Brick DNN running locally with real data
+and results, once in English (`<id>-<width>.webp`) and once in German
+(`<id>.de-<width>.webp`, see [In German](#in-german)):
 
 - `setup.mjs` creates the data through the REST API and the MCP server: two accounts (`ada`
   and `grace`), a messy table of field trials (generated with a fixed seed) with a data
@@ -43,10 +45,12 @@ npx vite preview --port 4173
 # 3. Playwright is not a dependency of the app: install it for this only
 npm install --no-save playwright && npx playwright install chromium
 node landing/screenshots/shoot.mjs
+node landing/screenshots/shoot.mjs --lang de
 ```
 
 The first run takes about 15 minutes, most of it for the trainings (CPU). Options:
 
+- `--lang de`: the German app, for the German pages (see below);
 - `--only editor,data-prep`: only these screenshots (the ids in `shots.mjs`);
 - `--raw <dir>`: also keep the full-resolution PNG files there;
 - `--out <dir>`: write somewhere else than `images/` (e.g. to try a crop);
@@ -58,9 +62,16 @@ app's layout can move things out of them.
 
 ## In German
 
-Once the app is translated, `--lang de` takes German screenshots: it sets the app's language
-(`brickdnn:language` in localStorage) and writes `<id>.de-<width>.webp`, which the German page
-then uses instead of the English files (`shotFiles` in `images.ts`). The shots find buttons
-and headings by their visible texts: add the German texts to `TEXTS.de` in `shots.mjs` first
-(missing ones are looked for in English), and adjust the alt texts in `content/de.ts` if the
-pictures say something else.
+`--lang de` takes the same screenshots of the German app: it sets the app's language
+(`brickdnn:language` in localStorage, and the language saved on the two accounts, which wins
+once somebody is logged in) and writes `<id>.de-<width>.webp`. The German pages use those
+files instead of the English ones (`shotFiles` in `images.ts`); a screenshot without German
+files falls back to the English ones. Run it after the English screenshots or on its own: the
+data is the same, and the Open Graph image is only made in English.
+
+The shots find buttons and headings by their visible texts, in `TEXTS.de` in `shots.mjs` (a
+text missing there is looked for in English): when the app's German wording changes, change it
+there too, and adjust the alt texts in `content/de.ts` and `content/guides.de.ts` if the
+pictures say something else. What the server words in English shows in English: the names of
+the data and networks the setup creates, the comment, an assistant's calls on the activity
+page and the results of the preparation's steps.

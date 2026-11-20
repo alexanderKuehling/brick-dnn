@@ -31,8 +31,9 @@ from .models import Dataset, TrainingRun
 logger = logging.getLogger(__name__)
 
 INPUT_FORMATS = ("prepared", "raw")
-# Rows the web app sends from a pasted or uploaded CSV file (in requests of MAX_SAMPLES).
-MAX_FORM_ROWS = 500
+# Rows the web app sends from pasted CSV text (in requests of MAX_SAMPLES); more rows are
+# predicted from an uploaded file (predict_files.py).
+MAX_FORM_ROWS = 300
 SAMPLE_ROWS = 5
 NOT_FROM_PREPARATION = (
     "input_format 'raw' is for runs trained on a dataset exported from a data preparation; "
@@ -290,6 +291,10 @@ def prediction_form(run: TrainingRun, actor: budgets.Actor) -> dict[str, Any]:
             ],
             "samples": _csv_samples(run, preprocessing),
         }
+        from . import predict_files
+
+        # "Predict a file": what an uploaded CSV file may have, how long the result stays.
+        form["file"] = predict_files.limits()
         form["gaussian_process"] = (
             isinstance(run.plan.get("classical"), dict)
             and run.plan["classical"].get("type") == "GaussianProcessRegressor"

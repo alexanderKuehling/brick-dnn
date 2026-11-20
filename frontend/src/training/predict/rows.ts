@@ -94,6 +94,53 @@ export function parseCsv(text: string): string[][] {
   return records.filter((r) => r.some((c) => c.trim() !== ''));
 }
 
+/** How much of a file is read to find the names of its columns. */
+const HEADER_BYTES = 64 * 1024;
+
+/**
+ * The column names of a CSV file, read from its first kilobytes only (the file itself is
+ * uploaded as it is and read by the server). Empty when the file has no header line.
+ */
+export async function fileColumns(file: Blob): Promise<string[]> {
+  const bytes = new Uint8Array(await file.slice(0, HEADER_BYTES).arrayBuffer());
+  let text: string;
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    text = new TextDecoder('utf-16le').decode(bytes);
+  } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    text = new TextDecoder('utf-16be').decode(bytes);
+  } else {
+    try {
+      // "stream": a character cut off at the end of the part is no error.
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes, { stream: true });
+    } catch {
+      text = new TextDecoder('windows-1252').decode(bytes);
+    }
+  }
+  // Excel's "sep=;" line is no header; a line cut off at the end of the part is left out.
+  let clean = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(
+    /^\s*sep=.\s*\r?\n/i,
+    ''
+  );
+  if (file.size > HEADER_BYTES && clean.includes('\n')) {
+    clean = clean.slice(0, clean.lastIndexOf('\n'));
+  }
+  const header = (parseCsv(clean)[0] ?? []).map((cell) => cell.trim());
+  const numbers = header.every((cell) => cell !== '' && Number.isFinite(Number(cell)));
+  return numbers ? [] : header.filter((cell) => cell !== '');
+}
+
+/** Whether `text` has more than `max` lines (without reading all of a long text). */
+export function hasMoreLines(text: string, max: number): boolean {
+  let at = -1;
+  for (let lines = 0; lines < max; lines += 1) {
+    at = text.indexOf('\n', at + 1);
+    if (at < 0) {
+      return false;
+    }
+  }
+  return at < text.length - 1;
+}
+
 export interface CsvRows {
   /** One object per row, by column name (only the columns of the form). */
   rows: Record<string, string>[];

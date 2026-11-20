@@ -59,14 +59,18 @@ starred runs too.
 
 ## Comparing runs
 
-Tick up to ten runs (also on different pages) to compare them below the table:
+Tick the runs to compare (also on different pages); the box in the table's header selects
+all runs of the page, or none of them, and the line above the table counts the selected runs
+(*Clear* drops the selection). They are compared below the table:
 
 - **Curves.** The loss of every run in one chart (validation or training loss), and a second
   chart with a metric (validation accuracy, RMSE or IoU by default, by the task). Each run has
   its colour (after the eighth, dashed lines), the legend names them, the x axis counts
   epochs or the time since the start, and *Smooth* draws a moving average (with the start
   corrected, like TensorBoard). Hover or use the arrow keys to read every run's value at an
-  epoch; the table button shows the values as a table.
+  epoch; the table button shows the values as a table. One chart takes ten runs: with more
+  selected, the charts show the first ten (in the order they were selected; the header's box
+  adds a page from top to bottom) and say so. The other two views take all selected runs.
 - **Losses of different kinds** are not comparable (a focal loss is smaller than the
   cross-entropy of the same model, a mean absolute error is no squared one; see
   [Losses](training.md#losses)): when the runs trained with different losses, a warning says
@@ -84,7 +88,8 @@ Every chart has a text summary for screen readers, a table view and keyboard acc
 
 ## Sharing a comparison
 
-*Share comparison…* creates a read-only link (`/compare/<token>`) to the selected runs.
+*Share comparison…* creates a read-only link (`/compare/<token>`) to the selected runs (at
+most ten: with more selected, the first ten, the ones whose curves are drawn).
 Anyone with the link sees them without an account: the runs' names, datasets, settings,
 results and curves, with the columns and chart settings chosen when the link was made. It
 does **not** show who started the runs, their networks, the trained weights or the logs, and

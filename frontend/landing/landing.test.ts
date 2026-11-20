@@ -3,8 +3,10 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { checkDist, checkLandingHtml, checkPageHtml, hreflangs, jsonLdTypes } from './check.ts';
+import { COMMON } from './content/common.ts';
 import { EXAMPLES, EXAMPLES_FILE, type ExampleData } from './examples/data.ts';
 import { titleLines } from './examples/diagram.ts';
+import { guideArt, hasOwnGuideArt } from './guideArt.ts';
 import { IMAGE_DIR, imageSize, LOGO, OG_IMAGE, readImage, shotFiles } from './images.ts';
 import {
   allPages,
@@ -13,6 +15,7 @@ import {
   EXAMPLE_COPY,
   examplePath,
   GUIDE_COPY,
+  readingMinutes,
 } from './pages.ts';
 import { minifyCss, renderStatic, staticPage } from './plugin.ts';
 import {
@@ -219,6 +222,16 @@ describe.each(LANGS)('landing page %s', (lang) => {
     expect(html).toContain('mailto:alexander.kuehling@brickdnn.com');
     const other = doc.querySelector(`.lang a[hreflang="${lang === 'en' ? 'de' : 'en'}"]`)!;
     expect(other.getAttribute('lang')).toBe(lang === 'en' ? 'de' : 'en');
+  });
+
+  test('the facts under the hero: each with a check mark that is not read out', () => {
+    const facts = [...doc.querySelectorAll('.hero .facts li')];
+    expect(facts.map((fact) => fact.textContent)).toEqual(c.hero.facts);
+    for (const fact of facts) {
+      const ticks = fact.querySelectorAll('svg.tick');
+      expect(ticks).toHaveLength(1);
+      expect(ticks[0].getAttribute('aria-hidden')).toBe('true');
+    }
   });
 
   test('the pricing table lists every plan', () => {
@@ -595,6 +608,109 @@ test('the content pages: every example and guide in both languages, unique title
     expect(
       CONTENT_FOLDERS.some((folder) => page.path.startsWith(folder)),
       page.path
+    ).toBe(true);
+  }
+});
+
+describe.each(LANGS)('the guides overview in %s', (lang) => {
+  const guides = GUIDE_COPY[lang].guides;
+  const doc = parse(RENDERED.get(GUIDES_PATHS[lang])!);
+  const cards = [...doc.querySelectorAll('.guide-grid > li.guide-card')];
+
+  test('has a card for every guide, in their order, each one link named by its title', () => {
+    expect(cards).toHaveLength(guides.length);
+    expect(doc.querySelectorAll('.guide-card')).toHaveLength(guides.length);
+    for (const [index, card] of cards.entries()) {
+      const guide = guides[index];
+      // One link, in the heading: landing.css stretches it over the card.
+      const links = card.querySelectorAll('a');
+      expect(links).toHaveLength(1);
+      expect(links[0].getAttribute('href')).toBe(`${GUIDES_PATHS[lang]}${guide.slug}/`);
+      expect(links[0].textContent).toBe(guide.short ?? guide.h1);
+      expect(links[0].parentElement!.tagName).toBe('H2');
+      expect(links[0].hasAttribute('aria-label')).toBe(false);
+      expect(card.querySelector('.summary')!.textContent).toBe(plainText(guide.summary));
+      expect(card.querySelector('.kicker')?.textContent).toBe(guide.topic);
+      expect(card.querySelector('.foot')!.textContent).toContain(
+        COMMON[lang].guide.readingTime(readingMinutes(guide))
+      );
+    }
+  });
+
+  test('the drawings and “Read guide” are decoration: hidden, and no images to load', () => {
+    for (const card of cards) {
+      const art = card.querySelectorAll('svg');
+      expect(art).toHaveLength(1);
+      expect(art[0].getAttribute('class')).toBe('art');
+      expect(art[0].getAttribute('aria-hidden')).toBe('true');
+      expect(art[0].querySelector('text, image, use, a')).toBeNull();
+      const go = card.querySelector('.go')!;
+      expect(go.textContent).toBe(COMMON[lang].guide.read);
+      expect(go.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(doc.querySelectorAll('main img')).toHaveLength(0);
+  });
+
+  test('opens with one sentence that names deep learning', () => {
+    const lead = doc.querySelector('.page-head .lead')!.textContent!;
+    expect(lead).toMatch(/deep[- ]learning/i);
+    expect(lead.match(/[.!?](\s|$)/g)).toHaveLength(1);
+    expect(lead.length).toBeLessThan(180);
+  });
+
+  test('fills its rows on a wide screen: three cards, or two wide ones', () => {
+    const wide = cards.filter((card) => card.classList.contains('wide')).length;
+    expect(wide % 2).toBe(0);
+    expect((cards.length - wide) % 3).toBe(0);
+    // The wide ones come first.
+    expect(cards.slice(0, wide).every((card) => card.classList.contains('wide'))).toBe(true);
+    // Two in a row on a tablet: the first alone if their number is odd.
+    expect(cards[0].classList.contains('first')).toBe(cards.length % 2 === 1);
+  });
+});
+
+test('the cards of the guides: reading time from the text, a drawing for any guide', () => {
+  for (const lang of LANGS) {
+    for (const guide of GUIDE_COPY[lang].guides) {
+      expect(readingMinutes(guide), guide.id).toBeGreaterThanOrEqual(2);
+      expect(readingMinutes(guide), guide.id).toBeLessThanOrEqual(30);
+      // The card is one link: its sentence has none of its own.
+      expect(guide.summary).not.toMatch(/<a\b/);
+    }
+  }
+  const guide = GUIDE_COPY.en.guides[0];
+  expect(readingMinutes({ ...guide, lead: 'Short.', sections: [] })).toBe(1);
+  for (const id of ['no-code', 'tabular', 'segmentation', 'imbalanced', 'gdpr']) {
+    expect(hasOwnGuideArt(id), id).toBe(true);
+  }
+  // Guides written later: by a word of their id, else the general drawing.
+  expect(hasOwnGuideArt('activation-functions')).toBe(true);
+  expect(guideArt('activation-functions')).not.toBe(guideArt('no-code'));
+  expect(hasOwnGuideArt('something-new')).toBe(false);
+  const drawings = [
+    ...GUIDE_COPY.en.guides.map((entry) => entry.id),
+    'activation-functions',
+    'parameters-features-data-points',
+    'something-new',
+  ].map(guideArt);
+  expect(new Set(drawings).size).toBe(drawings.length);
+  for (const svg of drawings) {
+    expect(svg).toMatch(/^<svg class="art" viewBox="0 0 320 160"/);
+    expect(svg).not.toMatch(/style=|<style|href=|url\(/);
+  }
+});
+
+test('the German pages show screenshots of the German app, the English ones of the English', () => {
+  for (const id of new Set([...shotIds(CONTENT.de), ...contentShotIds('de')])) {
+    expect(
+      shotFiles(id, 'de').every((file) => file.name.startsWith(`${id}.de-`)),
+      id
+    ).toBe(true);
+  }
+  for (const id of new Set([...shotIds(CONTENT.en), ...contentShotIds('en')])) {
+    expect(
+      shotFiles(id, 'en').every((file) => /^[a-z-]+-\d+\.webp$/.test(file.name)),
+      id
     ).toBe(true);
   }
 });

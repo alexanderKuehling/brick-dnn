@@ -61,6 +61,10 @@ export interface CommonTexts {
     moreGuides: string;
     contents: string;
     tryIt: string;
+    /** On a card of the guides' overview: “Read guide →”. */
+    read: string;
+    /** On a card of the guides' overview: “8 min read”. */
+    readingTime: (minutes: number) => string;
   };
 }
 
@@ -183,6 +187,8 @@ export const COMMON: Record<Lang, CommonTexts> = {
       moreGuides: 'More guides',
       contents: 'Contents',
       tryIt: 'Open the editor',
+      read: 'Read guide →',
+      readingTime: (minutes) => `${minutes} min read`,
     },
   },
   de: {
@@ -264,6 +270,8 @@ export const COMMON: Record<Lang, CommonTexts> = {
       moreGuides: 'Weitere Anleitungen',
       contents: 'Inhalt',
       tryIt: 'Editor öffnen',
+      read: 'Anleitung lesen →',
+      readingTime: (minutes) => `${minutes} Min. Lesezeit`,
     },
   },
 };

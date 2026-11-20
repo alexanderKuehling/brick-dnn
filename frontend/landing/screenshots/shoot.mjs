@@ -132,6 +132,10 @@ async function main() {
   const ctx = await setup(args.app);
   await prepareContext(ctx, args.app);
   ctx.lang = args.lang;
+  // The language saved on an account wins over the browser's (AuthContext): set it too.
+  for (const api of Object.values(ctx.users)) {
+    await api.request('PATCH', '/api/auth/account/language/', { language: args.lang });
+  }
 
   const browser = await playwright.chromium.launch({ args: ['--no-sandbox'] });
   const encoder = await browser.newPage();
