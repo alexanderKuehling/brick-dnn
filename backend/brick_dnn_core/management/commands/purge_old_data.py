@@ -14,6 +14,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
+from brick_dnn_core import predict_files
 from brick_dnn_core.retention import purge
 
 
@@ -90,6 +91,8 @@ class Command(BaseCommand):
         )
         if not dry_run:
             call_command("clearsessions")  # expired logins of the Django admin
+            # Results of "Predict a file" that nobody downloaded in time (predict_files.py).
+            predict_files.remove_expired()
         if result.warned or result.not_warned_yet:
             self.stdout.write(
                 f"{'Would warn' if dry_run else 'Warned'} {result.warned} inactive accounts by "

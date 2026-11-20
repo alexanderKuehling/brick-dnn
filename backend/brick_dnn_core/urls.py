@@ -15,6 +15,7 @@ from . import (
     legal,
     mcp,
     oauth,
+    predict_file_views,
     projects,
     recovery,
     tracking,
@@ -225,6 +226,17 @@ urlpatterns = [
         "training/runs/<str:pk>/explain/",
         explain_views.ExplainView.as_view(),
         name="training-run-explain",
+    ),
+    # Predictions for every row of an uploaded CSV file (predict_file_views.py).
+    path(
+        "training/runs/<str:pk>/predict-file/",
+        predict_file_views.PredictFileView.as_view(),
+        name="training-run-predict-file",
+    ),
+    path(
+        "training/runs/<str:pk>/predict-file/<str:result>/",
+        predict_file_views.PredictFileResultView.as_view(),
+        name="training-run-predict-file-result",
     ),
     path("", include(router.urls)),
 ]

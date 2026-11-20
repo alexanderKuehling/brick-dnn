@@ -1145,6 +1145,7 @@ refused with `400` and `errors`, one message per row and column:
 **The prediction form.** `GET /api/training/runs/<id>/predict-form/` (everyone who can see the
 run) describes the inputs for the panel of the web app: `available` and `reason`, `kind`
 (`tabular`, `image`, `demo`), `task`, `class_names`, `max_rows` (64 per request),
+`max_form_rows` (300 rows of pasted CSV text),
 `budget_note` (set when a compute budget is used up), for tables `prepared` (`columns` with
 the training's mean and standard deviation, a few `samples` with their actual `target`) and,
 for runs from a preparation, `raw` (the source columns with `kind`, the `categories` of the
@@ -1160,6 +1161,66 @@ weights or its preprocessing is unknown (e.g. it failed early), `503` when train
 disabled, PyTorch (scikit-learn for classical models) is missing or other predictions are
 running (`Retry-After: 5`), `500` when the
 prediction itself fails or takes too long, `429` above the rate limit.
+
+### Predicting a file
+
+`POST /api/training/runs/<id>/predict-file/` predicts every row of a CSV file with a run
+trained on a table (neural, classical, hybrid or an ensemble of runs) and keeps a result file
+for the download; see [training.md](training.md#predicting-a-file) for how columns are
+matched and what happens to rows that cannot be predicted. It is a multipart form, like a
+dataset upload; everyone who can see the run may use it (read-only API tokens too):
+
+| Field | Default | Meaning |
+| ----- | ------- | ------- |
+| `file` | required | the CSV file (`.csv`, `.tsv`, `.txt`); delimiter and encoding are detected |
+| `columns` | `all` | `all`, or a JSON list of the file's columns that the result keeps, e.g. `["id"]` (`[]`: only the prediction) |
+| `prediction_column` | `prediction` | the name of the prediction column |
+| `output` | `label` | classifiers: `label` (the class, by the run's decision threshold), `probability` (of `class`) or `probabilities` (one column per class, named like the class) |
+| `class` | the second class of two | whose probability `probability` writes |
+| `input_format` | `auto` | `raw` (the columns of the source table of a data preparation) or `prepared` (the feature columns); `auto` takes what the header fits |
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -F file=@test.csv -F 'columns=["PassengerId"]' \
+     -F prediction_column=Survived https://example.com/api/training/runs/$RUN/predict-file/
+```
+
+```json
+{
+  "id": "5f0c…", "filename": "test-predictions.csv", "expires_at": "2026-11-19T13:00:00+00:00",
+  "keep_minutes": 60, "size_bytes": 2839,
+  "rows": 418, "predicted": 416, "failed": 2,
+  "problems": ["Row 7, 'Age': 'n/a' is not a number.", "Row 90, 'Fare': no value."],
+  "warnings": [], "warning_count": 0,
+  "columns": ["PassengerId", "Survived"], "preview": [["892", "no"], ["893", "yes"]],
+  "task": "classification", "output": "label", "input_format": "prepared", "has_header": true,
+  "class_counts": { "no": 266, "yes": 150 }, "decision_threshold": 0.5,
+  "target": null, "metrics": null, "metrics_note": null,
+  "ignored_columns": ["PassengerId", "Name"], "delimiter": ",", "encoding": "utf-8"
+}
+```
+
+`problems` and `warnings` list the first 20 messages (`failed` and `warning_count` count all),
+`preview` the first 20 rows of the result. `values` (`min`, `max`, `mean`) describes written
+values or probabilities, `class` names the class of `probability`. With the target column in
+the file, `target` names it and `metrics` measures the predictions on the rows that have a
+value there: `{"rows", "skipped", "accuracy", "log_loss", "roc_auc"}` (`roc_auc` for two
+classes) or `{"rows", "skipped", "rmse", "mae", "r2"}`; `skipped` counts target values that
+are no class of the model or no number.
+
+`GET /api/training/runs/<id>/predict-file/<result id>/` downloads the result (`text/csv`,
+UTF-8, the delimiter of the uploaded file) for who made it. **The download deletes it**; a
+second request, another user and a result older than `keep_minutes` get `404`. `DELETE` on the
+same address discards a result that is not wanted. The uploaded file is deleted when the
+prediction ends.
+
+Answers of the POST: `400 {"detail"}` when the file or the options do not fit (not a CSV
+file, a missing column, more rows than `BRICKDNN_PREDICT_FILE_MAX_ROWS`, no row that can be
+predicted, an unknown column in `columns` …) or the run was not trained on a table, `413`
+above `BRICKDNN_PREDICT_FILE_MAX_MB`, `403` with `"code": "budget_exceeded"` when a compute
+budget is used up, `409`, `503` and `429` as for `predict`, `500` when the prediction fails or
+takes longer than `BRICKDNN_PREDICT_FILE_TIMEOUT` seconds. The CPU time is recorded as a
+prediction of the run. `predict-form` says what a file may have: `file` (`max_mb`,
+`max_rows`, `keep_minutes`).
 
 ### Explanations
 

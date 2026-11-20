@@ -41,6 +41,36 @@
   request and MCP calls 300 seconds. [docs/huggingface.md](docs/huggingface.md); the
   privacy policy of brickdnn.com, its template and `docs/privacy.md` name Hugging Face,
   Inc. (USA).
+- **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
+  of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
+  selected); runs selected on other pages stay. The line above the table counts them
+  (*12 selected*) with *Clear* next to it. The selection is no longer limited to ten runs:
+  the scatter plot and the parallel coordinates take all selected runs, the curve charts
+  show the first ten (in the order they were selected) and say so in one line, and a shared
+  comparison keeps its limit and takes the same first ten, which its dialog says.
+- **Predict a file.** The prediction panel of a run trained on a table (neural networks,
+  classical models, hybrid networks, ensembles of runs) has **Predict a file**: choose or drop
+  a CSV file, the browser uploads it as it is, the server predicts every row and gives a
+  result file back, e.g. the submission for a competition. The options appear once a file is
+  chosen: all columns of the file or only chosen ones (typically an id) plus the prediction,
+  the name of the prediction column, and for classifiers the class (by the run's decision
+  threshold), the probability of one class or the probabilities of all classes; regressions
+  write the value in the units of the target. Columns are matched by name, other columns are
+  ignored by the model but can be kept, a run on a dataset from the Data tab takes the columns
+  of the source table and applies its data preparation, delimiter and encoding are detected.
+  The rows keep their order; a row that cannot be predicted keeps its place with an empty
+  prediction and is counted and listed with the reason. The panel shows the first 20 rows of
+  the result, the rows per class or the range of the values, and the metrics if the file has
+  the target column. `POST /api/training/runs/<id>/predict-file/` (multipart) and `GET
+  …/predict-file/<result id>/` in [docs/api.md](docs/api.md#predicting-a-file); a process of
+  its own (`brickdnn.training.predict_file`) loads the model once and reads the file in chunks.
+  Limits `BRICKDNN_PREDICT_FILE_MAX_MB` (200), `BRICKDNN_PREDICT_FILE_MAX_ROWS` (1,000,000) and
+  `BRICKDNN_PREDICT_FILE_TIMEOUT` (270 s); the CPU time counts as a prediction. Both files are
+  temporary: the upload is deleted when the prediction ends, the result with its download and
+  at the latest after `BRICKDNN_PREDICT_FILE_KEEP_MINUTES` (60); backups leave them out.
+  nginx gets a location for the upload. The text field for pasted CSV rows now takes 300 rows
+  (it was 500, also from a file read into the field, which made the page slow) and points to
+  **Predict a file**.
 - **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
   has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
   `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):
@@ -491,6 +521,30 @@
   the charts and metrics.
 
 ### Changed
+- **brickdnn.com: the guides' overview as cards, calmer guide pages, the facts under the hero
+  as pills, and German screenshots on the German pages.** `/guides/` and `/de/anleitungen/` were
+  a heading, a long paragraph and a list of long titles. They now open with one sentence and
+  show a card per guide: a small drawing of the topic (inline SVG without text,
+  `frontend/landing/guideArt.ts`), the topic, a short title (`short` and `topic` in
+  `guides.<lang>.ts`), the one-sentence summary and the reading time worked out from the
+  guide's text. One column on a phone, two on a tablet, three on a desktop, where the first
+  cards take half a row whenever three do not divide the number, so every row is full. The
+  title is the card's only link and covers the whole card, so a card is one link named by its
+  title, with the focus ring around the card; the drawings and “Read guide →” are hidden from
+  screen readers. The cards follow the list of guides: a new guide needs nothing but its entry
+  (without `short` its h1 is shown, and a guide no drawing was made for gets one by a word of
+  its id or a general one). Titles, descriptions, canonical and hreflang links and the JSON-LD
+  are unchanged. A guide's page sets its text in a column of about 75 characters at 17 px,
+  separates its sections by space instead of rules, shows the contents beside the text on wide
+  screens (they stay in view while reading), and has quieter tables (smaller, a tinted head,
+  the caption below) and code blocks. On `/` and `/de/` the facts under the buttons (free plan,
+  no account needed, open source, hosted in Switzerland) are larger and semibold with a check
+  mark each, as pills in a row from tablet width and one under the other on a phone. The
+  German pages (`/de/` and the German guides) now show screenshots of the German app
+  (`<id>.de-<width>.webp`, 15 screenshots): `shoot.mjs --lang de` sets the language on the
+  accounts too (it wins over the browser's once somebody is logged in), `shots.mjs` has the
+  German texts the shots look for, and the German alt texts and the one quoted button name say
+  what the German pictures show. The English pages keep their screenshots.
 - **A calmer Data tab and training panel.** Less on screen at once, clearer groups, fewer
   standing hints. Data tab: *Target & split* folds to a one-line summary (target · task ·
   split) once a target is chosen and opens by itself while none is set; seed, stratification

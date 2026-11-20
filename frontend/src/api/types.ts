@@ -2109,8 +2109,10 @@ export interface PredictionForm {
   class_names: string[] | null;
   /** Rows per request; more rows are sent in several requests. */
   max_rows: number;
-  /** Rows of a pasted or uploaded CSV file at most. */
+  /** Rows of pasted CSV text at most; more rows are predicted from a file. */
   max_form_rows: number;
+  /** Tabular: what a file to predict may have, and how long its result is kept. */
+  file?: { max_mb: number; max_rows: number; keep_minutes: number };
   max_top_k: number;
   /** Set when a compute budget is used up (the server refuses predictions then). */
   budget_note: string | null;
@@ -2145,6 +2147,63 @@ export interface PredictionForm {
     dataset: string | null;
     examples: TextExample[];
   };
+}
+
+/** What "Predict a file" writes for a classifier. */
+export type FileOutput = 'label' | 'probability' | 'probabilities';
+
+/** The options of the result file of POST /api/training/runs/<id>/predict-file/. */
+export interface PredictFileOptions {
+  /** The columns of the file that the result keeps (before the prediction). */
+  columns: 'all' | string[];
+  prediction_column: string;
+  /** Classifiers: the class, the probability of `class`, or one column per class. */
+  output?: FileOutput;
+  class?: string;
+}
+
+/** The answer of POST /api/training/runs/<id>/predict-file/: summary and preview. */
+export interface FilePrediction {
+  /** The result waits under this id until it is downloaded or expires. */
+  id: string;
+  filename: string;
+  expires_at: string;
+  keep_minutes: number;
+  size_bytes: number;
+  rows: number;
+  predicted: number;
+  /** Rows without a prediction; `problems` lists the first ones with the reason. */
+  failed: number;
+  problems: string[];
+  warnings: string[];
+  warning_count: number;
+  /** The header of the result and its first rows. */
+  columns: string[];
+  preview: string[][];
+  task: 'classification' | 'regression';
+  output: FileOutput | 'value';
+  input_format: 'raw' | 'prepared';
+  /** Classifiers: rows per predicted class. */
+  class_counts?: Record<string, number>;
+  /** `output` "probability": of which class. */
+  class?: string;
+  /** Values or probabilities written: their range. */
+  values?: { min: number; max: number; mean: number };
+  /** The target column of the file, if it has one, and the predictions measured on it. */
+  target: string | null;
+  metrics: {
+    rows: number;
+    skipped: number;
+    accuracy?: number;
+    log_loss?: number;
+    roc_auc?: number | null;
+    rmse?: number | null;
+    mae?: number | null;
+    r2?: number | null;
+  } | null;
+  metrics_note: string | null;
+  ignored_columns: string[];
+  decision_threshold: number | null;
 }
 
 export interface PredictedClass {

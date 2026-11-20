@@ -9,6 +9,7 @@
   --bg: #fff;
   --bg-soft: #f8f9fa;
   --tint: #f5f4ff;
+  --tint-line: #dcd9fb;
   --text: #212529;
   --muted: #495057;
   --line: #e9ecef;
@@ -30,6 +31,7 @@
     --bg: #242424;
     --bg-soft: #2e2e2e;
     --tint: #2a2a33;
+    --tint-line: #45445c;
     --text: #e9ecef;
     --muted: #b5b5b5;
     --line: #3b3b3b;
@@ -340,21 +342,63 @@ ol {
 }
 
 .facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.5rem;
-  margin-top: 1.5rem;
-  color: var(--muted);
-  font-size: 0.9375rem;
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1.75rem;
 }
 
-.facts li,
+/*
+ * The facts under the hero's buttons are the reasons to try it, not small print: each with a
+ * check mark, one under the other on a phone and as pills in a row from 36rem.
+ */
+.facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.facts .tick {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1em;
+  fill: none;
+  stroke: var(--accent-text);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (min-width: 36rem) {
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .facts li {
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0.5rem 1.15rem 0.5rem 0.85rem;
+    border: 1px solid var(--tint-line);
+    border-radius: 1.375rem;
+    background: var(--tint);
+  }
+
+  .facts .tick {
+    margin-top: 0;
+  }
+}
+
 .checks li {
   position: relative;
   padding-left: 1rem;
 }
 
-.facts li::before,
 .checks li::before {
   position: absolute;
   top: 0.62em;
@@ -714,6 +758,12 @@ tbody th {
       background-color 120ms ease,
       color 120ms ease;
   }
+
+  .guide-card {
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
 }
 
 .site-footer .links .lang {
@@ -750,6 +800,8 @@ tbody th {
 }
 
 .page {
+  --measure: 46rem;
+
   padding: 1.5rem 0 4rem;
 }
 
@@ -830,7 +882,7 @@ tbody th {
 }
 
 .prose {
-  max-width: 46rem;
+  max-width: var(--measure, 46rem);
 }
 
 .prose p + p,
@@ -850,7 +902,7 @@ tbody th {
 }
 
 ol.numbered {
-  max-width: 46rem;
+  max-width: var(--measure, 46rem);
   padding-left: 1.5rem;
   list-style: decimal;
 }
@@ -883,7 +935,7 @@ ol.numbered li + li {
 }
 
 .page .frame {
-  max-width: 46rem;
+  max-width: var(--measure, 46rem);
   margin-top: 1.75rem;
 }
 
@@ -899,7 +951,7 @@ ol.numbered li + li {
 .howto {
   display: grid;
   gap: 1.25rem;
-  max-width: 46rem;
+  max-width: var(--measure, 46rem);
   margin-top: 1.5rem;
   counter-reset: howto;
 }
@@ -930,7 +982,7 @@ ol.numbered li + li {
 }
 
 .toc {
-  max-width: 46rem;
+  max-width: var(--measure, 46rem);
   margin-bottom: 0.5rem;
   padding: 1.1rem 1.25rem;
   border: 1px solid var(--line);
@@ -949,6 +1001,177 @@ ol.numbered li + li {
 
 .toc li + li {
   margin-top: 0.25rem;
+}
+
+/*
+ * A guide: the text in a column of about 75 characters, a little larger than the rest of the
+ * site, its sections set apart by space instead of rules. On a wide screen the contents stand
+ * beside the text and stay in view.
+ */
+
+.guide {
+  --measure: 41rem;
+}
+
+.guide .page-head {
+  padding-bottom: 2rem;
+}
+
+.guide .toc {
+  margin-bottom: 2.5rem;
+}
+
+.guide-layout {
+  margin-bottom: 3.5rem;
+}
+
+.guide-text > section {
+  padding: 0;
+  border-top: 0;
+}
+
+.guide-text > section + section {
+  margin-top: 3.25rem;
+}
+
+.guide-text h2 {
+  margin-bottom: 0.9rem;
+  font-size: clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem);
+  scroll-margin-top: 1.5rem;
+}
+
+.guide-text section {
+  scroll-margin-top: 1.5rem;
+}
+
+.guide-text .prose,
+.guide-text .howto {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+
+.guide-text .prose p + p,
+.guide-text .prose p + ul,
+.guide-text .prose ul + p,
+.guide-text .prose p + ol,
+.guide-text .prose ol + p {
+  margin-top: 1.1rem;
+}
+
+.guide-text .prose + .prose,
+.guide-text .prose + .howto,
+.guide-text .howto + .prose,
+.guide-text .frame + .prose {
+  margin-top: 1.5rem;
+}
+
+.guide-text .howto {
+  gap: 1.5rem;
+}
+
+.guide-text .howto h3 {
+  font-size: 1.125rem;
+  line-height: 1.9rem;
+}
+
+.guide-text .howto p {
+  color: var(--text);
+}
+
+.guide-text .frame {
+  margin-top: 2rem;
+}
+
+/* Tables in the text: smaller, with a quiet head, and words that wrap instead of scrolling. */
+
+.guide-text .table {
+  margin-top: 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.guide-text .prose .table + p {
+  margin-top: 1.5rem;
+}
+
+.guide-text thead th {
+  background: var(--bg-soft);
+  white-space: nowrap;
+}
+
+.guide-text th,
+.guide-text td {
+  padding: 0.7rem 0.9rem;
+}
+
+.guide-text caption {
+  caption-side: bottom;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.guide-text pre.snippet {
+  margin-top: 1.25rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.guide-text .prose pre + p {
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 64rem) {
+  .guide-layout {
+    display: grid;
+    grid-template-columns: minmax(0, var(--measure)) minmax(0, 15rem);
+    gap: 0 5rem;
+    align-items: start;
+  }
+
+  /* After the text, though it comes first in the page: it is the way into the sections. */
+  .guide .toc {
+    position: sticky;
+    top: 1.5rem;
+    order: 2;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    margin: 0;
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  .guide .toc h2 {
+    margin-bottom: 0.75rem;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .guide .toc ol {
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .guide .toc li + li {
+    margin-top: 0.55rem;
+  }
+
+  .guide .toc a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .guide .toc a:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
 }
 
 /* Cards of examples and guides. */
@@ -990,6 +1213,254 @@ ol.numbered li + li {
   margin-top: auto;
   padding-top: 0.25rem;
   font-size: 0.8125rem;
+}
+
+/*
+ * The guides' overview (/guides/, /de/anleitungen/): a card per guide with a drawing
+ * (guideArt.ts), the topic, a short title, one sentence and the reading time. One column on a
+ * phone, two from 40rem, three from 62rem; cards marked `wide` (pages.ts) take half of a row
+ * there, so that every row is full. The title's link covers the whole card: one link, named
+ * by the title, with the focus ring around the card.
+ */
+
+.guides-head {
+  padding-bottom: 2rem;
+}
+
+.guide-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.guide-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.guide-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.art-panel {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  border-radius: 11px 11px 0 0;
+  background: var(--bg-soft);
+}
+
+.guide-card .text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.25rem 1.35rem 1.2rem;
+}
+
+.guide-card .kicker {
+  margin-bottom: 0.4rem;
+  font-size: 0.8125rem;
+}
+
+.guide-card h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.1875rem;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.guide-card h2 a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.guide-card h2 a::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  content: '';
+}
+
+.guide-card h2 a:focus-visible {
+  outline: none;
+}
+
+.guide-card h2 a:focus-visible::after {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+.guide-card .summary {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.guide-card .foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-top: auto;
+  padding-top: 1.1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.guide-card .go {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.guide-card:hover .go {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+@media (min-width: 40rem) {
+  .guide-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guide-card.first {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 62rem) {
+  .guide-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .guide-card,
+  .guide-card.first {
+    grid-column: span 2;
+  }
+
+  .guide-card.wide {
+    grid-column: span 3;
+  }
+
+  .guide-card.wide h2 {
+    font-size: 1.375rem;
+  }
+
+  .guide-card.wide .summary {
+    max-width: 30rem;
+    font-size: 1rem;
+  }
+}
+
+/* The drawings: lines and boxes in the page's grays, the logo's indigo and two layer colours. */
+
+.art {
+  display: block;
+  width: 100%;
+  max-width: 19rem;
+  height: auto;
+  margin: 0 auto;
+}
+
+.art .box {
+  fill: var(--bg);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.art .panel,
+.art .faint {
+  fill: var(--line);
+}
+
+.art .ink,
+.art .muted {
+  fill: var(--line-strong);
+}
+
+.art .outline {
+  fill: var(--line);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.art .line,
+.art .thin,
+.art .rule {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art .thin {
+  stroke-width: 1;
+}
+
+.art .rule {
+  stroke-dasharray: 3 5;
+}
+
+.art .accent {
+  fill: var(--accent-text);
+}
+
+.art .accent-line,
+.art .accent-thin,
+.art .teal-line {
+  fill: none;
+  stroke: var(--accent-text);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art .accent-thin {
+  stroke-width: 1.25;
+}
+
+.art .teal-line {
+  stroke: #12b886;
+}
+
+.art .shade {
+  fill: var(--accent-text);
+  fill-opacity: 0.16;
+}
+
+.art .shade-teal {
+  fill: #12b886;
+  fill-opacity: 0.2;
+}
+
+.art .knob {
+  fill: var(--bg);
+  stroke: var(--accent-text);
+  stroke-width: 3;
+}
+
+.art .shield {
+  fill: var(--tint);
+  stroke: var(--accent-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.art .hole {
+  fill: var(--tint);
+}
+
+.art .teal {
+  fill: #12b886;
+}
+
+.art .violet {
+  fill: #7950f2;
 }
 
 /* The diagram of an example: real size, scrolled sideways when it is wider than the page. */

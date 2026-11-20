@@ -92,10 +92,10 @@ export const de: LandingContent = {
     items: [
       {
         title: 'Deep Learning unterrichten',
-        html: 'Studierende verbinden Schichten und sehen, wie sich die Form der Daten von Schicht zu Schicht ändert. Passt etwas nicht, sagt eine verständliche Meldung warum, etwa dass der Kernel größer ist als die Eingabe. <em>How data flows</em> schickt ein Beispiel Schritt für Schritt durch das Netz; der Inspektor zeigt, wie sich die Parameter einer Schicht zusammensetzen und wie groß ihr rezeptives Feld ist. Für Gruppenarbeit lassen sich Netze teilen und gemeinsam in Echtzeit bearbeiten.',
+        html: 'Studierende verbinden Schichten und sehen, wie sich die Form der Daten von Schicht zu Schicht ändert. Passt etwas nicht, sagt eine verständliche Meldung warum, etwa dass der Kernel größer ist als die Eingabe. <em>Wie die Daten fließen</em> schickt ein Beispiel Schritt für Schritt durch das Netz; der Inspektor zeigt, wie sich die Parameter einer Schicht zusammensetzen und wie groß ihr rezeptives Feld ist. Für Gruppenarbeit lassen sich Netze teilen und gemeinsam in Echtzeit bearbeiten.',
         image: {
           id: 'data-flow',
-          alt: '„How data flows“ im Editor: Eine Karte führt ein Beispiel Schritt für Schritt durch ein CNN und zeigt, wie Max-Pooling aus 32 × 28 × 28 Werten 32 × 14 × 14 macht, unter den Schichten auf der Arbeitsfläche.',
+          alt: '„Wie die Daten fließen“ im Editor: Eine Karte führt ein Beispiel Schritt für Schritt durch ein CNN und zeigt, wie Max-Pooling aus 32 × 28 × 28 Werten 32 × 14 × 14 macht, unter den Schichten auf der Arbeitsfläche.',
         },
       },
       {
@@ -127,7 +127,7 @@ export const de: LandingContent = {
         html: 'Verbinden Sie Claude oder einen anderen MCP-Client per OAuth mit Ihrem Konto. Der Assistent kann Netze bauen und prüfen, Daten aufbereiten, Trainings starten und Vorhersagen treffen. Sie legen fest, ob er Änderungen vornehmen oder nur lesen darf, können ihm ein Monatsbudget geben und sehen jede seiner Aktionen in einem Protokoll.',
         image: {
           id: 'agent-activity',
-          alt: 'Die Seite „Agent activity“: die Aufrufe eines KI-Assistenten über den MCP-Server mit einem API-Token, etwa ein Netz analysieren, ein Training abrufen und Code erzeugen, jeweils mit Ergebnis und Dauer.',
+          alt: 'Die Seite „Agenten-Aktivität“: die Aufrufe eines KI-Assistenten über den MCP-Server mit einem API-Token, etwa Code erzeugen, ein Training abrufen und ein Netz speichern, jeweils mit Ergebnis und Dauer.',
         },
       },
     ],
@@ -148,7 +148,7 @@ export const de: LandingContent = {
         html: 'Wählen Sie Demodaten, MNIST, Fashion-MNIST, CIFAR-10 oder eigene CSV- und Bilddateien. Brick DNN prüft vorab, ob Netz und Daten zusammenpassen, und trainiert dann auf dem Server – mit Verlust- und Metrikkurven in Echtzeit, Early Stopping und auf Wunsch einer Hyperparametersuche.',
         image: {
           id: 'training-setup',
-          alt: 'Das Trainingsfenster mit einem ausgewählten aufbereiteten Datensatz und der Prüfung „Ready to train: classification into 2 classes from 18 features“.',
+          alt: 'Das Trainingsfenster mit einem ausgewählten aufbereiteten Datensatz und der Prüfung „Bereit zum Training“: Klassifikation in 2 Klassen aus 18 Merkmalen.',
         },
       },
       {
@@ -156,7 +156,7 @@ export const de: LandingContent = {
         html: 'Laden Sie das PyTorch- oder scikit-learn-Skript, die trainierten Gewichte und die aufbereiteten Daten herunter. Der Code gehört Ihnen: Sie können ihn lesen, ändern und ausführen, wo Sie möchten.',
         image: {
           id: 'export',
-          alt: 'Das Ende eines abgeschlossenen Trainings: Schaltflächen zum Herunterladen der Gewichte, der Vorverarbeitung und des Skripts oder um das Netz in den Editor zu laden.',
+          alt: 'Das Ende eines abgeschlossenen Trainings: Schaltflächen zum Herunterladen der Gewichte und der Vorverarbeitung, zum Erklären des Modells und um das Netz in den Editor zu laden, darunter der Abschnitt „So verwenden Sie die Gewichte“.',
         },
       },
     ],
@@ -171,7 +171,7 @@ export const de: LandingContent = {
         html: 'Jede Schicht zeigt schon beim Bauen ihre Ausgabeform und Parameterzahl. Fehler werden markiert, bevor irgendetwas läuft – mit einer Meldung, was zu ändern ist.',
         image: {
           id: 'checks',
-          alt: 'Ein CNN mit einem Fehler: Eine Conv2d-Schicht ist rot markiert mit der Meldung „Kernel size 16 is larger than the (padded) input size 14“, die Schichten danach haben keine Form.',
+          alt: 'Ein CNN mit einem Fehler: Eine Conv2d-Schicht ist rot markiert mit der Meldung „Die Kernelgröße 16 ist größer als die (gepaddete) Eingabegröße 14“, die Schichten danach haben keine Form.',
         },
       },
       {
@@ -179,7 +179,7 @@ export const de: LandingContent = {
         html: 'Warteschlange, Early Stopping, das die besten Gewichte behält, und Kurven für Verlust und Metriken zu jeder Epoche, während das Netz lernt.',
         image: {
           id: 'training-curves',
-          alt: 'Verlust und Genauigkeit je Epoche eines kleinen CNN, trainiert auf MNIST, für Trainings- und Validierungsdaten, darüber die Testgenauigkeit von 98,6 %.',
+          alt: 'Verlust und Genauigkeit je Epoche eines kleinen CNN, trainiert auf MNIST, für Trainings- und Validierungsdaten: Die Validierungsgenauigkeit liegt nach sechs Epochen bei knapp 98 %.',
         },
       },
       {

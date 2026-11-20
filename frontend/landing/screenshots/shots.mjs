@@ -8,7 +8,10 @@
  * screenshots (`--lang`); a text missing there is looked for in English.
  */
 
-/** The texts of the app the shots look for. Add the German ones once the app is translated. */
+/**
+ * The texts of the app the shots look for (src/i18n/locales, and backend/locale for the names
+ * of the preparation's steps). The activity page shows what an assistant did in English.
+ */
 export const TEXTS = {
   en: {
     filters64: '64 filters',
@@ -32,7 +35,27 @@ export const TEXTS = {
     whyTheModelDecides: 'Why the model decides',
     comments: 'Comments',
   },
-  de: {},
+  de: {
+    filters64: '64 Filter',
+    howDataFlows: 'Wie die Daten fließen',
+    next: 'Weiter',
+    code: 'Code',
+    fillMissing: 'Fehlende Werte auffüllen',
+    goToColumn: 'Zur Spalte',
+    predictions: 'Vorhersagen',
+    yourDatasets: 'Ihre Datensätze',
+    readyToTrain: 'Bereit zum Training',
+    weights: 'Gewichte',
+    howToUseWeights: 'So verwenden Sie die Gewichte',
+    loss: 'Verlust',
+    valuesPerEpoch: 'Werte pro Epoche',
+    confusionMatrix: 'Konfusionsmatrix',
+    trials: 'Versuche',
+    metrics: 'Metriken',
+    showWhatMatters: 'Zeigen, was zählt',
+    whyTheModelDecides: 'Warum das Modell so entscheidet',
+    comments: 'Kommentare',
+  },
 };
 
 const t = (ctx, key) => TEXTS[ctx.lang]?.[key] ?? TEXTS.en[key];
@@ -272,7 +295,8 @@ export const SHOTS = [
       await page.waitForTimeout(600);
       await scrollIntoTop(button, 200);
       await page.waitForTimeout(800);
-      const top = (await button.boundingBox()).y - 64;
+      // From the heading above the buttons on.
+      const top = (await button.boundingBox()).y - 38;
       return { x: 0, y: top, width: 544, height: 340 };
     },
   },

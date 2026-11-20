@@ -16,7 +16,7 @@ const index: GuideIndex = {
     'Praxisnahe Anleitungen zu Deep Learning: Netz ohne Code bauen und als PyTorch exportieren, Gradient Boosting oder MLP, U-Net, seltene Klassen und DSGVO.',
   h1: 'Anleitungen',
   intro:
-    'Schritt-für-Schritt-Anleitungen zum Bauen, Trainieren und Bewerten von Deep-Learning-Modellen mit Brick DNN, und zu den Entscheidungen unterwegs: welches Modell für eine Tabelle, wie man Bilder segmentiert, was zu tun ist, wenn eine Klasse selten ist, und wie Sie mit Daten trainieren, für die die DSGVO gilt.',
+    'Praxisnahe Anleitungen zum Bauen, Trainieren und Bewerten von Deep-Learning-Modellen mit Brick DNN, vom ersten Netz bis zu Daten, für die die DSGVO gilt.',
 };
 
 const guides: Guide[] = [
@@ -27,6 +27,8 @@ const guides: Guide[] = [
     description:
       'Deep Learning ohne Code: ein neuronales Netz im Browser aus Schichten bauen, jede Tensorform prüfen lassen und sauberen PyTorch-Code herunterladen.',
     h1: 'Neuronales Netz ohne Code bauen und als PyTorch-Code exportieren',
+    short: 'Neuronales Netz ohne Code bauen',
+    topic: 'Einstieg',
     summary:
       'Schichten auf einer Arbeitsfläche verbinden, jede Form von Brick DNN prüfen lassen und ein PyTorch-Skript herunterladen, das für sich läuft.',
     lead: 'Ein neuronales Netz lässt sich entwerfen, indem Sie Schichten auf einer Arbeitsfläche verbinden, und am Ende steht trotzdem gewöhnlicher PyTorch-Code. Diese Anleitung baut ein kleines Faltungsnetz für 28×28-Bilder, prüft es und exportiert es, ganz ohne Konto.',
@@ -64,7 +66,7 @@ const guides: Guide[] = [
         ],
         image: {
           id: 'checks',
-          alt: 'Ein Faltungsnetz im Editor, eine Conv2d-Schicht rot markiert mit der Meldung „Kernel size 16 is larger than the (padded) input size 14“; die Schichten dahinter zeigen keine Form.',
+          alt: 'Ein Faltungsnetz im Editor, eine Conv2d-Schicht rot markiert mit der Meldung „Die Kernelgröße 16 ist größer als die (gepaddete) Eingabegröße 14“; die Schichten dahinter zeigen keine Form.',
           caption:
             'Ein Fehler erscheint dort, wo er entsteht, samt Begründung. Die folgenden Schichten warten auf die Korrektur.',
         },
@@ -100,7 +102,7 @@ const guides: Guide[] = [
         html: '<p>Mit einem kostenlosen Konto trainiert <strong>Trainieren</strong> das Netz auf dem Server von Brick DNN in der Schweiz. Zur Wahl stehen MNIST, Fashion-MNIST, CIFAR-10, eine eigene CSV-Datei oder eine ZIP-Datei mit Bildern. Brick DNN prüft vorab, ob Netz und Daten zusammenpassen, passt Input und letzte Schicht an, wenn nur diese abweichen, und zeigt dann Verlust und Genauigkeit je Epoche. Nach dem Lauf laden Sie die Gewichte (<code>.pt</code>) zusammen mit dem passenden Skript herunter:</p><pre class="snippet"><code>import torch\nfrom model import NeuralNetwork  # das heruntergeladene Skript\n\nmodel = NeuralNetwork()\nmodel.load_state_dict(torch.load("model.pt"))\nmodel.eval()</code></pre>',
         image: {
           id: 'export',
-          alt: 'Das Ende eines abgeschlossenen Trainings mit Schaltflächen zum Herunterladen der Gewichte, der Vorverarbeitung und des Skripts sowie zum Laden des Netzes in den Editor.',
+          alt: 'Das Ende eines abgeschlossenen Trainings mit Schaltflächen zum Herunterladen der Gewichte und der Vorverarbeitung sowie zum Laden des Netzes in den Editor; darunter steht, wie man die Gewichte in eigenem Code lädt.',
           caption: 'Nach dem Training: Gewichte, Vorverarbeitung und das Skript, das dazu passt.',
         },
       },
@@ -119,6 +121,8 @@ const guides: Guide[] = [
     description:
       'Gradient Boosting oder neuronales Netz für Tabellendaten? Wie beide eine Tabelle sehen, was sie brauchen und wie Sie sie fair auf demselben Split vergleichen.',
     h1: 'Tabellendaten: Gradient Boosting oder MLP – und wann was passt',
+    short: 'Gradient Boosting oder MLP für Tabellendaten',
+    topic: 'Tabellendaten',
     summary:
       'Wie Bäume und neuronale Netze eine Tabelle sehen, was beide brauchen und wie Sie sie fair auf demselben Split vergleichen.',
     lead: 'Für eine Tabelle aus Zeilen und Spalten ist ein Gradient Boosting meist das stärkere erste Modell, ein mehrschichtiges Perzeptron (MLP) das flexiblere. Welches gewinnt, hängt von Ihren Daten ab. Die eigentliche Frage ist daher, wie Sie es schnell und fair herausfinden.',
@@ -220,6 +224,8 @@ const guides: Guide[] = [
     description:
       'Deep Learning zur Bildsegmentierung: ein U-Net trainieren, Bilder und Masken vorbereiten, Batchgröße und Verlust wählen, mittlere IoU und Dice lesen.',
     h1: 'Bildsegmentierung mit U-Net: von den Masken zum trainierten Modell',
+    short: 'Bildsegmentierung mit U-Net',
+    topic: 'Bilder',
     summary:
       'Von einer ZIP-Datei mit Bildern und Masken zum trainierten U-Net, mit mittlerer IoU, Dice und den vorhergesagten Masken.',
     lead: 'Segmentierung gibt jedem Pixel eine Klasse: Hintergrund, Straße, Zelle, Fehlstelle. Diese Anleitung trainiert ein U-Net in Brick DNN, zuerst auf den eingebauten Shapes-Daten, dann auf eigenen Bildern und Masken, und erklärt, wie Sie die Ergebnisse lesen.',
@@ -292,6 +298,8 @@ const guides: Guide[] = [
     description:
       'Wenn eine Klasse selten ist: warum die Genauigkeit täuscht und wann Klassengewichte, Focal Loss, Oversampling oder eine andere Entscheidungsschwelle helfen.',
     h1: 'Unausgewogene Klassen: Klassengewichte, Focal Loss, Oversampling und die Entscheidungsschwelle',
+    short: 'Unausgewogene Klassen',
+    topic: 'Klassifikation',
     summary:
       'Warum die Genauigkeit täuscht, wenn eine Klasse selten ist, und die vier Stellschrauben dagegen: Gewichte, Focal Loss, Oversampling und die Schwelle.',
     lead: 'Sind 2 % der Zeilen Betrugsfälle, ist ein Modell, das nie Betrug meldet, zu 98 % genau und trotzdem nutzlos. Diese Anleitung zeigt, wie Sie das Problem an den Metriken erkennen und an welcher der vier Stellschrauben Sie zuerst drehen.',
@@ -360,6 +368,8 @@ const guides: Guide[] = [
     description:
       'KI-Training DSGVO-konform: personenbezogene oder anonyme Daten, wo Brick DNN in der Schweiz speichert und trainiert, Export, Löschung und eigener Server.',
     h1: 'Deep Learning DSGVO-konform: neuronale Netze mit Daten in Europa trainieren',
+    short: 'Deep Learning DSGVO-konform',
+    topic: 'Datenschutz',
     summary:
       'Welche Daten die DSGVO betrifft, wo brickdnn.com in der Schweiz speichert und trainiert und was mit Daten geschieht, die personenbezogen bleiben müssen.',
     lead: 'Die DSGVO verbietet nicht, neuronale Netze zu trainieren. Sie fragt, um welche Daten es geht, wohin sie gehen und wer sie verarbeitet. Diese Anleitung beantwortet die Fragen für Brick DNN: welche Daten Sorgfalt brauchen, wo brickdnn.com Daten speichert und in der Schweiz trainiert und wie Sie mit Daten arbeiten, die Ihre Einrichtung nicht verlassen dürfen.',
