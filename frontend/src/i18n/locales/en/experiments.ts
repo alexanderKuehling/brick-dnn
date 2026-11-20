@@ -243,7 +243,7 @@ export const experiments = {
     intro:
       'Train the exported script on your laptop or a GPU server, and its curves appear on the runs page next to the runs trained here, marked “ran elsewhere”.',
     step1:
-      'Export the network with “Export .py” (in the code view, “Log to Brick DNN” is on by default). The CSV training loop logs the loss and the metrics of every epoch, the settings and the test results.',
+      'Export the network with “Export .py” (in the code view, “Log to Brick DNN” is on by default). Its training logs the settings and the results: the loss and the metrics of every epoch of a neural network (a CSV file or a built-in text dataset) with the test results, the validation numbers of a classical model or an ensemble, and both for a hybrid network.',
     step2:
       'Create a token for it below; a token that may only log runs is enough. The token is never written into the script: set it in the environment.',
     step3:
@@ -252,7 +252,7 @@ export const experiments = {
     ownLoop: 'In a training loop of your own, the client of the brickdnn package does the same:',
     copyPython: 'Copy the Python code',
     privacy:
-      'Brick DNN stores what the script sends (settings, metrics per epoch, the name of the CSV file) with the run; it is deleted with the run or your account and is part of your data export.',
+      'Brick DNN stores what the script sends (settings, metrics per epoch, the final numbers, the name of the CSV file or dataset) with the run; it is deleted with the run or your account and is part of your data export.',
     codeSwitch: 'Log to Brick DNN',
     codeSwitchHelp: 'Only with the environment variable BRICKDNN_TOKEN',
     scopeLabel: 'Only log training runs',

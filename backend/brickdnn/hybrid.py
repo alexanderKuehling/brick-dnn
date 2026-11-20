@@ -32,9 +32,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .classical import (
+    _MODEL_SETTINGS,
     _NUMBERS,
     _READ_CSV,
     LINE_LENGTH,
+    LOG_FIT,
     MODEL_FORMAT,
     _ClassicalGenerator,
 )
@@ -174,8 +176,13 @@ class _HybridGenerator:
         self.tabular = len(self.parts.input_shape) == 1 and self.parts.input_dtype == "float"
 
     def render(self) -> str:
+        from .codegen import tracking_code
+
         main = self.opt.include_main
         training = main and self.opt.include_training and self.tabular
+        # Both phases log to Brick DNN: the curves of the features, the classical model's
+        # validation numbers as the run's result (codegen.py).
+        self.logging = training and self.opt.log_to_brickdnn
         header = BANNER + "\n" + self._docstring(main, training) + "\n\n" + self._imports(main)
         if main:
             header += "\n\n" + self._constants()
@@ -189,16 +196,23 @@ class _HybridGenerator:
                     self.classical._load_csv(),
                     _SPLIT,
                     self._learn_features(),
-                    _FIT.replace("[[REPORT]]", self.classical._report()),
+                    _FIT.replace("[[REPORT]]", self.classical._report())
+                    .replace("[[RUN_PARAM]]", _RUN_PARAM if self.logging else "")
+                    .replace("[[LOG_END]]", LOG_FIT if self.logging else ""),
                     self._save_model(),
                 ]
+                if self.logging:
+                    parts += [self.classical._scores(), _MODEL_SETTINGS]
             if self.tabular:
                 parts.append(
                     _PREDICT.replace("[[OUTPUT]]", self.classical._output()).replace(
                         "[[CLASS]]", self.class_name
                     )
                 )
-            parts += [self._demo(), self._main(training)]
+            parts.append(self._demo())
+            if self.logging:
+                parts.append(tracking_code(self.opt))
+            parts.append(self._main(training))
         return "\n\n\n".join(parts) + "\n"
 
     # -- header ------------------------------------------------------------ #
@@ -242,6 +256,19 @@ class _HybridGenerator:
                 "    python this_file.py --csv data.csv --epochs 20",
                 "    python this_file.py --predict new_data.csv",
             ]
+            if self.logging:
+                from .codegen import tracking_docstring
+
+                lines += tracking_docstring(
+                    self.opt,
+                    "python this_file.py --csv data.csv --epochs 20",
+                    "It sends the losses of every epoch of the features and the validation "
+                    + ("accuracy" if self.classification else "RMSE")
+                    + " of the temporary head, the settings and the classical model's "
+                    "hyperparameters, the name of the CSV file, and the classical model's "
+                    + self.classical._sends()
+                    + " on the validation rows and the time its fit took",
+                )
         elif main and self.tabular:
             lines += [
                 "",
@@ -254,16 +281,21 @@ class _HybridGenerator:
         return "\n".join(lines)
 
     def _imports(self, main: bool) -> str:
+        from .codegen import stdlib_imports
+
         lines = []
         if main:
-            lines += ["import argparse"]
+            modules = ["argparse"]
             if self.tabular:
-                lines += ["import csv"]
+                modules.append("csv")
             if self.opt.include_training and self.tabular:
-                lines += ["import time"]  # the fit reports its time
-            lines += ["", "import joblib", "import numpy as np"]
+                modules.append("time")  # the fit reports its time
+            if self.logging:
+                modules.append("warnings")  # scores() computes its numbers quietly
+            lines += stdlib_imports(modules, self.logging)
+            lines += ["import joblib", "import numpy as np"]
         lines += ["import torch", "import torch.nn as nn"]
-        lines += self.classical._imports(False, False).split("\n")
+        lines += self.classical._imports(False, False, self.logging).split("\n")
         if main and self.opt.include_training and self.tabular:
             lines.append("from torch.utils.data import DataLoader, TensorDataset")
         return "\n".join(lines)
@@ -282,7 +314,21 @@ class _HybridGenerator:
 
     def _learn_features(self) -> str:
         head = _CLASSIFICATION_HEAD if self.classification else _REGRESSION_HEAD
-        return _LEARN_FEATURES.replace("[[HEAD]]", head).replace("[[CLASS]]", self.class_name)
+        if not self.logging:
+            log = ""
+        elif self.classification:
+            log = _LOG_EPOCH.replace(
+                "[[METRIC]]", "val_accuracy=(outputs.argmax(dim=1) == y[val]).float().mean()"
+            )
+        else:
+            # The head learns the standardised target: its RMSE in the units of the target.
+            log = _LOG_EPOCH.replace("[[METRIC]]", "val_rmse=val_loss**0.5 * spread")
+        return (
+            _LEARN_FEATURES.replace("[[HEAD]]", head)
+            .replace("[[CLASS]]", self.class_name)
+            .replace("[[RUN_PARAM]]", _RUN_PARAM if self.logging else "")
+            .replace("[[LOG_EPOCH]]", log)
+        )
 
     def _save_model(self) -> str:
         if self.classification:
@@ -371,7 +417,9 @@ class _HybridGenerator:
             "    print(extractor)",
             "    print(model)",
         ]
-        if training:
+        if training and self.logging:
+            lines += self._logged_training()
+        elif training:
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
@@ -404,6 +452,63 @@ class _HybridGenerator:
             ]
         lines += ["    demo(extractor, model)", "", "", 'if __name__ == "__main__":', "    main()"]
         return "\n".join(lines)
+
+    def _logged_training(self) -> list[str]:
+        """The training of main() inside a run logged to Brick DNN."""
+        from .codegen import tracking_start
+
+        loss = "cross_entropy" if self.classification else "mse"
+        config = [
+            '"epochs": 0 if args.frozen else args.epochs',
+            '"batch_size": args.batch_size',
+            '"learning_rate": args.lr',
+            '"optimizer": "adam"',
+            '"seed": args.seed',
+            f'"loss": "{loss}"',
+            '"val_split": 0.2',
+            '"feature_training": "frozen" if args.frozen else "pretrain"',
+            '"learned_features": NUM_LEARNED',
+            f'"model": "{self.layer.estimator}"',
+            '"params": model_settings(model)',
+        ]
+        task = "classification" if self.classification else "regression"
+        arguments = (
+            "extractor",
+            "features",
+            "target",
+            "train_rows",
+            "val_rows",
+            "args.epochs",
+            "args.batch_size",
+            "args.lr",
+            "args.seed",
+            "run",
+        )
+        return [
+            "    if args.csv:",
+            "        header, features, target = load_csv(args.csv)",
+            "        train_rows, val_rows = split_rows(len(features), args.seed)",
+            "        mean, std = standardise(features, train_rows)",
+            "        features = (features - mean) / std",
+            *tracking_start(
+                f"{self.layer.label} on learned features",
+                config,
+                task,
+                "os.path.basename(args.csv)",
+                "None if args.frozen else args.epochs",
+                "        ",
+            ),
+            "            if args.frozen:",
+            '                print("Frozen random features: the neural layers are not trained.")',
+            "            else:",
+            "                learn_features(",
+            *[f"                    {arg}," for arg in arguments],
+            "                )",
+            "            learned = extract(extractor, features)",
+            "            fit(model, learned, target, train_rows, val_rows, run)",
+            "        save_model(extractor, model, args.weights, args.save, header, mean, std)",
+            "        return",
+        ]
 
 
 def document_of(analysis: Analysis) -> dict[str, Any]:
@@ -494,7 +599,7 @@ def learn_features(
     epochs: int,
     batch_size: int,
     lr: float,
-    seed: int,
+    seed: int,[[RUN_PARAM]]
 ) -> None:
     """Phase 1: train the neural layers with a temporary linear head on the target, then
     drop the head. ``features`` are standardised."""
@@ -523,11 +628,25 @@ def learn_features(
             seen += len(inputs)
         network.eval()
         with torch.no_grad():
-            val_loss = loss_fn(network(x[val]), y[val]).item()
+            outputs = network(x[val])
+            val_loss = loss_fn(outputs, y[val]).item()
         print(
             f"Epoch {epoch:3d}/{epochs}  train loss {total / max(seen, 1):.4f}"
             f"  val loss {val_loss:.4f}"
-        )'''
+        )[[LOG_EPOCH]]'''
+
+# A parameter of learn_features() and fit() in a script that logs to Brick DNN.
+_RUN_PARAM = "\n    run: BrickDNNRun | None = None,"
+
+# The curves of the feature training: the losses and the head's metric per epoch.
+_LOG_EPOCH = """
+        if run is not None:
+            run.log(
+                epoch=epoch,
+                train_loss=total / max(seen, 1),
+                val_loss=val_loss,
+                [[METRIC]],
+            )"""
 
 _FIT = '''\
 def fit(
@@ -535,15 +654,16 @@ def fit(
     features: np.ndarray,
     target: np.ndarray,
     train_rows: np.ndarray,
-    val_rows: np.ndarray,
+    val_rows: np.ndarray,[[RUN_PARAM]]
 ) -> None:
     """Phase 2: fit the classical model on the learned features of the training rows and
     validate it on the other rows. Its StandardScaler learns from the training rows only."""
     print(f"Fitting on the {features.shape[1]} learned features of {len(train_rows)} rows")
     started = time.perf_counter()
     model.fit(features[train_rows], target[train_rows])
-    print(f"Fitted in {time.perf_counter() - started:.1f} s")
-[[REPORT]]'''
+    seconds = time.perf_counter() - started
+    print(f"Fitted in {seconds:.1f} s")
+[[REPORT]][[LOG_END]]'''
 
 _SAVE_MODEL = '''\
 def save_model(

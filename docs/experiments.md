@@ -109,21 +109,29 @@ runs page next to the runs trained here, with the badge *ran elsewhere*. Compari
 notes and shared links work for them like for any run. Nothing is computed on the server for
 them: they use none of your compute (CPU time) and do not wait in the training queue.
 
-**1. The script.** *Export .py* (or the code view) writes a script whose CSV training loop
-logs to Brick DNN; *Log to Brick DNN* in the code view is on by default and turns it off.
-Logging is **inert** unless the environment variable `BRICKDNN_TOKEN` is set: without it the
-script sends nothing and trains offline with exactly the same results (the same numbers,
-the same weights) as a script without logging. The token is never written into the script.
-With it, the script sends
+**1. The script.** *Export .py* (or the code view) writes a script whose training logs to
+Brick DNN: the CSV loop of a neural network, the training on a built-in text dataset, the fit
+of a classical model or an ensemble, and both phases of a hybrid network. *Log to Brick DNN*
+in the code view is on by default and turns it off. Logging is **inert** unless the
+environment variable `BRICKDNN_TOKEN` is set: without it the script sends nothing and trains
+offline with exactly the same results (the same numbers, the same weights or fitted model) as
+a script without logging. The token is never written into the script, which holds one copy
+of the client. With the token, the script sends at the start the run's name, the settings,
+the task, the name of the data and the saved network it was exported from, and at the end
+whether it completed, failed (an error) or was stopped (Ctrl+C). In between, by the kind of
+script:
 
-- at the start: the run's name, the settings (epochs, batch size, learning rate, optimizer,
-  seed, loss, validation and test split), the task, the name of the CSV file and the saved
-  network it was exported from;
-- after every epoch: the training and validation loss and the validation accuracy (a
-  classification) or RMSE (a regression), with the seconds since the start;
-- at the end: the test results (with `--test-split`, e.g. `--test-split 0.2`, which holds out
-  that share of the rows and measures the model on them once at the end; without it the last
-  validation results), and whether it completed, failed (an error) or was stopped (Ctrl+C).
+| Script | Settings | Per epoch | At the end (the run's result) |
+| ------ | -------- | --------- | ----------------------------- |
+| Neural network, CSV file | epochs, batch size, learning rate, optimizer, seed, loss, validation and test split | training and validation loss, validation accuracy (classification) or RMSE (regression) | the test results with `--test-split` (e.g. `--test-split 0.2` holds out that share of the rows and measures the model on them once at the end), else the last validation results |
+| Neural network, built-in text dataset (`--train`) | as above, without the test split; the dataset's name | training and validation loss, validation accuracy | the test loss and accuracy on the dataset's test texts |
+| Classical model or ensemble (`--csv`) | the model (`model`), its hyperparameters as scikit-learn has them (`params`, e.g. `C` or `estimator__C`; kernels and inner models as text), seed, validation split | – (fitted once: no curves) | validation accuracy, balanced accuracy, F1 (macro and weighted) and, with two classes, ROC AUC; or RMSE, MAE and R²; and the seconds the fit took (`fit_seconds`) |
+| Hybrid network (`--csv`) | the neural settings, `feature_training` (`pretrain`, or `frozen` with `--frozen`), the number of learned features, the classical model and its hyperparameters | training and validation loss of the feature training and the temporary head's validation accuracy or RMSE (none with `--frozen`) | the classical model's validation numbers, as for a classical model: they are the run's result, not the head's |
+
+The generated scripts run no search (tuning); a search runs in Brick DNN. The numbers at the
+end are named like the columns of the runs table (`val_balanced_accuracy`, `test_rmse` …), so
+they appear there; the main ones (loss, accuracy, RMSE, R² of the validation and test rows)
+also become the run's metrics, the final numbers winning over those of the last epoch.
 
 `BRICKDNN_URL` names the server (default: the one the script was exported from, e.g.
 `https://brickdnn.com`), `BRICKDNN_PROJECT` the id of the network the run belongs to (default:
@@ -139,6 +147,8 @@ tokens of connected apps do not.
 ```bash
 export BRICKDNN_TOKEN=bdnn_...            # PowerShell: $env:BRICKDNN_TOKEN = "bdnn_..."
 python my_network.py --csv data.csv --epochs 20 --test-split 0.2
+python my_text_network.py --train --epochs 10    # a built-in text dataset
+python my_svm.py --csv data.csv                  # a classical model: one fit
 ```
 
 The script prints `Brick DNN: logging this run to …/runs`, and the run appears in the runs

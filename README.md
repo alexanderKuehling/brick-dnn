@@ -119,7 +119,9 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   when their losses differ in kind), plot a setting against a result or draw parallel
   coordinates, and share a comparison read-only with a link. **Train the exported script on
   your own machine or GPU** with `BRICKDNN_TOKEN` set, and its curves appear there too, marked
-  *ran elsewhere* (without the variable the script runs offline as before). See
+  *ran elsewhere*: a neural network's CSV loop or text dataset, a classical model's fit (its
+  settings and validation numbers) and both phases of a hybrid network (without the variable
+  the script runs offline as before). See
   [docs/experiments.md](docs/experiments.md).
 - **Explainable AI and learning aids**: explain a trained model's predictions with saliency
   maps, Grad-CAM and occlusion (images), Shapley values, integrated gradients and permutation

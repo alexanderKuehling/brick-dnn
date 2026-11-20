@@ -114,6 +114,12 @@ does not standardise the target of a regression, so it multiplies Huber's delta 
 standard deviation of the training targets. A loss that does not fit the outputs is a `400`.
 The training loop of a hybrid network's script keeps its default losses.
 
+Every training of a script (the CSV loop, a built-in text dataset, the fit of a classical
+model or an ensemble, both phases of a hybrid network) logs to Brick DNN while
+`BRICKDNN_TOKEN` is set where it runs ([experiments.md](experiments.md#runs-that-ran-elsewhere)):
+`log_to_brickdnn` (default `true`; `false` leaves the client out), `tracking_url` (the server,
+default this one) and `tracking_project` (the id of the saved network the runs belong to).
+
 ```bash
 curl -X POST http://localhost:8080/api/generate/?download=1 \
   -H "Content-Type: application/json" -d @my_network.json -o model.py
@@ -847,7 +853,10 @@ are reachable (`404` otherwise).
   the last points (`train_loss`, `val_loss`, `val_accuracy`, `val_rmse` …), its `epochs_done`
   the highest epoch or step.
 - `summary`: up to 64 numbers by name, e.g. `{"test_accuracy": 0.93}`; `test_*` become the
-  run's test metrics, all of them columns of the runs table.
+  run's test metrics, all of them columns of the runs table. The main numbers of a summary
+  (`val_loss`, `val_accuracy`, `val_rmse`, `val_r2` …, and the `test_*` ones) also become the
+  run's `metrics`, in place of those of the last point: a script whose result is not its last
+  epoch (a classical model fitted on learned features) reports it this way.
 
 **Limits and errors.** `400` with `detail` for anything malformed; `409` with `code`
 `finished` (the run ended, also when it was stopped in the app), `points_limit` (more than

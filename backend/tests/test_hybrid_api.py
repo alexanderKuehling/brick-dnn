@@ -108,6 +108,8 @@ def test_a_hybrid_run_end_to_end(auth_client, user, real_processes, tmp_path):
     ]
     archive.extractall(tmp_path / "download")
     folder = tmp_path / "download"
+    # A training with the script logs to this server (only with BRICKDNN_TOKEN).
+    assert 'BRICKDNN_URL = "http://testserver"' in (folder / "mail_features.py").read_text()
     bundle = joblib.load(folder / "mail-features.joblib")
     assert bundle["class_names"] == ["eggs", "ham", "spam"] and bundle["hybrid"]["features"] == 6
     preprocessing = json.loads((folder / "mail-features.preprocessing.json").read_text())

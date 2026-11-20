@@ -174,10 +174,18 @@ class _ClassicalGenerator:
         self.models = [m.layer for m in self.members] or [self.layer]
 
     def render(self) -> str:
+        from .codegen import tracking_code
+
         main = self.opt.include_main
         training = main and self.opt.include_training
+        # The fit logs its settings and validation numbers to Brick DNN (codegen.py).
+        self.logging = training and self.opt.log_to_brickdnn
         header = (
-            BANNER + "\n" + self._docstring(main, training) + "\n\n" + self._imports(main, training)
+            BANNER
+            + "\n"
+            + self._docstring(main, training)
+            + "\n\n"
+            + self._imports(main, training, self.logging)
         )
         if main:
             header += f"\n\nNUM_FEATURES = {self.n_features}"
@@ -186,7 +194,12 @@ class _ClassicalGenerator:
             parts += [_READ_CSV, _NUMBERS]
             if training:
                 parts += [self._load_csv(), self._fit(), self._save_model()]
-            parts += [self._predict(), self._demo(), self._main(training)]
+            if self.logging:
+                parts += [self._scores(), _MODEL_SETTINGS]
+            parts += [self._predict(), self._demo()]
+            if self.logging:
+                parts.append(tracking_code(self.opt))
+            parts.append(self._main(training))
         return "\n\n\n".join(parts) + "\n"
 
     # -- header ------------------------------------------------------------ #
@@ -249,6 +262,17 @@ class _ClassicalGenerator:
                 "    python this_file.py --csv data.csv",
                 "    python this_file.py --predict new_data.csv",
             ]
+            if self.logging:
+                from .codegen import tracking_docstring
+
+                lines += tracking_docstring(
+                    self.opt,
+                    "python this_file.py --csv data.csv",
+                    "It sends the model and its hyperparameters, the name of the CSV file, the "
+                    + self._sends()
+                    + " on the validation rows and the time the fit took",
+                    "Log the fit to Brick DNN, to see its results",
+                )
         elif main:
             lines += [
                 "",
@@ -282,11 +306,26 @@ class _ClassicalGenerator:
             how += ", weighted " + ":".join(str(w) for w in layer.p["weights"])
         return how + "."
 
-    def _imports(self, main: bool, training: bool) -> str:
+    def _sends(self) -> str:
+        """The validation numbers the fit logs, in words."""
+        if not self.classification:
+            return "RMSE, MAE and R²"
+        if hard_voting(self.layer):  # classes, but no probabilities
+            return "accuracy, balanced accuracy and F1"
+        return "accuracy, balanced accuracy, F1 and (two classes) ROC AUC"
+
+    def _imports(self, main: bool, training: bool, logging: bool = False) -> str:
+        """The imports; ``logging``: also those of the client and of scores()."""
+        from .codegen import stdlib_imports
+
         lines = []
         if main:
-            lines += ["import argparse", "import csv"]
-            lines += ["import time", ""] if training else [""]
+            standard = ["argparse", "csv"]
+            if training:
+                standard.append("time")  # the fit reports its time
+            if logging:
+                standard.append("warnings")  # scores() computes its numbers quietly
+            lines += stdlib_imports(standard, logging)
             lines += ["import joblib", "import numpy as np"]
         layer = self.layer
         modules: dict[str, list[str]] = {layer.module: [layer.estimator]}
@@ -299,6 +338,8 @@ class _ClassicalGenerator:
                 kernels += model.kernel.classes()
         if isinstance(layer, Ensemble) and layer.combines == "stacking":
             modules[layer.final_module] = [layer.final_estimator]  # type: ignore[attr-defined]
+        if logging:
+            modules["sklearn.metrics"] = self._metrics()
         modules["sklearn.pipeline"] = ["Pipeline"]
         modules["sklearn.preprocessing"] = ["StandardScaler"]
         for module in sorted(modules):
@@ -387,7 +428,43 @@ class _ClassicalGenerator:
         return _LOAD_CSV.replace("[[TARGET]]", target)
 
     def _fit(self) -> str:
-        return _FIT.replace("[[REPORT]]", self._report())
+        if self.logging:
+            signature = (
+                "def fit(\n"
+                "    model: Pipeline,\n"
+                "    features: np.ndarray,\n"
+                "    target: np.ndarray,\n"
+                "    seed: int,\n"
+                "    run: BrickDNNRun | None = None,\n"
+                ") -> None:"
+            )
+        else:
+            signature = (
+                "def fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) "
+                "-> None:"
+            )
+        return (
+            _FIT.replace("[[SIGNATURE]]", signature)
+            .replace("[[REPORT]]", self._report())
+            .replace("[[LOG_END]]", LOG_FIT if self.logging else "")
+        )
+
+    def _scores(self) -> str:
+        """scores(): the validation numbers that the fit logs. Hard voting predicts classes
+        but no probabilities, so its script has no ROC AUC."""
+        if not self.classification:
+            return _REGRESSION_SCORES
+        roc_auc = "" if hard_voting(self.layer) else _ROC_AUC
+        return _CLASSIFICATION_SCORES.replace("[[ROC_AUC]]", roc_auc)
+
+    def _metrics(self) -> list[str]:
+        """The functions of sklearn.metrics that scores() uses."""
+        if not self.classification:
+            return list(_REGRESSION_METRICS)
+        names = list(_CLASSIFICATION_METRICS)
+        if not hard_voting(self.layer):
+            names.append("roc_auc_score")
+        return names
 
     def _report(self) -> str:
         """What the fitted ``model`` did on ``features[val_rows]`` and what it learned."""
@@ -478,7 +555,25 @@ class _ClassicalGenerator:
             "    model = make_model()",
             "    print(model)",
         ]
-        if training:
+        if training and self.logging:
+            from .codegen import tracking_start
+
+            config = [
+                f'"model": "{self.layer.estimator}"',
+                '"seed": args.seed',
+                '"val_split": 0.2',
+                '"params": model_settings(model)',
+            ]
+            task = "classification" if self.classification else "regression"
+            lines += [
+                "    if args.csv:",
+                "        header, features, target = load_csv(args.csv)",
+                *tracking_start(name, config, task, "os.path.basename(args.csv)", None, "        "),
+                "            fit(model, features, target, args.seed, run)",
+                "        save_model(model, args.save, header)",
+                "        return",
+            ]
+        elif training:
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
@@ -530,7 +625,7 @@ def load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:
     return header, features, target'''
 
 _FIT = '''\
-def fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:
+[[SIGNATURE]]
     """Fit on a random 80 % of the rows and validate on the rest (the split depends only on
     ``seed``). The StandardScaler of the pipeline learns from the training rows only."""
     if len(features) < 4:
@@ -541,8 +636,84 @@ def fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) ->
     print(f"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation")
     started = time.perf_counter()
     model.fit(features[train_rows], target[train_rows])
-    print(f"Fitted in {time.perf_counter() - started:.1f} s")
-[[REPORT]]'''
+    seconds = time.perf_counter() - started
+    print(f"Fitted in {seconds:.1f} s")
+[[REPORT]][[LOG_END]]'''
+
+# The end of fit() in a script that logs to Brick DNN (also the fit of a hybrid network):
+# the validation numbers of scores() and the time of the fit. Nothing of it runs without
+# BRICKDNN_TOKEN (the run is inert then).
+LOG_FIT = """
+    if run is not None and run.active:
+        summary = scores(model, features[val_rows], target[val_rows])
+        run.finish(summary={**summary, "fit_seconds": round(seconds, 3)})"""
+
+_CLASSIFICATION_METRICS = ("accuracy_score", "balanced_accuracy_score", "f1_score")
+_REGRESSION_METRICS = ("mean_absolute_error", "mean_squared_error", "r2_score")
+
+_CLASSIFICATION_SCORES = '''\
+def scores(model: Pipeline, features: np.ndarray, target: np.ndarray) -> dict[str, float]:
+    """The numbers of the fitted model on the validation rows that are logged to Brick DNN,
+    named like the columns of its runs table. Logging never stops the script: a number that
+    cannot be computed is left out."""
+    found: dict[str, float] = {}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # e.g. a class without validation rows
+            predicted = model.predict(features)
+            found["val_accuracy"] = float(accuracy_score(target, predicted))
+            found["val_balanced_accuracy"] = float(balanced_accuracy_score(target, predicted))
+            for average in ("macro", "weighted"):
+                f1 = f1_score(target, predicted, average=average, zero_division=0)
+                found[f"val_{average}_f1"] = float(f1)[[ROC_AUC]]
+    except Exception:
+        pass
+    return found'''
+
+# The end of scores() for a model with class probabilities.
+_ROC_AUC = """
+            if len(model.classes_) == 2:
+                positive = target == model.classes_[1]
+                probability = model.predict_proba(features)[:, 1]
+                found["val_roc_auc"] = float(roc_auc_score(positive, probability))"""
+
+_REGRESSION_SCORES = '''\
+def scores(model: Pipeline, features: np.ndarray, target: np.ndarray) -> dict[str, float]:
+    """The numbers of the fitted model on the validation rows that are logged to Brick DNN,
+    named like the columns of its runs table. Logging never stops the script: a number that
+    cannot be computed is left out."""
+    found: dict[str, float] = {}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # e.g. R² of a single validation row
+            predicted = model.predict(features)
+            found["val_rmse"] = float(np.sqrt(mean_squared_error(target, predicted)))
+            found["val_mae"] = float(mean_absolute_error(target, predicted))
+            found["val_r2"] = float(r2_score(target, predicted))
+    except Exception:
+        pass
+    return found'''
+
+_MODEL_SETTINGS = '''\
+def model_settings(model: Pipeline) -> dict:
+    """The hyperparameters of the model for its run in Brick DNN: numbers, words and
+    switches, other objects (an inner model) as text, at most 60. It only reads them."""
+    found: dict = {}
+    try:
+        for key, value in model.named_steps["model"].get_params().items():
+            if isinstance(value, np.generic):
+                value = value.item()
+            if isinstance(value, float) and not math.isfinite(value):
+                value = str(value)
+            if value is None or isinstance(value, (bool, int, float)):
+                found[key] = value
+            elif isinstance(value, str) or ("__" not in key and hasattr(value, "get_params")):
+                found[key] = str(value)[:120]
+            if len(found) == 60:
+                break
+    except Exception:  # logging never stops the script
+        pass
+    return found'''
 
 _REGRESSION_REPORT = """\
     errors = model.predict(features[val_rows]) - target[val_rows]

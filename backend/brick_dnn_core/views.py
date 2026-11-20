@@ -684,7 +684,7 @@ class TrainingRunViewSet(
         if training.run_family(run) == "hybrid":
             # Two models (the neural layers and the classical one) and the script: a ZIP file.
             response = FileResponse(
-                training.weights_archive(run),
+                training.weights_archive(run, site_url(request)),
                 as_attachment=True,
                 filename=training.weights_filename(run),
                 content_type="application/zip",
