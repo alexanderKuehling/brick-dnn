@@ -129,17 +129,16 @@ export default function CodeModal({
             onOptionsChange({ ...options, include_training: event.currentTarget.checked })
           }
         />
-        {!classical && !hybrid && (
-          <Switch
-            label={t('experiments.logging.codeSwitch')}
-            description={t('experiments.logging.codeSwitchHelp')}
-            disabled={options.include_main === false || options.include_training === false}
-            checked={options.log_to_brickdnn ?? true}
-            onChange={(event) =>
-              onOptionsChange({ ...options, log_to_brickdnn: event.currentTarget.checked })
-            }
-          />
-        )}
+        {/* Every training logs: the CSV loop, a text dataset, a fit, both hybrid phases. */}
+        <Switch
+          label={t('experiments.logging.codeSwitch')}
+          description={t('experiments.logging.codeSwitchHelp')}
+          disabled={options.include_main === false || options.include_training === false}
+          checked={options.log_to_brickdnn ?? true}
+          onChange={(event) =>
+            onOptionsChange({ ...options, log_to_brickdnn: event.currentTarget.checked })
+          }
+        />
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
         {classical

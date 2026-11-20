@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **Every exported script logs its training to Brick DNN, not only the neural CSV loop.** With
+  `BRICKDNN_TOKEN` set, the scikit-learn script of a classical model or an ensemble logs one
+  run (no epochs): the model, its hyperparameters as scikit-learn has them (`params`), seed and
+  validation split, the CSV file's name and, at the end, the validation accuracy, balanced
+  accuracy, macro and weighted F1 and (two classes, not with hard voting) ROC AUC, or RMSE,
+  MAE and R², with the seconds of the fit (`fit_seconds`). A hybrid network's script logs the
+  losses of every epoch of its feature training with the temporary head's validation accuracy
+  or RMSE (none with `--frozen`; `feature_training` and the number of learned features in the
+  settings), then the classical model's validation numbers as the run's result. The training
+  on a built-in text dataset logs its curves and the test loss and accuracy, with the
+  dataset's name. The numbers are named like the columns of the runs table; the final
+  validation loss, accuracy, RMSE and R² now also become the run's metrics (they win over the
+  last point, so a hybrid run shows its classical model, not the head). Without the token the
+  scripts send nothing and give the same output, weights and fitted models as without
+  logging; the client is embedded once per script (`codegen.tracking_code`), the token is
+  never written into it, and network errors never stop the training. *Log to Brick DNN* is
+  now shown in the code view for classical models and hybrid networks too; MCP
+  `generate_pytorch_code` takes `log_to_brickdnn` and `tracking_project` and writes this
+  server into the script, as does the script in the ZIP download of a trained hybrid network;
+  the scripts' docstrings say what they send. See docs/experiments.md.
 - **PostgreSQL on the server itself, and moving the database onto it.** `docker-compose.yml`
   has a `db` service (PostgreSQL 17, `postgres:17.12-trixie`), off unless `.env` sets
   `COMPOSE_PROFILES=postgres` (Compose reads it there, so the deploy script stays as it is):

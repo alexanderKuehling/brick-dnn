@@ -249,7 +249,7 @@ export const experiments: Messages<typeof en> = {
     intro:
       'Trainieren Sie das exportierte Skript auf Ihrem Laptop oder einem GPU-Server: Seine Kurven erscheinen auf der Seite „Läufe“ neben den hier trainierten Läufen, markiert mit „anderswo trainiert“.',
     step1:
-      'Exportieren Sie das Netz mit „.py exportieren“ (in der Code-Ansicht ist „An Brick DNN protokollieren“ standardmäßig an). Die CSV-Trainingsschleife meldet Verlust und Metriken jeder Epoche, die Einstellungen und die Testergebnisse.',
+      'Exportieren Sie das Netz mit „.py exportieren“ (in der Code-Ansicht ist „An Brick DNN protokollieren“ standardmäßig an). Sein Training meldet die Einstellungen und die Ergebnisse: Verlust und Metriken jeder Epoche eines neuronalen Netzes (eine CSV-Datei oder ein eingebauter Textdatensatz) mit den Testergebnissen, die Validierungswerte eines klassischen Modells oder Ensembles und beides bei einem hybriden Netz.',
     step2:
       'Erstellen Sie unten einen Token dafür; ein Token, der nur Läufe protokollieren darf, genügt. Der Token steht nie im Skript: Setzen Sie ihn in der Umgebung.',
     step3:
@@ -258,7 +258,7 @@ export const experiments: Messages<typeof en> = {
     ownLoop: 'In einer eigenen Trainingsschleife tut der Client des Pakets brickdnn dasselbe:',
     copyPython: 'Python-Code kopieren',
     privacy:
-      'Brick DNN speichert, was das Skript sendet (Einstellungen, Metriken je Epoche, den Namen der CSV-Datei), beim Lauf; es wird mit dem Lauf oder Ihrem Konto gelöscht und ist Teil Ihres Datenexports.',
+      'Brick DNN speichert, was das Skript sendet (Einstellungen, Metriken je Epoche, die Endwerte, den Namen der CSV-Datei oder des Datensatzes), beim Lauf; es wird mit dem Lauf oder Ihrem Konto gelöscht und ist Teil Ihres Datenexports.',
     codeSwitch: 'An Brick DNN protokollieren',
     codeSwitchHelp: 'Nur mit der Umgebungsvariablen BRICKDNN_TOKEN',
     scopeLabel: 'Nur Trainingsläufe protokollieren',

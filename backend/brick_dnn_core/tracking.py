@@ -65,7 +65,7 @@ TASKS = ("classification", "regression", "segmentation")
 ENDINGS = ("completed", "failed", "stopped")
 METRIC_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_./-]{0,63}$")
 RESERVED = {"epoch", "step", "time", "x"}
-# Metrics of the last point that become the run's metrics (as for a run on the server).
+# Metrics of the last point that become the run's metrics; the final summary overrides them.
 RUN_METRICS = (
     "train_loss",
     "train_accuracy",
@@ -455,7 +455,7 @@ def _apply_summary(run: TrainingRun, summary: dict[str, Any]) -> None:
     external["summary"] = {**(external.get("summary") or {}), **summary}
     run.plan = {**run.plan, "external": external}
     metrics = dict(run.metrics) if isinstance(run.metrics, dict) else {}
-    metrics.update({key: summary[key] for key in TEST_METRICS if key in summary})
+    metrics.update({key: summary[key] for key in (*RUN_METRICS, *TEST_METRICS) if key in summary})
     run.metrics = metrics
 
 

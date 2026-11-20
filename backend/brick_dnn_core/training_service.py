@@ -1681,16 +1681,18 @@ def weights_filename(run: TrainingRun) -> str:
     return (slugify(run.name) or ("weights" if suffix == ".pt" else "model")) + suffix
 
 
-def weights_archive(run: TrainingRun) -> Any:
+def weights_archive(run: TrainingRun, site: str | None = None) -> Any:
     """The download of a hybrid network: a ZIP file (a temporary file, at its start) with
     the neural layers (``<run>.features.pt``: ``{"state_dict", "preprocessing"}``), the
     fitted classical model (``<run>.joblib``), the preprocessing (``.preprocessing.json``),
     the generated script (``<run>.py``, whose ``--predict`` reads both files) and a short
-    README.txt. None if the run has no trained model."""
+    README.txt. None if the run has no trained model. ``site`` is the address of this
+    server: a training with the script logs to it (with BRICKDNN_TOKEN, as an exported
+    script does)."""
     import tempfile
     import zipfile
 
-    from brickdnn.codegen import generate_code
+    from brickdnn.codegen import TRACKING_URL, generate_code
     from brickdnn.training.inference import module_name
 
     path = weights_path(run)
@@ -1708,7 +1710,8 @@ def weights_archive(run: TrainingRun) -> Any:
             bundle.write(preprocessing, f"{stem}.preprocessing.json")
         script = None
         try:
-            script = generate_code(run.graph)
+            logs_here = bool(site) and TRACKING_URL.match(site)
+            script = generate_code(run.graph, {"tracking_url": site} if logs_here else None)
         except Exception:  # the network cannot be turned into code any more
             logger.info("No script for the download of run %s", run.pk)
         if script is not None:
