@@ -76,7 +76,21 @@ def test_capabilities_list_classical_models(auth_client, training_dir, monkeypat
         "SVC": 50_000,
         "HistGradientBoostingRegressor": 1_000_000,
         "HistGradientBoostingClassifier": 1_000_000,
+        # XGBoost, LightGBM and CatBoost: the limit of gradient boosting.
+        **dict.fromkeys(
+            [
+                "XGBRegressor",
+                "XGBClassifier",
+                "LGBMRegressor",
+                "LGBMClassifier",
+                "CatBoostRegressor",
+                "CatBoostClassifier",
+            ],
+            1_000_000,
+        ),
     }
+    # The versions of the libraries (None: not installed).
+    assert sorted(classical["libraries"]) == ["catboost", "lightgbm", "xgboost"]
     monkeypatch.setattr(training_service, "sklearn_installed", lambda: False)
     classical = auth_client.get("/api/training/").data["classical"]
     assert classical["available"] is False and "pip install scikit-learn" in classical["reason"]

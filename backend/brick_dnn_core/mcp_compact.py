@@ -349,6 +349,13 @@ def classical_options(classical: dict[str, Any]) -> dict[str, Any]:
                 models[model] += " (the fit optimises the kernel itself)"
             for item in info.get("tunable") or []:
                 params.setdefault(item["name"], _tunable_line(item))
+        # A classifier that varies what its regressor does and more: "as XGBRegressor, +
+        # scale_pos_weight".
+        for model, line in list(models.items()):
+            regressor = model.replace("Classifier", "Regressor")
+            base = models.get(regressor)
+            if regressor != model and base and line.startswith(base + ", "):
+                models[model] = f"as {regressor}, + {line[len(base) + 2 :]}"
         folds = tuning.get("cv_folds") or {}
         found["tuning"] = {
             "cv_folds": f"{folds.get('min')}-{folds.get('max')}; without validation rows "

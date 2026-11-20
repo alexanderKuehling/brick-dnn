@@ -146,9 +146,10 @@ def test_answers_stay_small_for_wide_data_and_long_runs(user, mcp, training_dir,
     full = size(DatasetSerializer([dataset], many=True, context={"user": user}).data)
     # Eight built-in datasets with their class names (Cells adds about 500 bytes, the three
     # text datasets about 700 each, without their example texts), the limits and the
-    # defaults, what a hyperparameter search can rank by and vary (about 1,800 bytes of it),
-    # and the losses per task with their settings (about 560 bytes).
-    assert sizes["get_training_options"] < 9900 < full
+    # defaults, what a hyperparameter search can rank by and vary (about 3,300 bytes of it,
+    # 1,500 of them for XGBoost, LightGBM and CatBoost), the row limits and versions of the
+    # classical models, and the losses per task with their settings (about 560 bytes).
+    assert sizes["get_training_options"] < 11_600 < full
     tuning = options["classical"]["tuning"]
     assert tuning["models"]["SVC"] == "C*, gamma*, kernel, class_weight"
     assert tuning["params"]["C"] == "number > 0, log; e.g. 0.1:100"
@@ -256,7 +257,8 @@ def test_layer_types_are_compact_unless_asked(mcp):
     (linear,) = detail["layers"]
     assert linear["params"][0]["help"] and linear["input_slots"]
     full = size(detail) * 0  # (the full catalogue is GET /api/layers/)
-    assert compact_size < 25_000 + full
+    # About 700 bytes per classical model brick (XGBoost, LightGBM and CatBoost add six).
+    assert compact_size < 30_000 + full
     assert "Unknown layer type 'Dense'" in error_of(mcp, "list_layer_types", types=["Dense"])
 
 
