@@ -204,7 +204,7 @@ export function HistoryPanel({
                 ? i18n.t('ui.history.HistoryPanel.yourUnsavedChangesAreNot')
                 : i18n.t('ui.history.HistoryPanel.namedVersionsAreKeptFor')
             }
-            submitLabel="Save name"
+            submitLabel={i18n.t('ui.history.HistoryPanel.saveName')}
             onSubmit={nameCurrent}
             onCancel={() => setNaming(false)}
           />
@@ -274,7 +274,7 @@ export function HistoryPanel({
                               : i18n.t('ui.history.HistoryPanel.nameThisVersion')
                           }
                           initial={entry.kind === 'auto' ? '' : entry.label}
-                          submitLabel="Save name"
+                          submitLabel={i18n.t('ui.history.HistoryPanel.saveName')}
                           onSubmit={(label) => rename(entry, label)}
                           onCancel={() => setRenaming(null)}
                         />

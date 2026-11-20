@@ -359,3 +359,157 @@ def test_message_templates_cover_the_package():
     assert messages.translate_message("Only one entry of the target shape may be -1.") == (
         "Only one entry of the target shape may be -1."
     )
+
+
+def test_messages_that_start_with_a_value_and_their_values():
+    from brick_dnn_core import messages
+
+    with translation.override("de"):
+        # A sentence that starts with the name of a layer.
+        assert messages.translate_message("Linear has no incoming connection.") == (
+            "Linear hat keine eingehende Verbindung."
+        )
+        # Counts, numbers and a hint inside the message are translated too.
+        assert messages.translate_message(
+            "The network outputs 4 values, but Key lookup has 10 classes. The last layer "
+            "should output 10 values (e.g. Linear with 10 outputs)."
+        ) == (
+            "Das Netz gibt 4 Werte aus, aber Key lookup hat 10 Klassen. Die letzte Schicht "
+            "sollte 10 Werte ausgeben (z. B. Linear mit 10 Ausgaben)."
+        )
+        assert "10.000 Einträge" in messages.translate_message(
+            "The Embedding has 10,000 entries, but Key lookup has only 289 words: the other "
+            "9,711 are never used. Set its vocabulary size to 289."
+        )
+        # What a fix of the training check changes.
+        assert messages.translate_message("Input shape 64 → 10") == "Form der Eingabe 64 → 10"
+        # The label of a readiness fix, only inside "fix".
+        answer = {"fix": {"label": "Drop rows without churn"}, "label": "Drop rows without x"}
+        assert messages.translate_response(answer) == {
+            "fix": {"label": "Zeilen ohne churn entfernen"},
+            "label": "Drop rows without x",
+        }
+
+
+def test_training_check_in_german(ada):  # noqa: F811
+    from brickdnn.examples import get_example
+
+    client = APIClient()
+    client.force_authenticate(ada)
+    graph = get_example("transformer_classifier")["graph"]
+    body = {"graph": graph, "dataset": {"kind": "builtin", "id": "lookup"}}
+    answer = client.post("/api/training/check/", body, format="json", **GERMAN).json()
+    assert any(e.startswith("Jeder Text von Key lookup hat 10 Tokens") for e in answer["errors"])
+    assert "Form der Eingabe 64 → 10" in [fix["summary"] for fix in answer["fixes"]]
+
+
+def test_run_messages_in_german():
+    """The final message of a run, its metrics and what the queue stores with a run."""
+    from brick_dnn_core import messages
+
+    cases = {
+        "Finished: validation accuracy 16.8%; test accuracy 12.0%": (
+            "Abgeschlossen: Validierungsgenauigkeit 16,8 %; Testgenauigkeit 12,0 %"
+        ),
+        "Finished: validation RMSE 9.682, R² 0.965. Fitted on 240,000 rows in 0.8 s.": (
+            "Abgeschlossen: Validierungs-RMSE 9,682, R² 0,965. "
+            "Auf 240.000 Zeilen in 0,8 s angepasst."
+        ),
+        "Stopped early after epoch 7: no improvement for 3 epochs; kept the weights of epoch "
+        "4. Validation loss 0.1234, RMSE 4.5.": (
+            "Nach Epoche 7 vorzeitig gestoppt: keine Verbesserung seit 3 Epochen; die Gewichte "
+            "von Epoche 4 wurden behalten. Validierungsverlust 0,1234, RMSE 4,5."
+        ),
+        "Finished: 3 features learned in 3 epochs; HistGradientBoostingClassifier on them: "
+        "validation accuracy 91.0%. Fitted on 800 rows in 0.1 s.": (
+            "Abgeschlossen: 3 Merkmale in 3 Epochen gelernt; HistGradientBoostingClassifier "
+            "darauf: Validierungsgenauigkeit 91,0 %. Auf 800 Zeilen in 0,1 s angepasst."
+        ),
+        "Finished 5 trials. Best: trial 3 (learning rate 0.01, batch size 32, Adam), "
+        "validation accuracy 91.0%": (
+            "5 Versuche abgeschlossen. Bester: Versuch 3 (Lernrate 0,01, Batchgröße 32, Adam), "
+            "Validierungsgenauigkeit 91,0 %"
+        ),
+        "Combined 2 runs (weighted average): validation accuracy 92.0%; test accuracy 94.0%.": (
+            "2 Läufe kombiniert (gewichteter Mittelwert): Validierungsgenauigkeit 92,0 %; "
+            "Testgenauigkeit 94,0 %."
+        ),
+        "Waiting for a free training slot.": "Wartet auf einen freien Trainingsplatz.",
+        "Demo data: random inputs and a hidden rule to learn (classification).": (
+            "Demodaten: zufällige Eingaben und eine versteckte Regel zum Lernen (Klassifikation)."
+        ),
+        # A value that only looks like a metric stays as it is.
+        "Finished: accuracy unknown": "Abgeschlossen: accuracy unknown",
+    }
+    with translation.override("de"):
+        for english, german in cases.items():
+            assert messages.translate_message(english) == german
+    assert messages.translate_message("Finished: validation accuracy 16.8%") == (
+        "Finished: validation accuracy 16.8%"
+    )
+
+
+def test_readiness_messages_and_fix_labels_in_german():
+    from brick_dnn_core import messages
+
+    with translation.override("de"):
+        # A label of a layer and a sentence put into a message as values.
+        assert messages.translate_message(
+            "Gradient boosting classification predicts one class per sample, but Shapes has a "
+            "class for every pixel. A segmentation needs a neural network that outputs a class "
+            "per pixel, e.g. the example U-Net."
+        ).startswith("Gradient-Boosting-Klassifikation sagt eine Klasse pro Beispiel vorher")
+        # Two values that follow each other: the first one takes the whole hint.
+        assert "Die letzte Schicht sollte 10 Werte ausgeben (z. B. Linear mit 10 Ausgaben)." in (
+            messages.translate_message(
+                "The network outputs shape (4, 64, 64), but MNIST needs one score per class. "
+                "The last layer should output 10 values (e.g. Linear with 10 outputs). A network "
+                "with one output per pixel is trained on a segmentation dataset (images with "
+                "masks), e.g. the built-in Shapes or Cells."
+            )
+        )
+        assert messages.translate_message("2 feature columns have missing values (age, x).") == (
+            "2 Merkmalsspalten haben fehlende Werte (age, x)."
+        )
+        assert messages.translate_message(
+            "income is strongly skewed (skewness 3.6): a few large values dominate it. "
+            "log(1 + x) makes it more even."
+        ).endswith("log(1 + x) macht sie gleichmäßiger.")
+        assert messages.translate_message(
+            "Standardised 2 columns (mean 0, standard deviation 1 on the training rows)."
+        ).startswith("2 Spalten standardisiert")
+        answer = {"fix": {"label": "Drop id"}, "label": "Drop id", "message": "Drop id"}
+        assert messages.translate_response(answer) == {
+            "fix": {"label": "id entfernen"},
+            "label": "Drop id",
+            "message": "Drop id",
+        }
+        assert messages.translate_label("Log-transform 2 columns (log1p)") == (
+            "2 Spalten logarithmieren (log1p)"
+        )
+
+
+def test_extra_templates_are_still_in_the_source():
+    """EXTRA_TEMPLATES and LABEL_TEMPLATES repeat texts of the package: when a text changes
+    there, its copy in messages.py (and its translation) has to follow."""
+    import ast
+    from pathlib import Path
+
+    from brick_dnn_core import messages
+
+    backend = Path(messages.__file__).resolve().parent.parent
+    pieces: set[str] = set()
+    for folder in ("brickdnn", "brick_dnn_core"):
+        for path in (backend / folder).rglob("*.py"):
+            if path.name == "messages.py":
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    pieces.add(node.value)
+    source = "\n".join(pieces)
+    for template in (*messages.EXTRA_TEMPLATES, *messages.LABEL_TEMPLATES):
+        # The longest piece between two values, numbers, brackets or commas, or all but its last word
+        # or its first words (a plural "s" or a conditional part may follow in the source).
+        literal = max(re.split(r"\{\d+\}|\d+|\(|, ", template), key=len).strip(" .,:;()")
+        start = " ".join(literal.split(" ")[:4])
+        assert literal in source or literal.rsplit(" ", 1)[0] in source or start in source, template

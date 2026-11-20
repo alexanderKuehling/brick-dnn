@@ -190,7 +190,7 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
       const { isSaved, project } = latest.current;
       patchProject({ role: message.role });
       if (message.role === 'viewer' && (pending.length > 0 || (!trackingRef.current && !isSaved))) {
-        leaveAsCopy(`You can only view “${server.name}” now`);
+        leaveAsCopy(i18n.t('ui.live.useLiveBuilder.youCanOnlyViewNow', { name: server.name }));
         return;
       }
       if (trackingRef.current || pending.length > 0 || isSaved) {
@@ -344,7 +344,7 @@ export function useLiveBuilder(options: LiveBuilderOptions) {
     base.current = null;
     setTracked(false);
     const name = latest.current.name;
-    const keep = 'It stays open here as an unsaved network. Save it to keep it.';
+    const keep = i18n.t('ui.live.useLiveBuilder.itStaysOpenHere');
     if (endReason === 'deleted') {
       notifications.show({
         id: 'live-left',

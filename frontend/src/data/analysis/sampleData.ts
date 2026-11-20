@@ -5,6 +5,7 @@
 import type { ColumnKind, DataProfile, DataSample } from '@/api/types';
 import { MAX_SERIES } from '@/components/charts/colors';
 import { formatCount, formatDateTime } from '@/components/charts/format';
+import { currentLocale, i18n } from '@/i18n';
 
 export type SampleColumn = DataSample['columns'][number];
 
@@ -232,7 +233,7 @@ function groupRows(
   if (fold) {
     groups.push({
       key: OTHER_KEY,
-      label: `Other (${formatCount(all.length - own.length)} classes)`,
+      label: i18n.t('ui.data.sampleData.otherClasses', { n: formatCount(all.length - own.length) }),
       slot: -1,
       count: all.slice(max - 1).reduce((sum, [key]) => sum + (counts.get(key) ?? 0), 0),
     });
@@ -344,21 +345,17 @@ export function numericPairs(
   return { x, y, rows: Int32Array.from(rows) };
 }
 
-export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-export const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+/** "Mon" … "Sun" in the language of the app (2024-01-01 was a Monday). */
+export function weekdayNames(): string[] {
+  const format = new Intl.DateTimeFormat(currentLocale(), { weekday: 'short', timeZone: 'UTC' });
+  return Array.from({ length: 7 }, (_, i) => format.format(new Date(Date.UTC(2024, 0, 1 + i))));
+}
+
+/** "Jan" … "Dec" in the language of the app. */
+export function monthNames(): string[] {
+  const format = new Intl.DateTimeFormat(currentLocale(), { month: 'short', timeZone: 'UTC' });
+  return Array.from({ length: 12 }, (_, i) => format.format(new Date(Date.UTC(2024, i, 1))));
+}
 
 /** Timestamps per weekday (Monday first) and per month (UTC). */
 export function calendarCounts(values: readonly number[]): { weekday: number[]; month: number[] } {
@@ -378,17 +375,27 @@ export function calendarCounts(values: readonly number[]): { weekday: number[]; 
 export function sampleNote(sample: DataSample, always = false): string {
   if (sample.rows >= sample.n_total) {
     // All rows: nothing worth a note, unless the caller lists the basis of everything.
-    return always ? `Based on all ${formatCount(sample.n_total)} rows.` : '';
+    return always
+      ? i18n.t('ui.data.sampleData.basedOnAllRows', { rows: formatCount(sample.n_total) })
+      : '';
   }
-  return `Based on a random sample of ${formatCount(sample.rows)} of ${formatCount(sample.n_total)} rows.`;
+  return i18n.t('ui.data.sampleData.basedOnARandomSample', {
+    rows: formatCount(sample.rows),
+    total: formatCount(sample.n_total),
+  });
 }
 
 /** What the correlations, associations and duplicate counts are based on. */
 export function analysisNote(profile: DataProfile, always = false): string {
   if (profile.analysis_rows >= profile.n_rows) {
-    return always ? `Based on all ${formatCount(profile.n_rows)} rows.` : '';
+    return always
+      ? i18n.t('ui.data.sampleData.basedOnAllRows', { rows: formatCount(profile.n_rows) })
+      : '';
   }
-  return `Based on a random sample of ${formatCount(profile.analysis_rows)} of ${formatCount(profile.n_rows)} rows.`;
+  return i18n.t('ui.data.sampleData.basedOnARandomSample', {
+    rows: formatCount(profile.analysis_rows),
+    total: formatCount(profile.n_rows),
+  });
 }
 
 /** Text lengths of a text/categorical column (for a length histogram). */
@@ -405,5 +412,5 @@ export function textLengths(column: SampleColumn): number[] {
 /** Name of sample row i: its row number in the table (1-based). */
 export function rowName(sample: DataSample, i: number): string {
   const index = sample.index[i];
-  return `Row ${formatCount((index ?? i) + 1)}`;
+  return i18n.t('ui.data.sampleData.row', { row: formatCount((index ?? i) + 1) });
 }

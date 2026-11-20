@@ -34,9 +34,6 @@ export function onlyInputAndOutput(fixes: CompatibilityFix[]): boolean {
   );
 }
 
-const plural = (n: number, word: string) =>
-  `${n.toLocaleString(currentLocale())} ${word}${n === 1 ? '' : 's'}`;
-
 /**
  * What a flat Input shape counts: pixel values of images, tokens of texts, else the feature
  * columns of a table.
@@ -46,8 +43,13 @@ export type InputUnit = 'images' | 'tokens' | 'features';
 /** "4 features", "3,072 values" (flat images), "24 tokens" (texts), "1×28×28". */
 export function describeShape(shape: number[], unit: InputUnit): string {
   if (shape.length === 1) {
-    const word = { images: 'value', tokens: 'token', features: 'feature' }[unit];
-    return plural(shape[0], word);
+    const n = shape[0].toLocaleString(currentLocale());
+    const count = shape[0];
+    return unit === 'images'
+      ? i18n.t('ui.training.fit.values', { count, n })
+      : unit === 'tokens'
+        ? i18n.t('ui.training.fit.tokens', { count, n })
+        : i18n.t('ui.training.fit.features', { count, n });
   }
   return shape.join('×');
 }
@@ -67,17 +69,25 @@ export function describeFixes(fixes: CompatibilityFix[], unit: InputUnit): strin
     i18n.t('ui.training.fit.inputSetTo', {
       filter: [
         Array.isArray(input.shape) ? describeShape(input.shape as number[], unit) : null,
-        typeof input.dtype === 'string' ? `data type ${input.dtype}` : null,
+        typeof input.dtype === 'string'
+          ? i18n.t('ui.training.fit.dataType', { dtype: input.dtype })
+          : null,
       ]
         .filter(Boolean)
         .join(', '),
     });
   const outputText =
     channels !== undefined
-      ? plural(channels, 'output channel')
+      ? i18n.t('ui.training.fit.outputChannels', {
+          count: channels,
+          n: channels.toLocaleString(currentLocale()),
+        })
       : outputs === undefined
         ? null
-        : plural(outputs, 'output');
+        : i18n.t('ui.training.fit.outputs', {
+            count: outputs,
+            n: outputs.toLocaleString(currentLocale()),
+          });
   const words = fixes.find((fix) => typeof fix.params.num_embeddings === 'number')?.params
     .num_embeddings as number | undefined;
   const text =

@@ -23,14 +23,14 @@ import {
   classGroups,
   countValues,
   crossTab,
-  MONTHS,
+  monthNames,
   numericValues,
   sampleColumn,
   sampleNote,
   textLengths,
   valueLabel,
   valuesByGroup,
-  WEEKDAYS,
+  weekdayNames,
   type RowGroups,
 } from './sampleData';
 import { ColumnSelect, KIND_LABELS, Note } from './shared';
@@ -103,15 +103,15 @@ function quantileRows(
   format: (v: number | null) => string
 ): [string, string][] {
   return [
-    ['Min', format(stats.min)],
-    ['1st percentile', format(stats.q01)],
-    ['5th percentile', format(stats.q05)],
-    ['25th percentile (Q1)', format(stats.q25)],
-    ['Median', format(stats.median)],
-    ['75th percentile (Q3)', format(stats.q75)],
-    ['95th percentile', format(stats.q95)],
-    ['99th percentile', format(stats.q99)],
-    ['Max', format(stats.max)],
+    [i18n.t('ui.data.DistributionView.min'), format(stats.min)],
+    [i18n.t('ui.data.DistributionView.percentile1'), format(stats.q01)],
+    [i18n.t('ui.data.DistributionView.percentile5'), format(stats.q05)],
+    [i18n.t('ui.data.DistributionView.percentile25'), format(stats.q25)],
+    [i18n.t('ui.data.DistributionView.median'), format(stats.median)],
+    [i18n.t('ui.data.DistributionView.percentile75'), format(stats.q75)],
+    [i18n.t('ui.data.DistributionView.percentile95'), format(stats.q95)],
+    [i18n.t('ui.data.DistributionView.percentile99'), format(stats.q99)],
+    [i18n.t('ui.data.DistributionView.max'), format(stats.max)],
   ];
 }
 
@@ -119,12 +119,12 @@ const num = (v: number | null) => formatNumber(v);
 
 export function columnFacts(column: ColumnProfile, rows: number): [string, string][] {
   return [
-    ['Values', formatCount(column.count)],
+    [i18n.t('ui.data.DistributionView.values'), formatCount(column.count)],
     [
-      'Missing',
+      i18n.t('ui.data.DistributionView.missing'),
       `${formatCount(column.missing)} (${formatPercent(rows ? column.missing / rows : 0)})`,
     ],
-    ['Unique', formatCount(column.unique)],
+    [i18n.t('ui.data.DistributionView.unique'), formatCount(column.unique)],
   ];
 }
 
@@ -135,14 +135,14 @@ function numericFacts(column: ColumnProfile, rows: number): [string, string][] {
   }
   return [
     ...columnFacts(column, rows),
-    ['Mean', num(s.mean)],
-    ['Standard deviation', num(s.std)],
-    ['Skewness', num(s.skew)],
-    ['Excess kurtosis', num(s.kurtosis)],
-    ['Zeros', formatCount(s.zeros)],
-    ['Negative', formatCount(s.negative)],
-    ['Outliers (1.5 × IQR)', formatCount(s.iqr_outliers)],
-    ['Outliers (|z| > 3)', formatCount(s.z_outliers)],
+    [i18n.t('ui.data.DistributionView.mean'), num(s.mean)],
+    [i18n.t('ui.data.DistributionView.standardDeviation'), num(s.std)],
+    [i18n.t('ui.data.DistributionView.skewness'), num(s.skew)],
+    [i18n.t('ui.data.DistributionView.excessKurtosis'), num(s.kurtosis)],
+    [i18n.t('ui.data.DistributionView.zeros'), formatCount(s.zeros)],
+    [i18n.t('ui.data.DistributionView.negative'), formatCount(s.negative)],
+    [i18n.t('ui.data.DistributionView.outliersIqr'), formatCount(s.iqr_outliers)],
+    [i18n.t('ui.data.DistributionView.outliersZ'), formatCount(s.z_outliers)],
   ];
 }
 
@@ -532,7 +532,7 @@ function DatetimeDistribution({
           <BarChart
             title={i18n.t('ui.data.DistributionView.byWeekday')}
             subtitle={sampleNote(sample)}
-            rows={WEEKDAYS.map((label, i) => ({
+            rows={weekdayNames().map((label, i) => ({
               key: label,
               label,
               values: [calendar.weekday[i]],
@@ -542,7 +542,11 @@ function DatetimeDistribution({
           <BarChart
             title={i18n.t('ui.data.DistributionView.byMonth')}
             subtitle={sampleNote(sample)}
-            rows={MONTHS.map((label, i) => ({ key: label, label, values: [calendar.month[i]] }))}
+            rows={monthNames().map((label, i) => ({
+              key: label,
+              label,
+              values: [calendar.month[i]],
+            }))}
             unit="rows"
           />
         </SimpleGrid>
@@ -552,11 +556,11 @@ function DatetimeDistribution({
           label={i18n.t('ui.data.DistributionView.statisticsOf', { name: column.name })}
           rows={[
             ...columnFacts(column, profile.n_rows),
-            ['First', date(stats.min)],
-            ['Median', date(stats.median)],
-            ['Last', date(stats.max)],
+            [i18n.t('ui.data.DistributionView.first'), date(stats.min)],
+            [i18n.t('ui.data.DistributionView.median'), date(stats.median)],
+            [i18n.t('ui.data.DistributionView.last'), date(stats.max)],
             [
-              'Span',
+              i18n.t('ui.data.DistributionView.span'),
               stats.min !== null && stats.max !== null
                 ? formatDuration(stats.max - stats.min)
                 : '–',
@@ -707,18 +711,24 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
         rows={[
           ...columnFacts(column, profile.n_rows),
           ...(column.kind === 'boolean' && typeof column.stats?.mean === 'number'
-            ? ([['Share true', formatPercent(column.stats.mean)]] as [string, string][])
+            ? ([
+                [i18n.t('ui.data.DistributionView.shareTrue'), formatPercent(column.stats.mean)],
+              ] as [string, string][])
             : []),
           ...(column.mean_length !== null
-            ? ([['Mean length', `${formatNumber(column.mean_length, 3)} characters`]] as [
-                string,
-                string,
-              ][])
+            ? ([
+                [
+                  i18n.t('ui.data.DistributionView.meanLength'),
+                  i18n.t('ui.data.DistributionView.characters', {
+                    n: formatNumber(column.mean_length, 3),
+                  }),
+                ],
+              ] as [string, string][])
             : []),
           ...(top[0]
             ? ([
                 [
-                  'Most frequent',
+                  i18n.t('ui.data.DistributionView.mostFrequent'),
                   `${valueLabel(top[0].value, column.kind)} (${formatPercent(column.count ? top[0].count / column.count : 0)})`,
                 ],
               ] as [string, string][])
@@ -726,8 +736,11 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
           ...(sampleCounts
             ? ([
                 [
-                  'Distinct in the sample',
-                  `${formatCount(sampleCounts.counts.length)} of ${formatCount(sample.rows - sampleCounts.missing)}`,
+                  i18n.t('ui.data.DistributionView.distinctInTheSample'),
+                  i18n.t('ui.data.DistributionView.countOf', {
+                    count: formatCount(sampleCounts.counts.length),
+                    total: formatCount(sample.rows - sampleCounts.missing),
+                  }),
                 ],
               ] as [string, string][])
             : []),

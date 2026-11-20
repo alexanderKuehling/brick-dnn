@@ -1,6 +1,6 @@
 /** Pure helpers of the Rows view: filters, sorting, histograms and pairs of rows. */
 import type { RowAnalysis } from '@/api/types';
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 
 export type RowFilter = 'all' | 'atypical' | 'twins' | 'group' | 'selected';
 
@@ -134,7 +134,9 @@ export function randomPairs(analysis: RowAnalysis): [number, number][] {
 export function rowName(analysis: RowAnalysis, index: number): string {
   const position = analysis.rows.position[index];
   const id = analysis.rows.id?.[index];
-  const row = `Row ${(position ?? index).toLocaleString(currentLocale())}`;
+  const row = i18n.t('ui.data.sampleData.row', {
+    row: (position ?? index).toLocaleString(currentLocale()),
+  });
   return id !== null && id !== undefined && analysis.id_column
     ? `${row} (${analysis.id_column} ${id})`
     : row;

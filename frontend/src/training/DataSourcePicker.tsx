@@ -393,7 +393,12 @@ function DatasetGroups({
 /** "by alice · shared in Churn" for a dataset of someone else. */
 function sharedByLine(dataset: Dataset): string {
   const networks = dataset.shared_in.map((project) => `“${project.name}”`).join(', ');
-  return [`by ${dataset.owner}`, networks && `shared in ${networks}`].filter(Boolean).join(' · ');
+  return [
+    i18n.t('ui.training.DataSourcePicker.byOwner', { owner: dataset.owner }),
+    networks && i18n.t('ui.training.DataSourcePicker.sharedIn', { networks }),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function DatasetCard({

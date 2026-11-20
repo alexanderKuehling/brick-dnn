@@ -287,7 +287,9 @@ function DataItemRow({
   useTranslation();
   const inRouter = useInRouterContext();
   const meta = [
-    you ? 'by you' : `by ${item.owner}`,
+    you
+      ? i18n.t('ui.sharing.ProjectDataPanel.byYou')
+      : i18n.t('ui.sharing.ProjectDataPanel.byOwner', { owner: item.owner }),
     kind === 'dataset' && DATASET_LABELS[item.kind ?? 'csv'],
     kind === 'dataset' && formatBytes(item.size_bytes),
   ]

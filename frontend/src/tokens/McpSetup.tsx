@@ -32,7 +32,7 @@ export function McpSetup({ token }: McpSetupProps) {
         <Text size="sm" fw={500} mb={6}>
           {i18n.t('ui.tokens.McpSetup.mcpServerUrl')}
         </Text>
-        <Snippet value={url} copyLabel="Copy MCP server URL" />
+        <Snippet value={url} copyLabel={i18n.t('ui.tokens.McpSetup.copyMcpServerUrl')} />
       </div>
 
       <Tabs defaultValue={token ? 'claude-code' : 'claude-app'}>
@@ -64,7 +64,10 @@ export function McpSetup({ token }: McpSetupProps) {
               <Text size="sm" mb={6}>
                 {i18n.t('ui.tokens.McpSetup.runThisInATerminal')}
               </Text>
-              <Snippet value={claudeCodeCommand(url, secret)} copyLabel="Copy command" />
+              <Snippet
+                value={claudeCodeCommand(url, secret)}
+                copyLabel={i18n.t('ui.tokens.McpSetup.copyCommand')}
+              />
             </>
           ) : (
             <Stack gap="sm">
@@ -72,7 +75,10 @@ export function McpSetup({ token }: McpSetupProps) {
                 <Text size="sm" mb={6}>
                   <Trans i18nKey="ui.tokens.McpSetup.runThisInATerminal2" components={[<Code />]} />
                 </Text>
-                <Snippet value={claudeCodeCommand(url)} copyLabel="Copy command" />
+                <Snippet
+                  value={claudeCodeCommand(url)}
+                  copyLabel={i18n.t('ui.tokens.McpSetup.copyCommand')}
+                />
               </div>
               <div>
                 <Text size="sm" mb={6}>
@@ -80,7 +86,7 @@ export function McpSetup({ token }: McpSetupProps) {
                 </Text>
                 <Snippet
                   value={claudeCodeCommand(url, secret)}
-                  copyLabel="Copy command with token"
+                  copyLabel={i18n.t('ui.tokens.McpSetup.copyCommandWithToken')}
                 />
               </div>
             </Stack>
@@ -91,7 +97,10 @@ export function McpSetup({ token }: McpSetupProps) {
             {!token && i18n.t('ui.tokens.McpSetup.clientsThatCanSignIn')}
             {i18n.t('ui.tokens.McpSetup.forClientsThatSupportRemote')}
           </Text>
-          <Snippet value={mcpJsonConfig(url, secret)} copyLabel="Copy configuration" />
+          <Snippet
+            value={mcpJsonConfig(url, secret)}
+            copyLabel={i18n.t('ui.tokens.McpSetup.copyConfiguration')}
+          />
         </Tabs.Panel>
       </Tabs>
 
@@ -99,7 +108,10 @@ export function McpSetup({ token }: McpSetupProps) {
         <Text size="sm" mb={6}>
           {i18n.t('ui.tokens.McpSetup.yourOwnScriptsCanUse')}
         </Text>
-        <Snippet value={curlCommand(apiUrl, secret)} copyLabel="Copy curl command" />
+        <Snippet
+          value={curlCommand(apiUrl, secret)}
+          copyLabel={i18n.t('ui.tokens.McpSetup.copyCurlCommand')}
+        />
       </div>
 
       {!token && (

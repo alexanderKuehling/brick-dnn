@@ -18,7 +18,7 @@ import { i18n, useTranslation } from '@/i18n';
 import { usePrepAccess } from '../prepAccess';
 import { ASSOCIATION_LABELS, SHORT_METHOD } from './ColumnsView';
 import { KeyValueTable } from './DistributionView';
-import { SPLIT_NAMES } from './OverviewView';
+import { splitNames } from './OverviewView';
 import { analysisNote, classGroups, classLabel, sampleNote } from './sampleData';
 import { Note } from './shared';
 
@@ -67,7 +67,7 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
       }
     });
     return rows
-      .map((values, i): BarRow => ({ key: keys[i], label: SPLIT_NAMES[i], values }))
+      .map((values, i): BarRow => ({ key: keys[i], label: splitNames()[i], values }))
       .filter((row) => row.values.some((v) => v > 0));
   }, [groups, sample.split]);
 
@@ -190,11 +190,14 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
             <KeyValueTable
               label={i18n.t('ui.data.TargetView.statisticsOf', { column: info.column })}
               rows={[
-                ['Mean', formatNumber(info.stats.mean)],
-                ['Standard deviation', formatNumber(info.stats.std)],
-                ['Median', formatNumber(info.stats.median)],
-                ['Min – max', `${formatNumber(info.stats.min)} – ${formatNumber(info.stats.max)}`],
-                ['Skewness', formatNumber(info.stats.skew)],
+                [i18n.t('ui.data.TargetView.mean'), formatNumber(info.stats.mean)],
+                [i18n.t('ui.data.TargetView.standardDeviation'), formatNumber(info.stats.std)],
+                [i18n.t('ui.data.TargetView.median'), formatNumber(info.stats.median)],
+                [
+                  i18n.t('ui.data.TargetView.minMax'),
+                  `${formatNumber(info.stats.min)} – ${formatNumber(info.stats.max)}`,
+                ],
+                [i18n.t('ui.data.TargetView.skewness'), formatNumber(info.stats.skew)],
               ]}
             />
           )}
@@ -220,8 +223,8 @@ export function TargetView({ profile, sample, target, onShowColumn, onAddStep }:
               return `${formatCoefficient(row.values[0])} ${column ? SHORT_METHOD[column.target_association!.method] : ''}`;
             }}
             onSelect={onShowColumn}
-            selectHint="show the column"
-            unit="association"
+            selectHint={i18n.t('ui.data.MissingView.showTheColumn')}
+            unit={i18n.t('ui.data.TargetView.association')}
           />
           {ranking.length > RANKING && (
             <Button
@@ -284,7 +287,10 @@ function WeakFeatures({
   useTranslation();
   const weak = ranking.filter((c) => c.value < threshold).map((c) => c.name);
   const listed = weak.slice(0, LISTED).join(', ');
-  const more = weak.length > LISTED ? ` and ${formatCount(weak.length - LISTED)} more` : '';
+  const more =
+    weak.length > LISTED
+      ? i18n.t('ui.data.TargetView.andMore', { n: formatCount(weak.length - LISTED) })
+      : '';
   const stepKey = `select:${threshold}`;
   const listKey = `drop:${threshold}:${weak.length}`;
   return (

@@ -182,7 +182,7 @@ export function AuthorizePage() {
   }
 
   if (state.status === 'leaving') {
-    const app = state.clientName ?? 'the app';
+    const app = state.clientName ?? i18n.t('ui.oauth.AuthorizePage.theApp');
     return (
       <AuthLayout title={LEAVING_TITLES[state.outcome]}>
         <Stack align="center" ta="center" gap="sm">

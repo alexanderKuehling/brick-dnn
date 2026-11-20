@@ -39,24 +39,38 @@ import { UsageSection } from '@/usage/UsageSection';
 import { fieldError } from './fieldError';
 import { TwoFactorSection } from './TwoFactorSection';
 
-function plural(count: number, word: string, words = `${word}s`): string {
-  return `${count.toLocaleString(currentLocale())} ${count === 1 ? word : words}`;
+type Stored =
+  | 'storedNetworks'
+  | 'storedSharedNetworks'
+  | 'storedComments'
+  | 'storedImportedTables'
+  | 'storedDataPreparations'
+  | 'storedTrainingDatasets'
+  | 'storedTrainingRuns'
+  | 'storedApiTokens'
+  | 'storedConnectedApps'
+  | 'storedActivityEntries';
+
+function plural(count: number, what: Stored): string {
+  return i18n.t(`ui.account.AccountPage.${what}`, {
+    count,
+    n: count.toLocaleString(currentLocale()),
+  });
 }
 
 /** "3 networks, 2 comments, 1 dataset …": what the server keeps for the account. */
 export function storedSummary(stored: Account['stored']): string[] {
   const lines = [
-    stored.projects > 0 && plural(stored.projects, 'network'),
-    stored.memberships > 0 && `access to ${plural(stored.memberships, 'network')} of other people`,
-    stored.comments > 0 && plural(stored.comments, 'comment'),
-    stored.data_sources > 0 && plural(stored.data_sources, 'imported table'),
-    stored.data_preps > 0 && plural(stored.data_preps, 'data preparation'),
-    stored.datasets > 0 && plural(stored.datasets, 'training dataset'),
-    stored.training_runs > 0 && plural(stored.training_runs, 'training run'),
-    stored.api_tokens > 0 && plural(stored.api_tokens, 'API token'),
-    stored.connected_apps > 0 && plural(stored.connected_apps, 'connected app'),
-    stored.agent_actions > 0 &&
-      `${plural(stored.agent_actions, 'entry', 'entries')} in the agent activity log`,
+    stored.projects > 0 && plural(stored.projects, 'storedNetworks'),
+    stored.memberships > 0 && plural(stored.memberships, 'storedSharedNetworks'),
+    stored.comments > 0 && plural(stored.comments, 'storedComments'),
+    stored.data_sources > 0 && plural(stored.data_sources, 'storedImportedTables'),
+    stored.data_preps > 0 && plural(stored.data_preps, 'storedDataPreparations'),
+    stored.datasets > 0 && plural(stored.datasets, 'storedTrainingDatasets'),
+    stored.training_runs > 0 && plural(stored.training_runs, 'storedTrainingRuns'),
+    stored.api_tokens > 0 && plural(stored.api_tokens, 'storedApiTokens'),
+    stored.connected_apps > 0 && plural(stored.connected_apps, 'storedConnectedApps'),
+    stored.agent_actions > 0 && plural(stored.agent_actions, 'storedActivityEntries'),
   ];
   return lines.filter((line): line is string => Boolean(line));
 }

@@ -38,7 +38,9 @@ export function actionLabel(entry: Pick<AgentAction, 'source' | 'tool' | 'method
 }
 
 export function agentLabel(agent: Pick<AgentRef, 'kind' | 'name'>): string {
-  return `${agent.kind === 'app' ? 'App' : 'Token'} “${agent.name}”`;
+  return agent.kind === 'app'
+    ? i18n.t('ui.activity.format.app', { name: agent.name })
+    : i18n.t('ui.activity.format.token', { name: agent.name });
 }
 
 function scalarText(value: string | number | boolean | null): string {

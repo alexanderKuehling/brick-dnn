@@ -86,7 +86,11 @@ function optionLabel({ agent, active }: AgentOption): string {
 
 function LiveIndicator({ state }: { state: LiveState }) {
   useTranslation();
-  const label = { live: 'Live', paused: 'Paused', offline: 'Reconnecting…' }[state];
+  const label = {
+    live: i18n.t('ui.activity.AgentActivityPage.live'),
+    paused: i18n.t('ui.activity.AgentActivityPage.paused'),
+    offline: i18n.t('ui.activity.AgentActivityPage.reconnecting'),
+  }[state];
   const title = {
     live: i18n.t('ui.activity.AgentActivityPage.newActionsAppearAsThey'),
     paused: i18n.t('ui.activity.AgentActivityPage.pausedWhileThePageIs'),
@@ -227,7 +231,11 @@ export function AgentActivityPage({ pollInterval = POLL_INTERVAL }: { pollInterv
       <Text mt="xs" className={classes.intro}>
         <Trans
           i18nKey="ui.activity.AgentActivityPage.everythingAiAssistantsAndScripts"
-          values={{ value: retention ? ` Entries are kept for ${retention} days.` : '' }}
+          values={{
+            value: retention
+              ? i18n.t('ui.activity.AgentActivityPage.entriesAreKept', { count: retention })
+              : '',
+          }}
           components={[<Anchor component={Link} to="/tokens" />]}
         />
       </Text>

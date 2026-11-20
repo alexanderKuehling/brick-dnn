@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from django.utils.translation import gettext
+
 from brickdnn.training import inference
 
 from . import budgets
@@ -127,32 +129,33 @@ def _why_not(
     features: int | None,
 ) -> str | None:
     if family == "classical" and name in NEURAL_ONLY:
-        return "A classical model (scikit-learn) has no layers to look into."
+        return gettext("A classical model (scikit-learn) has no layers to look into.")
     if family == "hybrid" and (name == "image" or (name == "samples" and kind == "image")):
-        return (
+        return gettext(
             "Not for hybrid networks yet: their prediction comes from the classical model "
             "after the neural layers, which the network's gradients and scores do not reach."
         )
     if kind is None:
         if name == "weights":
             return None
-        return "How the inputs of this run were prepared is not known."
+        return gettext("How the inputs of this run were prepared is not known.")
     if kind not in spec["kinds"]:
-        return {
-            "image": "For image models only.",
-            "tabular": "For models trained on a CSV file only.",
-            "boundary": "For models trained on a CSV file only.",
-            "permutation": "For models trained on a CSV file only.",
-        }.get(name, "Not for this kind of run.")
+        if name == "image":
+            return gettext("For image models only.")
+        if name in ("tabular", "boundary", "permutation"):
+            return gettext("For models trained on a CSV file only.")
+        return gettext("Not for this kind of run.")
     if kind == "demo" and family != "classical" and name in DATA_METHODS:
-        return "Trained on random demo data, which is not kept: train on a dataset to explain it."
+        return gettext(
+            "Trained on random demo data, which is not kept: train on a dataset to explain it."
+        )
     one = len(targets) == 1 and targets[0].get("kind") in ("class", "value")
     if name in ("image", "tabular", "permutation", "boundary") and not one:
-        return "For models with one output only."
+        return gettext("For models with one output only.")
     if name == "image" and targets and targets[0].get("kind") != "class":
-        return "For classification networks only."
+        return gettext("For classification networks only.")
     if name == "boundary" and features != 2:
-        return "For models with exactly 2 input features."
+        return gettext("For models with exactly 2 input features.")
     return None
 
 

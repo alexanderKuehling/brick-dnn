@@ -1,4 +1,4 @@
-import { currentLocale } from '@/i18n';
+import { currentLocale, i18n } from '@/i18n';
 
 /** Number and date formatting for charts and statistics (English, UTC dates). */
 
@@ -88,12 +88,13 @@ export function formatBytes(bytes: number | null | undefined): string {
     value /= 1024;
     unit += 1;
   }
-  return unit === 0 ? `${value} bytes` : `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+  return unit === 0
+    ? `${value} ${i18n.t('ui.training.format.bytes')}`
+    : `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
 export type TimeUnit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** A timestamp (ms since the epoch, UTC) at the given precision: "2021", "Mar 2021", "2021-03-04". */
@@ -110,7 +111,11 @@ export function formatDate(ms: number | null | undefined, unit: TimeUnit = 'day'
     case 'year':
       return String(d.getUTCFullYear());
     case 'month':
-      return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      return new Intl.DateTimeFormat(currentLocale(), {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(d);
     case 'day':
       return date;
     case 'hour':
@@ -180,18 +185,21 @@ export function formatDuration(ms: number | null | undefined): string {
     return '–';
   }
   const size = Math.abs(ms);
-  const units: [number, string][] = [
-    [365.25 * DAY, 'year'],
-    [30.44 * DAY, 'month'],
-    [DAY, 'day'],
-    [3_600_000, 'hour'],
-    [60_000, 'minute'],
-    [1000, 'second'],
-  ];
+  const units = [
+    [365.25 * DAY, 'years'],
+    [30.44 * DAY, 'months'],
+    [DAY, 'days'],
+    [3_600_000, 'hours'],
+    [60_000, 'minutes'],
+    [1000, 'seconds'],
+  ] as const;
   for (const [length, name] of units) {
     if (size >= length) {
       const value = Number((ms / length).toPrecision(2));
-      return `${value} ${name}${value === 1 ? '' : 's'}`;
+      return i18n.t(`ui.components.format.${name}`, {
+        count: value,
+        n: value.toLocaleString(currentLocale()),
+      });
     }
   }
   return `${formatNumber(ms)} ms`;

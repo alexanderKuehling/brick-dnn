@@ -195,7 +195,10 @@ function Details({ group, now }: { group: EntryGroup; now: Date }) {
   useTranslation();
   const [entry] = group.entries;
   const args = Object.entries(entry.arguments);
-  const source = entry.source === 'mcp' ? 'MCP tool' : 'REST request';
+  const source =
+    entry.source === 'mcp'
+      ? i18n.t('ui.activity.ActivityItem.mcpTool')
+      : i18n.t('ui.activity.ActivityItem.restRequest');
   return (
     <div className={classes.details}>
       <dl className={classes.facts}>

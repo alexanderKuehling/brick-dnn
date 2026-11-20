@@ -99,7 +99,7 @@ def test_the_check_explains_and_fixes_a_text_network(web, mcp, training_dir):
         "/api/training/check/", {"graph": graph, "dataset": SENTIMENT}, format="json", **GERMAN
     ).json()
     assert check["errors"][0].startswith("Jeder Text von Sentiment hat 24 Tokens")
-    assert check["warnings"][0].startswith("Das Embedding hat 10,000 Einträge")
+    assert check["warnings"][0].startswith("Das Embedding hat 10.000 Einträge")
     assert check["fixes"][1]["summary"] == "Vokabulargröße des Embeddings 10000 → 151"
     # Over MCP, with the fixes applied, it fits.
     for fix in check["fixes"]:

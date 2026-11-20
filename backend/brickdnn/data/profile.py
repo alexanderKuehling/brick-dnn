@@ -868,9 +868,11 @@ def _warnings(
     duplicates = profile["duplicate_rows"]
     if duplicates:
         sampled = profile["analysis_rows"] < n_rows
-        rows = "row is an exact duplicate" if duplicates == 1 else "rows are exact duplicates"
-        others = "another row" if duplicates == 1 else "other rows"
-        message = f"{duplicates:,} {rows} of {others}."
+        message = (
+            "1 row is an exact duplicate of another row."
+            if duplicates == 1
+            else f"{duplicates:,} rows are exact duplicates of other rows."
+        )
         if sampled:
             message = (
                 f"In a sample of {profile['analysis_rows']:,} rows, "

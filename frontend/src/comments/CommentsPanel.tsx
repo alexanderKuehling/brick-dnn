@@ -102,7 +102,7 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
             ? i18n.t('ui.comments.CommentsPanel.commentOnTheNetwork2')
             : i18n.t('ui.comments.CommentsPanel.commentOn2', { layerLabel })
         }
-        submitLabel="Comment"
+        submitLabel={i18n.t('ui.comments.CommentsPanel.comment')}
         onSubmit={async (text) => {
           await store.add(text, layer);
           setFilter((current) => (current === 'resolved' ? 'open' : current));
@@ -119,7 +119,11 @@ export function CommentsPanel({ store, layerName, onFocusLayer }: CommentsPanelP
         size="xs"
         value={filter}
         onChange={(value) => setFilter(value as ThreadFilter)}
-        data={[segment('all', 'All'), segment('open', 'Open'), segment('resolved', 'Resolved')]}
+        data={[
+          segment('all', i18n.t('ui.comments.CommentsPanel.all')),
+          segment('open', i18n.t('ui.comments.CommentsPanel.open')),
+          segment('resolved', i18n.t('ui.comments.CommentsPanel.resolved')),
+        ]}
         aria-label={i18n.t('ui.comments.CommentsPanel.showComments')}
       />
 

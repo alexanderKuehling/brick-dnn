@@ -90,7 +90,9 @@ export function groupTitle(
     }
     case 'skewed': {
       const skews = found.map((c) => c.stats?.skew).filter((s) => typeof s === 'number');
-      const text = skews.length ? `skewness ${range(skews as number[], NUMBER)}` : '';
+      const text = skews.length
+        ? i18n.t('ui.data.warningGroups.skewness', { range: range(skews as number[], NUMBER) })
+        : '';
       return i18n.t('ui.data.warningGroups.stronglySkewed', { n, detail: detail(text) });
     }
     case 'many_zeros':
@@ -105,7 +107,9 @@ export function groupTitle(
       return i18n.t('ui.data.warningGroups.numbersStoredAsText', { n });
     case 'high_cardinality': {
       const counts = found.map((c) => c.unique);
-      const text = counts.length ? `${range(counts, formatCount)} values` : '';
+      const text = counts.length
+        ? i18n.t('ui.data.warningGroups.values', { range: range(counts, formatCount) })
+        : '';
       return i18n.t('ui.data.warningGroups.manyCategories', { n, detail: detail(text) });
     }
     case 'high_correlation':

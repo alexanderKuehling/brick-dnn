@@ -143,7 +143,10 @@ export function ThresholdHistogram({
             aria-valuemin={0}
             aria-valuemax={top}
             aria-valuenow={threshold}
-            aria-valuetext={`${formatNumber(threshold, 3)}: ${formatCount(below)} rows below`}
+            aria-valuetext={i18n.t('ui.data.ThresholdHistogram.rowsBelow', {
+              threshold: formatNumber(threshold, 3),
+              rows: formatCount(below),
+            })}
             className={classes.histogram}
             onPointerDown={(event) => {
               dragging.current = true;

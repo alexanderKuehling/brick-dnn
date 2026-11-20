@@ -58,7 +58,7 @@ export function LayerComments({ nodeId }: { nodeId: string }) {
         <CommentComposer
           label={i18n.t('ui.comments.LayerComments.commentOnThisLayer')}
           placeholder={i18n.t('ui.comments.LayerComments.commentOnThisLayer2')}
-          submitLabel="Comment"
+          submitLabel={i18n.t('ui.comments.LayerComments.comment')}
           autoFocus
           onSubmit={async (text) => {
             await store.add(text, nodeId);

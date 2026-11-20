@@ -71,7 +71,7 @@ export function defaultEnsembleName(runs: RunSummary[]): string {
   const names = runs.map((run) => run.name);
   const text =
     names.length <= 2
-      ? names.join(' and ')
+      ? names.join(i18n.t('ui.training.ensemble.joinAnd'))
       : names.length === 3
         ? i18n.t('ui.training.ensemble.and', {
             value: names[0],
@@ -83,7 +83,7 @@ export function defaultEnsembleName(runs: RunSummary[]): string {
             value2: names[1],
             value3: names.length - 2,
           });
-  return `Ensemble of ${text}`.slice(0, 120);
+  return i18n.t('ui.training.ensemble.ensembleOf', { text }).slice(0, 120);
 }
 
 /** What a method does, in one or two sentences. */

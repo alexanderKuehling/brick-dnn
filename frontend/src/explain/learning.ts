@@ -47,7 +47,9 @@ export function paramFormula(
       const [i, o] = [num(params, 'in_features'), num(params, 'out_features')];
       value = i * o + (bias ? o : 0);
       formula = `${n(i)}×${n(o)}${bias ? ` + ${n(o)}` : ''}`;
-      parts = `${n(i)} inputs × ${n(o)} outputs weights${bias ? `, ${n(o)} biases` : ''}`;
+      parts =
+        i18n.t('ui.explain.learning.linearWeights', { inputs: n(i), outputs: n(o) }) +
+        (bias ? i18n.t('ui.explain.learning.andBiases', { biases: n(o) }) : '');
       break;
     }
     case 'Conv1d':
@@ -57,9 +59,12 @@ export function paramFormula(
       const [i, o] = [num(params, 'in_channels'), num(params, 'out_channels')];
       value = kernel.reduce((a, b) => a * b, 1) * i * o + (bias ? o : 0);
       formula = `${kernel.join('×')}×${n(i)}×${n(o)}${bias ? ` + ${n(o)}` : ''}`;
-      parts = `a ${kernel.join('×')} kernel for each of ${n(i)} input and ${n(o)} output channels${
-        bias ? `, ${n(o)} biases` : ''
-      }`;
+      parts =
+        i18n.t('ui.explain.learning.convKernels', {
+          kernel: kernel.join('×'),
+          inputs: n(i),
+          outputs: n(o),
+        }) + (bias ? i18n.t('ui.explain.learning.andBiases', { biases: n(o) }) : '');
       break;
     }
     case 'BatchNorm1d':
@@ -67,28 +72,28 @@ export function paramFormula(
       const f = num(params, 'num_features');
       value = 2 * f;
       formula = `2×${n(f)}`;
-      parts = `a scale γ and a shift β per channel (the running mean and variance are not trained)`;
+      parts = i18n.t('ui.explain.learning.scaleAndShiftPerChannel');
       break;
     }
     case 'LayerNorm': {
       const f = num(params, 'normalized_shape');
       value = 2 * f;
       formula = `2×${n(f)}`;
-      parts = 'a scale γ and a shift β per feature';
+      parts = i18n.t('ui.explain.learning.scaleAndShiftPerFeature');
       break;
     }
     case 'Embedding': {
       const [v, d] = [num(params, 'num_embeddings'), num(params, 'embedding_dim')];
       value = v * d;
       formula = `${n(v)}×${n(d)}`;
-      parts = `a vector of ${n(d)} numbers for each of ${n(v)} tokens`;
+      parts = i18n.t('ui.explain.learning.vectorPerToken', { numbers: n(d), tokens: n(v) });
       break;
     }
     case 'PositionalEmbedding': {
       const [l, d] = [num(params, 'max_len'), num(params, 'embedding_dim')];
       value = l * d;
       formula = `${n(l)}×${n(d)}`;
-      parts = `a vector of ${n(d)} numbers for each of ${n(l)} positions`;
+      parts = i18n.t('ui.explain.learning.vectorPerPosition', { numbers: n(d), positions: n(l) });
       break;
     }
     case 'RNN':
@@ -104,9 +109,9 @@ export function paramFormula(
       formula = `${directions > 1 ? '2×(' : ''}${gates}×${n(h)}×(${n(i)}+${n(h)}) + 2×${gates}×${n(h)}${
         directions > 1 ? ')' : ''
       }`;
-      parts = `${gates} gate${gates > 1 ? 's' : ''}, each with weights for the input (${n(i)}) and the previous hidden state (${n(h)}) and two biases${
-        directions > 1 ? ', in both directions' : ''
-      }`;
+      parts =
+        i18n.t('ui.explain.learning.gates', { count: gates, input: n(i), hidden: n(h) }) +
+        (directions > 1 ? i18n.t('ui.explain.learning.inBothDirections') : '');
       break;
     }
     default:
@@ -313,10 +318,17 @@ export function shapeChange(step: FlowStep): string | null {
   if (before.length === 3 && after.length === 3) {
     const notes = [];
     if (before[0] !== after[0]) {
-      notes.push(`${n(before[0])} → ${n(after[0])} channels`);
+      notes.push(
+        i18n.t('ui.explain.learning.channelsChange', { before: n(before[0]), after: n(after[0]) })
+      );
     }
     if (before[1] !== after[1] || before[2] !== after[2]) {
-      notes.push(`${before[1]}×${before[2]} → ${after[1]}×${after[2]} pixels`);
+      notes.push(
+        i18n.t('ui.explain.learning.pixelsChange', {
+          before: `${before[1]}×${before[2]}`,
+          after: `${after[1]}×${after[2]}`,
+        })
+      );
     }
     return notes.join(', ');
   }

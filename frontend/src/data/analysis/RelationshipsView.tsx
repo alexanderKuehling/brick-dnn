@@ -187,7 +187,7 @@ const OverviewHeatmap = memo(
         measure="mean |ρ|"
         scale="sequential"
         onCellClick={(r, c) => onPick([...new Set([...blockColumns(r), ...blockColumns(c)])])}
-        clickHint="show these columns in the heatmap"
+        clickHint={i18n.t('ui.data.RelationshipsView.showTheseColumnsInTheHeatmap')}
       />
     );
   }
@@ -488,7 +488,6 @@ export function RelationshipsView({
   }
 
   const n = relations.columns.length;
-  const rowsText = relations.training_rows ? 'training rows' : 'rows';
   const sampled = relations.rows < relations.pool_rows;
   const markAdded = (key: string) => setAdded({ profile, keys: [...addedKeys, key] });
   const add = (key: string, step: NewStep) => {
@@ -552,9 +551,10 @@ export function RelationshipsView({
           i18nKey="ui.data.RelationshipsView.howTheNumberAndYes"
           values={{
             n: formatCount(n),
-            value: sampled
-              ? `a random sample of ${formatCount(relations.rows)} of ${formatCount(relations.pool_rows)} ${rowsText}`
-              : `${formatCount(relations.rows)} ${rowsText}`,
+            value: i18n.t(
+              `ui.data.RelationshipsView.${sampled ? 'sampleOf' : 'all'}${relations.training_rows ? 'TrainingRows' : 'Rows'}`,
+              { rows: formatCount(relations.rows), pool: formatCount(relations.pool_rows) }
+            ),
           }}
           components={[<b />]}
         />
@@ -806,23 +806,44 @@ export function RelationshipsView({
             <thead>
               <tr>
                 <th aria-label={i18n.t('ui.data.RelationshipsView.selected2')} />
-                {header('name', 'Column', false)}
+                {header('name', i18n.t('ui.data.RelationshipsView.column'), false)}
                 <th>{i18n.t('ui.data.RelationshipsView.strongestPartner')}</th>
                 {header(
                   'strength',
                   'ρ',
                   false,
-                  'Spearman ρ with the strongest partner (sorted by |ρ|)'
+                  i18n.t('ui.data.RelationshipsView.spearmanWithTheStrongestPartner')
                 )}
-                {header('r', 'Pearson r', true, 'Pearson r with the same partner')}
-                {header('partners', `Partners ≥ ${relations.partner_level}`, true)}
-                {header('group', 'Group', true, 'Group of related columns (clustering)')}
+                {header(
+                  'r',
+                  'Pearson r',
+                  true,
+                  i18n.t('ui.data.RelationshipsView.pearsonWithTheSamePartner')
+                )}
+                {header(
+                  'partners',
+                  i18n.t('ui.data.RelationshipsView.partnersAtLeast', {
+                    level: relations.partner_level,
+                  }),
+                  true
+                )}
+                {header(
+                  'group',
+                  i18n.t('ui.data.RelationshipsView.group'),
+                  true,
+                  i18n.t('ui.data.RelationshipsView.groupOfRelatedColumns')
+                )}
                 {target &&
-                  header('target', 'Target', true, `Association with ${target} (all rows)`)}
+                  header(
+                    'target',
+                    i18n.t('ui.data.RelationshipsView.target'),
+                    true,
+                    i18n.t('ui.data.RelationshipsView.associationWith', { target })
+                  )}
                 {!target && (
                   <th className={classes.right}>{i18n.t('ui.data.RelationshipsView.target')}</th>
                 )}
-                {header('missing', 'Missing')}
+                {header('missing', i18n.t('ui.data.RelationshipsView.missing'))}
               </tr>
             </thead>
             <tbody>
