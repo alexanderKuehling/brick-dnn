@@ -30,33 +30,33 @@ export const plans: Messages<typeof en> = {
     concurrent_one: '{{count}} Training zur selben Zeit',
     concurrent_other: '{{count}} Trainings zur selben Zeit',
     perMonth: '{{price}} pro Monat',
+    perYear: '{{price}} pro Jahr',
     noCharge: 'kostenlos',
     hours: '{{value}} CPU-Std.',
   },
   limit: {
     cpuTime:
-      'Die Rechenzeit Ihres Kontos für diesen Monat ist aufgebraucht: {{used}} von {{limit}}. Am {{date}} steht sie wieder bereit.',
+      'Die Rechenzeit Ihres Kontos für diesen Monat ist aufgebraucht ({{used}} von {{limit}}). Am {{date}} steht sie wieder bereit.',
     cpuTimePlan:
-      'Die Rechenzeit des Tarifs {{plan}} für diesen Monat ist aufgebraucht: {{used}} von {{limit}}. Am {{date}} steht sie wieder bereit.',
+      'Die Rechenzeit des Tarifs {{plan}} für diesen Monat ist aufgebraucht ({{used}} von {{limit}}). Am {{date}} steht sie wieder bereit.',
     reserved:
       'Der Rest der Rechenzeit dieses Monats ist für Ihre noch laufenden Trainings reserviert. Warten Sie, bis sie fertig sind, oder stoppen Sie eines.',
     overageCap:
-      'Die Rechenzeit Ihres Tarifs und die zusätzlich erlaubte Rechenzeit sind aufgebraucht: {{used}} von {{limit}}. Ihre Grenze können Sie auf der Kontoseite erhöhen.',
+      'Die Rechenzeit Ihres Tarifs und die zusätzlich erlaubte Rechenzeit sind aufgebraucht ({{used}} von {{limit}}). Ihre Grenze können Sie auf der Kontoseite erhöhen.',
     ownBudget:
-      'Das Monatsbudget, das Sie für Ihr Konto gesetzt haben, ist aufgebraucht: {{used}} von {{limit}}. Sie können es auf der Kontoseite erhöhen.',
+      'Das Monatsbudget, das Sie für Ihr Konto gesetzt haben, ist aufgebraucht ({{used}} von {{limit}}). Sie können es auf der Kontoseite erhöhen.',
     runTime:
-      'Ein Training darf bis zu {{limit}} verwenden; dieses braucht voraussichtlich {{estimate}}.',
+      'Dieses Training braucht voraussichtlich {{estimate}}; erlaubt sind höchstens {{limit}} pro Training.',
     runTimePlan:
-      'Im Tarif {{plan}} darf ein Training bis zu {{limit}} verwenden; dieses braucht voraussichtlich {{estimate}}.',
+      'Dieses Training braucht voraussichtlich {{estimate}}; im Tarif {{plan}} sind höchstens {{limit}} pro Training erlaubt.',
     runTimeStopped: 'Dieses Training hat {{limit}} erreicht, das Höchste für ein Training.',
     runTimeStoppedPlan:
       'Dieses Training hat {{limit}} erreicht, das Höchste für ein Training im Tarif {{plan}}.',
     leftThisMonth:
-      'Von der Rechenzeit dieses Monats sind noch {{limit}} übrig; dieses Training braucht voraussichtlich {{estimate}}.',
+      'Dieses Training braucht voraussichtlich {{estimate}}, von der Rechenzeit dieses Monats sind aber nur noch {{limit}} übrig.',
     probablyStopped:
       'Es wird wahrscheinlich stoppen, bevor es fertig ist; das bis dahin Gelernte bleibt erhalten.',
-    fewerEpochs:
-      'Trainieren Sie weniger Epochen, mit weniger Stichproben oder ein kleineres Netz.',
+    fewerEpochs: 'Trainieren Sie weniger Epochen, mit weniger Stichproben oder ein kleineres Netz.',
     storage:
       'Der Speicher Ihres Kontos ist voll: {{used}} von {{limit}}. Löschen Sie Daten oder Trainingsläufe, die Sie nicht mehr brauchen.',
     storagePlan:
@@ -90,7 +90,6 @@ export const plans: Messages<typeof en> = {
       'Sie können auch Rechenzeit über Ihren Tarif hinaus erlauben: {{price}} pro CPU-Stunde, bis zu einer Grenze, die Sie setzen.',
     overageButton: 'Zusätzliche Rechenzeit erlauben',
     overageTitle: 'Rechenzeit über Ihren Tarif hinaus',
-    overageSaved: 'Zusätzliche Rechenzeit ist jetzt erlaubt. Starten Sie das Training erneut.',
     seePlans: 'Tarife ansehen',
     usageAndBudget: 'Nutzung & Budget',
   },
@@ -106,9 +105,13 @@ export const plans: Messages<typeof en> = {
     offer: '{{name}} enthält {{includes}} für {{price}} pro Monat.',
     fits_one: 'In den Rest passt etwa {{count}} Training wie dieses.',
     fits_other: 'In den Rest passen etwa {{count}} Trainings wie dieses.',
-    fitsNone: 'Der Rest ist weniger, als dieses Training voraussichtlich braucht.',
-    menu: 'Tarif {{plan}} · {{used}} von {{limit}}',
-    menuNoPlan: 'Rechenzeit diesen Monat: {{used}} von {{limit}}',
+    menu: 'Tarif {{plan}} · {{usage}}',
+    menuNoPlan: 'Rechenzeit diesen Monat: {{usage}}',
+    trainings: 'Trainings {{value}}',
+    predictions: 'Vorhersagen {{value}}',
+    moreSources_one: '{{count}} weiteres Token oder eine weitere App',
+    moreSources_other: '{{count}} weitere Token oder Apps',
+    noLimit: '{{used}} · keine Grenze',
     menuLabel: 'Ihr Tarif und Ihre Nutzung',
   },
   estimate: {
@@ -124,12 +127,10 @@ export const plans: Messages<typeof en> = {
     perMonthEquivalent: '{{price}} pro Monat',
     yearlySaving: '{{percent}} % weniger als bei monatlicher Zahlung',
     yearlyOnlyMonthly: 'Nur monatlich',
-    recommended: 'Hebt Ihre Grenze auf',
     overage:
-      'Ist die Rechenzeit eines bezahlten Tarifs aufgebraucht, stoppen Trainings, sofern Sie nicht selbst mehr erlauben: {{price}} pro CPU-Stunde, bis zu einer Grenze, die Sie auf Ihrer Kontoseite setzen.',
+      'Ist die Rechenzeit eines bezahlten Tarifs aufgebraucht, stoppen Trainings, sofern Sie auf Ihrer Kontoseite nicht selbst mehr erlauben: abgerechnet pro CPU-Stunde zum Preis Ihres Tarifs, bis zu einer Grenze, die Sie setzen.',
     education:
       'Für Lehre und Forschung gibt es auf Anfrage einen Rabatt: <contact>schreiben Sie uns</contact>.',
-    priorityNote: 'Ist der Server ausgelastet, starten Trainings höherer Tarife zuerst.',
     notSold: 'Hier werden keine Tarife verkauft',
     notSoldText:
       'Dieser Server verkauft keine Tarife. Netze bauen und Code erzeugen ist kostenlos; was Ihr Konto trainieren und speichern darf, steht auf Ihrer Kontoseite.',

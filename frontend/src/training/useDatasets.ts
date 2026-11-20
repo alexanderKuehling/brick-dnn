@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { api, type Dataset } from '@/api';
+import { limitOf, type Limit } from '@/billing/limits';
 import { useUploadProgress, type UploadBytes } from '@/components/useUploadProgress';
 import { i18n } from '@/i18n';
 import { formatBytes } from './format';
@@ -25,6 +26,8 @@ export interface DataController {
   /** How much of it is sent; null for the first moment of an upload. */
   uploadProgress: UploadBytes | null;
   uploadError: string | null;
+  /** The upload was refused by a limit of the plan: where that leads (LimitNotice). */
+  uploadLimit?: Limit | null;
   dismissUploadError: () => void;
   upload: (file: File) => void;
   /** Stop the running upload (without an error). */
@@ -49,6 +52,7 @@ export function useDatasets(
   const [datasetsError, setDatasetsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadLimit, setUploadLimit] = useState<Limit | null>(null);
   // Changes whenever the session ends, so late responses of a former session are ignored.
   const session = useRef(0);
   // Bumped by every change of the list, so a list request that started before is ignored.
@@ -124,6 +128,7 @@ export function useDatasets(
         return;
       }
       setUploadError(null);
+      setUploadLimit(null);
       if (maxUploadMb !== null && file.size > maxUploadMb * 1024 * 1024) {
         setUploadError(
           i18n.t('ui.training.useDatasets.theFileIsTheServer', {
@@ -169,6 +174,7 @@ export function useDatasets(
             return;
           }
           setUploadError(error.message);
+          setUploadLimit(limitOf(error));
           if (!setupVisible()) {
             notifications.show({
               color: 'red',
@@ -205,7 +211,11 @@ export function useDatasets(
     uploading,
     uploadProgress,
     uploadError,
-    dismissUploadError: useCallback(() => setUploadError(null), []),
+    uploadLimit,
+    dismissUploadError: useCallback(() => {
+      setUploadError(null);
+      setUploadLimit(null);
+    }, []),
     upload,
     cancelUpload: useCallback(() => running.current?.abort(), []),
     remove,

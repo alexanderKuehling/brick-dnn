@@ -31,6 +31,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import type { BuiltinDataset, Dataset, TrainingStatus } from '@/api';
+import { LimitNotice, type Limit } from '@/billing/LimitNotice';
 import { UploadNotice } from '@/components/UploadNotice';
 import { UploadProgress } from '@/components/UploadProgress';
 import type { UploadBytes } from '@/components/useUploadProgress';
@@ -52,6 +53,7 @@ interface DataSourcePickerProps {
   /** How much of it is sent; null for the first moment of an upload. */
   uploadProgress: UploadBytes | null;
   uploadError: string | null;
+  uploadLimit?: Limit | null;
   onDismissUploadError: () => void;
   onUpload: (file: File) => void;
   onCancelUpload: () => void;
@@ -245,6 +247,7 @@ function Uploads({
   uploading,
   uploadProgress,
   uploadError,
+  uploadLimit = null,
   onDismissUploadError,
   onUpload,
   onCancelUpload,
@@ -311,7 +314,11 @@ function Uploads({
           withCloseButton
           onClose={onDismissUploadError}
         >
-          {uploadError}
+          {uploadLimit ? (
+            <LimitNotice info={uploadLimit} fallback={uploadError} newTab />
+          ) : (
+            uploadError
+          )}
         </Alert>
       )}
       {datasetsError && (

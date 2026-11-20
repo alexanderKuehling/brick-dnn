@@ -43,6 +43,7 @@ import {
   type TrialEntry,
   type TuningConfig,
 } from '@/api';
+import { limitOf, UpgradeHint } from '@/billing/LimitNotice';
 import { CodeView } from '@/builder/CodeView';
 import { downloadBlob, downloadText } from '@/builder/download';
 import { formatCount } from '@/builder/format';
@@ -975,6 +976,7 @@ function RunProgress({
       </Alert>
     );
   }
+  const hint = limitOf(run.limit_hint);
   if (run.status === 'stopped') {
     const reason = run.usage?.stop_reason;
     return (
@@ -984,6 +986,8 @@ function RunProgress({
         title={reason === 'budget' || reason === 'run_limit' ? STOP_TITLES[reason] : undefined}
       >
         {message || i18n.t('ui.training.RunView.trainingWasStopped')}
+        {/* A limit ended it: the plan that lifts it, for who started the run. */}
+        {hint && <UpgradeHint info={hint} newTab />}
       </Alert>
     );
   }
@@ -1000,11 +1004,14 @@ function RunProgress({
       }
     >
       {message || i18n.t('ui.training.RunView.somethingWentWrong')}
-      {noBudget && (
-        <div>
-          <AccountLink />
-        </div>
-      )}
+      {noBudget &&
+        (hint ? (
+          <UpgradeHint info={hint} newTab />
+        ) : (
+          <div>
+            <AccountLink />
+          </div>
+        ))}
       {(state?.log.length ?? 0) > 0 && (
         <Text size="xs" mt={4}>
           {i18n.t('ui.training.RunView.theLogBelowMayTell')}

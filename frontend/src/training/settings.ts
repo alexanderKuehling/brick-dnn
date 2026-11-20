@@ -4,6 +4,7 @@ import type {
   Dataset,
   DatasetRef,
   FeatureTraining,
+  GraphDocument,
   LossName,
   LossTask,
   Optimizer,
@@ -1415,6 +1416,46 @@ export interface SourceChoice {
 }
 
 export const DEFAULT_SOURCE: SourceChoice = { tab: 'random', builtin: null, upload: null };
+
+/**
+ * The built-in dataset a network was made for, by the shape of its Input: `[784]` or
+ * `[1, 28, 28]` is MNIST's. Of several with that shape, the one named in the network's name
+ * ("MLP classifier (MNIST)"), else the first. Null when none fits: demo data stays.
+ */
+export function matchingBuiltin(
+  doc: GraphDocument,
+  networkName: string,
+  datasets: BuiltinDataset[]
+): string | null {
+  const input = doc.nodes.find((node) => node.type === 'Input');
+  const shape = input?.params.shape;
+  if (!Array.isArray(shape) || shape.length === 0 || !shape.every(Number.isFinite)) {
+    return null;
+  }
+  const wanted = shape.map(Number);
+  const size = (dims: number[]) => dims.reduce((product, value) => product * value, 1);
+  const tokens = input?.params.dtype === 'long';
+  const fitting = datasets.filter((dataset) => {
+    if (!dataset.available || (dataset.input_kind === 'tokens') !== tokens) {
+      return false;
+    }
+    const sample = dataset.sample_shape;
+    return wanted.length === 1
+      ? size(sample) === wanted[0]
+      : sample.length === wanted.length && sample.every((value, i) => value === wanted[i]);
+  });
+  // Of several, the one whose name the network carries (the longest such name: a network
+  // called "Fashion-MNIST" means that one, not MNIST).
+  const lower = networkName.toLowerCase();
+  const named = (dataset: BuiltinDataset) =>
+    Math.max(
+      ...[dataset.id, dataset.name].map((text) =>
+        lower.includes(text.toLowerCase()) ? text.length : 0
+      )
+    );
+  const best = [...fitting].sort((a, b) => named(b) - named(a))[0];
+  return best?.id ?? null;
+}
 
 export function datasetRef(choice: SourceChoice): DatasetRef | null {
   if (choice.tab === 'random') {

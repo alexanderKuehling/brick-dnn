@@ -909,7 +909,46 @@ use with its token's or app's budget, `caller` only with an API token or app. A 
 raise its own. `overage_enabled` needs a plan with `overage_price_per_cpu_hour` and, on a
 server with [paid plans](billing.md), a subscription that is paid and not cancelled.
 `upgrade_url` is the pricing page on such a server (else null); the `403` of a used-up
-allowance or a full storage carries it too.
+allowance or a full storage carries it too. `next_plans: {compute, storage}` are the next
+plans on sale with more compute and more storage (null: none, or no plans are sold).
+
+### Limits in answers
+
+A request that a limit refuses says which one, so that no client has to read the text:
+
+```json
+{"detail": "The monthly compute allowance of this account (Free plan) is used up: … The Starter plan (5.00 EUR per month) includes 10 CPU hours per month, 3 GB of storage, up to 60 CPU minutes per training and 1 training at a time: https://example.org/pricing?plan=starter",
+ "code": "budget_exceeded",
+ "limit": {"kind": "cpu_time", "used": 30.0, "limit": 30.0, "unit": "cpu_minutes",
+           "resets_at": "2026-12-01T00:00:00Z"},
+ "plan": {"key": "free", "name": "Free"},
+ "upgrade": {"key": "starter", "name": "Starter", "price": 5.0, "price_per_year": null,
+             "currency": "EUR", "cpu_hours_per_month": 10.0, "storage_gb": 3.0,
+             "cpu_minutes_per_run": 60.0, "concurrent_trainings": 1, "…": "…",
+             "url": "https://example.org/pricing?plan=starter"},
+ "overage": null}
+```
+
+| Status, `code` | `limit.kind` | Unit |
+| --- | --- | --- |
+| `403` `budget_exceeded` | `cpu_time` (the plan's compute of the month), `overage_cap`, `own_budget`, `token_budget`, `app_budget` | `cpu_minutes` |
+| `403` `estimate_too_high` | `run_time` (the most one training may use) or one of the above | `cpu_minutes` |
+| `403` `storage_quota_exceeded` | `storage` | `bytes` |
+| `403` `feature_not_in_plan` | `feature` (`limit.feature` names it) | |
+| `409` `concurrent_trainings_limit`, `queued_trainings_limit` | `concurrent_trainings`, `queued_trainings` | `trainings` |
+| `409` `server_busy` | none: the server trains for somebody else | |
+| `413` `upload_too_large` | `upload_size` | `bytes` |
+| `409` `runs_limit`, `active_limit`, `points_limit` (runs logged from scripts) | `external_runs`, `external_active_runs`, `external_points` | `runs`, `points` |
+
+`plan` is the account's plan (null on a server without plans). `upgrade` is the cheapest plan
+on sale that lifts the limit, with what it costs and includes and `url`, the pricing page
+with it preselected; it is **null on a server that sells no plans**, for budgets the user set
+and for limits of the server. `overage` (`{price_per_cpu_hour, currency}`) says that the
+account could switch on compute beyond its plan instead. `reserved: true` means that the
+rest is reserved by trainings that are still running. The training check carries the same
+keys in `budget` when a start would be refused, and with `"warning_code":
+"estimate_above_limit"` when the estimate is above what the run may use. A run that a limit
+stopped has `limit_hint` (`{limit, plan, upgrade}`) for who started it.
 
 The check also takes the `config` (optional) to check what depends on it, e.g. `max_samples`
 against the row limit of a classical model. For classical models, only the Input layer's

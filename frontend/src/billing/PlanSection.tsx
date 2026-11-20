@@ -5,7 +5,7 @@ import { Alert, Badge, Button, Group, Loader, Modal, Stack, Text } from '@mantin
 import { notifications } from '@mantine/notifications';
 import { api, type BillingEnabled, type BillingState, type BillingSubscription } from '@/api';
 import { i18n, useTranslation } from '@/i18n';
-import { formatDay, formatPrice } from './format';
+import { formatDay, priceFor } from './format';
 
 const STATUS: Record<string, { label: string; color: string }> = {
   active: {
@@ -211,9 +211,7 @@ export function PlanSection({ info }: { info: BillingEnabled }) {
 
   const { plan, subscription, unlimited } = state;
   const paid = info.plans.find((p) => p.key === subscription?.plan);
-  const price = paid?.price
-    ? `${formatPrice(paid.price, paid.currency ?? info.currency)} per month`
-    : '';
+  const price = paid ? priceFor(paid, subscription?.interval ?? 'month', info.currency) : '';
   const badge = subscription ? STATUS[subscription.status] : undefined;
   const warn = subscription?.status === 'past_due' || subscription?.status === 'paused';
 

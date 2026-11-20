@@ -240,17 +240,17 @@ export const ui: Messages<typeof en> = {
   billing: {
     ChangePlanDialog: {
       askingPaddleWhatThisCosts: 'Paddle wird gefragt, was das jetzt kostet …',
-      isChargedNowForThe: '{{amount}} werden jetzt für den Rest des bezahlten Monats berechnet.',
+      isChargedNowForThe: '{{amount}} werden jetzt für den Rest des bezahlten Zeitraums berechnet.',
       isCreditedToYourNext:
-        '{{amount}} werden Ihrer nächsten Rechnung für den Rest des bezahlten Monats gutgeschrieben.',
+        '{{amount}} werden Ihrer nächsten Rechnung für den Rest des bezahlten Zeitraums gutgeschrieben.',
       keep: '{{currentName}} behalten',
       nextPayment: ' Nächste Zahlung: {{next_billed_at}}.',
       switchTo: 'Zu {{name}} wechseln',
       switchToThePlan: 'Zum Tarif {{name}} wechseln?',
       theDifferenceForTheRest:
-        'Die Differenz für den Rest des bezahlten Monats wird jetzt berechnet.',
+        'Die Differenz für den Rest des bezahlten Zeitraums wird jetzt berechnet.',
       theDifferenceForTheRest2:
-        'Die Differenz für den Rest des bezahlten Monats wird Ihrer nächsten Rechnung gutgeschrieben.',
+        'Die Differenz für den Rest des bezahlten Zeitraums wird Ihrer nächsten Rechnung gutgeschrieben.',
       youAreOnThePlan: 'Sie sind jetzt im Tarif {{name}}',
       yourNewLimitsApplyAt: 'Ihre neuen Grenzen gelten sofort.',
       yourSubscriptionChangesFromTo:
@@ -293,7 +293,7 @@ export const ui: Messages<typeof en> = {
       youAreOnTheFree:
         'Sie sind im kostenlosen Tarif. Bezahlte Tarife enthalten mehr Rechenzeit für Trainings und mehr Speicher.',
       youKeepUntilTheEnd:
-        'Sie behalten {{name}} bis {{until}}, dem Ende des bezahlten Monats. Es werden keine weiteren Zahlungen eingezogen.',
+        'Sie behalten {{name}} bis {{until}}, dem Ende des bezahlten Zeitraums. Es werden keine weiteren Zahlungen eingezogen.',
       yourSubscriptionContinues: 'Ihr Abonnement läuft weiter.',
       yourSubscriptionEndedNothingWas:
         'Ihr Abonnement {{name}} ist beendet{{value}}. Nichts wurde gelöscht; es gelten die Grenzen des kostenlosen Tarifs.',
@@ -319,7 +319,7 @@ export const ui: Messages<typeof en> = {
       manageOnYourAccountPage: 'Auf Ihrer Kontoseite verwalten',
       noLimitsApplyToYour: 'Für Ihr Konto gelten keine Grenzen: Sie brauchen keinen Tarif.',
       paddleChargesThemACpu:
-        '; Paddle berechnet sie. Eine CPU-Stunde ist eine Stunde eines Prozessorkerns, der an Ihren Trainings oder Vorhersagen arbeitet; ungenutzte Stunden verfallen. Sie können jederzeit zum Ende des bezahlten Monats kündigen. Wenn ein Tarif endet, wird nichts gelöscht: Es gelten die Grenzen des kostenlosen Tarifs.',
+        '; Paddle berechnet sie. Eine CPU-Stunde ist eine Stunde eines Prozessorkerns, der an Ihren Trainings oder Vorhersagen arbeitet; ungenutzte Stunden verfallen. Sie können jederzeit zum Ende des bezahlten Zeitraums kündigen. Wenn ein Tarif endet, wird nichts gelöscht: Es gelten die Grenzen des kostenlosen Tarifs.',
       paidPlansAreSoldBy:
         'Bezahlte Tarife werden von Paddle (Paddle.com Market Ltd) verkauft, das als Händler (Merchant of Record) Zahlung, Rechnung und Steuer abwickelt.',
       paymentReceivedActivatingYourPlan: 'Zahlung erhalten. Ihr Tarif wird aktiviert …',

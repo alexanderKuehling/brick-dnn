@@ -1,5 +1,6 @@
 import { IconAlertTriangle, IconGauge, IconInfoCircle } from '@tabler/icons-react';
 import { Alert, Anchor, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { LimitNotice, limitOf, limitText, limitTitle, UpgradeHint } from '@/billing/LimitNotice';
 import { i18n, useTranslation } from '@/i18n';
 import { formatCpu, formatMoney, formatResetDate } from './format';
 import type { CostEstimateState } from './useCostEstimate';
@@ -28,33 +29,70 @@ export function estimateText(state: Pick<CostEstimateState, 'estimate'>): string
   return `≈ ${formatCpu(estimate.cpu_minutes)} (${range})${money ? ` · ${money}` : ''}`;
 }
 
-/** "Up to 30 CPU min for this run (the limit per training) · 287 CPU min left this month". */
-export function budgetText(state: Pick<CostEstimateState, 'budget'>): string | null {
+/** The budget check of a planned training and, if there is one, its estimate. */
+type Planned = Pick<CostEstimateState, 'budget'> & { estimate?: CostEstimateState['estimate'] };
+
+/**
+ * How many trainings like the planned one fit into what is left of the month (by its
+ * estimate, so "about"); null without an estimate or a budget.
+ */
+export function trainingsThatFit(state: Planned): number | null {
+  const remaining = state.budget?.remaining_cpu_minutes;
+  const needed = state.estimate?.cpu_minutes;
+  if (typeof remaining !== 'number' || typeof needed !== 'number' || needed <= 0) {
+    return null;
+  }
+  return Math.floor(remaining / needed);
+}
+
+/**
+ * "It may use up to 15 CPU min (the limit per training). 30 CPU min left this month, until
+ * 1 December 2026. About 27 trainings like this one fit into what is left."
+ */
+export function budgetText(state: Planned): string | null {
   const { budget } = state;
   if (!budget || !budget.allowed) {
     return null;
   }
   const parts: string[] = [];
   if (budget.run_limit_cpu_minutes !== null) {
-    const why =
-      budget.limit_reason === 'run_limit'
-        ? 'the limit per training'
-        : 'what is left of your budget';
-    parts.push(`It may use up to ${formatCpu(budget.run_limit_cpu_minutes)} (${why}).`);
+    parts.push(
+      i18n.t(
+        budget.limit_reason === 'run_limit'
+          ? 'plans.estimate.mayUseRunLimit'
+          : 'plans.estimate.mayUseBudget',
+        { limit: formatCpu(budget.run_limit_cpu_minutes) }
+      )
+    );
   }
   if (budget.remaining_cpu_minutes != null) {
     parts.push(
-      `${formatCpu(budget.remaining_cpu_minutes)} left this month, until ${formatResetDate(budget.resets_at)}.`
+      i18n.t('plans.estimate.left', {
+        remaining: formatCpu(budget.remaining_cpu_minutes),
+        date: formatResetDate(budget.resets_at),
+      })
     );
+    const fits = trainingsThatFit(state);
+    if (fits !== null && fits >= 1) {
+      parts.push(i18n.t('plans.usage.fits', { count: fits }));
+    }
   }
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
 /**
  * The training panel's estimate of the planned run: its CPU time (a rough range), what it may
- * use within the budgets, and why a start would be refused or probably be stopped.
+ * use within the budgets, and why a start would be refused or probably be stopped. A refusal
+ * or warning by a limit of the plan names the plan that lifts it (LimitNotice).
  */
-export function CostEstimate({ state }: { state: CostEstimateState }) {
+export function CostEstimate({
+  state,
+  onChanged,
+}: {
+  state: CostEstimateState;
+  /** The user changed what the account may use (extra compute): check again. */
+  onChanged?: () => void;
+}) {
   useTranslation();
   const { estimate, budget, loading } = state;
   if (!estimate && !budget) {
@@ -62,6 +100,8 @@ export function CostEstimate({ state }: { state: CostEstimateState }) {
   }
   const text = estimateText(state);
   const limits = budgetText(state);
+  const limit = limitOf(budget);
+  const needed = estimate?.cpu_minutes ?? null;
   return (
     <Stack gap="xs" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 150ms' }}>
       {estimate && (
@@ -100,20 +140,50 @@ export function CostEstimate({ state }: { state: CostEstimateState }) {
           color="red"
           icon={<IconAlertTriangle size={18} />}
           title={
-            budget.code === 'storage_quota_exceeded'
+            (limit && limitTitle(limit)) ??
+            (budget.code === 'storage_quota_exceeded'
               ? i18n.t('ui.usage.CostEstimate.theStorageOfYourAccount')
               : budget.code === 'estimate_too_high'
                 ? i18n.t('ui.usage.CostEstimate.tooMuchComputeForYour')
-                : i18n.t('ui.usage.CostEstimate.notEnoughComputeBudget')
+                : i18n.t('ui.usage.CostEstimate.notEnoughComputeBudget'))
           }
         >
-          <Text size="sm">{budget.reason}</Text>
-          <AccountLink />
+          {limit ? (
+            <>
+              <LimitNotice
+                info={limit}
+                fallback={budget.reason}
+                estimate={budget.code === 'estimate_too_high' ? needed : null}
+                newTab
+                onChanged={onChanged}
+              />
+              {budget.code === 'estimate_too_high' && (
+                <Text size="sm" mt={limit.upgrade ? 'xs' : 0}>
+                  {i18n.t('plans.limit.fewerEpochs')}
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <Text size="sm">{budget.reason}</Text>
+              <AccountLink />
+            </>
+          )}
         </Alert>
       )}
       {budget?.allowed && budget.warning && (
         <Alert color="yellow" icon={<IconInfoCircle size={18} />}>
-          <Text size="sm">{budget.warning}</Text>
+          {limit ? (
+            <>
+              <Text size="sm">
+                {limitText(limit, { estimate: needed }) ?? budget.warning}{' '}
+                {i18n.t('plans.limit.probablyStopped')}
+              </Text>
+              <UpgradeHint info={limit} newTab onChanged={onChanged} />
+            </>
+          ) : (
+            <Text size="sm">{budget.warning}</Text>
+          )}
         </Alert>
       )}
     </Stack>

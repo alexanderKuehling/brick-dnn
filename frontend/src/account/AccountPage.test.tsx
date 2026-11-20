@@ -421,11 +421,13 @@ test('shows the plan and the other plans, without buying them', async () => {
   expect(await within(section).findByText('Free plan')).toBeInTheDocument();
   expect(
     within(section).getByText(
-      '0.5 CPU h per month · 1 GB · 15 CPU min per training · 1 training at a time'
+      '0.5 CPU hours per month · 1 GB of storage · up to 15 CPU minutes per training · 1 training at a time'
     )
   ).toBeInTheDocument();
   expect(
-    within(section).getByText(/Other plans: Starter \(€5\.00 per month\): 10 CPU h, 5 GB\./)
+    within(section).getByText(
+      'Other plans: Starter (€5.00 per month): 10 CPU hours per month, 5 GB of storage, and up to 1 CPU hour per training.'
+    )
   ).toBeInTheDocument();
   expect(within(section).queryByRole('button', { name: /upgrade|buy/i })).not.toBeInTheDocument();
   expect(within(section).queryByText(/beyond the monthly allowance/)).not.toBeInTheDocument();

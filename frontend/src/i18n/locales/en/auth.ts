@@ -27,7 +27,7 @@ export const auth = {
     title: 'Create an account',
     already: 'Already registered? <anchor>Log in</anchor>',
     intro:
-      'An account lets you save networks on this server. Building and exporting code works without one.',
+      'An account is free: save your networks, train them on this server and prepare your data. Building and exporting code works without one.',
     emailHint: 'Other people can invite you to their networks with it.',
     acceptTerms: 'I agree to the <terms>terms of use</terms>.',
     acceptTermsAndPrivacy:

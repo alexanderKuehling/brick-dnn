@@ -84,7 +84,8 @@ describe('LegalPage', () => {
     expect(screen.getByText(/Last changed/)).toBeInTheDocument();
     // Links to the pages the server has, not to the terms.
     const nav = await screen.findByRole('navigation', { name: 'Legal' });
-    const links = within(nav).getAllByRole('link');
+    // The last link is the project's donation page; the others are this server's pages.
+    const links = within(nav).getAllByRole('link').slice(0, -1);
     // Contact leads to the imprint, which has the operator's address.
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/imprint',
@@ -92,6 +93,10 @@ describe('LegalPage', () => {
       '/imprint',
     ]);
     expect(links.map((link) => link.textContent)).toEqual(['Imprint', 'Privacy', 'Contact']);
+    expect(within(nav).getByRole('link', { name: 'Support this project' })).toHaveAttribute(
+      'target',
+      '_blank'
+    );
   });
 
   it('shows the refund policy and links it with the other pages', async () => {
@@ -107,7 +112,7 @@ describe('LegalPage', () => {
     expect(await screen.findByText('Full refund within 14 days.')).toBeInTheDocument();
     expect(api.legal.page).toHaveBeenCalledWith('refund');
     const nav = await screen.findByRole('navigation', { name: 'Legal' });
-    const links = within(nav).getAllByRole('link');
+    const links = within(nav).getAllByRole('link').slice(0, -1);
     // Without an imprint there is no contact link.
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['/terms', '/refund']);
     expect(links.map((link) => link.textContent)).toEqual(['Terms', 'Refunds']);
@@ -123,11 +128,16 @@ describe('LegalPage', () => {
     expect(screen.getByRole('heading', { name: 'Terms of use' })).toBeInTheDocument();
   });
 
-  it('shows no links when the server has no legal pages', async () => {
+  it('shows no links to legal pages when the server has none', async () => {
     vi.mocked(api.legal.info).mockResolvedValue(info({}));
     renderAt('/');
     await vi.waitFor(() => expect(api.legal.info).toHaveBeenCalled());
-    expect(screen.queryByRole('navigation', { name: 'Legal' })).toBeNull();
+    const nav = screen.getByRole('navigation', { name: 'Legal' });
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => link.textContent)
+    ).toEqual(['Support this project']);
   });
 });
 

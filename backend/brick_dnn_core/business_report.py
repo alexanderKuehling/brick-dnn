@@ -484,6 +484,10 @@ def _number(value: Any, digits: int = 0) -> str:
     return f"{value:,.{digits}f}" if digits else f"{value:,}"
 
 
+def _count(number: int, noun: str) -> str:
+    return f"{number} {noun}{'' if number == 1 else 's'}"
+
+
 def _gigabytes(size: int | None) -> str:
     return f"{size / 1024**3:.1f} GB" if size is not None else "-"
 
@@ -563,8 +567,8 @@ def summary(data: dict[str, Any]) -> list[tuple[str, str]]:
         ("Stored by accounts", f"{_gigabytes(storage['used_bytes'])}{disk}"),
         (
             "Links that are on",
-            f"{now['shared_links']['networks']} networks, "
-            f"{now['shared_links']['comparisons']} comparisons",
+            f"{_count(now['shared_links']['networks'], 'network')}, "
+            f"{_count(now['shared_links']['comparisons'], 'comparison')}",
         ),
     ]
     if now["capacity_source"]:

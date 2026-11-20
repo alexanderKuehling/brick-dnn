@@ -438,7 +438,7 @@ brick-dnn/
 │       ├── i18n/            languages: English and German texts, switch, number formats
 │       └── pages/           login, sign-up, saved networks
 ├── deploy/                  server setup (Docker Compose, Caddy), legal templates
-├── docs/                    graph format, REST API, training, data, database, privacy, scaling
+├── docs/                    graph format, REST API, training, data, database, privacy, scaling, operations
 └── docker-compose.yml
 ```
 
@@ -528,8 +528,10 @@ reset, confirming addresses, notices) and two-factor login: [docs/email.md](docs
 Selling plans as
 subscriptions with Paddle (off unless configured): [docs/billing.md](docs/billing.md). The
 training queue and its worker: [docs/training.md](docs/training.md#the-training-queue); error
-monitoring with Sentry (off unless configured): [docs/monitoring.md](docs/monitoring.md); what
-comes after one server: [docs/scaling.md](docs/scaling.md).
+monitoring with Sentry (off unless configured): [docs/monitoring.md](docs/monitoring.md); the
+business report (sign-ups, paying accounts, compute against capacity):
+[docs/operations.md](docs/operations.md); what comes after one server:
+[docs/scaling.md](docs/scaling.md).
 
 ## Tests
 

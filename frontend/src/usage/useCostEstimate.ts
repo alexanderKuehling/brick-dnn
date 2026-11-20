@@ -41,7 +41,9 @@ export function useCostEstimate(
   config: Partial<TrainingConfig>,
   tuning: TuningInput | null,
   enabled: boolean,
-  delay = 600
+  delay = 600,
+  /** Changes when the budgets may have changed (a new plan, extra compute): ask again. */
+  refresh = 0
 ): CostEstimateState {
   const graphKey = useMemo(() => semanticKey(doc), [doc]);
   const key = dataset ? JSON.stringify([graphKey, dataset, config, tuning]) : null;
@@ -93,7 +95,7 @@ export function useCostEstimate(
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [key, enabled, delay]);
+  }, [key, enabled, delay, refresh]);
 
   const fresh = enabled && !loading && answer.key === key;
   return {

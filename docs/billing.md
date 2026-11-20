@@ -14,6 +14,9 @@ without it: no prices, no pricing page, no request to Paddle, and every billing 
 - [Settings](#settings)
 - [Setting it up, step by step](#setting-it-up-step-by-step)
 - [Running it](#running-it)
+- [Where limits lead](#where-limits-lead)
+- [Paying per year](#paying-per-year)
+- [Features of plans](#features-of-plans)
 - [Overage](#overage-compute-beyond-the-allowance)
 - [Privacy and legal texts](#privacy-and-legal-texts)
 
@@ -69,6 +72,7 @@ exists. Accounts with a subscription are never deleted for inactivity.
 | `BRICKDNN_PADDLE_ENV` | site settings or `.env` | `sandbox` (Paddle's test system) or `live` |
 | `BRICKDNN_PADDLE_CLIENT_TOKEN` | site settings or `.env` | Client-side token for Paddle.js (`test_…` / `live_…`); public |
 | `BRICKDNN_PADDLE_PRICES` | site settings or `.env` | `starter=pri_…,plus=pri_…,pro=pri_…`: the Paddle price of each paid plan. Several prices of one plan are separated by `\|`: the first is sold, the others stay valid for whoever subscribed to them (after a price change) |
+| `BRICKDNN_PADDLE_PRICES_YEARLY` | site settings or `.env`, optional | `plus=pri_…,pro=pri_…`: the yearly Paddle price of the plans that can be paid per year too ([Paying per year](#paying-per-year)). Unset: plans are sold per month only |
 | `BRICKDNN_PADDLE_OVERAGE_PRODUCT` | site settings or `.env` | Paddle product (`pro_…`) that overage is billed as; empty: overage is not offered |
 | `BRICKDNN_PADDLE_API_KEY` | **`.env` only** | Server-side API key (secret) |
 | `BRICKDNN_PADDLE_WEBHOOK_SECRET` | **`.env` only** | Secret of the notification destination (secret); two separated by a comma while rotating |
@@ -161,10 +165,68 @@ account with its own ids, tokens and keys, and no real money.
   (`BRICKDNN_PLANS`): `docker-compose.yml` passes both to both, and a server set up with
   `deploy/server` reads the public ones from the site settings. If the cleanup log says
   "paid plans are OFF, the settings are incomplete", that service lacks one of them.
-- **Where users are led to the pricing page:** the header, "Plan & billing" and "Usage &
-  budget" on the account page, and the messages of a used-up allowance or a full storage
-  (web, REST and MCP; with `BRICKDNN_PUBLIC_URL` they carry the full address, and their JSON
-  has `upgrade_url`).
+- **Where users are led to the pricing page:** the header, the account menu (plan and
+  this month's compute), "Plan & billing" and "Usage & budget" on the account page, the usage
+  line of the training panel from 80 % of a limit, and the message of every limit a plan
+  lifts ([Where limits lead](#where-limits-lead)).
+- **Whether it works as a business:** `manage.py business_report` and *Business report* in
+  the admin ([operations.md](operations.md)).
+
+## Where limits lead
+
+Wherever a limit of the plan stops a user, the message names the limit and, **only on a
+server that sells plans**, the next plan that lifts it: the cheapest plan on sale that costs
+at least what the account's plan costs, allows more of what ran out and has room for what was
+asked for (the upload, the estimated training). It is shown with its price and what it
+includes, and one button leads to `/pricing?plan=<key>`, where that plan is marked and its
+button is the main one. Nothing opens by itself, and there are no banners or pop-ups: the
+offer appears at the limit, in the usage line of the training panel and on the pricing page.
+
+| Limit | Where it is met | Leads to |
+| --- | --- | --- |
+| Compute of the month (`cpu_time`) | starting a training, predictions; a run stopped by it | the next plan; for a paid plan also the switch for compute beyond it (overage), offered right there with the user's own limit; else the day it is back |
+| Per training (`run_time`) | the check before the start (refused if even the low end of the estimate is above it, a warning if the estimate is); a run stopped at it | the plan whose trainings may run long enough |
+| Storage (`storage`) | uploads, imports in the Data tab, starting a training (its weights need room), runs logged from scripts | the plan with room for it |
+| Trainings at a time (`concurrent_trainings`) | starting a second training | the plan that trains more at a time |
+| Trainings waiting (`queued_trainings`) | starting one more with the training queue | a plan that lets more wait, if there is one |
+| Own budgets (`own_budget`, `token_budget`, `app_budget`, `overage_cap`) | as for compute | the account page, where the user set them: never a plan |
+| Limits of the server (`upload_size`, `external_runs`, `external_active_runs`, `external_points`, a busy server) | uploads, runs logged from scripts | nothing to buy: they are the same for every plan |
+
+The REST API answers with the same in JSON (`code`, `limit`, `plan`, `upgrade`, see
+[api.md](api.md#limits-in-answers)), the message for scripts and AI assistants names the plan
+with its price and address, and the error of an MCP tool carries the JSON as
+`structuredContent`. On a server without paid plans `upgrade` is null, no price appears
+anywhere and `/pricing` says in a sentence that no plans are sold there.
+
+## Paying per year
+
+Optional, and off unless both are set:
+
+1. In `BRICKDNN_PLANS`, `"price_per_year": <amount>` for each plan that can be paid per year
+   (the amount that is shown, like `price`).
+2. `BRICKDNN_PADDLE_PRICES_YEARLY=plus=pri_…,pro=pri_…`: for each of those plans a second
+   price in Paddle, billed **yearly**, same currency, tax included.
+
+The pricing page then has a switch *Monthly | Yearly*. A yearly price is shown with what it
+is per month and how much less than twelve months it costs, both computed from the two
+prices. A plan without a yearly price keeps its monthly one and says "Only monthly".
+`manage.py billing_sync --check` checks the yearly prices too (interval, amount, currency).
+
+The plan and its monthly allowances are the same either way; only the price and the period
+Paddle bills differ. Overage is still billed per calendar month. **A subscription keeps its
+interval**: changing its plan moves it to the new plan's price for the same interval, and a
+plan without such a price cannot be chosen. Moving a running subscription from monthly to
+yearly (or back) is not offered here, because Paddle then starts a new period and bills it at
+once; the way is to cancel to the end of the paid period and choose the plan again.
+
+## Features of plans
+
+Besides its limits, a plan can list features: `"features": ["share_comparisons", …]` in
+`BRICKDNN_PLANS`. **Nothing is gated unless a plan lists a feature**: `budgets.has_feature(user,
+name)` is true for everybody until some plan names it, and always for accounts without limits
+and on servers without plans. Code that gates something calls `budgets.require_feature(user,
+name, "What it is called")`, which refuses with `403`, `"code": "feature_not_in_plan"` and the
+cheapest plan on sale that includes the feature as `upgrade`, like every other limit.
 
 ## Overage: compute beyond the allowance
 

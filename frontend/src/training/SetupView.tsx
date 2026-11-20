@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -22,9 +22,12 @@ import {
   type RunSummary,
   type TrainingStatus,
 } from '@/api';
+import { LimitNotice, limitOf, limitTitle, type Limit } from '@/billing/LimitNotice';
 import { i18n, useTranslation } from '@/i18n';
 import { AccountLink, CostEstimate } from '@/usage/CostEstimate';
+import { UsageIndicator } from '@/usage/UsageIndicator';
 import { useCostEstimate } from '@/usage/useCostEstimate';
+import { useUsage } from '@/usage/useUsage';
 import type { TrainingProject } from './access';
 import { classicalMaxRows, MODEL_KINDS, trainingFamily } from './classical';
 import { DataSourcePicker } from './DataSourcePicker';
@@ -88,6 +91,8 @@ interface StartError {
   busy?: boolean;
   /** A budget or the storage quota does not allow it (HTTP 403 with a budget code). */
   budget?: string;
+  /** Which limit refused it, with the plan that lifts it (see LimitNotice). */
+  limit?: Limit | null;
 }
 
 const BUDGET_CODES = ['budget_exceeded', 'estimate_too_high', 'storage_quota_exceeded'] as const;
@@ -253,12 +258,29 @@ export function SetupView({
         : toTuning(settings, searchType, { hybrid: isHybrid, loss: lossScope }),
     [settings, isClassical, isHybrid, searchType, lossScope]
   );
+  // The usage of the month, and a counter that asks for it and the estimate again: after
+  // a start, when the user allowed extra compute, and when the tab gets the focus back
+  // (the plan may have been changed in the tab the upgrade button opened).
+  const { usage, reload: reloadUsage } = useUsage(true);
+  const [budgetsChanged, setBudgetsChanged] = useState(0);
+  const recheckBudgets = useCallback(() => {
+    setBudgetsChanged((n) => n + 1);
+    reloadUsage();
+    setStartError(null);
+  }, [reloadUsage]);
+  useEffect(() => {
+    const onFocus = () => setBudgetsChanged((n) => n + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
   const cost = useCostEstimate(
     doc,
     ref,
     config,
     tuning,
-    networkValid && ref !== null && check?.ok === true && settingsValid
+    networkValid && ref !== null && check?.ok === true && settingsValid,
+    600,
+    budgetsChanged
   );
   const refusedByBudget = cost.fresh && cost.budget?.allowed === false;
 
@@ -313,10 +335,12 @@ export function SetupView({
       const message = (error as Error).message;
       const code =
         error instanceof ApiError ? (error.data as { code?: unknown } | null)?.code : null;
+      const limit = limitOf(error);
       if (error instanceof ApiError && error.status === 403 && typeof code === 'string') {
-        setStartError({ message, budget: code });
+        setStartError({ message, budget: code, limit });
+        reloadUsage();
       } else if (error instanceof ApiError && error.status === 409) {
-        setStartError({ message, busy: true });
+        setStartError({ message, busy: true, limit });
         onRefresh();
       } else if (error instanceof ApiError && error.status === 503) {
         setStartError({ message });
@@ -382,6 +406,7 @@ export function SetupView({
             uploading={data.uploading}
             uploadProgress={data.uploadProgress}
             uploadError={data.uploadError}
+            uploadLimit={data.uploadLimit}
             onDismissUploadError={data.dismissUploadError}
             onUpload={data.upload}
             onCancelUpload={data.cancelUpload}
@@ -419,27 +444,44 @@ export function SetupView({
 
       {networkValid && ref && check?.ok && settingsValid && (
         <Stack gap="xs">
-          <CostEstimate state={cost} />
+          <CostEstimate state={cost} onChanged={recheckBudgets} />
           {cost.fresh && <QueueHint queue={cost.queue} />}
         </Stack>
       )}
+      {/* Said once: where a limit's message is shown, the line below stays quiet. */}
+      <UsageIndicator usage={usage} newTab quiet={refusedByBudget || Boolean(startError?.limit)} />
 
       {startError && (
         <Alert
           color={startError.busy ? 'yellow' : 'red'}
           icon={<IconAlertTriangle size={18} />}
           title={
-            startError.busy
+            (startError.limit && limitTitle(startError.limit)) ??
+            (startError.busy
               ? queueing
                 ? t('training.setup.tooMany')
                 : t('training.setup.another')
               : startError.budget
                 ? budgetTitle(startError.budget)
-                : t('training.setup.cannotStart')
+                : t('training.setup.cannotStart'))
           }
         >
-          <Text size="sm">{startError.message}</Text>
-          {startError.budget && <AccountLink />}
+          {startError.limit ? (
+            <LimitNotice
+              info={startError.limit}
+              fallback={startError.message}
+              estimate={
+                startError.budget === 'estimate_too_high' ? cost.estimate?.cpu_minutes : null
+              }
+              newTab
+              onChanged={recheckBudgets}
+            />
+          ) : (
+            <>
+              <Text size="sm">{startError.message}</Text>
+              {startError.budget && <AccountLink />}
+            </>
+          )}
           {startError.errors && (
             <List styles={WRAPPING_LIST} size="sm" mt={4}>
               {startError.errors.map((message) => (

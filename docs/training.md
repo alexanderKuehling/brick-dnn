@@ -1592,7 +1592,8 @@ money.
   CPU time left, the storage quota must not be used up and the plan must allow another training
   at a time. Otherwise the start is refused (HTTP 403 with `code` `budget_exceeded` or
   `storage_quota_exceeded`, 409 for trainings at a time) with what is used, the limit, when it
-  resets and how to get more. With a [training queue](#the-training-queue), the trainings at
+  resets and how to get more: on a server that sells plans, the next plan that lifts the
+  limit ([billing.md](billing.md#where-limits-lead), [api.md](api.md#limits-in-answers)). With a [training queue](#the-training-queue), the trainings at
   a time do not refuse a start (the run waits for its turn); 409 then means that the account
   has as many runs waiting as it may.
 - The run gets what is left as its **limit** (at most the plan's limit per training), written
@@ -1619,7 +1620,10 @@ money.
   from a preparation need room in the storage quota.
 
 `GET /api/account/usage/` (and the MCP tool `get_usage`) shows this month's usage, the plan,
-limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets).
+limits, what is left and when it resets; see [api.md](api.md#usage-and-budgets). The training
+panel shows the same in one line under the estimate ("Usage this month: 18 of 30 CPU min ·
+100 MB of 512 MB storage"), which says so from 80 % of a limit and at 100 %, and the estimate
+says how many trainings like the planned one fit into what is left.
 
 ## Configuration
 

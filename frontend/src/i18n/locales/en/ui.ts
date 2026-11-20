@@ -231,17 +231,17 @@ export const ui = {
   billing: {
     ChangePlanDialog: {
       askingPaddleWhatThisCosts: 'Asking Paddle what this costs now…',
-      isChargedNowForThe: '{{amount}} is charged now for the rest of the month you paid for.',
+      isChargedNowForThe: '{{amount}} is charged now for the rest of the period you paid for.',
       isCreditedToYourNext:
-        '{{amount}} is credited to your next invoice for the rest of the month you paid for.',
+        '{{amount}} is credited to your next invoice for the rest of the period you paid for.',
       keep: 'Keep {{currentName}}',
       nextPayment: ' Next payment: {{next_billed_at}}.',
       switchTo: 'Switch to {{name}}',
       switchToThePlan: 'Switch to the {{name}} plan?',
       theDifferenceForTheRest:
-        'The difference for the rest of the month you paid for is charged now.',
+        'The difference for the rest of the period you paid for is charged now.',
       theDifferenceForTheRest2:
-        'The difference for the rest of the month you paid for is credited to your next invoice.',
+        'The difference for the rest of the period you paid for is credited to your next invoice.',
       youAreOnThePlan: 'You are on the {{name}} plan now',
       yourNewLimitsApplyAt: 'Your new limits apply at once.',
       yourSubscriptionChangesFromTo:
@@ -282,7 +282,7 @@ export const ui = {
       youAreOnTheFree:
         'You are on the free plan. Paid plans include more compute for trainings and more storage.',
       youKeepUntilTheEnd:
-        'You keep {{name}} until {{until}}, the end of the month you paid for. No further payment is taken.',
+        'You keep {{name}} until {{until}}, the end of the period you paid for. No further payment is taken.',
       yourSubscriptionContinues: 'Your subscription continues.',
       yourSubscriptionEndedNothingWas:
         'Your {{name}} subscription ended{{value}}. Nothing was deleted; the limits of the free plan apply.',
@@ -307,7 +307,7 @@ export const ui = {
       manageOnYourAccountPage: 'Manage on your account page',
       noLimitsApplyToYour: 'No limits apply to your account: you do not need a plan.',
       paddleChargesThemACpu:
-        '; Paddle charges them. A CPU hour is one hour of one processor core working on your trainings or predictions; unused hours do not carry over. You can cancel at any time to the end of the month you paid for. Nothing is deleted when a plan ends: the limits of the free plan apply.',
+        '; Paddle charges them. A CPU hour is one hour of one processor core working on your trainings or predictions; unused hours do not carry over. You can cancel at any time to the end of the period you paid for. Nothing is deleted when a plan ends: the limits of the free plan apply.',
       paidPlansAreSoldBy:
         'Paid plans are sold by Paddle (Paddle.com Market Ltd), which handles the payment, the invoice and the tax as the merchant of record.',
       paymentReceivedActivatingYourPlan: 'Payment received. Activating your plan…',

@@ -3,6 +3,46 @@
 ## Unreleased
 
 ### Added
+- **Limits lead somewhere.** Wherever a limit of the plan stops a user (the compute of the
+  month, the most one training may use, the storage, trainings at a time or waiting in the
+  queue), the message names the limit in the language of the app and, on a server that sells
+  plans, the next plan that lifts it with its price and what it includes, and one button to
+  the pricing page with that plan preselected. A paid plan that ran out offers the switch for
+  compute beyond it right there (off until the user saves it, with a limit of their own).
+  Budgets the user set lead to the account page, limits of the server to nothing to buy. The
+  check before a training says the same up front when the estimate is above what the run may
+  use, and a run that a limit stopped names the plan too. The API answers carry `code`,
+  `limit`, `plan` and `upgrade` ([docs/api.md](docs/api.md#limits-in-answers)); the message
+  for scripts and AI assistants names the plan, and MCP errors have the JSON as
+  `structuredContent`. Views that let a budget error through now answer with its whole body
+  (the Data tab's import lost the code before).
+- **Usage before it runs out.** The training panel shows the compute and the storage of the
+  month in one line; from 80 % of a limit it says so and links to the plans (the account page
+  where none are sold), at 100 % likewise. The estimate says how many trainings like the
+  planned one fit into what is left, and the account menu shows the plan and this month's
+  compute.
+- **Pricing page.** The own plan is marked and every other plan says what changes against it
+  ("now 0.5"); plans that start before cheaper ones when the server is busy say so; overage
+  is one sentence; teaching and research are pointed to the operator. With yearly prices
+  (`BRICKDNN_PADDLE_PRICES_YEARLY` and `price_per_year` of a plan, both optional) a switch
+  *Monthly | Yearly* appears; a subscription keeps its interval when its plan changes. The
+  page no longer shows "Page not found": a server that sells no plans says so in a sentence
+  without prices, and a server that did not answer offers to try again. The plan lines and
+  limit messages are German in the German app.
+- **A free account first.** Where an account is needed (Train, Save, the Data tab, choosing a
+  plan), "Create free account" is the main button and "Log in" the second. After signing up
+  from *Train* the panel opens again, with the built-in dataset the network was made for
+  (MNIST for the MNIST example) instead of demo data.
+- **Business report.** `manage.py business_report` (text or `--json`, by day, week or month)
+  and *Business report* in the Django admin, for staff only: sign-ups, activated accounts
+  (first training within 7 days), accounts that trained, new and ended subscriptions, paying
+  accounts by plan, estimated MRR, free to paid conversion, CPU hours against the capacity of
+  the training workers, storage against the disk, runs logged from scripts, links shared.
+  Aggregates from the database; nothing is tracked and no account is named
+  ([docs/operations.md](docs/operations.md)).
+- **Features of plans.** A plan can list features (`"features"` in `BRICKDNN_PLANS`);
+  `budgets.require_feature` refuses with the plan that includes it. Nothing is gated until a
+  plan lists a feature.
 - **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
   of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
   selected); runs selected on other pages stay. The line above the table counts them
@@ -483,6 +523,8 @@
   the charts and metrics.
 
 ### Changed
+- The link to the project's donation page moved from the header (next to *Pricing*) into the
+  footer row with the legal pages.
 - **brickdnn.com: the guides' overview as cards, calmer guide pages, the facts under the hero
   as pills, and German screenshots on the German pages.** `/guides/` and `/de/anleitungen/` were
   a heading, a long paragraph and a list of long titles. They now open with one sentence and
