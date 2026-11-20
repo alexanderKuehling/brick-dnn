@@ -46,6 +46,22 @@ OAuth or an API token) fetch data on the user's behalf; their provider is respon
 The one exception to "nothing from other servers" is Paddle's checkout on a server that sells
 plans, see [Paid plans](#paid-plans-paddle).
 
+### Hugging Face
+
+The server talks to the Hugging Face Hub (Hugging Face, Inc., USA) only when a user starts
+it ([huggingface.md](huggingface.md)): **publishing a run** uploads the files the dialog
+lists (the trained model, the generated script, the network, the preprocessing and a model
+card with settings and results) into a repository of the user's Hugging Face account,
+private or public as the user chose; **importing a dataset file** asks the Hub for the
+dataset's files and downloads the chosen one. Hugging Face sees the server's IP address,
+not the user's. The user's Hugging Face access token is used for that one request, sent to
+the Hub's own host only, and neither stored nor logged; nothing else from Hugging Face is
+stored besides the imported file and its link (as for every import from a link). Hugging
+Face is responsible for what it stores, under its own privacy policy; what was published
+is deleted in the Hugging Face account, not by deleting the run or the Brick DNN account.
+Name it in the privacy policy (the template has a paragraph; legal basis Art. 6(1)(b)
+GDPR, the function the user asked for) or switch it off with `BRICKDNN_HUGGINGFACE=false`.
+
 ## Legal pages
 
 Put Markdown files into `BRICKDNN_LEGAL_DIR`:

@@ -3,6 +3,44 @@
 ## Unreleased
 
 ### Added
+- **Hugging Face Hub: publish a run, import a dataset file.** Both only when a user starts
+  them, with the user's own Hugging Face access token, which is used for that one request,
+  sent to the Hub's own host only (not to the storage servers of uploads and downloads) and
+  never stored or logged (`hub_client.HubToken` hides its value in every log line,
+  traceback and error report and cannot be pickled; the activity log stores `[redacted]`).
+  *Publish to Hugging Face* on a finished run (neural, classical, hybrid, segmentation,
+  text) asks for the token, the repository name (default: from the network's name),
+  private or public and the licence, shows the files and the model card first, then
+  creates or (if allowed) updates a model repository in one commit: `model.safetensors`
+  (written by `brickdnn.training.safetensors_file` without the `safetensors` package, in a
+  process of its own; `model.pt` if the weights cannot be converted), `model.joblib` for a
+  classical model, both `model.joblib` and `model.features.pt` for a hybrid network, the
+  generated script, `network.json`, `preprocessing.json` and `README.md`: YAML metadata
+  (`library_name`, `license`, `tags` with `brickdnn`, `pipeline_tag`, `datasets`,
+  `metrics`, a `model-index` with the results of every split) and the architecture,
+  training settings, results, files and code that downloads the repository, loads the
+  model with the included script and predicts. New `GET` (preview, sends nothing) and
+  `POST /api/training/runs/<id>/huggingface/`, `huggingface` in `GET /api/training/`. At
+  most `BRICKDNN_HUGGINGFACE_MAX_UPLOAD_MB` (250) MB per publish, checked before anything
+  is sent, `BRICKDNN_HUGGINGFACE_RATE` (`30/hour`), 240 seconds; errors of the Hub come
+  with a `code` (`token_invalid` as `400`, not `401`; `token_read_only`, `forbidden`,
+  `name_taken` `409`, `too_large` `413`, `busy`, `unreachable`, `timeout`) that the app
+  translates. The import dialog has a tab *Hugging Face*: `hf://datasets/<owner>/<name>`,
+  `<owner>/<name>` or the dataset's page lists its CSV, TSV, JSON, JSON Lines and Parquet
+  files with config and split (from the card's `configs` or the usual file names; datasets
+  with a loading script from the Parquet files the Hub converted them to), and the chosen
+  one is imported like a link import with the same limits and address checks
+  (`POST /api/data/huggingface/files/`, then `POST /api/data/sources/` with the file's
+  `hf://` reference); an optional token reads gated and private datasets. MCP:
+  `publish_to_huggingface`, a publishing action of the approval rules (approving allows
+  the assistant to publish exactly what it asked for, once, within 24 hours, since the
+  token is never stored), and `import_data` takes `hf://` references (`hf_token`) and
+  answers a bare dataset with its files. The Hub's HTTP API is called directly with the
+  standard library (no `huggingface_hub` on the server); the tests run against a local
+  fake Hub. `BRICKDNN_HUGGINGFACE=false` switches all of it off; nginx gives the publish
+  request and MCP calls 300 seconds. [docs/huggingface.md](docs/huggingface.md); the
+  privacy policy of brickdnn.com, its template and `docs/privacy.md` name Hugging Face,
+  Inc. (USA).
 - **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
   of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
   selected); runs selected on other pages stay. The line above the table counts them

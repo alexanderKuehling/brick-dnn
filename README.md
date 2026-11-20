@@ -81,6 +81,13 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   heatmaps, scatter plots and target analysis. Values are learned from the training rows only,
   and the result becomes a training dataset with a fixed train/validation/test split, a
   cleaned CSV file or a standalone pandas script. See [docs/data-preparation.md](docs/data-preparation.md).
+- **Hugging Face Hub**: publish a finished run as a model repository of your Hugging
+  Face account (weights as `model.safetensors` or the scikit-learn model, the generated
+  script, the network, the preprocessing and a model card with the results and code to
+  load it), and import a CSV, JSON or Parquet file of a dataset on the Hub
+  (`hf://datasets/<owner>/<name>`). Both only when you start them, with your own access
+  token, which is used for that request and never stored. See
+  [docs/huggingface.md](docs/huggingface.md).
 - **MCP server for AI assistants**: add Brick DNN as a connector in Claude (or another MCP
   client), sign in with OAuth, and let it build, check, save and train networks in your
   account, upload small CSV datasets, predict with trained networks and hand you their
@@ -469,6 +476,7 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `BRICKDNN_DATA_MAX_UPLOAD_MB`  | `200`                      | Largest import in the Data tab (file, link or unpacked) |
 | `BRICKDNN_DATA_IMPORT_PROCESS_MB` | `20`                  | Imports from this size on are read in a process of their own, so running out of memory does not stop the web server |
 | `BRICKDNN_DATA_URL_IMPORT`     | `true`                     | Set to `false` to switch imports from links off      |
+| `BRICKDNN_HUGGINGFACE`         | `true`                     | Set to `false` to switch publishing runs to the Hugging Face Hub and importing its dataset files off; `BRICKDNN_HUGGINGFACE_MAX_UPLOAD_MB` (250), `_RATE` (`30/hour`), `_PROXY` ([docs/huggingface.md](docs/huggingface.md#settings)) |
 | `BRICKDNN_DATA_URL_ALLOW_PRIVATE` | `false`                 | Allow links to private network addresses (trusted local installations only) |
 | `BRICKDNN_INSTALL_TORCH`       | `false`                    | Docker build: include PyTorch (CPU) for training     |
 | `BRICKDNN_GP_MAX_ROWS`         | `5000`                     | Training rows a Gaussian process regression is fitted on at most |
@@ -517,7 +525,8 @@ All settings are environment variables, or lines in a file `.env` in the reposit
 | `VITE_API_URL`                 | same origin                | Build-time API URL if the UI is hosted separately    |
 
 The REST API is documented in [docs/api.md](docs/api.md), the MCP server and API tokens in
-[docs/mcp.md](docs/mcp.md), the database setup (SQLite,
+[docs/mcp.md](docs/mcp.md), publishing to and importing from the Hugging Face Hub in
+[docs/huggingface.md](docs/huggingface.md), the database setup (SQLite,
 PostgreSQL, Supabase) in [docs/database.md](docs/database.md). Running a server for other
 people: [docs/privacy.md](docs/privacy.md) explains what is stored and for how long, the
 legal pages (imprint, privacy policy, terms of use; templates in

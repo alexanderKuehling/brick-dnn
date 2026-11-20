@@ -132,6 +132,8 @@ def status() -> dict[str, Any]:
         # File name endings the import reads (formats whose library is missing left out).
         "file_types": file_types(),
         "url_import": bool(settings.DATA_URL_IMPORT_ENABLED),
+        # Files of datasets on the Hugging Face Hub (hub_datasets.py).
+        "huggingface": bool(settings.DATA_URL_IMPORT_ENABLED and settings.HUGGINGFACE_ENABLED),
     }
 
 
@@ -177,9 +179,11 @@ def import_source(user, upload, fields: dict[str, Any]) -> DataSource:
     return _import(user, save, fields)
 
 
-def import_url(user, url: Any, fields: dict[str, Any]) -> DataSource:
+def import_url(user, url: Any, fields: dict[str, Any], auth=None) -> DataSource:
     """Download the file at ``url`` (see :mod:`url_import` for the safety checks) and read it
-    like an upload. Raises :class:`DataInputError`."""
+    like an upload. ``auth``: ``(origin, token)`` for a download that needs an access token
+    (a gated dataset of the Hugging Face Hub, hub_datasets.py), sent to that origin only.
+    Raises :class:`DataInputError`."""
     if not settings.DATA_URL_IMPORT_ENABLED:
         raise DataInputError(URL_DISABLED_MESSAGE)
     budgets.check_storage(user)  # the size is known after the download
@@ -195,6 +199,7 @@ def import_url(user, url: Any, fields: dict[str, Any]) -> DataSource:
                 work,
                 max_bytes=max_upload_bytes(),
                 allow_private=bool(settings.DATA_URL_ALLOW_PRIVATE),
+                auth=auth,
             )
         except url_import.LinkError as exc:
             raise DataInputError(str(exc)) from None

@@ -20,7 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from . import catalog
+from . import catalog, hub_datasets
 from . import data_service as data
 from . import training_service as training
 from .models import DataPrep, Dataset, DataSource
@@ -195,9 +195,25 @@ class DataSourceViewSet(
             )
         fields = {key: body.get(key) for key in ("name", *data.OPTION_FIELDS)}
         try:
-            source = data.import_url(request.user, body.get("url"), fields)
+            # A Hugging Face access token (gated or private datasets) is taken out of the
+            # request data at once and only sent to the Hub (hub_datasets.py).
+            token = hub_datasets.HubToken.optional(body.pop("hf_token", None))
+            ref = hub_datasets.import_reference(body.get("url"), token)
+            if ref is None:
+                source = data.import_url(request.user, body.get("url"), fields)
+            elif ref.path is None:
+                return Response(
+                    {"detail": "Choose a file of the dataset (Data tab: “Hugging Face”)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                source = hub_datasets.import_file(request.user, ref, token, fields)
         except data.DataInputError as exc:
             return _bad_request(exc)
+        except hub_datasets.HubDisabled as exc:
+            raise PermissionDenied(str(exc)) from None
+        except ValueError as exc:  # an invalid token or dataset reference
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(DataSourceSerializer(source).data, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance: DataSource) -> None:

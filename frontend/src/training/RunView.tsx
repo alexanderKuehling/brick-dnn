@@ -38,6 +38,7 @@ import {
   type ClassicalRunState,
   type GraphDocument,
   type HistoryEntry,
+  type HubCapabilities,
   type RunDetail,
   type TestResult,
   type TrialEntry,
@@ -55,6 +56,7 @@ import { LineChart, SERIES_COLORS, type LineSeries } from '@/components/LineChar
 import { ElsewhereBadge } from '@/experiments/ElsewhereBadge';
 import { ExplainButton } from '@/explain/ExplainButton';
 import { RunExplanations } from '@/explain/RunExplanations';
+import { PublishButton } from '@/huggingface/PublishButton';
 import { currentLocale, i18n, Trans, useTranslation } from '@/i18n';
 import { AccountLink } from '@/usage/CostEstimate';
 import {
@@ -112,6 +114,8 @@ interface RunViewProps {
   onLoadNetwork: (graph: GraphDocument, name: string) => void;
   /** Opens another run (the members of an ensemble). */
   onOpenRun?: (id: string) => void;
+  /** Publishing to the Hugging Face Hub, if the server offers it. */
+  hub?: HubCapabilities;
 }
 
 /** Re-renders every second while `running` so elapsed times stay current. */
@@ -209,6 +213,7 @@ function NetworkRunView({
   onUpdate,
   onDeleted,
   onLoadNetwork,
+  hub,
 }: RunViewProps) {
   useTranslation();
   const state = run.state;
@@ -784,6 +789,11 @@ function NetworkRunView({
             {i18n.t('ui.training.RunView.scriptPy')}
           </Button>
         )}
+        {/* Who may stop a run may publish it (src/huggingface). */}
+        {hub?.publish &&
+          run.has_weights &&
+          (run.status === 'completed' || run.status === 'stopped') &&
+          canStopRun(run, scope) && <PublishButton run={run} hub={hub} />}
         {!sameNetwork && run.graph.nodes.length > 0 && (
           <Button
             variant="default"

@@ -29,6 +29,10 @@ import type {
   GenerateOptions,
   GenerateResult,
   GraphDocument,
+  HubDatasetFiles,
+  HubPublishPreview,
+  HubPublishRequest,
+  HubPublishResult,
   ImportOptions,
   LayerCatalog,
   LegalInfo,
@@ -602,6 +606,22 @@ const serverApi = {
         request<void>(`/api/training/runs/${id}/`, { method: 'DELETE', auth: true }),
       downloadWeights: (id: string) =>
         requestFile(`/api/training/runs/${id}/weights/`, { auth: true }),
+      /** What publishing to Hugging Face would upload, with the model card (nothing is sent). */
+      hubPreview: (id: string, repo: string, signal?: AbortSignal) =>
+        request<HubPublishPreview>(
+          `/api/training/runs/${id}/huggingface/${queryString({ repo })}`,
+          { auth: true, signal }
+        ),
+      /**
+       * Publish the run to the Hugging Face Hub with the user's access token (used for this
+       * request only). Errors answer with `{detail, code}` (HubErrorBody).
+       */
+      publishToHub: (id: string, body: HubPublishRequest) =>
+        request<HubPublishResult>(`/api/training/runs/${id}/huggingface/`, {
+          method: 'POST',
+          body,
+          auth: true,
+        }),
       /** What the prediction panel needs (everyone who can see the run). */
       predictForm: (id: string, signal?: AbortSignal) =>
         request<PredictionForm>(`/api/training/runs/${id}/predict-form/`, { auth: true, signal }),
@@ -733,6 +753,14 @@ const serverApi = {
   data: {
     /** What the server can do (public, no login needed). */
     status: (signal?: AbortSignal) => request<DataStatus>('/api/data/', { signal }),
+    /** The files of a dataset on the Hugging Face Hub that can be imported. */
+    hubFiles: (dataset: string, hfToken: string | null = null, signal?: AbortSignal) =>
+      request<HubDatasetFiles>('/api/data/huggingface/files/', {
+        method: 'POST',
+        body: { dataset, ...(hfToken ? { hf_token: hfToken } : {}) },
+        auth: true,
+        signal,
+      }),
     /** All step types with their settings (public). */
     steps: (signal?: AbortSignal) => request<StepCatalog>('/api/data/steps/', { signal }),
     sources: {
@@ -770,6 +798,22 @@ const serverApi = {
         request<DataSource>('/api/data/sources/', {
           method: 'POST',
           body: { url, ...options },
+          auth: true,
+          signal,
+        }),
+      /**
+       * Import a file of a dataset on the Hugging Face Hub (`ref`: hf://datasets/…/<path>);
+       * `hfToken` only for gated or private datasets (used for this request only).
+       */
+      importFromHub: (
+        ref: string,
+        options: Partial<ImportOptions> & { name?: string } = {},
+        hfToken: string | null = null,
+        signal?: AbortSignal
+      ) =>
+        request<DataSource>('/api/data/sources/', {
+          method: 'POST',
+          body: { url: ref, ...options, ...(hfToken ? { hf_token: hfToken } : {}) },
           auth: true,
           signal,
         }),

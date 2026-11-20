@@ -82,6 +82,11 @@ streichen.
 - [ ] **Import über Links:** der Server ruft die Datei beim Anbieter des Links ab (dieser
       sieht die Server-IP); gespeichert wird der Link ohne Query-Teil.
       `BRICKDNN_DATA_URL_IMPORT=false` schaltet das ab.
+- [ ] **Hugging Face** (docs/huggingface.md): nur wenn die Person es selbst auslöst, lädt
+      der Server die Dateien eines Trainings in ihr Hugging-Face-Konto hoch bzw. ruft
+      einen Datensatz bei Hugging Face, Inc. (USA) ab; das Zugriffstoken wird nur für
+      diese Anfrage verwendet und nicht gespeichert. Art. 6 Abs. 1 lit. b.
+      `BRICKDNN_HUGGINGFACE=false` schaltet das ab.
 - [ ] **Echtzeit-Bearbeitung** (WebSockets, Redis nur im Arbeitsspeicher): andere Mitglieder
       sehen Benutzername und Auswahl; nichts davon wird gespeichert.
 - [ ] **Keine Cookies, kein Tracking:** localStorage für Login-Token (Login höchstens 7 Tage

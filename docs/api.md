@@ -448,6 +448,8 @@ Training runs on the server in a separate process per run, see [training.md](tra
 | PATCH  | `/api/training/runs/<id>/ensemble/`    | An ensemble's weights `{weights}` (weighted average only; only who created it) |
 | GET    | `/api/training/runs/<id>/previews/`    | Segmentation runs: validation images with their mask and the predicted mask (`404` without) |
 | GET    | `/api/training/runs/<id>/previews/<name>` | One of those pictures as a PNG file           |
+| GET    | `/api/training/runs/<id>/huggingface/` | What publishing the run to the Hugging Face Hub would upload: files, sizes and the model card ([huggingface.md](huggingface.md#api)) |
+| POST   | `/api/training/runs/<id>/huggingface/` | Publish the run as a model repository `{hf_token, repo?, private?, license?, update_existing?}`; the token is used for this request only |
 | GET    | `/api/training/runs/<id>/explain/`     | Which explanations work for the run, and why the others do not |
 | POST   | `/api/training/runs/<id>/explain/`     | Explain the trained model `{method, sample? \| input?, input_scale?, target?, layer?, node?}` |
 
@@ -1318,6 +1320,15 @@ switched off (`BRICKDNN_DATA_URL_IMPORT=false`, `url_import: false` in `GET /api
 `BRICKDNN_DATA_URL_ALLOW_PRIVATE=true` allows private addresses for installations in a trusted
 network. Link imports count against the same rate limit as uploads. Details:
 [data preparation](data-preparation.md#security-of-link-imports).
+
+**Import from the Hugging Face Hub.** `POST /api/data/huggingface/files/` with
+`{"dataset": "hf://datasets/<owner>/<name>", "hf_token"?}` (also `<owner>/<name>` or the
+link of the dataset's page) lists the CSV, TSV, JSON, JSON Lines and Parquet files of a
+dataset with `size`, `format`, `config`, `split` and `ref`. Send a file's `ref`
+(`hf://datasets/<owner>/<name>/<path>`) as the `url` of the import above; `hf_token` (a
+Hugging Face access token, used for this request only and never stored) reads gated and
+private datasets. `403` when it is switched off (`huggingface: false` in `GET /api/data/`).
+See [huggingface.md](huggingface.md#importing-a-dataset-file).
 
 ```bash
 curl -X POST http://localhost:8080/api/data/sources/ -H "Authorization: Bearer $TOKEN" \

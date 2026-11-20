@@ -108,7 +108,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `list_approvals`        | read   |             | The approval requests of this token or app                      |
 | `list_data_sources`     | read   |             | Your imported data files, and what `import_data` accepts        |
 | `get_data_source`       | read   |             | One imported file: columns with types, import report, first rows |
-| `import_data`           | full   |             | Import a file (CSV/JSON text, base64 for Excel/Parquet …, or a public link) |
+| `import_data`           | full   |             | Import a file (CSV/JSON text, base64 for Excel/Parquet …, a public link, or a file of a dataset on the Hugging Face Hub: `hf://datasets/<owner>/<name>/<path>`) |
 | `delete_data_source`    | full   | yes         | Delete an imported file (owner; not while a preparation uses it) |
 | `list_data_preps`       | read   |             | Your data preparations and the ones shared with you             |
 | `get_data_prep`         | read   |             | One preparation: source, settings, steps, exported datasets     |
@@ -128,6 +128,7 @@ Locally the URL is `http://localhost:8000/api/mcp/` (`make backend`) or
 | `stop_training`         | full   |             | Stop a run after the current batch, or cancel a queued one (starter, project editors) |
 | `delete_training_run`   | full   | yes         | Delete a run with its weights (starter, project owner)          |
 | `get_weights_download`  | read   |             | Short-lived download link for the trained weights, with model code and preprocessing |
+| `publish_to_huggingface` | full  |             | Publish a finished run as a model repository on the Hugging Face Hub, with the user's access token for this call only ([huggingface.md](huggingface.md#mcp)) |
 | `predict`               | read   |             | Run a trained network on up to 64 samples, or on image files (base64) |
 | `set_decision_threshold` | full  |             | Binary classification: the threshold `predict` uses (0–1; who started the run) |
 | `create_ensemble`       | full   |             | Combine 2–10 finished runs of one dataset into an ensemble: weighted average or stacking ([Ensembles](#ensembles)) |
@@ -633,7 +634,11 @@ app (API tokens page, next to its budget):
     preparation (with its data file) in a project. The upload or the new preparation is done
     right away for you alone; only the sharing waits;
   - `create_upload_link` for a training dataset with `project_id`: the link is made once
-    approved (and is valid for 15 minutes from then).
+    approved (and is valid for 15 minutes from then);
+  - `publish_to_huggingface`: uploading a run to the Hugging Face Hub. The assistant has
+    the access token and Brick DNN never stores it, so approving does not upload: it
+    allows the assistant to publish exactly what it asked for (run, repository, public or
+    private, licence) once within 24 hours, by calling the tool again with `approval_id`.
 
   MCP has no tools for share links of networks or for inviting people; with an API token the
   REST API has (see below).

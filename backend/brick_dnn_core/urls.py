@@ -10,6 +10,8 @@ from . import (
     data_views,
     experiments_views,
     explain_views,
+    hub_datasets,
+    hub_publish,
     legal,
     mcp,
     oauth,
@@ -177,6 +179,18 @@ urlpatterns = [
         name="training-run-preview-file",
     ),
     path("training/check/", views.training_check, name="training-check"),
+    # Publishing a run to the Hugging Face Hub (hub_publish.py).
+    path(
+        "training/runs/<uuid:pk>/huggingface/",
+        hub_publish.PublishView.as_view(),
+        name="training-run-huggingface",
+    ),
+    # The files of a dataset on the Hugging Face Hub (hub_datasets.py).
+    path(
+        "data/huggingface/files/",
+        hub_datasets.DatasetFilesView.as_view(),
+        name="data-huggingface-files",
+    ),
     # Runs trained elsewhere that a script logs with an API token (tracking.py).
     path("tracking/runs/", tracking.TrackingRunsView.as_view(), name="tracking-runs"),
     path("tracking/runs/<uuid:pk>/", tracking.TrackingRunView.as_view(), name="tracking-run"),

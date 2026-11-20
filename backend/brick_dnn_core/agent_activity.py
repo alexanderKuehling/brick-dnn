@@ -106,9 +106,10 @@ SECRET_WORDS = (
 )
 SECRET_KEYS = {"key", "sig", "signature", "code", "refresh", "access"}
 # Values that look like credentials wherever they appear: API tokens (bdnn_…), refresh tokens
-# of apps (bdnr_…) and JWTs.
+# of apps (bdnr_…), JWTs and Hugging Face access tokens (hf_…).
 SECRET_VALUE = re.compile(
     r"bdn[nr]_[A-Za-z0-9_-]{6,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]*)?"
+    r"|hf_[A-Za-z0-9]{8,}"
 )
 # Texts kept in full (up to MAX_NAME characters); other texts longer than MAX_SHORT characters
 # are stored as their length only.
@@ -355,6 +356,7 @@ PAST_TENSE = {
     "open": "Opened",
     "predict": "Predicted",
     "preview": "Previewed",
+    "publish": "Published",
     "read": "Read",
     "remove": "Removed",
     "rename": "Renamed",
@@ -737,6 +739,18 @@ def _weights_download(user, args, result) -> Described:
     )
 
 
+def _publish_to_hub(user, args, result) -> Described:
+    ref, project = _run_targets(user, args.get("run_id"), None)
+    repo = result.get("repo_id") if isinstance(result, Mapping) else None
+    where = f" as “{clean_text(repo, MAX_NAME)}”" if isinstance(repo, str) else ""
+    return Described(
+        f"publish {phrase_of(ref, 'run')} to Hugging Face",
+        result=where,
+        targets=[ref] if ref else [],
+        project_id=project,
+    )
+
+
 def _predict(user, args, result) -> Described:
     ref, project = _run_targets(user, args.get("run_id"), None)
     inputs, image = args.get("inputs"), args.get("image")
@@ -923,6 +937,9 @@ REST_PHRASES: dict[tuple[str, str], str] = {
     ("training-dataset-list", "POST"): "upload {object}",
     ("training-dataset-detail", "GET"): "open {object}",
     ("training-run-weights", "GET"): "download the weights of {object}",
+    ("training-run-huggingface", "GET"): "look at what publishing {object} would upload",
+    ("training-run-huggingface", "POST"): "publish {object} to Hugging Face",
+    ("data-huggingface-files", "POST"): "list the files of a dataset on Hugging Face",
     ("training-run-ensemble", "PATCH"): "change the weights of {object}",
     ("training-run-predict-file", "POST"): "predict a file with {object}",
     ("training-run-predict-file-result", "GET"): "download a predicted file of {object}",
@@ -1065,6 +1082,7 @@ TOOL_DESCRIPTIONS.update(
         "delete_data_prep": _data_tool("delete", "data_prep", answer=("preparation", "prep")),
         "delete_data_source": _data_tool("delete", "data_source", answer=("source",)),
         "get_usage": lambda user, args, result: Described("look up its usage and budget"),
+        "publish_to_huggingface": _publish_to_hub,
     }
 )
 

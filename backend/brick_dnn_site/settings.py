@@ -355,6 +355,15 @@ DATA_IMPORT_TIMEOUT = int(os.environ.get("BRICKDNN_DATA_IMPORT_TIMEOUT", "270"))
 # that import from servers in their own network).
 DATA_URL_IMPORT_ENABLED = env_bool("BRICKDNN_DATA_URL_IMPORT", True)
 DATA_URL_ALLOW_PRIVATE = env_bool("BRICKDNN_DATA_URL_ALLOW_PRIVATE", False)
+# The Hugging Face Hub (docs/huggingface.md): publishing trained runs as model repositories
+# and importing dataset files, both only when a user starts it, with the user's own access
+# token for that one request (never stored). BRICKDNN_HUGGINGFACE_URL points to another Hub
+# (a fake one in tests); BRICKDNN_HUGGINGFACE_PROXY sends the API requests through a proxy.
+HUGGINGFACE_ENABLED = env_bool("BRICKDNN_HUGGINGFACE", True)
+HUGGINGFACE_URL = os.environ.get("BRICKDNN_HUGGINGFACE_URL", "").strip() or "https://huggingface.co"
+HUGGINGFACE_PROXY = os.environ.get("BRICKDNN_HUGGINGFACE_PROXY", "").strip()
+# The files of one publish together (weights, script, model card ...), in megabytes.
+HUGGINGFACE_MAX_UPLOAD_MB = env_number("BRICKDNN_HUGGINGFACE_MAX_UPLOAD_MB", 250)
 # Rows in a preview sample (the data table and the charts): default and maximum.
 DATA_SAMPLE_ROWS = 5000
 DATA_MAX_SAMPLE_ROWS = 20000
@@ -387,6 +396,8 @@ REST_FRAMEWORK = {
         "predict": os.environ.get("BRICKDNN_PREDICT_RATE", "120/hour"),
         # Previews of data preparations (one per change in the Data tab).
         "data": os.environ.get("BRICKDNN_DATA_RATE", "1200/hour"),
+        # Publishing runs to the Hugging Face Hub and listing the files of its datasets.
+        "huggingface": os.environ.get("BRICKDNN_HUGGINGFACE_RATE", "30/hour"),
         # Requests to the MCP server (one per tool call of an AI assistant).
         "mcp": os.environ.get("BRICKDNN_MCP_RATE", "600/hour"),
         # Inviting people to a project and changing its link.
