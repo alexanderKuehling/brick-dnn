@@ -1344,6 +1344,182 @@ msgstr ""
 "balanced: gewichtet die Klassen umgekehrt proportional zu ihrer Häufigkeit (für unausgewogene Daten, z. B. wenige Prozent Positive)."
 
 #: catalog
+msgid "XGBoost regression"
+msgstr "XGBoost-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with XGBoost's gradient-boosted trees: a favourite of tabular competitions. Connect the Input (features). Early stopping on the validation rows picks the number of trees. Needs the xgboost package on the server."
+msgstr ""
+"Sagt eine Zahl mit den geboosteten Entscheidungsbäumen von XGBoost vorher: ein Favorit in Wettbewerben auf Tabellendaten. Verbinden Sie den Input (Merkmale). Early Stopping auf den Validierungszeilen wählt die Zahl der Bäume. Braucht das Paket xgboost auf dem Server."
+
+#: catalog
+msgid "Max. trees"
+msgstr "Max. Bäume"
+
+#: catalog
+msgid ""
+"Boosting rounds: one tree each (a classifier with more than two classes may fit one tree per class and round). Early stopping usually ends sooner."
+msgstr ""
+"Boosting-Runden: je ein Baum (ein Klassifikator mit mehr als zwei Klassen passt unter Umständen je Klasse und Runde einen Baum an). Early Stopping endet meist früher."
+
+#: catalog
+msgid ""
+"How much each tree corrects the trees before it. Smaller values need more trees but often generalise better."
+msgstr ""
+"Wie stark jeder Baum die Bäume vor ihm korrigiert. Kleinere Werte brauchen mehr Bäume, verallgemeinern aber oft besser."
+
+#: catalog
+msgid ""
+"Every tree is at most this deep. Deeper trees capture more interactions between the features."
+msgstr ""
+"Jeder Baum ist höchstens so tief. Tiefere Bäume erfassen mehr Wechselwirkungen zwischen den Merkmalen."
+
+#: catalog
+msgid "Min. child weight"
+msgstr "Min. Gewicht je Kind"
+
+#: catalog
+msgid ""
+"A split needs at least this much weight (for squared errors: rows) on both sides. Larger values regularise more."
+msgstr ""
+"Eine Teilung braucht auf beiden Seiten mindestens so viel Gewicht (bei quadratischen Fehlern: Zeilen). Größere Werte regularisieren stärker."
+
+#: catalog
+msgid "Row sample"
+msgstr "Zeilenstichprobe"
+
+#: catalog
+msgid ""
+"Each tree sees this share of the training rows (1: all). Values such as 0.8 add randomness and often generalise better."
+msgstr ""
+"Jeder Baum sieht diesen Anteil der Trainingszeilen (1: alle). Werte wie 0,8 bringen Zufall hinein und verallgemeinern oft besser."
+
+#: catalog
+msgid "Column sample"
+msgstr "Spaltenstichprobe"
+
+#: catalog
+msgid ""
+"Each tree sees this share of the features (1: all). Values such as 0.8 add randomness and often generalise better."
+msgstr ""
+"Jeder Baum sieht diesen Anteil der Merkmale (1: alle). Werte wie 0,8 bringen Zufall hinein und verallgemeinern oft besser."
+
+#: catalog
+msgid "L1 regularisation"
+msgstr "L1-Regularisierung"
+
+#: catalog
+msgid "Penalises leaf values (0: none)."
+msgstr "Bestraft Blattwerte (0: keine Strafe)."
+
+#: catalog
+msgid "Penalises large leaf values."
+msgstr "Bestraft große Blattwerte."
+
+#: catalog
+msgid "Early stopping rounds"
+msgstr "Early-Stopping-Runden"
+
+#: catalog
+msgid ""
+"Stop adding trees when the loss on the validation rows has not improved for this many rounds, and keep the best round (0: off, all trees). Not used without validation rows, in an ensemble or in a cross-validated search."
+msgstr ""
+"Keine Bäume mehr hinzufügen, wenn sich der Verlust auf den Validierungszeilen so viele Runden lang nicht verbessert hat, und die beste Runde behalten (0: aus, alle Bäume). Nicht verwendet ohne Validierungszeilen, in einem Ensemble oder in einer kreuzvalidierten Suche."
+
+#: catalog
+msgid ""
+"Seed for the random choices of the fit (row and column samples). The same seed gives the same model."
+msgstr ""
+"Startwert für die Zufallsentscheidungen der Anpassung (Zeilen- und Spaltenstichproben). Derselbe Startwert ergibt dasselbe Modell."
+
+#: catalog
+msgid "XGBoost classification"
+msgstr "XGBoost-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with XGBoost's gradient-boosted trees, with class probabilities: a favourite of tabular competitions. Connect the Input (features); the classes come from the data. For a rare class of two, raise Positive class weight. Needs the xgboost package on the server."
+msgstr ""
+"Klassifiziert mit den geboosteten Entscheidungsbäumen von XGBoost, mit Klassenwahrscheinlichkeiten: ein Favorit in Wettbewerben auf Tabellendaten. Verbinden Sie den Input (Merkmale); die Klassen kommen aus den Daten. Ist eine von zwei Klassen selten, erhöhen Sie das Gewicht der positiven Klasse. Braucht das Paket xgboost auf dem Server."
+
+#: catalog
+msgid "Positive class weight"
+msgstr "Gewicht der positiven Klasse"
+
+#: catalog
+msgid ""
+"Two classes only: weight of the rows of the second class (in sorted order), e.g. negatives / positives (19 for 5 % positives) for a rare positive class. 1: no weighting."
+msgstr ""
+"Nur bei zwei Klassen: Gewicht der Zeilen der zweiten Klasse (in sortierter Reihenfolge), z. B. Negative / Positive (19 bei 5 % Positiven) für eine seltene positive Klasse. 1: keine Gewichtung."
+
+#: catalog
+msgid "LightGBM regression"
+msgstr "LightGBM-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with LightGBM's gradient-boosted trees (grown leaf by leaf): fast on large tables. Connect the Input (features). Early stopping on the validation rows picks the number of trees. Needs the lightgbm package on the server."
+msgstr ""
+"Sagt eine Zahl mit den geboosteten Entscheidungsbäumen von LightGBM vorher (Blatt für Blatt gewachsen): schnell auf großen Tabellen. Verbinden Sie den Input (Merkmale). Early Stopping auf den Validierungszeilen wählt die Zahl der Bäume. Braucht das Paket lightgbm auf dem Server."
+
+#: catalog
+msgid ""
+"LightGBM grows its trees leaf by leaf: this limits their size. More leaves capture more interactions between the features."
+msgstr ""
+"LightGBM lässt seine Bäume Blatt für Blatt wachsen: Das begrenzt ihre Größe. Mehr Blätter erfassen mehr Wechselwirkungen zwischen den Merkmalen."
+
+#: catalog
+msgid "LightGBM classification"
+msgstr "LightGBM-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with LightGBM's gradient-boosted trees (grown leaf by leaf), with class probabilities: fast on large tables. Connect the Input (features); the classes come from the data. For rare classes, set Class weights to balanced. Needs the lightgbm package on the server."
+msgstr ""
+"Klassifiziert mit den geboosteten Entscheidungsbäumen von LightGBM (Blatt für Blatt gewachsen), mit Klassenwahrscheinlichkeiten: schnell auf großen Tabellen. Verbinden Sie den Input (Merkmale); die Klassen kommen aus den Daten. Für seltene Klassen setzen Sie die Klassengewichte auf ausgeglichen. Braucht das Paket lightgbm auf dem Server."
+
+#: catalog
+msgid "CatBoost regression"
+msgstr "CatBoost-Regression"
+
+#: catalog
+msgid ""
+"Predicts a number with CatBoost's gradient-boosted symmetric trees: robust with little tuning. Connect the Input (features). Early stopping on the validation rows keeps the best number of trees. Needs the catboost package on the server."
+msgstr ""
+"Sagt eine Zahl mit den geboosteten symmetrischen Bäumen von CatBoost vorher: robust mit wenig Feinabstimmung. Verbinden Sie den Input (Merkmale). Early Stopping auf den Validierungszeilen behält die beste Zahl von Bäumen. Braucht das Paket catboost auf dem Server."
+
+#: catalog
+msgid "Depth"
+msgstr "Tiefe"
+
+#: catalog
+msgid ""
+"Depth of every tree (CatBoost grows symmetric trees: the same split on each level). 4 to 10 is the usual range."
+msgstr ""
+"Tiefe jedes Baums (CatBoost baut symmetrische Bäume: dieselbe Teilung auf jeder Ebene). Üblich sind 4 bis 10."
+
+#: catalog
+msgid "Penalises large leaf values. Larger values regularise more."
+msgstr "Bestraft große Blattwerte. Größere Werte regularisieren stärker."
+
+#: catalog
+msgid "CatBoost classification"
+msgstr "CatBoost-Klassifikation"
+
+#: catalog
+msgid ""
+"Classifies with CatBoost's gradient-boosted symmetric trees, with class probabilities: robust with little tuning. Connect the Input (features); the classes come from the data. For rare classes, set Class weights to Balanced. Needs the catboost package on the server."
+msgstr ""
+"Klassifiziert mit den geboosteten symmetrischen Bäumen von CatBoost, mit Klassenwahrscheinlichkeiten: robust mit wenig Feinabstimmung. Verbinden Sie den Input (Merkmale); die Klassen kommen aus den Daten. Für seltene Klassen setzen Sie die Klassengewichte auf Balanced. Braucht das Paket catboost auf dem Server."
+
+#: catalog
+msgid ""
+"Balanced: weight the classes inversely to their frequency; SqrtBalanced: by the square root of that (milder). For imbalanced data."
+msgstr ""
+"Balanced: die Klassen umgekehrt zu ihrer Häufigkeit gewichten; SqrtBalanced: mit der Wurzel davon (milder). Für unausgewogene Daten."
+
+#: catalog
 msgid "Voting classifier"
 msgstr "Voting-Klassifikator"
 
@@ -1522,6 +1698,18 @@ msgid ""
 "A hybrid network for tables of 8 numeric features: an MLP learns 32 features (first with a temporary linear head on the target), then gradient-boosted trees are fitted on them and predict the class. Set the Input to the number of feature columns of your data."
 msgstr ""
 "Ein hybrides Netz für Tabellen mit 8 numerischen Merkmalen: Ein MLP lernt 32 Merkmale (zuerst mit einem temporären linearen Kopf auf der Zielspalte), dann werden gradient-geboostete Bäume darauf angepasst und sagen die Klasse vorher. Setzen Sie die Eingabe auf die Anzahl der Merkmalsspalten Ihrer Daten."
+
+#: catalog
+msgid ""
+"A classical model (LightGBM): gradient-boosted trees, grown leaf by leaf, classify rows of 20 numeric features and give class probabilities. Up to 1,000 trees with a learning rate of 0.05; early stopping on the validation rows keeps the best number of them. Each tree sees 80 % of the rows and of the features, and balanced class weights help with rare classes. A favourite of tabular competitions."
+msgstr ""
+"Ein klassisches Modell (LightGBM): Geboostete Entscheidungsbäume, Blatt für Blatt gewachsen, klassifizieren Zeilen aus 20 numerischen Merkmalen und geben Klassenwahrscheinlichkeiten. Bis zu 1.000 Bäume mit der Lernrate 0,05; Early Stopping auf den Validierungszeilen behält die beste Zahl davon. Jeder Baum sieht 80 % der Zeilen und der Merkmale, und ausgeglichene Klassengewichte helfen bei seltenen Klassen. Ein Favorit in Wettbewerben auf Tabellendaten."
+
+#: catalog
+msgid ""
+"An ensemble of the three gradient boosting libraries of tabular competitions: XGBoost, LightGBM and CatBoost classify rows of 20 numeric features, and a logistic regression learns from their class probabilities for rows they were not fitted on (5-fold cross-validation) how much to trust each of them. In an ensemble the models fit all their trees (no early stopping), so their number is set lower. The dotted connections into the stacking brick carry the models themselves."
+msgstr ""
+"Ein Ensemble aus den drei Gradient-Boosting-Bibliotheken der Tabellen-Wettbewerbe: XGBoost, LightGBM und CatBoost klassifizieren Zeilen aus 20 numerischen Merkmalen, und eine logistische Regression lernt aus ihren Klassenwahrscheinlichkeiten für Zeilen, an die sie nicht angepasst wurden (5-fache Kreuzvalidierung), wie sehr sie jedem davon trauen kann. In einem Ensemble passen die Modelle alle ihre Bäume an (kein Early Stopping), daher ist ihre Zahl kleiner gewählt. Die gepunkteten Verbindungen zum Stacking-Baustein tragen die Modelle selbst."
 
 #: catalog
 msgid "Combine data"
@@ -3310,6 +3498,44 @@ msgstr ""
 "balanced gewichtet die Klassen umgekehrt proportional zu ihrer Häufigkeit."
 
 #: catalog
+msgid "max. trees"
+msgstr "max. Bäume"
+
+#: catalog
+msgid "min. child weight"
+msgstr "min. Gewicht je Kind"
+
+#: catalog
+msgid "row sample"
+msgstr "Zeilenstichprobe"
+
+#: catalog
+msgid "The share each tree sees (at most 1)."
+msgstr "Der Anteil, den jeder Baum sieht (höchstens 1)."
+
+#: catalog
+msgid "column sample"
+msgstr "Spaltenstichprobe"
+
+#: catalog
+msgid "positive class weight"
+msgstr "Gewicht der positiven Klasse"
+
+#: catalog
+msgid "Two classes only: the weight of the rows of the second class."
+msgstr "Nur bei zwei Klassen: das Gewicht der Zeilen der zweiten Klasse."
+
+#: catalog
+msgid "depth"
+msgstr "Tiefe"
+
+#: catalog
+msgid ""
+"Balanced weights the classes inversely to their frequency, SqrtBalanced by the square root of that."
+msgstr ""
+"Balanced gewichtet die Klassen umgekehrt zu ihrer Häufigkeit, SqrtBalanced mit der Wurzel davon."
+
+#: catalog
 msgid "C"
 msgstr "C"
 
@@ -3526,6 +3752,13 @@ msgstr ""
 
 #: brickdnn
 msgctxt "brickdnn"
+msgid ""
+"Each tree sees this share of the {0} (1: all). Values such as 0.8 add randomness and often generalise better."
+msgstr ""
+"Jeder Baum sieht diesen Anteil von {0} (1: alles). Werte wie 0,8 bringen Zufall hinein und verallgemeinern oft besser."
+
+#: brickdnn
+msgctxt "brickdnn"
 msgid "Unknown layer type '{0}'."
 msgstr "Unbekannter Schichttyp '{0}'."
 
@@ -3604,6 +3837,11 @@ msgstr "Die Lernrate muss größer als 0 sein."
 
 #: brickdnn
 msgctxt "brickdnn"
+msgid "Positive class weight must be greater than 0."
+msgstr "Das Gewicht der positiven Klasse muss größer als 0 sein."
+
+#: brickdnn
+msgctxt "brickdnn"
 msgid ""
 "Weights has {0} value{1}, but {2} models are connected (in this order: {3})."
 msgstr ""
@@ -3662,6 +3900,13 @@ msgstr "Die Grenzen von {0} müssen positiv sein, die untere unter der oberen."
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
+"Hard voting counts the classes the models predict, but {0} ({1}) predicts them in a shape scikit-learn cannot count. Choose soft voting."
+msgstr ""
+"Hard Voting zählt die Klassen, die die Modelle vorhersagen, aber {0} ({1}) sagt sie in einer Form vorher, die scikit-learn nicht zählen kann. Wählen Sie Soft Voting."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
 "A network with one output per pixel is trained on a segmentation dataset (images with masks), e.g. the built-in Shapes or Cells."
 msgstr ""
 "Ein Netz mit einer Ausgabe pro Pixel wird auf einem Segmentierungsdatensatz (Bilder mit Masken) trainiert, z. B. den eingebauten Shapes oder Cells."
@@ -3693,6 +3938,13 @@ msgid ""
 "Gradient boosting has early stopping of its own (a setting of the brick): it holds out 10 % of the training rows and stops adding trees when the loss on them no longer improves."
 msgstr ""
 "Gradient Boosting hat ein eigenes Early Stopping (eine Einstellung des Bausteins): Es hält 10 % der Trainingszeilen zurück und fügt keine Bäume mehr hinzu, wenn sich der Verlust darauf nicht mehr verbessert."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"XGBoost, LightGBM and CatBoost stop adding trees when the loss on the validation rows has not improved for Early stopping rounds, and keep the best round: the validation metrics are then a little optimistic, the test rows are not used. Without validation rows, in an ensemble and in a cross-validated search they fit all their trees."
+msgstr ""
+"XGBoost, LightGBM und CatBoost fügen keine Bäume mehr hinzu, wenn sich der Verlust auf den Validierungszeilen so viele Runden lang nicht verbessert hat, wie Early-Stopping-Runden angeben, und behalten die beste Runde: Die Validierungsmetriken sind dann etwas optimistisch, die Testzeilen werden nicht verwendet. Ohne Validierungszeilen, in einem Ensemble und in einer kreuzvalidierten Suche passen sie alle ihre Bäume an."
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -3964,6 +4216,13 @@ msgstr "Segmentierung in {0} Klassen bei {1} Pixeln ({2}, {3})."
 msgctxt "brickdnn"
 msgid "Vocabulary size of the Embedding {0} → {1}"
 msgstr "Vokabulargröße des Embeddings {0} → {1}"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"The library {0} is not installed on this server, so {1} cannot be trained here. Install it with: pip install {2}"
+msgstr ""
+"Die Bibliothek {0} ist auf diesem Server nicht installiert, daher kann {1} hier nicht trainiert werden. Installieren Sie sie mit: pip install {2}"
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -4387,6 +4646,13 @@ msgstr ""
 #: brickdnn
 msgctxt "brickdnn"
 msgid ""
+"Early stopping needs validation rows (set a validation split above 0): {0} fits all its trees."
+msgstr ""
+"Early Stopping braucht Validierungszeilen (setzen Sie einen Validierungsanteil über 0): {0} passt alle seine Bäume an."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
 "Out of memory while fitting {0} rows. Set Max. samples to fit on fewer rows."
 msgstr ""
 "Kein Speicher mehr beim Anpassen von {0} Zeilen. Setzen Sie Max. Stichproben, um auf weniger Zeilen anzupassen."
@@ -4405,6 +4671,13 @@ msgstr "{0} auf {1} Zeilen in {2} angepasst."
 msgctxt "brickdnn"
 msgid "Measuring the fitted model …"
 msgstr "Das angepasste Modell wird gemessen …"
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"Early stopping only watches the validation rows when the trials are compared on them, not in a cross-validation: {0} fits all its trees in this search."
+msgstr ""
+"Early Stopping beobachtet die Validierungszeilen nur, wenn die Versuche auf ihnen verglichen werden, nicht in einer Kreuzvalidierung: {0} passt in dieser Suche alle seine Bäume an."
 
 #: brickdnn
 msgctxt "brickdnn"
@@ -4454,6 +4727,13 @@ msgstr "Der Datensatz hat keine Datei. Laden Sie ihn erneut hoch."
 msgctxt "brickdnn"
 msgid "The CSV file was not found. Upload it again."
 msgstr "Die CSV-Datei wurde nicht gefunden. Laden Sie sie erneut hoch."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid ""
+"XGBoost needs training rows of every class up to the last one, but the class '{0}' has none. Use more rows, or LightGBM or CatBoost, which take any classes."
+msgstr ""
+"XGBoost braucht Trainingszeilen jeder Klasse bis zur letzten, aber die Klasse '{0}' hat keine. Verwenden Sie mehr Zeilen oder LightGBM oder CatBoost, die beliebige Klassen nehmen."
 
 #: brickdnn
 msgctxt "brickdnn"

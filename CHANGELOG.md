@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Added
+- **XGBoost, LightGBM and CatBoost bricks.** The gradient boosting libraries of tabular
+  competitions are classical model bricks, each for regression and classification
+  (`XGBRegressor`, `XGBClassifier`, `LGBMRegressor`, `LGBMClassifier`, `CatBoostRegressor`,
+  `CatBoostClassifier`), with a short list of settings: max. trees, learning rate, the size of
+  the trees, row and column samples, L1/L2 regularisation, early stopping rounds and random
+  state, and for rare classes XGBoost's positive class weight, LightGBM's class weights or
+  CatBoost's auto class weights. Early stopping (50 rounds by default) watches the validation
+  rows of the run and keeps the best round; the run reports the trees kept. They work
+  wherever scikit-learn's gradient boosting does: training, hyperparameter search (with
+  default search spaces), soft voting and stacking ensembles (their models fit all their
+  trees there), the classical head of a hybrid network, single and file predictions,
+  explanations, the joblib download and the generated script, which builds the estimator of
+  the library and passes it the validation rows for early stopping. Their fits use one thread
+  on small data and `OMP_NUM_THREADS` otherwise (CatBoost's `thread_count` is set from it).
+  The libraries are server dependencies (`xgboost-cpu`, `lightgbm`, `catboost`; the image
+  gains `libgomp1` and about 420 MB, most of it CatBoost); the `brickdnn` package does not
+  need them, and without one the check says that it is not installed. Two new examples:
+  *LightGBM classifier* and *XGBoost, LightGBM and CatBoost stacked*. Text columns are still
+  one-hot encoded in the Data tab; the native categorical handling of CatBoost and LightGBM is
+  not used yet.
 - **Runs page: select all.** The runs table has a checkbox in its header that selects all runs
   of the page, or none of them (indeterminate, `aria-checked="mixed"`, while some are
   selected); runs selected on other pages stay. The line above the table counts them

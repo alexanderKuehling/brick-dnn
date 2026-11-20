@@ -34,13 +34,23 @@ const gallery: ExampleGallery = {
     {
       title: 'Klassische Modelle',
       intro:
-        'Modelle von scikit-learn für Tabellendaten, aus Bausteinen gebaut wie die Netze: Gradient Boosting, eine Support Vector Machine und Gauß-Prozesse mit Kerneln.',
-      ids: ['gradient_boosting_classifier', 'svm_classifier', 'gp_regression', 'periodic_gp'],
+        'Modelle für Tabellendaten, aus Bausteinen gebaut wie die Netze: Gradient Boosting mit scikit-learn oder LightGBM, eine Support Vector Machine und Gauß-Prozesse mit Kerneln.',
+      ids: [
+        'gradient_boosting_classifier',
+        'lightgbm_classifier',
+        'svm_classifier',
+        'gp_regression',
+        'periodic_gp',
+      ],
     },
     {
       title: 'Ensembles',
       intro: 'Mehrere klassische Modelle, kombiniert durch Abstimmung (Voting) oder Stacking.',
-      ids: ['voting_ensemble_classifier', 'stacking_ensemble_regression'],
+      ids: [
+        'voting_ensemble_classifier',
+        'stacking_ensemble_regression',
+        'boosting_stacking_ensemble',
+      ],
     },
   ],
   note: 'Diagramme, Formen, Parameterzahlen und Code auf diesen Seiten entstehen aus den Beispielen selbst, mit derselben Formprüfung und demselben Code-Generator wie im Editor.',
@@ -364,6 +374,30 @@ const examples: ExampleCopy[] = [
     related: ['svm_classifier', 'voting_ensemble_classifier', 'hybrid_mlp_gradient_boosting'],
   },
   {
+    id: 'lightgbm_classifier',
+    name: 'LightGBM-Klassifikator',
+    title: 'LightGBM-Klassifikator für Tabellendaten – Python-Beispielcode',
+    description:
+      'Ein LightGBM-Klassifikator für 20 numerische Merkmale: bis zu 1.000 blattweise gewachsene Bäume, frühes Stoppen auf den Validierungszeilen, ausgeglichene Klassengewichte.',
+    h1: 'LightGBM-Klassifikator für Tabellendaten',
+    task: 'classification',
+    summary:
+      'LightGBM lässt seine Bäume Blatt für Blatt wachsen; frühes Stoppen auf den Validierungszeilen wählt, wie viele.',
+    lead: 'LightGBM ist eine der Gradient-Boosting-Bibliotheken, mit denen Wettbewerbe auf Tabellendaten gewonnen werden. Dieses Beispiel klassifiziert Zeilen aus 20 numerischen Merkmalen und lässt das frühe Stoppen entscheiden, wie viele Bäume es braucht.',
+    what: [
+      'Der Baustein <code>LGBMClassifier</code> fügt nacheinander Bäume hinzu; jeder korrigiert die Fehler der vorherigen, skaliert mit der Lernrate 0,05. LightGBM lässt jeden Baum Blatt für Blatt wachsen und teilt immer das Blatt, das am meisten bringt, bis zu 31 Blätter (<code>num_leaves</code>) mit je mindestens 20 Zeilen. Jeder Baum sieht 80 % der Trainingszeilen und der Merkmale (<code>subsample</code>, <code>colsample_bytree</code>); das macht die Bäume verschiedener, und das Modell verallgemeinert besser.',
+      'Höchstens 1.000 Bäume (<code>n_estimators</code>): Mit <code>early_stopping_rounds = 50</code> beobachtet die Anpassung den Verlust auf den Validierungszeilen, hört auf, wenn 50 Bäume in Folge ihn nicht verbessert haben, und behält die beste Runde. Die Validierungsmetriken sind dann etwas optimistisch; die Testzeilen bleiben unberührt. <code>class_weight = balanced</code> gewichtet jede Klasse umgekehrt zu ihrer Häufigkeit.',
+    ],
+    when: [
+      'Für Tabellen mit Zehntausenden bis Millionen Zeilen: LightGBM gehört zu den schnellsten Boosting-Bibliotheken. Brick DNN passt es an bis zu 1.000.000 Trainingszeilen an.',
+      'Wenn das letzte Prozent Genauigkeit zählt, etwa in Wettbewerben; kombinieren Sie es mit XGBoost und CatBoost in einem <a href="/de/beispiele/boosting-stacking-ensemble/">Stacking-Ensemble</a>.',
+      'Textspalten werden vorher im Bereich <strong>Daten</strong> One-hot-kodiert, wie bei den anderen klassischen Modellen.',
+    ],
+    train:
+      'Laden Sie eine CSV-Datei mit 20 numerischen Merkmalen und einer Klassenspalte hoch oder nehmen Sie einen Datensatz aus dem Bereich <strong>Daten</strong>, und lassen Sie für das frühe Stoppen einen Validierungsanteil über 0. Der Lauf meldet, wie viele Bäume das frühe Stoppen behalten hat, Genauigkeit, Balanced Accuracy, die Konfusionsmatrix und bei zwei Klassen ROC- und PR-Kurven. Eine Suche über Lernrate, Blätter und Zeilen je Blatt findet bessere Einstellungen; das heruntergeladene Modell läuft im erzeugten Skript, wenn LightGBM installiert ist.',
+    related: ['boosting_stacking_ensemble', 'gradient_boosting_classifier', 'svm_classifier'],
+  },
+  {
     id: 'voting_ensemble_classifier',
     name: 'Voting-Ensemble',
     title: 'Voting-Ensemble in scikit-learn – Beispiel mit Soft Voting',
@@ -410,6 +444,30 @@ const examples: ExampleCopy[] = [
     train:
       'Laden Sie eine CSV-Datei mit acht numerischen Merkmalen und einer numerischen Zielgröße hoch oder verwenden Sie einen Datensatz aus dem Bereich <strong>Daten</strong>. Der Lauf meldet RMSE und R² des Ensembles und jedes einzelnen Modells auf den Validierungszeilen; so sehen Sie, ob das Stacking sein bestes Modell schlägt.',
     related: ['voting_ensemble_classifier', 'gp_regression', 'tabular_regression'],
+  },
+  {
+    id: 'boosting_stacking_ensemble',
+    name: 'XGBoost, LightGBM und CatBoost gestapelt',
+    title: 'Stacking aus XGBoost, LightGBM und CatBoost – Ensemble-Beispiel',
+    description:
+      'Ein Stacking-Ensemble aus XGBoost, LightGBM und CatBoost in Python: Eine logistische Regression lernt aus ihren kreuzvalidierten Wahrscheinlichkeiten die Kombination.',
+    h1: 'Stacking-Ensemble aus XGBoost, LightGBM und CatBoost',
+    task: 'classification',
+    summary:
+      'Die drei Boosting-Bibliotheken der Tabellen-Wettbewerbe, kombiniert durch eine logistische Regression.',
+    lead: 'Wer Wettbewerbe gewinnt, reicht selten ein einzelnes Modell ein. Hier klassifizieren XGBoost, LightGBM und CatBoost dieselben 20 Merkmale, und eine logistische Regression lernt, wie sehr sie jedem davon trauen kann.',
+    what: [
+      'Die drei Modelle bekommen die Merkmale vom <code>Input</code>: <code>XGBClassifier</code> mit 300 Bäumen der Tiefe 6, <code>LGBMClassifier</code> mit 300 blattweise gewachsenen Bäumen mit bis zu 31 Blättern und <code>CatBoostClassifier</code> mit 500 symmetrischen Bäumen der Tiefe 6, alle mit der Lernrate 0,05. Sie bauen ihre Bäume verschieden und machen daher verschiedene Fehler. Die gepunkteten Verbindungen zum <code>StackingClassifier</code> tragen die Modelle selbst.',
+      'Mit <code>cv = 5</code> wird jedes Modell fünfmal angepasst, jedes Mal ohne ein Fünftel der Trainingszeilen, und sagt die Klassenwahrscheinlichkeiten dieses Fünftels vorher. Die logistische Regression lernt aus diesen Vorhersagen für Zeilen, die die Modelle nicht gesehen haben; danach wird jedes Modell noch einmal auf allen Zeilen angepasst. In einem Ensemble bekommen die Modelle keine Validierungszeilen und passen daher alle ihre Bäume an: Das frühe Stoppen ist aus, und die Zahl der Bäume ist kleiner als bei einem einzelnen Modell.',
+    ],
+    when: [
+      'Wenn jede Bibliothek für sich gute Einstellungen erreicht hat und Sie die zusätzliche Genauigkeit der Kombination wollen.',
+      'Für Tabellen bis zu Hunderttausenden Zeilen: Die Anpassung dauert etwa sechsmal so lange wie die der drei Modelle einzeln.',
+      'Um die Bibliotheken zu vergleichen: Der Lauf zeigt die Bewertung jedes Modells neben der des Ensembles.',
+    ],
+    train:
+      'Laden Sie eine CSV-Datei mit 20 numerischen Merkmalen und einer Klassenspalte hoch oder nehmen Sie einen Datensatz aus dem Bereich <strong>Daten</strong>. Das Ensemble trainiert wie ein einzelnes klassisches Modell, mit derselben Auswertung, denselben Erklärungen und demselben Download; das erzeugte Skript braucht installiertes xgboost, lightgbm und catboost.',
+    related: ['lightgbm_classifier', 'stacking_ensemble_regression', 'voting_ensemble_classifier'],
   },
   {
     id: 'hybrid_mlp_gradient_boosting',

@@ -12,12 +12,13 @@ UI can apply with one click (see :func:`suggest_fixes`).
 from __future__ import annotations
 
 import copy
+import importlib.util
 import math
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..graph import Analysis, analyze
-from ..layers import REGISTRY, ClassicalModel, Ensemble, fmt_shape
+from ..layers import BOOSTING_LIBRARIES, REGISTRY, ClassicalModel, Ensemble, fmt_shape
 from .config import (
     NO_VALIDATION_PATIENCE,
     NO_VALIDATION_SEARCH,
@@ -250,11 +251,13 @@ def _check(
     inputs = _input_specs(analysis)
     if analysis.family == "classical":
         _check_classical(result, analysis, dataset, inputs, config)
+        _check_libraries(result, analysis)
         if result.errors:
             result.plan = None
         return result
     if analysis.family == "hybrid":
         _check_hybrid(result, analysis, dataset, config)
+        _check_libraries(result, analysis)
         if result.errors:
             result.plan = None
         return result
@@ -1306,6 +1309,39 @@ BOOSTING_NOTE = (
 )
 
 
+LIBRARY_STOPPING_NOTE = (
+    "XGBoost, LightGBM and CatBoost stop adding trees when the loss on the validation rows has "
+    "not improved for Early stopping rounds, and keep the best round: the validation metrics "
+    "are then a little optimistic, the test rows are not used. Without validation rows, in an "
+    "ensemble and in a cross-validated search they fit all their trees."
+)
+
+
+def missing_library(models: list[ClassicalModel]) -> str | None:
+    """Why ``models`` cannot be fitted here: the first one whose library (XGBoost, LightGBM,
+    CatBoost) is not installed. None: all can."""
+    for model in models:
+        library = model.library
+        if library is not None and importlib.util.find_spec(library) is None:
+            name = BOOSTING_LIBRARIES[library]
+            return (
+                f"The library {name} is not installed on this server, so {model.label} cannot "
+                f"be trained here. Install it with: pip install {library}"
+            )
+    return None
+
+
+def _check_libraries(result: Compatibility, analysis: Analysis) -> None:
+    node = analysis.model
+    if node is None or not isinstance(node.layer, ClassicalModel):
+        return
+    layer = node.layer
+    models = [m.layer for m in layer.members] if isinstance(layer, Ensemble) else [layer]
+    error = missing_library(models)
+    if error is not None:
+        result.errors.append(error)
+
+
 def _models_for(task: str) -> str:
     """The classical models of a task: "GaussianProcessRegressor, SVR or …"."""
     names = [
@@ -1507,8 +1543,10 @@ def _model_notes(layer: ClassicalModel) -> list[str]:
         notes.append(ENSEMBLE_NOTE)
         if layer.type == "VotingClassifier" and layer.p["voting"] == "hard":
             notes.append(HARD_VOTING_NOTE)
-    if any(model.scale == "gradient_boosting" for model in models):
+    if any(model.scale == "gradient_boosting" and model.library is None for model in models):
         notes.append(BOOSTING_NOTE)
+    if any(model.library is not None and model.p["early_stopping_rounds"] for model in models):
+        notes.append(LIBRARY_STOPPING_NOTE)
     return notes
 
 

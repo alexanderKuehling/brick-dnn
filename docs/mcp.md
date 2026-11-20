@@ -210,12 +210,13 @@ predict {run_id, inputs: ["c7 x2 m4 f9 a1 q5 z0 k3 ? x"]} → class "2", tokens
 ```
 
 **Classical models.** The same tools work for Gaussian processes, support vector machines and
-gradient boosting
+gradient boosting (scikit-learn's, XGBoost, LightGBM and CatBoost)
 ([graph-format.md](graph-format.md#classical-models)): the instructions and
 `list_layer_types` explain the kernel bricks (`RBF`, `WhiteKernel`, … combined with
 `KernelSum` and `KernelProduct`) and the models; `analyze_network` reports the kernel
 expression; `generate_pytorch_code` returns a scikit-learn script; `get_training_options`
-says under `classical` whether they can be trained and on how many rows at most;
+says under `classical` whether they can be trained, on how many rows at most and which of
+XGBoost, LightGBM and CatBoost are installed (`libraries`);
 `start_training` fits them once (only `val_split`, `test_split`, `max_samples` and `seed`
 apply; without validation rows the fit is measured on the test rows, or on its training rows);
 `get_training_run` shows the fitted kernel, the support vectors or the boosting iterations in

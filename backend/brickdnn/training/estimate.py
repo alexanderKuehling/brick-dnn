@@ -394,8 +394,10 @@ def _model_cost(
     """CPU seconds to fit one classical model on ``n`` rows and predict all rows (without
     the start of the process), what it is in words and further details."""
     if layer.scale == "gradient_boosting":
-        # At most max_iter iterations: early stopping often ends sooner.
-        trees = int(layer.p["max_iter"]) * (classes if classes > 2 else 1)
+        # At most max_iter iterations (XGBoost, LightGBM, CatBoost: their max. trees): early
+        # stopping often ends sooner.
+        rounds = getattr(layer, "max_trees", None) or layer.p["max_iter"]
+        trees = int(rounds) * (classes if classes > 2 else 1)
         fit = trees * (TREE_CPU_SECONDS + TREE_ROW_FEATURE_CPU_SECONDS * n * features)
         predict = trees * (n_held_out + n) * TREE_PREDICT_CPU_SECONDS
         return fit + predict, f"gradient boosting with up to {trees:,} trees", {"trees": trees}

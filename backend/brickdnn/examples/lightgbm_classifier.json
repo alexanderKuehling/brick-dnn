@@ -1,0 +1,52 @@
+{
+  "id": "lightgbm_classifier",
+  "name": "LightGBM classifier",
+  "description": "A classical model (LightGBM): gradient-boosted trees, grown leaf by leaf, classify rows of 20 numeric features and give class probabilities. Up to 1,000 trees with a learning rate of 0.05; early stopping on the validation rows keeps the best number of them. Each tree sees 80 % of the rows and of the features, and balanced class weights help with rare classes. A favourite of tabular competitions.",
+  "order": 16,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            20
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "lightgbm",
+        "type": "LGBMClassifier",
+        "params": {
+          "n_estimators": 1000,
+          "learning_rate": 0.05,
+          "num_leaves": 31,
+          "min_child_samples": 20,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "reg_alpha": 0.0,
+          "reg_lambda": 0.0,
+          "early_stopping_rounds": 50,
+          "class_weight": "balanced",
+          "random_state": 0
+        },
+        "position": {
+          "x": 280,
+          "y": 0
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-lightgbm",
+        "source": "features",
+        "target": "lightgbm"
+      }
+    ]
+  }
+}

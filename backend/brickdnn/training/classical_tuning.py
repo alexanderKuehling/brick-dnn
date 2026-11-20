@@ -26,7 +26,7 @@ import copy
 from dataclasses import dataclass
 from typing import Any
 
-from ..layers import SVM_KERNELS
+from ..layers import CATBOOST_CLASS_WEIGHTS, SVM_KERNELS
 from .config import ConfigError, TrainingConfig
 from .datasets import DatasetInfo
 from .tabular import has_validation
@@ -134,6 +134,81 @@ _BOOSTING = (
         help="A log range needs a minimum above 0; a list may hold 0.",
     ),
 )
+
+
+# XGBoost, LightGBM, CatBoost: early stopping (a setting of the brick) picks the number of
+# trees on the validation rows, so the trees are rarely worth searching.
+def _trees(name: str, label: str, values: list[int]) -> Tunable:
+    return Tunable(name, label, "int", values, low=1, high=20_000)
+
+
+_LIBRARY_RATE = Tunable(
+    "learning_rate",
+    "learning rate",
+    "float",
+    {"min": 0.01, "max": 0.3},
+    high=10.0,
+    open_low=True,
+    help="How much each tree corrects the ones before.",
+)
+
+
+def _share(name: str, label: str) -> Tunable:
+    return Tunable(
+        name,
+        label,
+        "float",
+        {"min": 0.5, "max": 1.0},
+        high=1.0,
+        open_low=True,
+        log=False,
+        help="The share each tree sees (at most 1).",
+    )
+
+
+_PENALTY_HELP = "A log range needs a minimum above 0; a list may hold 0."
+_XGBOOST = (
+    _LIBRARY_RATE,
+    _trees("n_estimators", "max. trees", [200, 500, 1000]),
+    Tunable("max_depth", "max. depth", "int", [3, 6, 9], low=1, high=30),
+    Tunable("min_child_weight", "min. child weight", "float", {"min": 1, "max": 10}, high=1e4),
+    _share("subsample", "row sample"),
+    _share("colsample_bytree", "column sample"),
+    Tunable("reg_alpha", "L1 regularisation", "float", [0, 0.1, 1], high=1e4, help=_PENALTY_HELP),
+    Tunable("reg_lambda", "L2 regularisation", "float", [0.1, 1, 10], high=1e4, help=_PENALTY_HELP),
+)
+_LIGHTGBM = (
+    _LIBRARY_RATE,
+    _trees("n_estimators", "max. trees", [200, 500, 1000]),
+    Tunable(
+        "num_leaves", "max. leaves per tree", "int", {"min": 15, "max": 127}, low=2, high=131_072
+    ),
+    Tunable(
+        "max_depth",
+        "max. depth",
+        "int",
+        [None, 6, 10],
+        low=1,
+        high=100,
+        none=True,
+        help="null (no limit) is allowed in a list.",
+    ),
+    Tunable(
+        "min_child_samples", "min. rows per leaf", "int", {"min": 5, "max": 100}, low=1, high=1e6
+    ),
+    _share("subsample", "row sample"),
+    _share("colsample_bytree", "column sample"),
+    Tunable("reg_alpha", "L1 regularisation", "float", [0, 0.1, 1], high=1e4, help=_PENALTY_HELP),
+    Tunable(
+        "reg_lambda", "L2 regularisation", "float", [0, 0.1, 1, 10], high=1e4, help=_PENALTY_HELP
+    ),
+)
+_CATBOOST = (
+    _LIBRARY_RATE,
+    _trees("iterations", "max. trees", [500, 1000, 2000]),
+    Tunable("depth", "depth", "int", [4, 6, 8], low=1, high=16),
+    Tunable("l2_leaf_reg", "L2 regularisation", "float", {"min": 1, "max": 10}, high=1e4),
+)
 _SVM = (
     Tunable(
         "C",
@@ -164,6 +239,34 @@ _RESTARTS = Tunable(
 TUNABLES: dict[str, tuple[Tunable, ...]] = {
     "HistGradientBoostingRegressor": _BOOSTING,
     "HistGradientBoostingClassifier": (*_BOOSTING, _CLASS_WEIGHT),
+    "XGBRegressor": _XGBOOST,
+    "XGBClassifier": (
+        *_XGBOOST,
+        Tunable(
+            "scale_pos_weight",
+            "positive class weight",
+            "float",
+            [1, 5, 20],
+            high=1e6,
+            open_low=True,
+            help="Two classes only: the weight of the rows of the second class.",
+        ),
+    ),
+    "LGBMRegressor": _LIGHTGBM,
+    "LGBMClassifier": (*_LIGHTGBM, _CLASS_WEIGHT),
+    "CatBoostRegressor": _CATBOOST,
+    "CatBoostClassifier": (
+        *_CATBOOST,
+        Tunable(
+            "auto_class_weights",
+            "class weights",
+            "choice",
+            ["none", "Balanced"],
+            options=CATBOOST_CLASS_WEIGHTS,
+            help="Balanced weights the classes inversely to their frequency, SqrtBalanced "
+            "by the square root of that.",
+        ),
+    ),
     "SVR": (
         *_SVM,
         Tunable(
@@ -194,6 +297,12 @@ TUNABLES: dict[str, tuple[Tunable, ...]] = {
 DEFAULT_SPACES: dict[str, tuple[str, ...]] = {
     "HistGradientBoostingRegressor": ("learning_rate", "max_leaf_nodes", "min_samples_leaf"),
     "HistGradientBoostingClassifier": ("learning_rate", "max_leaf_nodes", "min_samples_leaf"),
+    "XGBRegressor": ("learning_rate", "max_depth", "min_child_weight"),
+    "XGBClassifier": ("learning_rate", "max_depth", "min_child_weight"),
+    "LGBMRegressor": ("learning_rate", "num_leaves", "min_child_samples"),
+    "LGBMClassifier": ("learning_rate", "num_leaves", "min_child_samples"),
+    "CatBoostRegressor": ("learning_rate", "depth", "l2_leaf_reg"),
+    "CatBoostClassifier": ("learning_rate", "depth", "l2_leaf_reg"),
     "SVR": ("C", "gamma"),
     "SVC": ("C", "gamma"),
     "GaussianProcessRegressor": ("alpha",),
@@ -208,6 +317,12 @@ NOTES = {
 MODEL_LABELS = {
     "HistGradientBoostingRegressor": "gradient boosting regression",
     "HistGradientBoostingClassifier": "gradient boosting classification",
+    "XGBRegressor": "XGBoost regression",
+    "XGBClassifier": "XGBoost classification",
+    "LGBMRegressor": "LightGBM regression",
+    "LGBMClassifier": "LightGBM classification",
+    "CatBoostRegressor": "CatBoost regression",
+    "CatBoostClassifier": "CatBoost classification",
     "SVR": "support vector regression",
     "SVC": "support vector classification",
     "GaussianProcessRegressor": "Gaussian process regression",

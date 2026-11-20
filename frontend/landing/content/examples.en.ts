@@ -33,13 +33,23 @@ const gallery: ExampleGallery = {
     {
       title: 'Classical models',
       intro:
-        'scikit-learn models for tabular data, built from bricks like the networks: gradient boosting, a support vector machine and Gaussian processes with kernels.',
-      ids: ['gradient_boosting_classifier', 'svm_classifier', 'gp_regression', 'periodic_gp'],
+        'Models for tabular data, built from bricks like the networks: gradient boosting with scikit-learn or LightGBM, a support vector machine and Gaussian processes with kernels.',
+      ids: [
+        'gradient_boosting_classifier',
+        'lightgbm_classifier',
+        'svm_classifier',
+        'gp_regression',
+        'periodic_gp',
+      ],
     },
     {
       title: 'Ensembles',
       intro: 'Several classical models combined by voting or by stacking.',
-      ids: ['voting_ensemble_classifier', 'stacking_ensemble_regression'],
+      ids: [
+        'voting_ensemble_classifier',
+        'stacking_ensemble_regression',
+        'boosting_stacking_ensemble',
+      ],
     },
   ],
   note: 'The diagrams, shapes, parameter counts and code on these pages are produced from the examples themselves, with the same shape inference and code generator as the editor.',
@@ -358,6 +368,30 @@ const examples: ExampleCopy[] = [
     related: ['svm_classifier', 'voting_ensemble_classifier', 'hybrid_mlp_gradient_boosting'],
   },
   {
+    id: 'lightgbm_classifier',
+    name: 'LightGBM classifier',
+    title: 'LightGBM classifier for tabular data – Python example code',
+    description:
+      'A LightGBM classifier for 20 numeric features: up to 1,000 leaf-wise trees, early stopping on the validation rows and balanced class weights, with code.',
+    h1: 'LightGBM classifier for tabular data',
+    task: 'classification',
+    summary:
+      'LightGBM grows its trees leaf by leaf; early stopping on the validation rows picks how many.',
+    lead: 'LightGBM is one of the gradient boosting libraries that win tabular competitions. This example classifies rows of 20 numeric features and lets early stopping decide how many trees it needs.',
+    what: [
+      'The <code>LGBMClassifier</code> brick adds trees one after the other, each correcting the errors of the trees before it, scaled by the learning rate of 0.05. LightGBM grows each tree leaf by leaf, always splitting the leaf that helps most, up to 31 leaves (<code>num_leaves</code>) with at least 20 rows each. Each tree sees 80 % of the training rows and of the features (<code>subsample</code>, <code>colsample_bytree</code>), which makes the trees differ and the model generalise better.',
+      'At most 1,000 trees (<code>n_estimators</code>): with <code>early_stopping_rounds = 50</code> the fit watches the loss on the validation rows, stops when 50 trees in a row have not improved it and keeps the best round. The validation metrics are then a little optimistic; the test rows stay untouched. <code>class_weight = balanced</code> weights each class inversely to its frequency.',
+    ],
+    when: [
+      'For tables with tens of thousands to millions of rows: LightGBM is among the fastest boosting libraries. Brick DNN fits it on up to 1,000,000 training rows.',
+      'When the last per cent of accuracy counts, as in competitions; combine it with XGBoost and CatBoost in a <a href="/examples/boosting-stacking-ensemble/">stacking ensemble</a>.',
+      'Text columns are one-hot encoded in the <strong>Data</strong> tab first, as for the other classical models.',
+    ],
+    train:
+      'Upload a CSV file of 20 numeric features and a class column, or a dataset from the <strong>Data</strong> tab, and keep a validation split above 0 for early stopping. The run reports how many trees early stopping kept, accuracy, balanced accuracy, the confusion matrix and, for two classes, ROC and PR curves. A search over learning rate, leaves and rows per leaf finds better settings; the downloaded model works in the generated script with LightGBM installed.',
+    related: ['boosting_stacking_ensemble', 'gradient_boosting_classifier', 'svm_classifier'],
+  },
+  {
     id: 'voting_ensemble_classifier',
     name: 'Voting ensemble',
     title: 'Voting ensemble classifier in scikit-learn – soft voting example',
@@ -403,6 +437,30 @@ const examples: ExampleCopy[] = [
     train:
       'Upload a CSV file of eight numeric features and a numeric target, or use a dataset from the <strong>Data</strong> tab. The run reports RMSE and R² of the ensemble and of each model on the validation rows, so you see whether stacking beats its best model.',
     related: ['voting_ensemble_classifier', 'gp_regression', 'tabular_regression'],
+  },
+  {
+    id: 'boosting_stacking_ensemble',
+    name: 'XGBoost, LightGBM and CatBoost stacked',
+    title: 'Stacking XGBoost, LightGBM and CatBoost – ensemble example',
+    description:
+      'A stacking ensemble of XGBoost, LightGBM and CatBoost classifiers in Python: a logistic regression learns from their cross-validated probabilities how to combine them.',
+    h1: 'Stacking ensemble of XGBoost, LightGBM and CatBoost',
+    task: 'classification',
+    summary:
+      'The three boosting libraries of tabular competitions, combined by a logistic regression.',
+    lead: 'Competition winners rarely submit a single model. Here XGBoost, LightGBM and CatBoost classify the same 20 features, and a logistic regression learns how much to trust each of them.',
+    what: [
+      'The three models get the features from the <code>Input</code>: <code>XGBClassifier</code> with 300 trees of depth 6, <code>LGBMClassifier</code> with 300 leaf-wise trees of up to 31 leaves and <code>CatBoostClassifier</code> with 500 symmetric trees of depth 6, all with a learning rate of 0.05. They build their trees differently, so they make different mistakes. The dotted connections into <code>StackingClassifier</code> carry the models themselves.',
+      'With <code>cv = 5</code>, each model is fitted five times, each time without a fifth of the training rows, and predicts the class probabilities of that fifth. The logistic regression learns from these predictions for rows the models did not see; then every model is fitted once more on all rows. In an ensemble the models get no validation rows, so they fit all their trees: early stopping is off, and the numbers of trees are lower than for a single model.',
+    ],
+    when: [
+      'When each library has reached good settings on its own and you want the extra accuracy of combining them.',
+      'For tables up to hundreds of thousands of rows: fitting takes about six times as long as fitting the three models once.',
+      'To compare the libraries: the run lists each model’s own score next to the ensemble’s.',
+    ],
+    train:
+      'Upload a CSV file of 20 numeric features and a class column, or a dataset from the <strong>Data</strong> tab. The ensemble trains like a single classical model, with the same evaluation, explanations and download; the generated script needs xgboost, lightgbm and catboost installed.',
+    related: ['lightgbm_classifier', 'stacking_ensemble_regression', 'voting_ensemble_classifier'],
   },
   {
     id: 'hybrid_mlp_gradient_boosting',

@@ -269,6 +269,20 @@ def _masks(output: Any, options: dict[str, Any], torch: Any) -> list[dict[str, A
     return masks
 
 
+def missing_library_text(exc: ModuleNotFoundError) -> str:
+    """Why a fitted model cannot be loaded: its library (XGBoost, LightGBM, CatBoost, or
+    another module of the pickle) is not installed here."""
+    from ..layers import BOOSTING_LIBRARIES
+
+    module = (exc.name or "").split(".")[0]
+    name = BOOSTING_LIBRARIES.get(module, module or "A library")
+    return (
+        f"The library {name} is not installed on this server, so the fitted model cannot be "
+        "loaded here. "
+        f"Install it with: pip install {module}"
+    )
+
+
 def _load_classical(run_dir: Path) -> Callable[[Any], dict[str, Any]]:
     """Predict with the fitted scikit-learn pipeline of a classical model."""
     try:
@@ -284,6 +298,8 @@ def _load_classical(run_dir: Path) -> Callable[[Any], dict[str, Any]]:
     try:
         bundle = joblib.load(path)  # written by the training of this run
         pipeline = bundle["model"]
+    except ModuleNotFoundError as exc:
+        raise PredictionError(missing_library_text(exc)) from exc
     except Exception as exc:
         raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
 
@@ -361,6 +377,8 @@ def _load_hybrid(run_dir: Path, graph: dict[str, Any]) -> Callable[[Any], dict[s
     try:
         bundle = joblib.load(path)  # written by the training of this run
         pipeline = bundle["model"]
+    except ModuleNotFoundError as exc:
+        raise PredictionError(missing_library_text(exc)) from exc
     except Exception as exc:
         raise PredictionError(f"The fitted model cannot be loaded: {short_error(exc)}") from exc
 

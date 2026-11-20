@@ -8,16 +8,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BRICKDNN_DATA_DIR=/data \
     PATH=/usr/lib/postgresql/17/bin:$PATH
 
-# pg_dump, pg_restore and psql 17 (about 15 MB).
+# pg_dump, pg_restore and psql 17 (about 15 MB); libgomp1, the OpenMP runtime LightGBM needs.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && apt-get install -y --no-install-recommends postgresql-client-17 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
 # Includes scikit-learn (with SciPy, about 190 MB): classical models (Gaussian processes,
-# SVMs) train in the default image, without PyTorch.
+# SVMs) train in the default image, without PyTorch. XGBoost (CPU build), LightGBM and
+# CatBoost add about 420 MB: CatBoost 270 MB, the plotting libraries it requires (matplotlib,
+# plotly) about 110 MB, XGBoost 25 MB, LightGBM 10 MB.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Training needs PyTorch, which adds about 1 GB to the image. It is therefore optional:

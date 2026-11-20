@@ -91,7 +91,14 @@ shape has no batch dimension; nodes without outgoing edges are the outputs.
 It also builds classical models (scikit-learn) for tabular data: Gaussian processes
 (GaussianProcessRegressor, GaussianProcessClassifier), support vector machines (SVR, SVC)
 and gradient boosting (HistGradientBoostingRegressor, HistGradientBoostingClassifier: a
-strong baseline for large tables; class_weight "balanced" for rare classes). Connect the
+strong baseline for large tables; class_weight "balanced" for rare classes), also from the
+libraries of tabular competitions: XGBRegressor/XGBClassifier (XGBoost; scale_pos_weight
+for a rare second class), LGBMRegressor/LGBMClassifier (LightGBM; class_weight) and
+CatBoostRegressor/CatBoostClassifier (CatBoost; auto_class_weights "Balanced"). These stop
+adding trees by early_stopping_rounds on the validation rows (0: off; not in an ensemble or
+a cross-validated search; examples lightgbm_classifier, boosting_stacking_ensemble); text
+columns are one-hot encoded in a data preparation first, like for every classical model.
+Hard voting does not take CatBoostClassifier (use soft voting). Connect the
 Input (shape [number of features]) straight to the model; a Gaussian
 process can also take a kernel built from kernel bricks (RBF, Matern, RationalQuadratic,
 ExpSineSquared, DotProduct, WhiteKernel, ConstantKernel, combined with KernelSum and
@@ -1266,8 +1273,9 @@ TOOLS: dict[str, Tool] = {
             "list_layer_types",
             "List layer types",
             "All layer types (Input, Linear, Conv2d, LSTM, …, kernel bricks such as RBF and "
-            "classical models such as GaussianProcessRegressor, SVC or "
-            "HistGradientBoostingClassifier, ensembles such as VotingClassifier and "
+            "classical models such as GaussianProcessRegressor, SVC, "
+            "HistGradientBoostingClassifier, XGBClassifier, LGBMClassifier or "
+            "CatBoostClassifier, ensembles such as VotingClassifier and "
             "StackingRegressor) with their parameters: "
             "kind, default, allowed range, and whether the value can be inferred ('auto'). "
             "family says whether a brick is a neural layer or classical (scikit-learn), "
@@ -1289,8 +1297,9 @@ TOOLS: dict[str, Tool] = {
             "list_examples",
             "List example networks",
             "Example networks (MLP, CNN, ResNet block, LSTM, Transformer, Gaussian process "
-            "regression, SVM classifier, gradient boosting classifier, voting and stacking "
-            "ensembles, an MLP that learns the features of gradient boosting, …): good starting "
+            "regression, SVM classifier, gradient boosting classifier, LightGBM classifier, "
+            "voting and stacking ensembles (one of XGBoost, LightGBM and CatBoost), an MLP that "
+            "learns the features of gradient boosting, …): good starting "
             "points. Lists names and "
             "descriptions; id gives one example with its graph.",
             list_examples,
@@ -1398,8 +1407,8 @@ TOOLS: dict[str, Tool] = {
             "get_training_options",
             "Show training options",
             "Whether training is available on this server (available: neural networks with "
-            "PyTorch; classical: Gaussian processes, SVMs, gradient boosting and their "
-            "ensembles with "
+            "PyTorch; classical: Gaussian processes, SVMs, gradient boosting (also XGBoost, "
+            "LightGBM, CatBoost) and their ensembles with "
             "scikit-learn, with the "
             "most training rows they are fitted on), the built-in datasets and the user's own "
             "datasets, how to refer to a dataset, the default training settings (config) and "

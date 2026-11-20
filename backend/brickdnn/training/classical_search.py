@@ -39,6 +39,7 @@ from typing import Any
 import numpy as np
 
 from ..graph import analyze
+from .boosting import EVAL_SET_DEPRECATED
 from .classical_engine import (
     MAX_WARNINGS,
     STOP_CHECK_INTERVAL,
@@ -295,6 +296,14 @@ class ClassicalSearch(_ClassicalRun):
         sink.add(predictions, self.data.y[rows])
         return split_value(metric, sink.result(metrics["loss"]))
 
+    def _eval_rows(self) -> np.ndarray | None:
+        """Early stopping watches the validation rows only when the trials are compared on
+        them: a cross-validated search fits all trees, in its folds and at the end."""
+        return None if self.folds is not None else super()._eval_rows()
+
+    def _without_eval_rows(self, cross_validated: bool = False) -> str:
+        return super()._without_eval_rows(cross_validated=self.folds is not None)
+
     def _fit_with(
         self, pipeline: Any, x: np.ndarray, y: np.ndarray, stoppable: bool = True
     ) -> None:
@@ -302,12 +311,14 @@ class ClassicalSearch(_ClassicalRun):
         In the runner a stop before any trial has finished ends the process (nothing to
         keep); later the fit is left behind and the best trial is kept."""
         outcome: dict[str, Any] = {}
+        params = self._fit_params(pipeline, x, y)
 
         def work() -> None:
             try:
                 with warnings.catch_warnings(record=True) as caught, self._threads():
                     warnings.simplefilter("always")
-                    pipeline.fit(x, y)
+                    warnings.filterwarnings("ignore", message=EVAL_SET_DEPRECATED)
+                    pipeline.fit(x, y, **params)
                 outcome["warnings"] = caught
             except BaseException as exc:  # handed to the main thread
                 outcome["error"] = exc

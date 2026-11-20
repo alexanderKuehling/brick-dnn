@@ -1,0 +1,117 @@
+{
+  "id": "boosting_stacking_ensemble",
+  "name": "XGBoost, LightGBM and CatBoost stacked",
+  "description": "An ensemble of the three gradient boosting libraries of tabular competitions: XGBoost, LightGBM and CatBoost classify rows of 20 numeric features, and a logistic regression learns from their class probabilities for rows they were not fitted on (5-fold cross-validation) how much to trust each of them. In an ensemble the models fit all their trees (no early stopping), so their number is set lower. The dotted connections into the stacking brick carry the models themselves.",
+  "order": 17,
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "features",
+        "type": "Input",
+        "params": {
+          "shape": [
+            20
+          ]
+        },
+        "position": {
+          "x": 0,
+          "y": 190
+        }
+      },
+      {
+        "id": "xgboost",
+        "type": "XGBClassifier",
+        "params": {
+          "n_estimators": 300,
+          "learning_rate": 0.05,
+          "max_depth": 6,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "early_stopping_rounds": 0,
+          "random_state": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 0
+        }
+      },
+      {
+        "id": "lightgbm",
+        "type": "LGBMClassifier",
+        "params": {
+          "n_estimators": 300,
+          "learning_rate": 0.05,
+          "num_leaves": 31,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "early_stopping_rounds": 0,
+          "random_state": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 190
+        }
+      },
+      {
+        "id": "catboost",
+        "type": "CatBoostClassifier",
+        "params": {
+          "iterations": 500,
+          "learning_rate": 0.05,
+          "depth": 6,
+          "early_stopping_rounds": 0,
+          "random_state": 0
+        },
+        "position": {
+          "x": 300,
+          "y": 380
+        }
+      },
+      {
+        "id": "stack",
+        "type": "StackingClassifier",
+        "params": {
+          "cv": 5,
+          "passthrough": false
+        },
+        "position": {
+          "x": 600,
+          "y": 190
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-features-xgboost",
+        "source": "features",
+        "target": "xgboost"
+      },
+      {
+        "id": "e-features-lightgbm",
+        "source": "features",
+        "target": "lightgbm"
+      },
+      {
+        "id": "e-features-catboost",
+        "source": "features",
+        "target": "catboost"
+      },
+      {
+        "id": "e-xgboost-stack",
+        "source": "xgboost",
+        "target": "stack"
+      },
+      {
+        "id": "e-lightgbm-stack",
+        "source": "lightgbm",
+        "target": "stack"
+      },
+      {
+        "id": "e-catboost-stack",
+        "source": "catboost",
+        "target": "stack"
+      }
+    ]
+  }
+}
