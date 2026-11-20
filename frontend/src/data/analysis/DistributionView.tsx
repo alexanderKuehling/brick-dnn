@@ -565,7 +565,10 @@ function DatetimeDistribution({
                 ? formatDuration(stats.max - stats.min)
                 : '–',
             ],
-            ['Middle 50 %', `${date(stats.q25)} – ${date(stats.q75)}`],
+            [
+              i18n.t('ui.data.DistributionView.middle50'),
+              `${date(stats.q25)} – ${date(stats.q75)}`,
+            ],
           ]}
         />
       )}
@@ -719,7 +722,7 @@ function CategoryDistribution({ column, profile, sample, groups }: PartProps) {
             ? ([
                 [
                   i18n.t('ui.data.DistributionView.meanLength'),
-                  i18n.t('ui.data.DistributionView.characters', {
+                  i18n.t('ui.data.DistributionView.charactersCount', {
                     n: formatNumber(column.mean_length, 3),
                   }),
                 ],

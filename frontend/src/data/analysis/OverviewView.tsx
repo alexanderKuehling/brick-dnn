@@ -28,7 +28,7 @@ export interface OverviewViewProps {
 export function warningHeading(profile: DataProfile): string {
   const total = profile.warnings.length;
   if (!total) {
-    return i18n.t('ui.data.OverviewView.warnings');
+    return i18n.t('ui.data.OverviewView.warningsHeading');
   }
   const entries = groupWarnings(profile.warnings, profile).length;
   return entries < total

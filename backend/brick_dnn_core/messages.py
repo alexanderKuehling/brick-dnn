@@ -152,9 +152,18 @@ EXTRA_TEMPLATES = (
     "Not started: {0}",
     "The training process could not be started. See the server log for details.",
 )
-# Found in the source, but an entry of EXTRA_TEMPLATES translates the message better: the
-# metric of "validation {2} {3}" is a value there, which would stay English.
-SUPERSEDED_TEMPLATES = ("Best: trial {0} ({1}), validation {2} {3}",)
+# Found in the source, but not used. The first one: an entry of EXTRA_TEMPLATES translates
+# the message better (the metric of "validation {2} {3}" is a value there, which would stay
+# English). The others have values that are English words of the package ("is", "too
+# typical", "year, month"): half a sentence in each language is worse than an English one.
+SKIPPED_TEMPLATES = (
+    "Best: trial {0} ({1}), validation {2} {3}",
+    "Already {0}: {1}.",
+    "Added {0} ({1}) from {2} ({3}) and {4}.",
+    "Removed {0} ({1}) that {2} {3} on {4} ({5}).",
+    "Removed {0} ({1}) {2}.",
+    "Removed {0} ({1}) with {2}.",
+)
 # The label of the step a readiness check offers ({"fix": {"label": ...}}, data/checks.py):
 # matched only there, since "Drop {0}" would fit many other sentences.
 LABEL_TEMPLATES = (
@@ -222,6 +231,9 @@ def _is_message(text: str, sentence: bool = False) -> bool:
         return _is_message(rest[:1].upper() + rest[1:], sentence=True)
     # What a fix changes: "Input shape x → x".
     if "→" in text and text[:1].isupper() and len(words) >= 2 and "\n" not in text:
+        return True
+    # A verb and what it did, with a full stop: "Dropped x: x.", "Renamed x."
+    if re.match(r"[A-Z][a-z]{3,} x\b", text) and text.rstrip().endswith(".") and "\n" not in text:
         return True
     # A short sentence with a value and a full stop: "Applied x to x.", "x missing values (x)."
     short = sentence or (text.rstrip().endswith(".") and " x" in text and text[:1].isupper())
@@ -314,7 +326,7 @@ def templates() -> tuple[str, ...]:
                     found.setdefault(template, None)
     for template in (*EXTRA_TEMPLATES, *_stored_messages()):
         found.setdefault(template, None)
-    for template in SUPERSEDED_TEMPLATES:
+    for template in SKIPPED_TEMPLATES:
         found.pop(template, None)
     return tuple(found)
 

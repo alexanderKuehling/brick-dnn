@@ -8,7 +8,7 @@ import { OTHER_COLOR, seriesColor } from '@/components/charts/colors';
 import { formatCount, formatDate, formatNumber } from '@/components/charts/format';
 import { Histogram } from '@/components/charts/Histogram';
 import { boxFromStats } from '@/components/charts/stats';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { valueLabel } from './sampleData';
 import { ColumnSelect, KIND_LABELS, Note } from './shared';
 import classes from './AnalysisPanel.module.css';
@@ -45,7 +45,7 @@ function change(before: number | null | undefined, after: number | null | undefi
   }
   const diff = after - before;
   if (diff === 0) {
-    return 'same';
+    return i18n.t('ui.data.CompareView.same');
   }
   return `${diff > 0 ? '+' : '−'}${formatNumber(Math.abs(diff))}`;
 }
@@ -221,7 +221,7 @@ export function CompareView({
         <Text size="sm" c="dimmed">
           {i18n.t('ui.data.CompareView.wasRemovedByTheSteps', {
             name: a.name,
-            value: KIND_LABELS[a.kind].toLowerCase(),
+            value: lowerCase(KIND_LABELS[a.kind]),
             missing: formatCount(a.missing),
           })}
         </Text>
@@ -230,7 +230,7 @@ export function CompareView({
         <Text size="sm" c="dimmed">
           {i18n.t('ui.data.CompareView.wasAddedByTheSteps', {
             name: b.name,
-            value: KIND_LABELS[b.kind].toLowerCase(),
+            value: lowerCase(KIND_LABELS[b.kind]),
           })}
         </Text>
       )}
@@ -325,7 +325,7 @@ function ColumnComparison({
       ]);
     }
     statRows.push([
-      'Outliers (1.5 × IQR)',
+      i18n.t('ui.data.DistributionView.outliersIqr'),
       formatCount(before.stats.iqr_outliers),
       formatCount(after.stats.iqr_outliers),
       change(before.stats.iqr_outliers, after.stats.iqr_outliers),

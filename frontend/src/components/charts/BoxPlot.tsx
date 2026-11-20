@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Text } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { linearScale } from '@/components/chartScale';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { innerTicks, timeTicks } from './axes';
 import { ChartEmpty, ChartFrame, ChartTooltip, TooltipRow } from './ChartFrame';
 import { seriesColor } from './colors';
@@ -122,7 +122,7 @@ export function BoxPlot({
     const g = groups[i];
     return g
       ? `${showLabels ? `${g.label}: ` : ''}${facts(g.box)
-          .map(([k, v]) => `${k.toLowerCase()} ${v}`)
+          .map(([k, v]) => `${lowerCase(k)} ${v}`)
           .join(', ')}`
       : '';
   };

@@ -3,7 +3,7 @@ import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { Handle, Position, useNodeConnections, type NodeProps } from '@xyflow/react';
 import { Text, Tooltip } from '@mantine/core';
 import { CommentMarker } from '@/comments/CommentMarker';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { useRemoteSelection } from '@/live/presence';
 import { categoryColor } from '@/theme';
 import { useBuilder } from './BuilderContext';
@@ -81,9 +81,7 @@ function LayerNodeView({ id, data, selected }: NodeProps<LayerFlowNode>) {
           style={slots.length > 1 ? { top: handleTop(index, slots.length) } : undefined}
           title={slots.length > 1 ? `${slot.label} (${slot.kind})` : undefined}
         >
-          {slots.length > 1 && (
-            <span className={classes.slotLabel}>{slot.label.toLowerCase()}</span>
-          )}
+          {slots.length > 1 && <span className={classes.slotLabel}>{lowerCase(slot.label)}</span>}
         </Handle>
       ))}
       <div className={classes.header}>

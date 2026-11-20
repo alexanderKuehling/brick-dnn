@@ -13,7 +13,7 @@ import type {
   TunableSetting,
   TuningConfig,
 } from '@/api/types';
-import { currentLocale, i18n } from '@/i18n';
+import { currentLanguage, currentLocale, i18n, lowerCase } from '@/i18n';
 import { isClassicalRun, isHybridRun } from './classical';
 import { classicalParamLabel } from './search';
 
@@ -372,7 +372,9 @@ function isBrickParams(names: string[]): boolean {
 
 /** "Max. depth" → "max. depth", but "C" and "L2 regularisation" stay as they are. */
 const inSentence = (label: string) =>
-  /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+  currentLanguage() === 'en' && /^[A-Z][a-z]/.test(label)
+    ? label[0].toLowerCase() + label.slice(1)
+    : label;
 
 /**
  * "learning rate 0.00312, batch size 64, Adam" (like the engine's messages); for a classical
@@ -397,7 +399,7 @@ export function describeParams(params: TrialParams): string {
     .map((name) => {
       const value = formatSetting(name, params[name] as number | string);
       const plain = name === 'optimizer' || name === 'loss';
-      return plain ? value : `${SETTING_LABELS[name].toLowerCase()} ${value}`;
+      return plain ? value : `${lowerCase(SETTING_LABELS[name])} ${value}`;
     })
     .join(', ');
 }
@@ -434,7 +436,7 @@ export function paramLabel(name: string): string {
   if (name.startsWith(NEURAL_PREFIX)) {
     const setting = name.slice(NEURAL_PREFIX.length) as TunableSetting;
     return i18n.t('ui.training.format.neural', {
-      value: (SETTING_LABELS[setting] ?? setting).toLowerCase(),
+      value: lowerCase(SETTING_LABELS[setting] ?? setting),
     });
   }
   return SETTING_LABELS[name as TunableSetting] ?? classicalParamLabel(name) ?? name;
@@ -492,7 +494,7 @@ export function lossText(run: RunDetail): string | null {
   }
   const smoothing = found ? found.label_smoothing : config.label_smoothing;
   if (smoothing && ['cross_entropy', 'weighted_cross_entropy'].includes(name)) {
-    parts.push(i18n.t('ui.training.format.labelSmoothing', { smoothing }));
+    parts.push(i18n.t('ui.training.format.labelSmoothingValue', { smoothing }));
   }
   const delta = found
     ? found.huber_delta

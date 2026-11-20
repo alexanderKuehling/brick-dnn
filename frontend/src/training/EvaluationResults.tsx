@@ -225,7 +225,7 @@ export function ConfusionMatrix({
         <GradientLegend
           label={i18n.t('ui.training.EvaluationResults.colourShareOfTheTrue')}
           stops={[SEQUENTIAL[scheme].fillLow, SEQUENTIAL[scheme].high]}
-          labels={['0%', i18n.t('ui.training.EvaluationResults.ofTheTrueClass')]}
+          labels={['0%', i18n.t('ui.training.EvaluationResults.fullOfTheTrueClass')]}
         />
       }
       caption={i18n.t('ui.training.EvaluationResults.rowsTrueClassColumnsPredicted')}

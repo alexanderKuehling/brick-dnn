@@ -829,7 +829,7 @@ export function RelationshipsView({
                 )}
                 {header(
                   'group',
-                  i18n.t('ui.data.RelationshipsView.group'),
+                  i18n.t('ui.data.RelationshipsView.groupHead'),
                   true,
                   i18n.t('ui.data.RelationshipsView.groupOfRelatedColumns')
                 )}

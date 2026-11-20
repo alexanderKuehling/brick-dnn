@@ -130,7 +130,7 @@ export function RowTable({
                 }}
               />
             </th>
-            {header('position', i18n.t('ui.data.RowTable.row'), true)}
+            {header('position', i18n.t('ui.data.RowTable.rowHead'), true)}
             {showId && <th>{analysis.id_column}</th>}
             {showSplit && header('split', i18n.t('ui.data.RowTable.split'))}
             {showTarget &&

@@ -78,6 +78,14 @@ export function currentLocale(): string {
   return currentLanguage() === 'de' ? 'de-DE' : 'en-US';
 }
 
+/**
+ * A label inside a sentence or a list: lower case in English ("the learning rate"), unchanged
+ * in German, where nouns keep their capital letter ("die Lernrate").
+ */
+export function lowerCase(text: string): string {
+  return currentLanguage() === 'en' ? text.toLowerCase() : text;
+}
+
 /** Dates written out ("1 December 2026", "1. Dezember 2026"): British order in English. */
 export function longDateLocale(): string {
   return currentLanguage() === 'de' ? 'de-DE' : 'en-GB';

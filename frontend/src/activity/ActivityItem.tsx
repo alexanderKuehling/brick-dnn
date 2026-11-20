@@ -33,7 +33,7 @@ import {
 import { ActionIcon, Anchor, Badge, Collapse, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import type { AgentAction, AgentTarget } from '@/api';
 import { fullDateTime, timeInDay } from '@/collab/time';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import {
   actionLabel,
   argumentText,
@@ -120,7 +120,7 @@ function TargetLink({
         onOpen(target);
       }}
       aria-label={i18n.t('ui.activity.ActivityItem.open', {
-        value: TARGET_LABELS[target.kind].toLowerCase(),
+        value: lowerCase(TARGET_LABELS[target.kind]),
         name: target.name,
       })}
     >

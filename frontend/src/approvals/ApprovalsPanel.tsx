@@ -28,7 +28,7 @@ import type { OpenTarget } from '@/activity/ActivityItem';
 import { summaryParts, TARGET_LABELS, unnamedTargets } from '@/activity/format';
 import { api, type AgentTarget, type ApprovalCategory, type ApprovalRequest } from '@/api';
 import { relativeTime } from '@/collab/time';
-import { i18n, useTranslation } from '@/i18n';
+import { i18n, lowerCase, useTranslation } from '@/i18n';
 import { formatCpu } from '@/usage/format';
 import { estimateText, expiresIn } from './format';
 import classes from './Approvals.module.css';
@@ -60,7 +60,7 @@ function TargetLink({ target, onOpen }: { target: AgentTarget; onOpen: OpenTarge
       className={classes.link}
       onClick={() => onOpen(target)}
       aria-label={i18n.t('ui.approvals.ApprovalsPanel.open', {
-        value: TARGET_LABELS[target.kind].toLowerCase(),
+        value: lowerCase(TARGET_LABELS[target.kind]),
         name: target.name,
       })}
     >

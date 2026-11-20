@@ -1088,6 +1088,29 @@
   without one keep working.
 
 ### Fixed
+- **English left in the German app.** Many texts did not go through the translations and
+  stayed English in German: the undo notification after the training check adapts a network
+  ("10 tokens … from 'Key lookup'"), the tiles and notes of the metrics of a run, counts and
+  units ("3 trials", "2 networks", "bytes", "500 validation rows"), table heads and facts of
+  the data analysis (*Column*, *Missing*, *Standard deviation*, percentiles, weekdays and
+  months), what an import detected, messages of the preparation steps' fields, labels in the
+  comments, the version preview, approvals, the agent activity and the API token page, and
+  several validation messages of the training settings. They come from the locale files now;
+  texts kept in constants are read when they are shown, so they follow a change of the
+  language. The API translates more of what the server writes: the final message of a run
+  with its metrics ("Abgeschlossen: Validierungsgenauigkeit 97,1 %; Testgenauigkeit 96,8 %"),
+  early stopping, searches, hybrid runs and ensembles, what a fix of the training check
+  changes ("Form der Eingabe 64 → 10"), the labels of the steps a readiness check offers
+  ("id entfernen"), readiness and step messages that are built from parts (duplicates,
+  missing values, skewed columns, near twins, scaling), the names of layers and steps inside
+  a message, counts and numbers in German notation, and what the training queue stores with
+  a waiting run. `brick_dnn_core/messages.py` lists the short and composed messages it cannot
+  find in the package's source (`EXTRA_TEMPLATES`), and a test fails when one of them no
+  longer matches the source. Still English: the summaries of the agent activity, the plan
+  and limit lines of the account page, and step results built from several clauses
+  ([docs/translations.md](docs/translations.md#known-gaps)).
+- **Accessibility statement.** It names the postal address and the website of the market
+  surveillance authority (MLBF) in Magdeburg.
 - **"Why the model decides" on text runs.** For a run trained on a built-in text dataset
   (Sentiment, Key lookup, Topics) the side panel said "For models trained on a CSV file only",
   although the full explanation offers the weights the network learned. It now says that

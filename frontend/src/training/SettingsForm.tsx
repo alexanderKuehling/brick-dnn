@@ -29,7 +29,7 @@ import type {
   TuningMetric,
 } from '@/api';
 import { HintedLabel, InfoHint } from '@/components/InfoHint';
-import { currentLanguage, currentLocale, i18n, useTranslation } from '@/i18n';
+import { currentLanguage, currentLocale, i18n, lowerCase, useTranslation } from '@/i18n';
 import { numberSeparators } from '@/i18n/mantine';
 import { formatSetting, formatSplit, splitPercents } from './format';
 import {
@@ -1531,7 +1531,7 @@ function ParamRow({
           <Group gap="xs" wrap="nowrap" align="flex-start">
             <NumberInput
               aria-label={i18n.t('ui.training.SettingsForm.smallest', {
-                label: item.label.toLowerCase(),
+                label: lowerCase(item.label),
               })}
               value={state.min}
               onChange={(min) => onChange({ min })}
@@ -1546,7 +1546,7 @@ function ParamRow({
             </Text>
             <NumberInput
               aria-label={i18n.t('ui.training.SettingsForm.largest', {
-                label: item.label.toLowerCase(),
+                label: lowerCase(item.label),
               })}
               value={state.max}
               onChange={(max) => onChange({ max })}
@@ -1557,7 +1557,7 @@ function ParamRow({
             />
             <Select
               aria-label={i18n.t('ui.training.SettingsForm.scaleOfThe', {
-                label: item.label.toLowerCase(),
+                label: lowerCase(item.label),
               })}
               data={SCALES}
               value={state.scale}

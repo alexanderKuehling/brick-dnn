@@ -6067,6 +6067,16 @@ msgstr ""
 
 #: brickdnn
 msgctxt "brickdnn"
+msgid "Dropped {0}: {1}."
+msgstr "{0} entfernt: {1}."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Renamed {0}."
+msgstr "{0} umbenannt."
+
+#: brickdnn
+msgctxt "brickdnn"
 msgid "Changed {0} to {1}."
 msgstr "{0} in {1} geändert."
 
@@ -6601,6 +6611,11 @@ msgid ""
 "Target mean encoding needs at least two classes of '{0}' in the training rows."
 msgstr ""
 "Target-Mean-Kodierung braucht mindestens zwei Klassen von '{0}' in den Trainingszeilen."
+
+#: brickdnn
+msgctxt "brickdnn"
+msgid "Grouped {0} ({1}, {2}) into '{3}' in {4}."
+msgstr "{0} ({1}, {2}) in {4} zu '{3}' zusammengefasst."
 
 #: brickdnn
 msgctxt "brickdnn"

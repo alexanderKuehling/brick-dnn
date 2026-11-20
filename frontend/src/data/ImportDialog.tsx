@@ -300,8 +300,8 @@ export function describeReport(report: ImportReport): string {
   if (format === 'csv' || WORKBOOKS.includes(format)) {
     parts.push(
       report.header
-        ? i18n.t('ui.data.ImportDialog.headerRow')
-        : i18n.t('ui.data.ImportDialog.noHeaderRow')
+        ? i18n.t('ui.data.ImportDialog.withHeaderRow')
+        : i18n.t('ui.data.ImportDialog.withoutHeaderRow')
     );
   }
   return parts.filter(Boolean).join(' · ');

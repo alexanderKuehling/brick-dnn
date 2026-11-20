@@ -32,7 +32,7 @@ import {
   type GraphDocument,
   type RunDetail,
 } from '@/api';
-import { currentLocale, i18n, useTranslation } from '@/i18n';
+import { currentLocale, i18n, lowerCase, useTranslation } from '@/i18n';
 import {
   canDeleteRun,
   canSetThreshold,
@@ -128,7 +128,7 @@ export function EnsembleRunView({
         <Text size="xs" c="dimmed" mt={4}>
           {[
             i18n.t('ui.training.EnsembleRunView.ensemble'),
-            METHOD_LABELS[method].toLowerCase(),
+            lowerCase(METHOD_LABELS[method]),
             by && i18n.t('ui.training.DataSourcePicker.byOwner', { owner: by }),
             run.dataset.name,
             run.started_via?.name &&

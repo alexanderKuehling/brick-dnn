@@ -188,7 +188,7 @@ export function VersionPreview({
                 current
                   ? i18n.t('ui.history.VersionPreview.closeThePreview')
                   : canRestore
-                    ? i18n.t('ui.history.VersionPreview.restoreThisVersion')
+                    ? i18n.t('ui.history.VersionPreview.restoreToContinue')
                     : i18n.t('ui.history.VersionPreview.ownerAndEditorsCanRestore'),
               ]}
             />
