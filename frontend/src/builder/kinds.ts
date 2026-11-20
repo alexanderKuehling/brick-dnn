@@ -46,9 +46,21 @@ export function isClassicalSpec(spec: LayerSpec | undefined): boolean {
   return spec?.family === 'classical';
 }
 
-/** Gradient boosting (HistGradientBoostingRegressor or HistGradientBoostingClassifier). */
+/** XGBoost, LightGBM and CatBoost (regressors and classifiers). */
+export const BOOSTING_LIBRARY_TYPES = [
+  'XGBRegressor',
+  'XGBClassifier',
+  'LGBMRegressor',
+  'LGBMClassifier',
+  'CatBoostRegressor',
+  'CatBoostClassifier',
+];
+
+/** Gradient boosting: scikit-learn's HistGradientBoosting…, XGBoost, LightGBM, CatBoost. */
 export function isBoosting(type: string | null | undefined): boolean {
-  return Boolean(type?.startsWith('HistGradientBoosting'));
+  return (
+    Boolean(type?.startsWith('HistGradientBoosting')) || BOOSTING_LIBRARY_TYPES.includes(type ?? '')
+  );
 }
 
 /** Ensembles of classical models (VotingClassifier, StackingRegressor, …). */
