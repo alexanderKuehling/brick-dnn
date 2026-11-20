@@ -2870,16 +2870,22 @@ export const ui: Messages<typeof en> = {
       pipInstallTorchTorchvision: 'pip install torch torchvision',
     },
     classical: {
+      catboostClassification: 'CatBoost-Klassifikation',
+      catboostRegression: 'CatBoost-Regression',
       gaussianProcessClassification: 'Gauß-Prozess-Klassifikation',
       gaussianProcessRegression: 'Gauß-Prozess-Regression',
       gradientBoostingClassification: 'Gradient-Boosting-Klassifikation',
       gradientBoostingRegression: 'Gradient-Boosting-Regression',
+      lightgbmClassification: 'LightGBM-Klassifikation',
+      lightgbmRegression: 'LightGBM-Regression',
       stackingClassifier: 'Stacking-Klassifikator',
       stackingRegression: 'Stacking-Regression',
       supportVectorClassification: 'Support-Vector-Klassifikation',
       supportVectorRegression: 'Support-Vector-Regression',
       votingClassifier: 'Voting-Klassifikator',
       votingRegression: 'Voting-Regression',
+      xgboostClassification: 'XGBoost-Klassifikation',
+      xgboostRegression: 'XGBoost-Regression',
     },
     ensemble: {
       aLogisticRegressionLearnsFrom:

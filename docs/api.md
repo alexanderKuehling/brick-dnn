@@ -960,13 +960,16 @@ same `queue` object for a run that would be started now (plus `running` and `mes
 **Classical models** (Gaussian processes, SVMs, gradient boosting, see
 [training.md](training.md#classical-models))
 train with scikit-learn and do not need PyTorch. `GET /api/training/` describes them separately,
-because `available` and `reason` are about PyTorch:
+because `available` and `reason` are about PyTorch; `libraries` has the versions of XGBoost,
+LightGBM and CatBoost (`null`: not installed, their bricks cannot be trained here):
 
 ```json
 "classical": {
   "available": true, "reason": null, "sklearn_version": "1.9.1",
+  "libraries": { "xgboost": "3.4.1", "lightgbm": "4.7.0", "catboost": "1.2.10" },
   "max_rows": { "GaussianProcessRegressor": 5000, "GaussianProcessClassifier": 2000, "SVR": 50000, "SVC": 50000,
-                "HistGradientBoostingRegressor": 1000000, "HistGradientBoostingClassifier": 1000000 },
+                "HistGradientBoostingRegressor": 1000000, "HistGradientBoostingClassifier": 1000000,
+                "XGBClassifier": 1000000, … },
   "tuning": {
     "models": { "SVC": { "tunable": [ { "name": "C", "kind": "float", "min": 0, "min_exclusive": true, "scale": "log", "default": { "min": 0.1, "max": 100 }, … }, … ],
                          "default": { "C": { "min": 0.1, "max": 100 }, "gamma": { "min": 0.001, "max": 1 } }, "note": null }, … },

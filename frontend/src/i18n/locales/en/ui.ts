@@ -2796,16 +2796,22 @@ export const ui = {
       pipInstallTorchTorchvision: 'pip install torch torchvision',
     },
     classical: {
+      catboostClassification: 'CatBoost classification',
+      catboostRegression: 'CatBoost regression',
       gaussianProcessClassification: 'Gaussian process classification',
       gaussianProcessRegression: 'Gaussian process regression',
       gradientBoostingClassification: 'Gradient boosting classification',
       gradientBoostingRegression: 'Gradient boosting regression',
+      lightgbmClassification: 'LightGBM classification',
+      lightgbmRegression: 'LightGBM regression',
       stackingClassifier: 'Stacking classifier',
       stackingRegression: 'Stacking regression',
       supportVectorClassification: 'Support vector classification',
       supportVectorRegression: 'Support vector regression',
       votingClassifier: 'Voting classifier',
       votingRegression: 'Voting regression',
+      xgboostClassification: 'XGBoost classification',
+      xgboostRegression: 'XGBoost regression',
     },
     ensemble: {
       aLogisticRegressionLearnsFrom:

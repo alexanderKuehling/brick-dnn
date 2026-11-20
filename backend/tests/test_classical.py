@@ -45,6 +45,15 @@ MODELS = [
 BOOSTING = ["HistGradientBoostingRegressor", "HistGradientBoostingClassifier"]
 # Tested in test_classical_ensembles.py.
 ENSEMBLES = ["VotingClassifier", "VotingRegressor", "StackingClassifier", "StackingRegressor"]
+# XGBoost, LightGBM and CatBoost: tested in test_boosting_libraries.py.
+LIBRARY_MODELS = [
+    "XGBRegressor",
+    "XGBClassifier",
+    "LGBMRegressor",
+    "LGBMClassifier",
+    "CatBoostRegressor",
+    "CatBoostClassifier",
+]
 
 
 def graph(nodes, edges):
@@ -75,7 +84,7 @@ def errors(g):
 
 def test_every_classical_brick_is_covered():
     classical = {t for t, cls in REGISTRY.items() if cls.family == "classical"}
-    assert classical == set(KERNELS + COMBINATIONS + MODELS + ENSEMBLES)
+    assert classical == set(KERNELS + COMBINATIONS + MODELS + LIBRARY_MODELS + ENSEMBLES)
 
 
 def test_catalogue_describes_kinds_and_slots():

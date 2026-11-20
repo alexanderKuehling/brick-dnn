@@ -492,6 +492,9 @@ a range or a list of values; each model starts with sensible defaults:
 | Model | Parameters (searched by default in bold) |
 | ----- | ---------------------------------------- |
 | Gradient boosting | **`learning_rate`** (0.01 to 0.3), `max_iter`, **`max_leaf_nodes`** (15 to 127), `max_depth` (`null`: no limit), **`min_samples_leaf`** (5 to 100), `l2_regularization`, and for the classifier `class_weight` (`none`, `balanced`) |
+| XGBoost | **`learning_rate`**, `n_estimators`, **`max_depth`** (3, 6, 9), **`min_child_weight`** (1 to 10), `subsample`, `colsample_bytree` (0.5 to 1), `reg_alpha`, `reg_lambda`, and for the classifier `scale_pos_weight` |
+| LightGBM | **`learning_rate`**, `n_estimators`, **`num_leaves`** (15 to 127), `max_depth`, **`min_child_samples`** (5 to 100), `subsample`, `colsample_bytree`, `reg_alpha`, `reg_lambda`, and for the classifier `class_weight` |
+| CatBoost | **`learning_rate`**, `iterations`, **`depth`** (4, 6, 8), **`l2_leaf_reg`** (1 to 10), and for the classifier `auto_class_weights` |
 | SVC, SVR | **`C`** (0.1 to 100), **`gamma`** (0.001 to 1; also `scale` and `auto` in a list), `kernel` (`linear`, `poly`, `rbf`, `sigmoid`), SVR `epsilon`, SVC `class_weight` |
 | Gaussian process regression | **`alpha`**, `normalize_y`, `n_restarts_optimizer` |
 | Gaussian process classification | **`n_restarts_optimizer`** |
@@ -1004,6 +1007,8 @@ Besides neural networks, Brick DNN builds and trains classical models for tabula
 | Support vector classification | classes with probabilities (Platt scaling) | `SVC` |
 | Gradient boosting regression | predicts a number | `HistGradientBoostingRegressor` |
 | Gradient boosting classification | classes with probabilities | `HistGradientBoostingClassifier` |
+| XGBoost, LightGBM, CatBoost regression | predicts a number | `XGBRegressor`, `LGBMRegressor`, `CatBoostRegressor` |
+| XGBoost, LightGBM, CatBoost classification | classes with probabilities | `XGBClassifier`, `LGBMClassifier`, `CatBoostClassifier` |
 
 Connect the Input (shape: the number of feature columns) straight to the model; a Gaussian
 process may also take a kernel built from kernel bricks (`RBF`, `Matern`, `RationalQuadratic`,
@@ -1030,6 +1035,37 @@ pipeline standardises them anyway (it does not change the splits), so the saved 
 the format of the other classical models. Missing values have to be filled in first (e.g. in
 the *Data* tab), as for the other models.
 
+**XGBoost, LightGBM and CatBoost**, the gradient boosting libraries of tabular competitions,
+are bricks too, each for regression and classification (`XGBRegressor`, `XGBClassifier`,
+`LGBMRegressor`, `LGBMClassifier`, `CatBoostRegressor`, `CatBoostClassifier`; examples
+*LightGBM classifier* and *XGBoost, LightGBM and CatBoost stacked*). Their settings are
+short: *Max. trees* (500, CatBoost 1,000), *Learning rate* (0.05), the size of the trees
+(XGBoost *Max. depth* 6 and *Min. child weight*; LightGBM *Max. leaves per tree* 31, *Max.
+depth* and *Min. rows per leaf*; CatBoost *Depth* 6), *Row sample* and *Column sample*
+(XGBoost, LightGBM), L1/L2 regularisation, *Early stopping rounds* (50; 0: off), *Random
+state* and for rare classes XGBoost's *Positive class weight* (`scale_pos_weight`, two
+classes: e.g. negatives / positives), LightGBM's *Class weights* (`balanced`) or CatBoost's
+(`Balanced`, `SqrtBalanced`). Early stopping hands the model the **validation rows** of the
+run: it stops adding trees when their loss has not improved for that many rounds and keeps
+the best round; the run reports the trees kept (*Boosting iterations*). The validation
+metrics are then a little optimistic; the test rows are never used. Without validation rows,
+in an ensemble and in a cross-validated search the models fit all their trees (the run log
+says so). Hard voting does not take `CatBoostClassifier`. `XGBClassifier` needs training
+rows of every class up to the last one (it learns class indices); LightGBM and CatBoost take
+any classes.
+
+The libraries are dependencies of the server (`xgboost-cpu`, `lightgbm`, `catboost` in
+`requirements.txt`; the Docker image installs `libgomp1` for LightGBM), but the `brickdnn`
+package does not need them: the analysis and the generated code work without them, and a
+brick whose library is missing gets the check *"XGBoost is not installed on this server, so
+XGBoost classification cannot be trained here. Install it with: pip install xgboost"*
+(`pip install "brickdnn[boosting]"` for the command line). Their fits use one thread on small
+data, like scikit-learn's gradient boosting, and otherwise `OMP_NUM_THREADS` (CatBoost does
+not read it, so the engine sets its `thread_count`). Text columns are one-hot encoded in the
+*Data* tab first, as for every classical model: the native categorical handling of CatBoost
+and LightGBM is not used yet. Explanations (permutation importance, feature attributions)
+work as for the other classical models.
+
 In the editor, the bricks are in the *Classical · scikit-learn* part of the palette. A Gaussian
 process has two inputs, *features* (from the Input) and *kernel*; kernel connections are
 dashed, and the editor refuses a kernel into a data input and data into a kernel input.
@@ -1048,8 +1084,8 @@ history and API, but **fitted once instead of epoch by epoch**:
   classifiers take text labels, whole numbers (each value is a class) or the classes of a
   prepared dataset. The check explains mismatches, e.g. *"The target column 'species'
   contains text labels (3 classes), so this is a classification task: use
-  GaussianProcessClassifier, SVC or HistGradientBoostingClassifier instead of Support vector
-  regression."*
+  GaussianProcessClassifier, SVC, HistGradientBoostingClassifier, XGBClassifier,
+  LGBMClassifier or CatBoostClassifier instead of Support vector regression."*
 - **Split and scaling**: the same rules as for neural networks (validation split, test split,
   the split of a prepared dataset, *Max. samples*, *Seed*); the random split uses NumPy's
   generator, so the rows differ from a neural run with the same seed. The model is a
@@ -1059,7 +1095,8 @@ history and API, but **fitted once instead of epoch by epoch**:
   [hyperparameter search](#searching-a-classical-model) over the parameters of the brick.
   Epochs, batch size, learning rate, optimizer, weight decay, device, early stopping and the
   kept weights do not (a Gaussian process optimises its kernel hyperparameters itself).
-  Gradient boosting has an early stopping of its own, set on the brick.
+  Gradient boosting has an early stopping of its own, set on the brick (XGBoost, LightGBM
+  and CatBoost: on the validation rows).
 - **Size limits**: fitting a Gaussian process takes O(n³) time and O(n²) memory, an SVM
   between O(n²) and O(n³), gradient boosting about O(n) per tree. A Gaussian process
   classifier is much slower than a regression (its Laplace approximation is iterative, and it

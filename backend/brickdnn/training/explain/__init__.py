@@ -219,6 +219,10 @@ class _Context:
                 raise ExplainError("This run has no fitted model.")
             try:
                 self._bundle = joblib.load(path)
+            except ModuleNotFoundError as exc:
+                from ..predict import missing_library_text
+
+                raise ExplainError(missing_library_text(exc)) from exc
             except Exception as exc:
                 raise ExplainError(f"The fitted model cannot be loaded: {exc}") from exc
         return self._bundle

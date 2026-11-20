@@ -85,6 +85,11 @@ export const builder: Messages<typeof en> = {
     },
     kernel: { linear: 'Linear', poly: 'Polynomiell', rbf: 'RBF', sigmoid: 'Sigmoid' },
     class_weight: { none: 'Keine', balanced: 'Ausgeglichen' },
+    auto_class_weights: {
+      none: 'Keine',
+      Balanced: 'Ausgeglichen',
+      SqrtBalanced: 'Wurzel aus ausgeglichen',
+    },
     early_stopping: { auto: 'Automatisch (ab 10.000 Zeilen)', on: 'An', off: 'Aus' },
     voting: {
       soft: 'Soft (Wahrscheinlichkeiten mitteln)',
@@ -124,6 +129,7 @@ export const builder: Messages<typeof en> = {
     kernelOutput: 'Kernel',
     balanced: 'ausgeglichen',
     iterations: '{{value}} Iterationen',
+    trees: '≤ {{value}} Bäume',
     rate: 'Rate {{value}}',
     leaves: '{{value}} Blätter',
     depth: 'Tiefe {{value}}',

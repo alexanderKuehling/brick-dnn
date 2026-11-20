@@ -4839,6 +4839,239 @@
     }
    ],
    "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Gradient boosting classification on learned features: generated with Brick DNN.\n\nNeural layers (FeatureExtractor) turn 8 numeric features into 32 learned features;\nHistGradientBoostingClassifier is fitted on them and predicts the class of each row. The\ntraining has two phases: first the neural layers learn with a temporary linear head on the\ntarget (with --frozen they keep their random initial weights), then the head is dropped and\nthe classical model is fitted on the features of the training rows.\n\nPrint the models and fit them to random data:\n\n    python this_file.py\n\nTrain on a CSV file (every column but the last is a feature, the last column is\nthe target); this writes features.pt (the neural layers) and model.joblib (the\nclassical model). Then predict new rows with both:\n\n    python this_file.py --csv data.csv --epochs 20\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nimport torch\nimport torch.nn as nn\nfrom sklearn.ensemble import HistGradientBoostingClassifier\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom torch.utils.data import DataLoader, TensorDataset\n\nNUM_FEATURES = 8  # input columns of the CSV file\nNUM_LEARNED = 32  # features the neural layers learn\n\n\nclass FeatureExtractor(nn.Module):\n    def __init__(self) -> None:\n        super().__init__()\n        self.linear_1 = nn.Linear(8, 64)\n        self.relu_1 = nn.ReLU()\n        self.learned_features = nn.Linear(64, 32)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        x = self.linear_1(x)\n        x = self.relu_1(x)\n        x = self.learned_features(x)\n        return x\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit HistGradientBoostingClassifier.\"\"\"\n    model = HistGradientBoostingClassifier(\n        learning_rate=0.1,\n        max_iter=200,\n        max_leaf_nodes=31,\n        max_depth=None,\n        min_samples_leaf=20,\n        l2_regularization=0.0,\n        early_stopping=\"auto\",\n        random_state=0,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# The two phases: learning the features, then fitting the classical model\n# --------------------------------------------------------------------------- #\n\n\ndef extract(extractor: nn.Module, inputs: np.ndarray) -> np.ndarray:\n    \"\"\"The learned features of every row (or sample): the output of the neural layers,\n    computed in batches without gradients.\"\"\"\n    extractor.eval()\n    x = torch.as_tensor(inputs, dtype=torch.float32)\n    with torch.no_grad():\n        parts = [extractor(x[i : i + 1024]) for i in range(0, len(x), 1024)]\n    if not parts:\n        return np.empty((0, NUM_LEARNED))\n    return torch.cat(parts).double().numpy()\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef split_rows(n: int, seed: int) -> tuple[np.ndarray, np.ndarray]:\n    \"\"\"A random 80 % of the rows for training, the rest for validation (fixed by ``seed``).\n    Both phases use the same split.\"\"\"\n    if n < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(n)\n    n_val = max(1, n // 5)\n    return order[n_val:], order[:n_val]\n\n\ndef standardise(features: np.ndarray, train_rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:\n    \"\"\"The mean and standard deviation of the training rows. New rows are standardised with\n    them as well, before the neural layers.\"\"\"\n    mean = features[train_rows].mean(axis=0)\n    std = features[train_rows].std(axis=0)\n    std[std < 1e-8] = 1.0  # constant columns are left as they are\n    return mean, std\n\n\ndef learn_features(\n    extractor: FeatureExtractor,\n    features: np.ndarray,\n    target: np.ndarray,\n    train_rows: np.ndarray,\n    val_rows: np.ndarray,\n    epochs: int,\n    batch_size: int,\n    lr: float,\n    seed: int,\n) -> None:\n    \"\"\"Phase 1: train the neural layers with a temporary linear head on the target, then\n    drop the head. ``features`` are standardised.\"\"\"\n    # Classification: one output per class and the cross-entropy loss.\n    classes, labels = np.unique(target, return_inverse=True)\n    y = torch.as_tensor(labels, dtype=torch.long)\n    head = nn.Linear(NUM_LEARNED, len(classes))\n    loss_fn = nn.CrossEntropyLoss()\n    x = torch.as_tensor(features, dtype=torch.float32)\n    train, val = torch.as_tensor(train_rows), torch.as_tensor(val_rows)\n    network = nn.Sequential(extractor, head)\n    loader = DataLoader(\n        TensorDataset(x[train], y[train]),\n        batch_size=batch_size,\n        shuffle=True,\n        drop_last=len(train) > batch_size,\n        generator=torch.Generator().manual_seed(seed),\n    )\n    optimizer = torch.optim.Adam(network.parameters(), lr=lr)\n    print(f\"Learning the features on {len(train)} rows, {len(val)} for validation\")\n    for epoch in range(1, epochs + 1):\n        network.train()\n        total, seen = 0.0, 0\n        for inputs, targets in loader:\n            optimizer.zero_grad()\n            loss = loss_fn(network(inputs), targets)\n            loss.backward()\n            optimizer.step()\n            total += loss.item() * len(inputs)\n            seen += len(inputs)\n        network.eval()\n        with torch.no_grad():\n            val_loss = loss_fn(network(x[val]), y[val]).item()\n        print(\n            f\"Epoch {epoch:3d}/{epochs}  train loss {total / max(seen, 1):.4f}\"\n            f\"  val loss {val_loss:.4f}\"\n        )\n\n\ndef fit(\n    model: Pipeline,\n    features: np.ndarray,\n    target: np.ndarray,\n    train_rows: np.ndarray,\n    val_rows: np.ndarray,\n) -> None:\n    \"\"\"Phase 2: fit the classical model on the learned features of the training rows and\n    validate it on the other rows. Its StandardScaler learns from the training rows only.\"\"\"\n    print(f\"Fitting on the {features.shape[1]} learned features of {len(train_rows)} rows\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    boosting = model.named_steps[\"model\"]\n    # Early stopping may end before max_iter.\n    print(f\"Boosting iterations: {boosting.n_iter_} of at most {boosting.max_iter}\")\n\n\ndef save_model(\n    extractor: FeatureExtractor,\n    model: Pipeline,\n    weights_path: str,\n    model_path: str,\n    header: list[str],\n    mean: np.ndarray,\n    std: np.ndarray,\n) -> None:\n    \"\"\"Save the neural layers with the preprocessing of the input columns (PyTorch) and the\n    fitted classical model (joblib, a pickle: only load files you trust).\"\"\"\n    preprocessing = {\n        \"columns\": header[:-1],  # the input columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"mean\": mean.tolist(),  # every input column is standardised: (value - mean) / std\n        \"std\": std.tolist(),\n    }\n    torch.save({\"state_dict\": extractor.state_dict(), \"preprocessing\": preprocessing}, weights_path)\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": [f\"feature_{i + 1}\" for i in range(NUM_LEARNED)],  # the learned features\n        \"target\": preprocessing[\"target\"],\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n        \"hybrid\": {\"features\": NUM_LEARNED, \"input_columns\": preprocessing[\"columns\"]},\n    }\n    joblib.dump(bundle, model_path)\n    print(f\"Saved the neural layers to {weights_path} and the classical model to {model_path}\")\n\n\ndef predict(weights_path: str, model_path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file: standardise the input columns like\n    the training rows, compute the learned features, then let the classical model predict.\n\n    If both the saved preprocessing and the file have a header line, the input columns are\n    found by their names; otherwise they have to come first. Other columns are ignored.\n    \"\"\"\n    checkpoint = torch.load(weights_path, map_location=\"cpu\", weights_only=True)\n    extractor = FeatureExtractor()\n    extractor.load_state_dict(checkpoint[\"state_dict\"])\n    preprocessing = checkpoint[\"preprocessing\"]\n    bundle = joblib.load(model_path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], preprocessing[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} input columns.\")\n    inputs = numbers(rows, csv_path)\n    mean, std = np.asarray(preprocessing[\"mean\"]), np.asarray(preprocessing[\"std\"])\n    features = extract(extractor, (inputs - mean) / std)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(extractor: FeatureExtractor, model: Pipeline) -> None:\n    \"\"\"Compute the features of 40 random samples with the untrained neural layers, fit the\n    model on them and predict two (shows that both parts work together).\"\"\"\n    rng = np.random.default_rng(0)\n    learned = extract(extractor, rng.normal(size=(40, NUM_FEATURES)))\n    target = np.where(learned[:, 0] + learned[:, -1] > 0, \"yes\", \"no\")\n    model.fit(learned, target)\n    print(\"Predictions for 2 random samples:\", model.predict(learned[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"Gradient boosting classification on learned features, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"train on this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--epochs\", type=int, default=10)\n    parser.add_argument(\"--batch-size\", type=int, default=32)\n    parser.add_argument(\"--lr\", type=float, default=1e-3, help=\"learning rate\")\n    parser.add_argument(\n        \"--frozen\",\n        action=\"store_true\",\n        help=\"keep the random initial weights of the neural layers (no training)\",\n    )\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable run\")\n    parser.add_argument(\n        \"--weights\", default=\"features.pt\", help=\"the neural layers (--csv writes it)\"\n    )\n    parser.add_argument(\n        \"--save\", default=\"model.joblib\", help=\"the classical model (--csv writes it)\"\n    )\n    args = parser.parse_args()\n    torch.manual_seed(args.seed)  # the same initial weights for the same seed\n\n    if args.predict:\n        predict(args.weights, args.save, args.predict)\n        return\n    extractor = FeatureExtractor()\n    model = make_model()\n    print(extractor)\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        train_rows, val_rows = split_rows(len(features), args.seed)\n        mean, std = standardise(features, train_rows)\n        features = (features - mean) / std\n        if args.frozen:\n            print(\"Frozen random features: the neural layers are not trained.\")\n        else:\n            learn_features(\n                extractor,\n                features,\n                target,\n                train_rows,\n                val_rows,\n                args.epochs,\n                args.batch_size,\n                args.lr,\n                args.seed,\n            )\n        learned = extract(extractor, features)\n        fit(model, learned, target, train_rows, val_rows)\n        save_model(extractor, model, args.weights, args.save, header, mean, std)\n        return\n    demo(extractor, model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "lightgbm_classifier",
+   "name": "LightGBM classifier",
+   "description": "A classical model (LightGBM): gradient-boosted trees, grown leaf by leaf, classify rows of 20 numeric features and give class probabilities. Up to 1,000 trees with a learning rate of 0.05; early stopping on the validation rows keeps the best number of them. Each tree sees 80 % of the rows and of the features, and balanced class weights help with rare classes. A favourite of tabular competitions.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "classification",
+   "estimator": "LGBMClassifier",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "lightgbm"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       20
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "output_shape": [
+      20
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "lightgbm",
+     "type": "LGBMClassifier",
+     "category": "Classical models",
+     "params": {
+      "n_estimators": 1000,
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "min_child_samples": 20,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "reg_alpha": 0.0,
+      "reg_lambda": 0.0,
+      "early_stopping_rounds": 50,
+      "class_weight": "balanced",
+      "random_state": 0
+     },
+     "position": {
+      "x": 280,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "lightgbm",
+     "kind": "tensor"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"LightGBM classification: generated with Brick DNN.\n\nA scikit-learn model for 20 numeric features: they are standardised, then LGBMClassifier\npredicts the class of each row. The trees do not need standardised features (their splits\nstay the same); the scaler keeps the saved model in the format of the other classical\nmodels. Early stopping: the fit to a CSV file stops adding trees when the loss on the\nvalidation rows has not improved for 50 rounds.\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom lightgbm import LGBMClassifier\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\n\nNUM_FEATURES = 20\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit LGBMClassifier.\"\"\"\n    model = LGBMClassifier(\n        n_estimators=1000,\n        learning_rate=0.05,\n        num_leaves=31,\n        max_depth=-1,\n        min_child_samples=20,\n        subsample=0.8,\n        subsample_freq=1,\n        colsample_bytree=0.8,\n        reg_alpha=0.0,\n        reg_lambda=0.0,\n        early_stopping_rounds=50,\n        class_weight=\"balanced\",\n        random_state=0,\n        verbose=-1,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    # Early stopping: LightGBM watches the loss on the validation rows (standardised\n    # like the training rows) and keeps the trees up to its best round.\n    watch = model[:-1].fit(features[train_rows]).transform(features[val_rows])\n    model.fit(\n        features[train_rows],\n        target[train_rows],\n        model__eval_X=watch,\n        model__eval_y=target[val_rows],\n    )\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    boosting = model.named_steps[\"model\"]\n    # Early stopping keeps the trees up to the best round on the validation rows.\n    print(f\"Trees: {boosting.best_iteration_} of at most {boosting.n_estimators}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str], class_names: np.ndarray) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(class_names[i]) for i in model.classes_],\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = np.where(features[:, 0] + features[:, -1] > 0, 1, 0)  # indices\n    # The demo sets no validation rows aside, which early stopping needs.\n    model.set_params(model__early_stopping_rounds=None)\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(\n        description=\"LightGBM classification, generated with Brick DNN\"\n    )\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        # The model learns the classes as indices 0, 1, …: save_model() names them again.\n        class_names, target = np.unique(target, return_inverse=True)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header, class_names)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+  },
+  {
+   "id": "boosting_stacking_ensemble",
+   "name": "XGBoost, LightGBM and CatBoost stacked",
+   "description": "An ensemble of the three gradient boosting libraries of tabular competitions: XGBoost, LightGBM and CatBoost classify rows of 20 numeric features, and a logistic regression learns from their class probabilities for rows they were not fitted on (5-fold cross-validation) how much to trust each of them. In an ensemble the models fit all their trees (no early stopping), so their number is set lower. The dotted connections into the stacking brick carry the models themselves.",
+   "family": "classical",
+   "framework": "scikit-learn",
+   "task": "classification",
+   "estimator": "StackingClassifier",
+   "total_params": null,
+   "neural_params": null,
+   "inputs": [
+    "features"
+   ],
+   "outputs": [
+    "stack"
+   ],
+   "nodes": [
+    {
+     "id": "features",
+     "type": "Input",
+     "category": "Input",
+     "params": {
+      "shape": [
+       20
+      ]
+     },
+     "position": {
+      "x": 0,
+      "y": 190
+     },
+     "output_shape": [
+      20
+     ],
+     "output_kind": "tensor",
+     "num_params": 0,
+     "task": null,
+     "kernel": null
+    },
+    {
+     "id": "xgboost",
+     "type": "XGBClassifier",
+     "category": "Classical models",
+     "params": {
+      "n_estimators": 300,
+      "learning_rate": 0.05,
+      "max_depth": 6,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "early_stopping_rounds": 0,
+      "random_state": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 0
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    },
+    {
+     "id": "lightgbm",
+     "type": "LGBMClassifier",
+     "category": "Classical models",
+     "params": {
+      "n_estimators": 300,
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "early_stopping_rounds": 0,
+      "random_state": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 190
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    },
+    {
+     "id": "catboost",
+     "type": "CatBoostClassifier",
+     "category": "Classical models",
+     "params": {
+      "iterations": 500,
+      "learning_rate": 0.05,
+      "depth": 6,
+      "early_stopping_rounds": 0,
+      "random_state": 0
+     },
+     "position": {
+      "x": 300,
+      "y": 380
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    },
+    {
+     "id": "stack",
+     "type": "StackingClassifier",
+     "category": "Ensembles",
+     "params": {
+      "cv": 5,
+      "passthrough": false
+     },
+     "position": {
+      "x": 600,
+      "y": 190
+     },
+     "output_shape": null,
+     "output_kind": "estimator",
+     "num_params": null,
+     "task": "classification",
+     "kernel": null
+    }
+   ],
+   "edges": [
+    {
+     "source": "features",
+     "target": "xgboost",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "lightgbm",
+     "kind": "tensor"
+    },
+    {
+     "source": "features",
+     "target": "catboost",
+     "kind": "tensor"
+    },
+    {
+     "source": "xgboost",
+     "target": "stack",
+     "kind": "estimator"
+    },
+    {
+     "source": "lightgbm",
+     "target": "stack",
+     "kind": "estimator"
+    },
+    {
+     "source": "catboost",
+     "target": "stack",
+     "kind": "estimator"
+    }
+   ],
+   "code": "# Built with Brick DNN: https://brickdnn.com, https://github.com/alexanderKuehling/brick-dnn\n\"\"\"Stacking classifier: generated with Brick DNN.\n\nA scikit-learn ensemble for 20 numeric features: they are standardised, then\nStackingClassifier combines 3 models (xgboost: XGBClassifier, lightgbm: LGBMClassifier,\ncatboost: CatBoostClassifier) and predicts the class of each row. LogisticRegression learns\nfrom their predictions for rows they were not fitted on (5-fold cross-validation) how to\ncombine them.\n\nPrint the model and fit it to random data:\n\n    python this_file.py\n\nFit it to a CSV file (every column but the last is a feature, the last column is\nthe target), then predict new rows with the saved model:\n\n    python this_file.py --csv data.csv\n    python this_file.py --predict new_data.csv\n\"\"\"\n\nimport argparse\nimport csv\nimport time\n\nimport joblib\nimport numpy as np\nfrom catboost import CatBoostClassifier\nfrom lightgbm import LGBMClassifier\nfrom sklearn.ensemble import StackingClassifier\nfrom sklearn.linear_model import LogisticRegression\nfrom sklearn.pipeline import Pipeline\nfrom sklearn.preprocessing import StandardScaler\nfrom xgboost import XGBClassifier\n\nNUM_FEATURES = 20\n\n\ndef make_model() -> Pipeline:\n    \"\"\"Standardise the features (with the mean and standard deviation of the data\n    it is fitted to), then fit StackingClassifier with its 3 models.\"\"\"\n    xgboost = XGBClassifier(\n        n_estimators=300,\n        learning_rate=0.05,\n        max_depth=6,\n        min_child_weight=1.0,\n        subsample=0.8,\n        colsample_bytree=0.8,\n        reg_alpha=0.0,\n        reg_lambda=1.0,\n        random_state=0,\n    )\n    lightgbm = LGBMClassifier(\n        n_estimators=300,\n        learning_rate=0.05,\n        num_leaves=31,\n        max_depth=-1,\n        min_child_samples=20,\n        subsample=0.8,\n        subsample_freq=1,\n        colsample_bytree=0.8,\n        reg_alpha=0.0,\n        reg_lambda=0.0,\n        random_state=0,\n        verbose=-1,\n    )\n    catboost = CatBoostClassifier(\n        iterations=500,\n        learning_rate=0.05,\n        depth=6,\n        l2_leaf_reg=3.0,\n        random_seed=0,\n        verbose=0,\n        allow_writing_files=False,\n    )\n    model = StackingClassifier(\n        estimators=[(\"xgboost\", xgboost), (\"lightgbm\", lightgbm), (\"catboost\", catboost)],\n        final_estimator=LogisticRegression(),\n        cv=5,\n        passthrough=False,\n    )\n    return Pipeline([(\"scale\", StandardScaler()), (\"model\", model)])\n\n\n# --------------------------------------------------------------------------- #\n# CSV files: fitting, saving and predictions for new rows\n# --------------------------------------------------------------------------- #\n\n\ndef read_csv(path: str) -> tuple[list[str], list[list[str]]]:\n    \"\"\"Read a CSV file: the column names of its header line (an empty list if it has none)\n    and the rows (as text).\"\"\"\n    with open(path, newline=\"\") as f:\n        rows = [row for row in csv.reader(f) if row]\n    header: list[str] = []\n    if rows:\n        cells = rows[0][:-1] or rows[0]  # the last column (the target) may hold text\n        try:\n            [float(value) for value in cells]\n        except ValueError:\n            header, rows = [name.strip() for name in rows[0]], rows[1:]\n    if not rows:\n        raise SystemExit(f\"{path} contains no data rows.\")\n    return header, rows\n\n\ndef numbers(rows: list[list[str]], path: str) -> np.ndarray:\n    try:\n        return np.array([[float(value) for value in row] for row in rows])\n    except ValueError as exc:\n        raise SystemExit(f\"{path}: {exc}\") from None\n\n\ndef load_csv(path: str) -> tuple[list[str], np.ndarray, np.ndarray]:\n    \"\"\"Training data: every column but the last is a feature, the last one is the target.\"\"\"\n    header, rows = read_csv(path)\n    if any(len(row) != NUM_FEATURES + 1 for row in rows):\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns and the target in every row.\")\n    features = numbers([row[:-1] for row in rows], path)\n    target = np.array([row[-1].strip() for row in rows])  # the class labels\n    return header, features, target\n\n\ndef fit(model: Pipeline, features: np.ndarray, target: np.ndarray, seed: int) -> None:\n    \"\"\"Fit on a random 80 % of the rows and validate on the rest (the split depends only on\n    ``seed``). The StandardScaler of the pipeline learns from the training rows only.\"\"\"\n    if len(features) < 4:\n        raise SystemExit(\"The CSV file needs at least 4 rows (training + validation).\")\n    order = np.random.default_rng(seed).permutation(len(features))\n    n_val = max(1, len(features) // 5)\n    val_rows, train_rows = order[:n_val], order[n_val:]\n    print(f\"Fitting on {len(train_rows)} rows, {len(val_rows)} for validation\")\n    started = time.perf_counter()\n    model.fit(features[train_rows], target[train_rows])\n    print(f\"Fitted in {time.perf_counter() - started:.1f} s\")\n    accuracy = float(np.mean(model.predict(features[val_rows]) == target[val_rows]))\n    print(f\"Validation accuracy {accuracy:.1%}\")\n    ensemble = model.named_steps[\"model\"]\n    print(f\"Models: {', '.join(ensemble.named_estimators_)}\")\n    print(f\"Final estimator: {ensemble.final_estimator_}\")\n\n\ndef save_model(model: Pipeline, path: str, header: list[str]) -> None:\n    \"\"\"Save the fitted pipeline with what predict() needs to read new rows. joblib files\n    are pickles: only load files you trust.\"\"\"\n    bundle = {\n        \"format\": \"brickdnn-sklearn-1\",\n        \"model\": model,\n        \"columns\": header[:-1],  # the feature columns by name (empty: no header line)\n        \"target\": header[-1] if header else \"target\",\n        \"task\": \"classification\",\n        # one name per column of model.predict_proba()\n        \"class_names\": [str(name) for name in model.classes_],\n    }\n    joblib.dump(bundle, path)\n    print(f\"Saved the fitted model to {path}\")\n\n\ndef predict(path: str, csv_path: str) -> None:\n    \"\"\"Print a prediction for every row of a CSV file.\n\n    If both the saved model and the file have a header line, the feature columns are found\n    by their names; otherwise they have to come first. Other columns (such as the target)\n    are ignored. The pipeline standardises the features like the training data.\n    \"\"\"\n    bundle = joblib.load(path)  # a pickle: only load files you trust\n    model, columns = bundle[\"model\"], bundle[\"columns\"]\n    header, rows = read_csv(csv_path)\n    if columns and header:\n        missing = [name for name in columns if name not in header]\n        if missing:\n            raise SystemExit(f\"{csv_path} lacks the columns {', '.join(missing)}.\")\n        rows = [[row[header.index(name)] for name in columns] for row in rows]\n    elif all(len(row) >= NUM_FEATURES for row in rows):\n        rows = [row[:NUM_FEATURES] for row in rows]\n    else:\n        raise SystemExit(f\"Expected {NUM_FEATURES} feature columns.\")\n    features = numbers(rows, csv_path)\n    probabilities = model.predict_proba(features)\n    names = bundle[\"class_names\"]\n    print(f\"{bundle['target']},probability\")\n    for row in probabilities:\n        best = int(np.argmax(row))\n        print(f\"{names[best]},{row[best]:.4f}\")\n\n\ndef demo(model: Pipeline) -> None:\n    \"\"\"Fit the model to 40 random rows and predict two of them (shows that it works).\"\"\"\n    rng = np.random.default_rng(0)\n    features = rng.normal(size=(40, NUM_FEATURES))\n    target = np.where(features[:, 0] + features[:, -1] > 0, \"yes\", \"no\")\n    model.fit(features, target)\n    print(\"Predictions for 2 random rows:\", model.predict(features[:2]))\n\n\ndef main() -> None:\n    parser = argparse.ArgumentParser(description=\"Stacking classifier, generated with Brick DNN\")\n    parser.add_argument(\"--csv\", help=\"fit the model to this CSV file (last column = target)\")\n    parser.add_argument(\"--predict\", metavar=\"CSV\", help=\"predict the rows of this file\")\n    parser.add_argument(\"--seed\", type=int, default=0, help=\"for a repeatable split\")\n    parser.add_argument(\n        \"--save\",\n        default=\"model.joblib\",\n        help=\"the fitted model (--csv writes it, --predict reads it)\",\n    )\n    args = parser.parse_args()\n\n    if args.predict:\n        predict(args.save, args.predict)\n        return\n    model = make_model()\n    print(model)\n    if args.csv:\n        header, features, target = load_csv(args.csv)\n        fit(model, features, target, args.seed)\n        save_model(model, args.save, header)\n        return\n    demo(model)\n\n\nif __name__ == \"__main__\":\n    main()\n"
   }
  ]
 }

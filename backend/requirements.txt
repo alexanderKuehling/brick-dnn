@@ -23,6 +23,13 @@ pillow>=10
 # Classical models (Gaussian processes, SVMs, gradient boosting): training and predictions.
 # Brings SciPy and joblib along; PyTorch is not needed for them.
 scikit-learn>=1.3,<2
+# Gradient boosting libraries for the XGBoost, LightGBM and CatBoost bricks (CPU builds:
+# xgboost-cpu is XGBoost without the CUDA libraries; LightGBM needs libgomp1, see the
+# Dockerfile). LightGBM 4.7 takes the validation rows of early stopping as eval_X/eval_y.
+# CatBoost brings matplotlib, plotly and graphviz along (its plotting).
+xgboost-cpu>=3.0,<4
+lightgbm>=4.7,<5
+catboost>=1.2.8,<2
 # Live editing over WebSockets (Django Channels; Redis connects the server processes).
 channels>=4.2,<5
 channels-redis>=4.2,<5

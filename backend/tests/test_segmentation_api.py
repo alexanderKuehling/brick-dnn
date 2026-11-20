@@ -312,10 +312,10 @@ def test_datasets_over_mcp_are_compact(mcp, web, user, training_dir):
     del files["masks/011.png"]
     dataset_id = upload(web, "squares.zip", zip_bytes(files), name="Squares").data["id"]
     options, size = answer(mcp, "get_training_options")
-    # With the hyperparameter search options (about 1,800 bytes), the losses per task with
-    # their settings (about 560 bytes) and eight built-in datasets (Cells adds about 500, the
-    # text datasets about 700 each).
-    assert size < 9900
+    # With the hyperparameter search options (about 3,300 bytes, 1,500 of them for XGBoost,
+    # LightGBM and CatBoost), the losses per task with their settings (about 560 bytes) and
+    # eight built-in datasets (Cells adds about 500, the text datasets about 700 each).
+    assert size < 11_600
     assert options["segmentation"]["max_classes"] == 32
     assert options["config_defaults"]["loss"] == "auto"  # cross_entropy for a segmentation
     assert options["losses"]["segmentation"] == (

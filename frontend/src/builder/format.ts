@@ -277,6 +277,32 @@ export function summarize(type: string, p: Params, context: SummaryContext = {})
       }
       return parts.join(' · ');
     }
+    case 'XGBRegressor':
+    case 'XGBClassifier':
+    case 'LGBMRegressor':
+    case 'LGBMClassifier':
+    case 'CatBoostRegressor':
+    case 'CatBoostClassifier': {
+      const catboost = type.startsWith('CatBoost');
+      const parts = [
+        i18n.t('builder.format.trees', { value: num(catboost ? p.iterations : p.n_estimators) }),
+        i18n.t('builder.format.rate', { value: num(p.learning_rate) }),
+      ];
+      if (type.startsWith('LGBM')) {
+        parts.push(i18n.t('builder.format.leaves', { value: num(p.num_leaves) }));
+      }
+      const depth = catboost ? p.depth : p.max_depth;
+      if (typeof depth === 'number') {
+        parts.push(i18n.t('builder.format.depth', { value: depth }));
+      }
+      if (
+        p.class_weight === 'balanced' ||
+        (typeof p.auto_class_weights === 'string' && p.auto_class_weights !== 'none')
+      ) {
+        parts.push(i18n.t('builder.format.balanced'));
+      }
+      return parts.join(' · ');
+    }
     case 'VotingClassifier':
     case 'VotingRegressor': {
       const how =

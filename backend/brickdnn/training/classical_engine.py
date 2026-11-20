@@ -46,8 +46,9 @@ import numpy as np
 from ..classical import MODEL_FORMAT
 from ..codegen import generate_code
 from ..graph import analyze
-from ..layers import ClassicalModel, Ensemble
-from .compat import TrainingPlan, check_compatibility
+from ..layers import BOOSTING_LIBRARIES, ClassicalModel, Ensemble
+from . import boosting
+from .compat import TrainingPlan, check_compatibility, missing_library
 from .config import TrainingConfig
 from .datasets import DatasetInfo
 from .job import TrainingJob, TrainingResult
@@ -221,8 +222,12 @@ class _ClassicalRun:
                 f"Out of memory while fitting {self.rows:,} rows. Set Max. samples to fit on "
                 "fewer rows."
             )
-        text = f"Fitting failed: {short_error(exc)}"
         layer = getattr(self, "layer", None)
+        if isinstance(exc, ImportError) and layer is not None:
+            missing = missing_library(models_of(layer))
+            if missing is not None:
+                return missing
+        text = f"Fitting failed: {short_error(exc)}"
         gaussian = layer is not None and any(
             model.scale == "gaussian_process" for model in models_of(layer)
         )
@@ -446,6 +451,8 @@ class _ClassicalRun:
     def _what(self) -> str:
         if isinstance(self.layer, Ensemble):
             return f"{self.layer.combines} ensemble of {len(self.models)} models"
+        if self.layer.library is not None:
+            return f"{BOOSTING_LIBRARIES[self.layer.library]} model"
         return WHAT[self.layer.scale]
 
     def _measure_members(self, rows: np.ndarray) -> None:
@@ -662,6 +669,16 @@ class _ClassicalRun:
             folds = int(self.layer.p["cv"])
             if (present < folds).all():
                 raise TrainingError(STACKING_FOLDS.format(cv=folds))
+        if self.layer.type == "XGBClassifier":
+            # XGBoost learns class indices 0 … k-1 (in an ensemble scikit-learn numbers them).
+            last = int(np.flatnonzero(counts)[-1])
+            gaps = [i for i in range(last) if counts[i] == 0]
+            if gaps:
+                raise TrainingError(
+                    "XGBoost needs training rows of every class up to the last one, but the "
+                    f"class '{names[gaps[0]] if gaps[0] < len(names) else gaps[0]}' has none. "
+                    "Use more rows, or LightGBM or CatBoost, which take any classes."
+                )
         if self._early_stopping(len(y)):
             # The held-out rows are stratified: every class needs a row on both sides.
             rare = [names[i] if i < len(names) else str(i) for i in np.flatnonzero(counts == 1)]
@@ -681,7 +698,7 @@ class _ClassicalRun:
         """Whether gradient boosting (a model of an ensemble, too) holds out rows for its
         early stopping."""
         for model in self.models:
-            if model.scale != "gradient_boosting":
+            if model.scale != "gradient_boosting" or model.library is not None:
                 continue
             setting = model.p["early_stopping"]
             if setting == "on" or (setting == "auto" and rows > AUTO_EARLY_STOPPING_ROWS):
@@ -700,12 +717,14 @@ class _ClassicalRun:
     def _fit(self, x: np.ndarray, y: np.ndarray) -> None:
         """Fit the pipeline in a thread and check the stop request meanwhile."""
         outcome: dict[str, Any] = {}
+        params = self._fit_params(self.pipeline, x, y)
 
         def work() -> None:
             try:
                 with warnings.catch_warnings(record=True) as caught, self._threads():
                     warnings.simplefilter("always")
-                    self.pipeline.fit(x, y)
+                    warnings.filterwarnings("ignore", message=boosting.EVAL_SET_DEPRECATED)
+                    self.pipeline.fit(x, y, **params)
                 outcome["warnings"] = caught
             except BaseException as exc:  # handed to the main thread
                 outcome["error"] = exc
@@ -730,6 +749,51 @@ class _ClassicalRun:
                 seen.add(text)
                 self.reporter.log(text)
 
+    def _eval_rows(self) -> np.ndarray | None:
+        """The rows the early stopping of XGBoost, LightGBM and CatBoost watches: the
+        validation rows (None without them)."""
+        val = self.data.val
+        return val if len(val) else None
+
+    def _without_eval_rows(self, cross_validated: bool = False) -> str:
+        """Why early stopping has no rows to watch (logged once)."""
+        if cross_validated:
+            return (
+                "Early stopping only watches the validation rows when the trials are compared "
+                f"on them, not in a cross-validation: {self.layer.label} fits all its trees in "
+                "this search."
+            )
+        return (
+            "Early stopping needs validation rows (set a validation split above 0): "
+            f"{self.layer.label} fits all its trees."
+        )
+
+    def _fit_params(self, pipeline: Any, x: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+        """Threads and early stopping of XGBoost, LightGBM and CatBoost (``{}`` for other
+        models): one thread on small data (SINGLE_THREAD_CELLS, as for scikit-learn's
+        gradient boosting; their OpenMP threads crawl on busy CPUs), else the threads of a
+        training; the validation rows for early stopping."""
+        if not boosting.library_estimators(pipeline):
+            return {}
+        small = len(x) * max(1, x.shape[1]) < SINGLE_THREAD_CELLS
+        boosting.limit_threads(pipeline, 1 if small else boosting.job_threads())
+        if not boosting.stopping_rounds(pipeline):
+            return {}
+        rows = self._eval_rows()
+        data = self.data
+        params = boosting.stopping_fit_params(
+            pipeline,
+            x,
+            y,
+            data.x[rows] if rows is not None else None,
+            data.y[rows] if rows is not None else None,
+            self.classification,
+        )
+        if not params and not getattr(self, "_told_no_stopping", False):
+            self._told_no_stopping = True
+            self.reporter.log(self._without_eval_rows())
+        return params
+
     def _learned(self) -> dict[str, Any]:
         """What the fit found: the kernel of a Gaussian process, the support vectors of an
         SVM, the boosting iterations of gradient boosting (early stopping may end sooner).
@@ -737,6 +801,9 @@ class _ClassicalRun:
         if isinstance(self.layer, Ensemble):
             return {}
         model = final_estimator(self.pipeline)
+        if self.layer.library is not None:
+            used, most = boosting.trees(model)
+            return {"iterations": used, "max_iterations": most}
         if self.layer.scale == "gradient_boosting":
             return {"iterations": int(model.n_iter_), "max_iterations": int(model.max_iter)}
         if self.layer.scale == "gaussian_process":

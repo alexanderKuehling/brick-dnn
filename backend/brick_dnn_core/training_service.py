@@ -30,6 +30,7 @@ import base64
 import contextlib
 import copy
 import importlib.metadata
+import importlib.util
 import json
 import logging
 import math
@@ -61,7 +62,7 @@ from django.utils.text import slugify
 from rest_framework import serializers
 
 from brickdnn import REGISTRY, Analysis, analyze
-from brickdnn.layers import ClassicalModel, Ensemble
+from brickdnn.layers import BOOSTING_LIBRARIES, ClassicalModel, Ensemble
 from brickdnn.training import (
     ACTIVE_STATUSES,
     BUILTIN_DATASETS,
@@ -393,6 +394,16 @@ def _sklearn_version() -> str | None:
         return None
 
 
+def _library_version(library: str) -> str | None:
+    """The installed version of a gradient boosting library (xgboost: the CPU build too)."""
+    if importlib.util.find_spec(library) is None:
+        return None
+    for distribution in (library, f"{library}-cpu"):
+        with contextlib.suppress(importlib.metadata.PackageNotFoundError):
+            return importlib.metadata.version(distribution)
+    return None
+
+
 def classical_capabilities() -> dict[str, Any]:
     """Whether classical models can be trained here (needs scikit-learn, not PyTorch)."""
     reason = unavailable_reason("classical")
@@ -400,6 +411,9 @@ def classical_capabilities() -> dict[str, Any]:
         "available": reason is None,
         "reason": reason,
         "sklearn_version": _sklearn_version() if reason is None else None,
+        # The versions of XGBoost, LightGBM and CatBoost (None: not installed, their bricks
+        # cannot be trained here).
+        "libraries": {library: _library_version(library) for library in BOOSTING_LIBRARIES},
         # Training rows each classical model is fitted on at most (more are subsampled). An
         # ensemble has the strictest limit of its models.
         "max_rows": {

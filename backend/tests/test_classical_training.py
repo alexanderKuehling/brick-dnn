@@ -162,14 +162,16 @@ INTEGER = {"target_kind": "integer", "target_range": [1, 7], "class_names": ["1"
         (
             "SVR",
             csv_info(**TEXT),
-            "use GaussianProcessClassifier, SVC or HistGradientBoostingClassifier instead",
+            "use GaussianProcessClassifier, SVC, HistGradientBoostingClassifier, XGBClassifier, "
+            "LGBMClassifier or CatBoostClassifier instead",
         ),
         ("GaussianProcessRegressor", csv_info(**TEXT), "classification task"),
         ("HistGradientBoostingRegressor", csv_info(**TEXT), "classification task"),
         (
             "SVC",
             csv_info(**NUMBER),
-            "use GaussianProcessRegressor, SVR or HistGradientBoostingRegressor instead",
+            "use GaussianProcessRegressor, SVR, HistGradientBoostingRegressor, XGBRegressor, "
+            "LGBMRegressor or CatBoostRegressor instead",
         ),
         ("HistGradientBoostingClassifier", csv_info(**NUMBER), "regression task"),
         ("HistGradientBoostingClassifier", builtin_info("mnist"), "not on images like MNIST"),

@@ -34,9 +34,17 @@ from typing import TYPE_CHECKING, Any
 from .classical import (
     _NUMBERS,
     _READ_CSV,
+    CLASS_NAMES,
+    ENCODE_LABELS,
+    FIT_LINE,
     LINE_LENGTH,
     MODEL_FORMAT,
+    NAMED_CLASSES,
     _ClassicalGenerator,
+    demo_without_stopping,
+    encodes_labels,
+    stopping_fit,
+    stops_early,
 )
 from .graph import Analysis, GraphValidationError, analyze
 from .layers import ClassicalModel
@@ -189,7 +197,7 @@ class _HybridGenerator:
                     self.classical._load_csv(),
                     _SPLIT,
                     self._learn_features(),
-                    _FIT.replace("[[REPORT]]", self.classical._report()),
+                    self._fit(),
                     self._save_model(),
                 ]
             if self.tabular:
@@ -284,6 +292,10 @@ class _HybridGenerator:
         head = _CLASSIFICATION_HEAD if self.classification else _REGRESSION_HEAD
         return _LEARN_FEATURES.replace("[[HEAD]]", head).replace("[[CLASS]]", self.class_name)
 
+    def _fit(self) -> str:
+        code = _FIT.replace("[[REPORT]]", self.classical._report())
+        return code.replace(FIT_LINE, stopping_fit(self.layer)) if stops_early(self.layer) else code
+
     def _save_model(self) -> str:
         if self.classification:
             task = (
@@ -293,17 +305,26 @@ class _HybridGenerator:
             )
         else:
             task = '        "task": "regression",\n        "class_names": None,'
-        return (
+        code = (
             _SAVE_MODEL.replace("[[FORMAT]]", MODEL_FORMAT)
             .replace("[[TASK]]", task)
             .replace("[[CLASS]]", self.class_name)
         )
+        if encodes_labels(self.layer):
+            code = code.replace(
+                "    std: np.ndarray,\n) -> None:",
+                "    std: np.ndarray,\n    class_names: np.ndarray,\n) -> None:",
+            ).replace(CLASS_NAMES, NAMED_CLASSES)
+        return code
 
     def _demo(self) -> str:
-        if self.classification:
+        if encodes_labels(self.layer):
+            target = "    target = np.where(learned[:, 0] + learned[:, -1] > 0, 1, 0)  # indices"
+        elif self.classification:
             target = '    target = np.where(learned[:, 0] + learned[:, -1] > 0, "yes", "no")'
         else:
             target = "    target = learned[:, 0] + np.sin(2 * learned[:, -1])"
+        target = "\n".join([target, *demo_without_stopping(self.layer)])
         shape = "(40, NUM_FEATURES)" if self.tabular else "(40, *INPUT_SHAPE)"
         return (
             _DEMO.replace("[[TARGET]]", target)
@@ -375,6 +396,7 @@ class _HybridGenerator:
             lines += [
                 "    if args.csv:",
                 "        header, features, target = load_csv(args.csv)",
+                *(ENCODE_LABELS if encodes_labels(self.layer) else []),
                 "        train_rows, val_rows = split_rows(len(features), args.seed)",
                 "        mean, std = standardise(features, train_rows)",
                 "        features = (features - mean) / std",
@@ -399,7 +421,8 @@ class _HybridGenerator:
                 "            )",
                 "        learned = extract(extractor, features)",
                 "        fit(model, learned, target, train_rows, val_rows)",
-                "        save_model(extractor, model, args.weights, args.save, header, mean, std)",
+                "        save_model(extractor, model, args.weights, args.save, header, mean, std"
+                + (", class_names)" if encodes_labels(self.layer) else ")"),
                 "        return",
             ]
         lines += ["    demo(extractor, model)", "", "", 'if __name__ == "__main__":', "    main()"]

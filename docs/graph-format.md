@@ -87,7 +87,7 @@ data. Its bricks are in three categories of the catalogue:
 | Category         | Bricks |
 | ---------------- | ------ |
 | Kernels          | `RBF`, `Matern` (ν 0.5, 1.5, 2.5), `RationalQuadratic`, `ExpSineSquared` (periodic), `DotProduct`, `WhiteKernel`, `ConstantKernel`; `KernelSum` and `KernelProduct` combine two or more kernels |
-| Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC`, `HistGradientBoostingRegressor`, `HistGradientBoostingClassifier` |
+| Classical models | `GaussianProcessRegressor`, `GaussianProcessClassifier`, `SVR`, `SVC`, `HistGradientBoostingRegressor`, `HistGradientBoostingClassifier`, `XGBRegressor`, `XGBClassifier` (XGBoost), `LGBMRegressor`, `LGBMClassifier` (LightGBM), `CatBoostRegressor`, `CatBoostClassifier` (CatBoost) |
 | Ensembles        | `VotingClassifier`, `VotingRegressor`, `StackingClassifier`, `StackingRegressor` combine two or more classical models |
 
 ```json
@@ -126,6 +126,24 @@ Rules (the analysis explains every violation at the brick concerned):
   (2 … 4,096, 31), `max_depth` (1 … 100, empty: no limit), `min_samples_leaf` (≥ 1, 20),
   `l2_regularization` (≥ 0, 0), `early_stopping` (`auto`, `on`, `off`), `random_state`
   (≥ 0, 0) and, for the classifier, `class_weight` (`none` or `balanced`).
+- XGBoost, LightGBM and CatBoost take `learning_rate` (> 0, default 0.05),
+  `early_stopping_rounds` (0 … 10,000, default 50, 0: off) and `random_state` (≥ 0, 0;
+  CatBoost's `random_seed`), and
+  - `XGBRegressor`, `XGBClassifier`: `n_estimators` (1 … 20,000, 500), `max_depth` (1 … 30,
+    6), `min_child_weight` (≥ 0, 1), `subsample` and `colsample_bytree` (above 0 … 1, 1),
+    `reg_alpha` (≥ 0, 0), `reg_lambda` (≥ 0, 1); the classifier `scale_pos_weight` (> 0, 1:
+    the weight of the second class of two);
+  - `LGBMRegressor`, `LGBMClassifier`: `n_estimators` (500), `num_leaves` (2 … 131,072, 31),
+    `max_depth` (1 … 100, empty: no limit), `min_child_samples` (≥ 1, 20), `subsample`,
+    `colsample_bytree`, `reg_alpha`, `reg_lambda` (0); the classifier `class_weight`
+    (`none`, `balanced`);
+  - `CatBoostRegressor`, `CatBoostClassifier`: `iterations` (1 … 20,000, 1,000), `depth`
+    (1 … 16, 6), `l2_leaf_reg` (≥ 0, 3); the classifier `auto_class_weights` (`none`,
+    `Balanced`, `SqrtBalanced`).
+
+  The analysis needs none of the libraries; training checks that the library of the brick
+  is installed. Hard voting does not take `CatBoostClassifier` (it predicts the classes as
+  a column, which scikit-learn's vote cannot count).
 - A Gaussian process without a kernel uses `ConstantKernel × RBF + WhiteKernel`
   (regression) or `ConstantKernel × RBF` (classification).
 - Kernel hyperparameters are **initial values**: the Gaussian process optimises them on the
@@ -307,7 +325,13 @@ For a classical model the script uses scikit-learn instead of PyTorch:
   `SVC` is wrapped in `CalibratedClassifierCV(..., ensemble=False)` (Platt scaling with
   5-fold cross-validation), which gives it class probabilities. Gradient boosting is
   `HistGradientBoostingRegressor(...)` or `HistGradientBoostingClassifier(...)` from
-  `sklearn.ensemble` with all its settings written out. An ensemble gets a variable per
+  `sklearn.ensemble` with all its settings written out; XGBoost, LightGBM and CatBoost the
+  estimator of their library (`from xgboost import XGBClassifier` …; LightGBM with
+  `verbose=-1`, CatBoost with `verbose=0, allow_writing_files=False`). With early stopping
+  the CSV fit hands the model the validation rows, standardised like the training rows
+  (`eval_set`, LightGBM's `eval_X`/`eval_y`); the script then numbers the classes 0, 1, …
+  for `XGBClassifier` and an `LGBMClassifier` with early stopping and saves their names. In
+  an ensemble the models are written without early stopping. An ensemble gets a variable per
   model, named like the model in the ensemble (a Gaussian process's kernel `<name>_kernel`,
   an SVC's SVM `<name>_svm`), then e.g. `VotingClassifier(estimators=[("boosting",
   boosting), ("svc", svc), ("gp", gp)], voting="soft")`.
@@ -315,7 +339,8 @@ For a classical model the script uses scikit-learn instead of PyTorch:
 - `--csv data.csv` (with `include_training`) fits it to a random 80 % of the rows (`--seed`)
   and reports the validation RMSE and R² or the accuracy, for a Gaussian process the fitted
   kernel and log marginal likelihood, for an SVM the number of support vectors, for
-  gradient boosting the boosting iterations (of at most `max_iter`), for an ensemble its
+  gradient boosting the boosting iterations (of at most `max_iter`; XGBoost, LightGBM and
+  CatBoost: the trees kept), for an ensemble its
   models (and the fitted final estimator of stacking). The scaler
   learns from the training rows only. The target may hold class labels as text.
 - `--save model.joblib` (the default) stores `{"format": "brickdnn-sklearn-1", "model":

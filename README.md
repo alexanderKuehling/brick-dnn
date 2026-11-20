@@ -92,7 +92,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
   periodic, dot product, white noise and constant kernels, added and multiplied), and
   **support vector machines** (SVR, SVC) and **gradient boosting** (histogram-based
   decision trees, with balanced class weights for rare classes: a strong baseline for large
-  tables). They train on CSV files and prepared datasets with scikit-learn (no PyTorch
+  tables), also with **XGBoost, LightGBM and CatBoost** (early stopping on the validation
+  rows). They train on CSV files and prepared datasets with scikit-learn (no PyTorch
   needed), report the fitted kernel and its log marginal likelihood, the support vectors or
   the boosting iterations, predict with uncertainty (Gaussian processes) or class
   probabilities, and export as a scikit-learn script. **Ensembles** combine several of them
@@ -133,8 +134,8 @@ demonstrate them, and practitioners who want a correct starting point in seconds
 - **Examples** to start from: MLP, CNN, residual block, U-Net (segmentation) and a U-Net
   classifier for Fashion-MNIST, LSTM and Transformer text classifiers,
   tabular regression, multi-input model, Gaussian process regression, SVM classifier, a
-  periodic Gaussian process, a gradient boosting classifier, and voting and stacking
-  ensembles of classical models.
+  periodic Gaussian process, a gradient boosting classifier, a LightGBM classifier, and
+  voting and stacking ensembles of classical models (one of XGBoost, LightGBM and CatBoost).
 - **Accounts and saved networks** (optional): building and exporting work without logging in.
   Networks can also be saved and opened as JSON files. Users download all their data or delete
   their account themselves; servers can show an imprint, privacy policy and terms of use and

@@ -249,6 +249,64 @@ const BOOSTING = [
   tunable('min_samples_leaf', 'Min. rows per leaf', 'int', { min: 5, max: 100 }, { min: 1 }),
   tunable('l2_regularization', 'L2 regularisation', 'float', [0, 0.1, 1, 10], { max: 1e4 }),
 ];
+// XGBoost, LightGBM, CatBoost (classical_tuning.py): early stopping picks the trees.
+const LIBRARY_RATE = tunable(
+  'learning_rate',
+  'Learning rate',
+  'float',
+  { min: 0.01, max: 0.3 },
+  { max: 10, minExclusive: true }
+);
+const libraryTrees = (name: string, values: number[]) =>
+  tunable(name, 'Max. trees', 'int', values, { min: 1, max: 20_000 });
+const share = (name: string, label: string) =>
+  tunable(
+    name,
+    label,
+    'float',
+    { min: 0.5, max: 1 },
+    { max: 1, minExclusive: true, scale: 'linear' }
+  );
+const XGBOOST = [
+  LIBRARY_RATE,
+  libraryTrees('n_estimators', [200, 500, 1000]),
+  tunable('max_depth', 'Max. depth', 'int', [3, 6, 9], { min: 1, max: 30 }),
+  tunable('min_child_weight', 'Min. child weight', 'float', { min: 1, max: 10 }, { max: 1e4 }),
+  share('subsample', 'Row sample'),
+  share('colsample_bytree', 'Column sample'),
+  tunable('reg_alpha', 'L1 regularisation', 'float', [0, 0.1, 1], { max: 1e4 }),
+  tunable('reg_lambda', 'L2 regularisation', 'float', [0.1, 1, 10], { max: 1e4 }),
+];
+const LIGHTGBM = [
+  LIBRARY_RATE,
+  libraryTrees('n_estimators', [200, 500, 1000]),
+  tunable(
+    'num_leaves',
+    'Max. leaves per tree',
+    'int',
+    { min: 15, max: 127 },
+    { min: 2, max: 131_072 }
+  ),
+  tunable('max_depth', 'Max. depth', 'int', [null, 6, 10], {
+    min: 1,
+    max: 100,
+    none: true,
+    get help() {
+      return i18n.t('ui.training.search.noneNoLimit');
+    },
+  }),
+  tunable('min_child_samples', 'Min. rows per leaf', 'int', { min: 5, max: 100 }, { min: 1 }),
+  share('subsample', 'Row sample'),
+  share('colsample_bytree', 'Column sample'),
+  tunable('reg_alpha', 'L1 regularisation', 'float', [0, 0.1, 1], { max: 1e4 }),
+  tunable('reg_lambda', 'L2 regularisation', 'float', [0, 0.1, 1, 10], { max: 1e4 }),
+];
+const CATBOOST = [
+  LIBRARY_RATE,
+  libraryTrees('iterations', [500, 1000, 2000]),
+  tunable('depth', 'Depth', 'int', [4, 6, 8], { min: 1, max: 16 }),
+  tunable('l2_leaf_reg', 'L2 regularisation', 'float', { min: 1, max: 10 }, { max: 1e4 }),
+];
 const SVM = [
   tunable('C', 'C', 'float', { min: 0.1, max: 100 }, { minExclusive: true }),
   tunable(
@@ -278,6 +336,22 @@ const RESTARTS = tunable('n_restarts_optimizer', 'Optimizer restarts', 'int', [0
 export const CLASSICAL_TUNABLES: Record<string, Tunable[]> = {
   HistGradientBoostingRegressor: BOOSTING,
   HistGradientBoostingClassifier: [...BOOSTING, CLASS_WEIGHT],
+  XGBRegressor: XGBOOST,
+  XGBClassifier: [
+    ...XGBOOST,
+    tunable('scale_pos_weight', 'Positive class weight', 'float', [1, 5, 20], {
+      minExclusive: true,
+    }),
+  ],
+  LGBMRegressor: LIGHTGBM,
+  LGBMClassifier: [...LIGHTGBM, CLASS_WEIGHT],
+  CatBoostRegressor: CATBOOST,
+  CatBoostClassifier: [
+    ...CATBOOST,
+    tunable('auto_class_weights', 'Class weights', 'choice', ['none', 'Balanced'], {
+      options: ['none', 'Balanced', 'SqrtBalanced'],
+    }),
+  ],
   SVR: [...SVM, tunable('epsilon', 'Epsilon', 'float', { min: 0.01, max: 1 })],
   SVC: [...SVM, CLASS_WEIGHT],
   GaussianProcessRegressor: [
@@ -294,6 +368,12 @@ export const CLASSICAL_TUNABLES: Record<string, Tunable[]> = {
 export const DEFAULT_CLASSICAL_PARAMS: Record<string, string[]> = {
   HistGradientBoostingRegressor: ['learning_rate', 'max_leaf_nodes', 'min_samples_leaf'],
   HistGradientBoostingClassifier: ['learning_rate', 'max_leaf_nodes', 'min_samples_leaf'],
+  XGBRegressor: ['learning_rate', 'max_depth', 'min_child_weight'],
+  XGBClassifier: ['learning_rate', 'max_depth', 'min_child_weight'],
+  LGBMRegressor: ['learning_rate', 'num_leaves', 'min_child_samples'],
+  LGBMClassifier: ['learning_rate', 'num_leaves', 'min_child_samples'],
+  CatBoostRegressor: ['learning_rate', 'depth', 'l2_leaf_reg'],
+  CatBoostClassifier: ['learning_rate', 'depth', 'l2_leaf_reg'],
   SVR: ['C', 'gamma'],
   SVC: ['C', 'gamma'],
   GaussianProcessRegressor: ['alpha'],

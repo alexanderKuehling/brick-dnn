@@ -97,6 +97,24 @@ export const MODEL_KINDS: Record<string, string> = {
   get HistGradientBoostingClassifier() {
     return i18n.t('ui.training.classical.gradientBoostingClassification');
   },
+  get XGBRegressor() {
+    return i18n.t('ui.training.classical.xgboostRegression');
+  },
+  get XGBClassifier() {
+    return i18n.t('ui.training.classical.xgboostClassification');
+  },
+  get LGBMRegressor() {
+    return i18n.t('ui.training.classical.lightgbmRegression');
+  },
+  get LGBMClassifier() {
+    return i18n.t('ui.training.classical.lightgbmClassification');
+  },
+  get CatBoostRegressor() {
+    return i18n.t('ui.training.classical.catboostRegression');
+  },
+  get CatBoostClassifier() {
+    return i18n.t('ui.training.classical.catboostClassification');
+  },
   get VotingClassifier() {
     return i18n.t('ui.training.classical.votingClassifier');
   },
