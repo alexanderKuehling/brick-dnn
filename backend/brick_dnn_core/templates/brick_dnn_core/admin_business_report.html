@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+{% comment %}The business report (admin_site.py, business_report.py): where things stand now,
+the last periods as a table, and how the numbers are counted.{% endcomment %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> &rsaquo; Business report
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="business-report" style="overflow-x: auto;">
+  <p class="help">
+    Counted from the database when this page was loaded ({{ report.generated_at|slice:":16" }} UTC).
+    Nothing is tracked for it. <code>manage.py business_report</code> prints the same;
+    <code>--json</code> gives the numbers for a spreadsheet.
+  </p>
+
+  <h2>Now</h2>
+  <table>
+    <tbody>
+      {% for label, value in summary %}
+      <tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 style="margin-top: 24px;">By {{ report.period }}</h2>
+  <p>
+    {% for name in periods %}
+      {% if name == report.period %}<strong>By {{ name }}</strong>{% else %}<a href="?period={{ name }}">By {{ name }}</a>{% endif %}{% if not forloop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+  <table>
+    <thead>
+      <tr>{% for heading in headings %}<th scope="col">{{ heading }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        {% for cell in row %}{% if forloop.first %}<th scope="row">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 style="margin-top: 24px;">How to read this</h2>
+  <ul>
+    {% for note in report.notes %}<li>{{ note }}</li>{% endfor %}
+  </ul>
+</div>
+{% endblock %}
