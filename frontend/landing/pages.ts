@@ -34,6 +34,7 @@ import {
   type ExampleData,
 } from './examples/data.ts';
 import { describeGraph, diagramSvg, formatCount, formatShape } from './examples/diagram.ts';
+import { guideArt } from './guideArt.ts';
 import { highlightPython } from './highlight.ts';
 import { escapeHtml, picture, plainText, scriptJson, type Assets } from './html.ts';
 import {
@@ -576,6 +577,25 @@ ${gallery.groups
 
 // ------------------------------------------------------------------------------ guides
 
+/** Words a minute, for the reading time on the cards of the overview. */
+const READING_SPEED = 200;
+
+/** Roughly how long a guide takes to read, in whole minutes: its text, without the markup. */
+export function readingMinutes(entry: Guide): number {
+  const html = [
+    entry.lead,
+    ...entry.sections.flatMap((part) => [
+      part.title,
+      part.html,
+      ...(part.steps ?? []).flatMap((step) => [step.title, step.html]),
+      part.image?.caption ?? '',
+      part.after ?? '',
+    ]),
+  ].join(' ');
+  const words = plainText(html).split(' ').filter(Boolean).length;
+  return Math.max(1, Math.round(words / READING_SPEED));
+}
+
 function renderGuide(page: PageMeta, assets: Assets): string {
   const lang = page.lang;
   const t = COMMON[lang];
@@ -608,10 +628,14 @@ function renderGuide(page: PageMeta, assets: Assets): string {
 <p class="lead">${entry.lead}</p>
 <p class="byline">${escapeHtml(t.by)} ${escapeHtml(AUTHOR.name)} · ${escapeHtml(t.updated)} <time datetime="${entry.modified}">${escapeHtml(t.date(entry.modified))}</time></p>
 </header>
+<div class="guide-layout">
 <nav class="toc" aria-labelledby="toc-title"><h2 id="toc-title">${escapeHtml(t.guide.contents)}</h2><ol>${entry.sections
     .map((part) => `<li><a href="#${part.id}">${escapeHtml(part.title)}</a></li>`)
     .join('')}</ol></nav>
+<div class="guide-text">
 ${sections.join('\n')}
+</div>
+</div>
 ${section('examples', t.guide.relatedExamples, exampleCards(entry.examples, lang))}
 ${section('more', t.guide.moreGuides, guideCards(others, lang))}
 <p class="cta"><a class="button" href="${EDITOR_PATH}">${escapeHtml(t.guide.tryIt)}</a></p>
@@ -670,16 +694,43 @@ function contentImages(entry: Guide, assets: Assets): string[] {
   );
 }
 
+/**
+ * The cards of the guides' overview, one for every guide of guides.<lang>.ts in their order: a
+ * drawing (guideArt.ts, with one for guides it does not know), the topic, the short title, the
+ * summary and the reading time. The title is the card's only link; landing.css stretches it
+ * over the whole card, so the card is one target named by its title.
+ */
+function guideOverview(entries: Guide[], lang: Lang): string {
+  const t = COMMON[lang].guide;
+  // Three cards in a row on a wide screen; with one or two left over, the first rows hold two.
+  const wide = [0, 4, 2][entries.length % 3];
+  const classes = (index: number) =>
+    [
+      'guide-card',
+      index < wide ? 'wide' : '',
+      // Two in a row on a tablet: with an odd number the first takes a row of its own.
+      index === 0 && entries.length % 2 === 1 ? 'first' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  return `<ul class="guide-grid">${entries
+    .map(
+      (entry, index) =>
+        `<li class="${classes(index)}"><div class="art-panel">${guideArt(entry.id)}</div><div class="text">${entry.topic ? `<p class="kicker">${escapeHtml(entry.topic)}</p>` : ''}<h2><a href="${guidePath(lang, entry)}">${escapeHtml(entry.short ?? entry.h1)}</a></h2><p class="summary">${entry.summary}</p><p class="foot"><span>${escapeHtml(t.readingTime(readingMinutes(entry)))}</span><span class="go" aria-hidden="true">${escapeHtml(t.read)}</span></p></div></li>`
+    )
+    .join('\n')}</ul>`;
+}
+
 function renderGuideIndex(page: PageMeta, assets: Assets): string {
   const lang = page.lang;
   const copy = GUIDE_COPY[lang];
   const crumbs: Crumb[] = [homeCrumb(lang), { name: COMMON[lang].nav.guides, path: page.path }];
   const main = `${breadcrumbs(lang, crumbs)}
-<header class="page-head">
+<header class="page-head guides-head">
 <h1>${escapeHtml(copy.index.h1)}</h1>
 <p class="lead">${copy.index.intro}</p>
 </header>
-${guideCards(copy.guides, lang, 2)}`;
+${guideOverview(copy.guides, lang)}`;
   const graph = [
     webPage(page, 'CollectionPage', {
       mainEntity: {

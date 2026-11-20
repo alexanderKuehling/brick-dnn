@@ -3,7 +3,7 @@ export const experiments = {
   page: {
     title: 'Runs',
     intro:
-      'Every run of your networks and of the networks shared with you. Select up to 10 to compare their curves, settings and results.',
+      'Every run of your networks and of the networks shared with you. Select runs to compare their curves, settings and results.',
     share: 'Share comparison…',
     retry: 'Try again',
     loading: 'Loading the runs',
@@ -11,8 +11,9 @@ export const experiments = {
     empty: 'No runs yet. Train a network in the editor and it appears here.',
     count_one: '{{count}} run',
     count_other: '{{count}} runs',
-    selected_one: '{{count}} of {{max}} selected',
-    selected_other: '{{count}} of {{max}} selected',
+    selected_one: '{{count}} selected',
+    selected_other: '{{count}} selected',
+    clear: 'Clear',
     clearSelection: 'Clear the selection',
     tableLabel: 'Runs',
     page: 'Page {{page}}',
@@ -120,8 +121,7 @@ export const experiments = {
     star: 'Star',
     sortBy: 'Sort by {{label}}',
     select: 'Compare “{{name}}”',
-    full_one: 'At most {{count}} run can be compared',
-    full_other: 'At most {{count}} runs can be compared at a time',
+    selectAll: 'Select all runs on this page',
     starRun: 'Star “{{name}}”',
     starred: 'Starred',
     showTrials: 'Trials of “{{name}}”',
@@ -156,6 +156,7 @@ export const experiments = {
     lossesDifferTitle: 'The losses differ in kind',
     lossesDiffer:
       'These runs trained with different losses ({{losses}}). Their loss curves are not comparable: compare them by a metric such as accuracy or RMSE.',
+    firstOnly: 'The charts show the first {{shown}} of {{total}} selected runs.',
     tasksDifferTitle: 'Different tasks',
     tasksDiffer:
       'These runs solve different tasks (e.g. a classification and a regression): their curves measure different things.',
@@ -197,6 +198,7 @@ export const experiments = {
       'A read-only link to {{count}} run. Anyone with the link can look at it, without an account.',
     intro_other:
       'A read-only link to these {{count}} runs. Anyone with the link can look at them, without an account.',
+    firstOnly: 'They are the first {{shown}} of the {{total}} selected runs.',
     shows:
       'It shows the runs’ names, datasets, settings, results and curves, with the columns and charts as they are now.',
     hides:

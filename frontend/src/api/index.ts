@@ -26,6 +26,7 @@ import type {
   DataStatus,
   EnsembleInput,
   Example,
+  FilePrediction,
   GenerateOptions,
   GenerateResult,
   GraphDocument,
@@ -42,6 +43,7 @@ import type {
   OAuthRequest,
   PasswordResetLink,
   PlanChangePreview,
+  PredictFileOptions,
   PredictionForm,
   PredictionRequest,
   PredictionResult,
@@ -611,6 +613,42 @@ const serverApi = {
           body,
           auth: true,
           signal,
+        }),
+      /**
+       * Predict every row of a CSV file. The file is sent as it is (never read as text
+       * here); the answer has the summary, a preview and the id of the result file.
+       */
+      predictFile: (
+        id: string,
+        file: File,
+        options: PredictFileOptions,
+        upload: UploadOptions = {}
+      ) => {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('columns', options.columns === 'all' ? 'all' : JSON.stringify(options.columns));
+        form.append('prediction_column', options.prediction_column);
+        if (options.output) {
+          form.append('output', options.output);
+        }
+        if (options.class) {
+          form.append('class', options.class);
+        }
+        return request<FilePrediction>(`/api/training/runs/${id}/predict-file/`, {
+          method: 'POST',
+          body: form,
+          auth: true,
+          ...upload,
+        });
+      },
+      /** The result file of predictFile. The server deletes it with this download. */
+      downloadPredictedFile: (id: string, resultId: string) =>
+        requestFile(`/api/training/runs/${id}/predict-file/${resultId}/`, { auth: true }),
+      /** Delete a result that is not wanted any more. */
+      discardPredictedFile: (id: string, resultId: string) =>
+        request<void>(`/api/training/runs/${id}/predict-file/${resultId}/`, {
+          method: 'DELETE',
+          auth: true,
         }),
       /**
        * Binary classification: the threshold its predictions use (0 to 1). Only who started

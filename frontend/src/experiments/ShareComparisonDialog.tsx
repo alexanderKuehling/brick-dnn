@@ -25,18 +25,21 @@ export function comparisonUrl(token: string): string {
 
 /**
  * Share the selected runs read-only with a link: says what the link shows (and what not),
- * creates it, and lists the links shared before so they can be turned off.
+ * creates it, and lists the links shared before so they can be turned off. A link takes a
+ * limited number of runs: `rows` are the ones it gets, `selectedCount` how many are selected.
  */
 export function ShareComparisonDialog({
   opened,
   onClose,
   rows,
+  selectedCount = rows.length,
   columns,
   options,
 }: {
   opened: boolean;
   onClose: () => void;
   rows: RunRow[];
+  selectedCount?: number;
   columns: string[];
   options: ComparisonOptions;
 }) {
@@ -96,7 +99,11 @@ export function ShareComparisonDialog({
   return (
     <Modal opened={opened} onClose={onClose} title={t('experiments.share.title')} size="lg">
       <Stack gap="sm">
-        <Text size="sm">{t('experiments.share.intro', { count: rows.length })}</Text>
+        <Text size="sm">
+          {t('experiments.share.intro', { count: rows.length })}
+          {selectedCount > rows.length &&
+            ` ${t('experiments.share.firstOnly', { shown: rows.length, total: selectedCount })}`}
+        </Text>
         <List size="sm" spacing={2}>
           <List.Item>{t('experiments.share.shows')}</List.Item>
           <List.Item>{t('experiments.share.hides')}</List.Item>

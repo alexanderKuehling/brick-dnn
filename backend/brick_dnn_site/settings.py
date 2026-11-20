@@ -269,6 +269,16 @@ TRAINING_RUNNER_COMMAND: list[str] | None = None
 # argument; None means [sys.executable, "-m", "brickdnn.training.predict"].
 TRAINING_MAX_PREDICTIONS = int(os.environ.get("BRICKDNN_MAX_PREDICTIONS", "1"))
 TRAINING_PREDICT_COMMAND: list[str] | None = None
+# "Predict a file" in the run view (predict_files.py): every row of an uploaded CSV file is
+# predicted by a process of its own. The file may have this many megabytes (and never more
+# than BRICKDNN_MAX_UPLOAD_MB) and rows, and the prediction may take this many seconds (it
+# blocks a web server worker meanwhile, so stay below gunicorn's 300 s). The result is deleted
+# when it is downloaded, and this many minutes after it was made at the latest.
+TRAINING_PREDICT_FILE_MAX_MB = float(os.environ.get("BRICKDNN_PREDICT_FILE_MAX_MB", "200"))
+TRAINING_PREDICT_FILE_MAX_ROWS = int(os.environ.get("BRICKDNN_PREDICT_FILE_MAX_ROWS", "1000000"))
+TRAINING_PREDICT_FILE_TIMEOUT = int(os.environ.get("BRICKDNN_PREDICT_FILE_TIMEOUT", "270"))
+TRAINING_PREDICT_FILE_KEEP_MINUTES = int(os.environ.get("BRICKDNN_PREDICT_FILE_KEEP_MINUTES", "60"))
+TRAINING_PREDICT_FILE_COMMAND: list[str] | None = None
 # Largest CSV text that AI assistants can upload with the MCP tool upload_dataset, in MB (at
 # most BRICKDNN_MAX_UPLOAD_MB). The MCP endpoint accepts requests of about twice this size
 # (JSON escapes the text), unlike other JSON requests (DATA_UPLOAD_MAX_MEMORY_SIZE).
