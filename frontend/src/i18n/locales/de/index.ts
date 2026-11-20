@@ -8,6 +8,7 @@ import { common } from './common';
 import { data } from './data';
 import { experiments } from './experiments';
 import { nav } from './nav';
+import { plans } from './plans';
 import { projects } from './projects';
 import { training } from './training';
 import { ui } from './ui';
@@ -24,4 +25,5 @@ export const de: Messages<typeof en> = {
   data,
   experiments,
   a11y,
+  plans,
 };
